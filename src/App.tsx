@@ -207,11 +207,11 @@ function ChartTooltip({ active, payload }) {
   );
 }
 
-function MiniChart({ data, positive, id, showTooltip = true }) {
+function MiniChart({ data, positive, id, showTooltip = true, width = 78, height = 36 }) {
   const gid = `spark-${id}`;
   const color = positive ? T.up : T.down;
   return (
-    <div style={{ width: 78, height: 36 }}>
+    <div style={{ width, height }}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 4, right: 2, bottom: 0, left: 2 }}>
           <defs>
@@ -521,28 +521,28 @@ function TokenCard({ t, onOpen, index }) {
   const up = t.change >= 0;
   const chartData = useMemo(() => mcapSeries(t.mcapNum, t.seed), [t.mcapNum, t.seed]);
   return (
-    <button onClick={() => onOpen(t)} className="fx-card w-full text-left rounded-2xl" style={{ background: T.surface, border: `1px solid ${up ? "rgba(49,208,123,0.28)" : "rgba(255,77,77,0.24)"}`, padding: "12px 14px", animationDelay: `${index * 55}ms`, position: "relative", overflow: "hidden" }}>
+    <button onClick={() => onOpen(t)} className="fx-card w-full text-left rounded-2xl" style={{ background: T.surface, border: `1px solid ${up ? "rgba(49,208,123,0.28)" : "rgba(255,77,77,0.24)"}`, padding: "9px 12px", animationDelay: `${index * 55}ms`, position: "relative", overflow: "hidden" }}>
       <TrendFX up={up} seedKey={t.seed} />
-      <div className="flex items-center gap-3" style={{ position: "relative", zIndex: 1 }}>
-        <TokenAvatar tone={up ? "up" : "down"}>{t.emoji}</TokenAvatar>
+      <div className="flex items-center gap-2.5" style={{ position: "relative", zIndex: 1 }}>
+        <TokenAvatar size={42} tone={up ? "up" : "down"}>{t.emoji}</TokenAvatar>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 600 }}>{t.name}</span>
-            {t.verified && <ShieldCheck size={12} color={T.electric} />}
-            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 10 }}>${t.ticker} · {t.cat}</span>
+            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600 }}>{t.name}</span>
+            {t.verified && <ShieldCheck size={11} color={T.electric} />}
+            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 9.5 }}>${t.ticker} · {t.cat}</span>
           </div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 19, color: T.ice, opacity: 0.92 }}>{fmtUSD(t.mcapNum)}</span>
+          <div className="flex items-baseline gap-2 mt-0.5">
+            <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 17, color: T.ice, opacity: 0.92 }}>{fmtUSD(t.mcapNum)}</span>
             <ChangeBadge value={t.change} />
           </div>
         </div>
-        <MiniChart data={chartData} positive={up} id={t.id} />
+        <MiniChart data={chartData} positive={up} id={t.id} width={62} height={30} />
       </div>
-      <div className="flex items-center gap-3.5 mt-3 pt-2.5" style={{ borderTop: `1px solid ${T.line}`, position: "relative", zIndex: 1, background: T.surface }}>
+      <div className="flex items-center gap-3 mt-2 pt-2" style={{ borderTop: `1px solid ${T.line}`, position: "relative", zIndex: 1, background: T.surface }}>
         <CardStat icon={Wallet}>${t.liq}</CardStat>
         <CardStat icon={User}>{t.holders.toLocaleString("ru-RU")}</CardStat>
         <CardStat icon={Flame}>${t.vol}</CardStat>
-        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 10.5, marginLeft: "auto" }}>{fmtPrice(t.price)}</span>
+        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 10, marginLeft: "auto" }}>{fmtPrice(t.price)}</span>
       </div>
     </button>
   );
@@ -550,16 +550,16 @@ function TokenCard({ t, onOpen, index }) {
 
 function TokenCardSkeleton({ index }) {
   return (
-    <div className="fx-card w-full rounded-2xl" style={{ background: T.surface, border: `1px solid ${T.line}`, padding: "12px 14px", animationDelay: `${index * 55}ms` }}>
-      <div className="flex items-center gap-3">
-        <div className="fx-skeleton" style={{ width: 52, height: 52, borderRadius: "50%" }} />
+    <div className="fx-card w-full rounded-2xl" style={{ background: T.surface, border: `1px solid ${T.line}`, padding: "9px 12px", animationDelay: `${index * 55}ms` }}>
+      <div className="flex items-center gap-2.5">
+        <div className="fx-skeleton" style={{ width: 42, height: 42, borderRadius: "50%" }} />
         <div className="flex-1 flex flex-col gap-2">
-          <div className="fx-skeleton" style={{ width: "40%", height: 12, borderRadius: 4 }} />
-          <div className="fx-skeleton" style={{ width: "60%", height: 18, borderRadius: 4 }} />
+          <div className="fx-skeleton" style={{ width: "40%", height: 11, borderRadius: 4 }} />
+          <div className="fx-skeleton" style={{ width: "60%", height: 16, borderRadius: 4 }} />
         </div>
-        <div className="fx-skeleton" style={{ width: 78, height: 36, borderRadius: 6 }} />
+        <div className="fx-skeleton" style={{ width: 62, height: 30, borderRadius: 6 }} />
       </div>
-      <div className="flex items-center gap-3 mt-3 pt-2.5" style={{ borderTop: `1px solid ${T.line}` }}>
+      <div className="flex items-center gap-3 mt-2 pt-2" style={{ borderTop: `1px solid ${T.line}` }}>
         <div className="fx-skeleton" style={{ width: "60%", height: 10, borderRadius: 4 }} />
       </div>
     </div>
@@ -640,7 +640,7 @@ function HomeView({ onOpen, onSearch }) {
       </div>
 
       <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        <div className="flex flex-col gap-2 pb-4" key={filter + query}>
+        <div className="flex flex-col gap-1.5 pb-4" key={filter + query}>
           {loading ? Array.from({ length: 4 }).map((_, i) => <TokenCardSkeleton key={i} index={i} />) : list.map((t, i) => <TokenCard key={t.id} t={t} onOpen={onOpen} index={i} />)}
           {!loading && list.length === 0 && (
             <div className="fx-view" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>
