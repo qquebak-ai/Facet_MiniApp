@@ -1665,8 +1665,10 @@ function CreateAccountModal({ open, onClose, onSubmit, initial, mode = "create",
           {touched && !emailValid && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 11, marginTop: -10 }}>{email.trim() === "" ? "Укажите email — поле обязательно" : "Введите корректный email"}</span>}
           <Field label="О себе (необязательно)" placeholder="Пара слов о себе" area value={bio} onChange={(e) => setBio(e.target.value)} />
         </div>
-{serverError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12, marginTop: -6, display: "block" }}>{serverError}</span>}
-        <button onClick={handleSubmit} className="fx-tap w-full rounded-xl py-3 mt-5" style={{ background: canSubmit ? PRISM : T.surfaceHi, color: canSubmit ? "#08080A" : T.muted, fontFamily: displayFont, fontWeight: 700, fontSize: 14, boxShadow: canSubmit ? "0 0 22px rgba(255,255,255,0.28)" : "none" }}>
+         {serverError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12, marginTop: -6, display: "block" }}>{serverError}</span>}
+<button onClick={handleSubmit} disabled={submitting} className="fx-tap w-full rounded-xl py-3 mt-5" style={{ background: canSubmit ? PRISM : T.surfaceHi, color: canSubmit ? "#08080A" : T.muted, fontFamily: displayFont, fontWeight: 700, fontSize: 14, boxShadow: canSubmit ? "0 0 22px rgba(255,255,255,0.28)" : "none", opacity: submitting ? 0.6 : 1 }}>
+  {submitting ? "Проверяем..." : isEdit ? "Сохранить изменения" : "Создать аккаунт"}
+</button>
           {isEdit ? "Сохранить изменения" : "Создать аккаунт"}
         </button>
       </div>
