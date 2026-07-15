@@ -1582,17 +1582,64 @@ function CreateAccountModal({ open, onClose, onSubmit, initial, mode = "create",
     if (!file) return;
     setAvatarUrl(URL.createObjectURL(file));
   }
-  function handleSubmit() {
-    setTouched(true);
-    if (!canSubmit) return;
-    onSubmit({
+  async function handleSubmit() {
+  setTouched(true);
+  setServerError("");
+  if (!canSubmit) return;
+
+  if (!isEdit) {
+    setSubmitting(true);
+    const { data: existing, error } = await supabase
+      .from("profiles")
+      .select("nickname, email")
+      .or(`nickname.ilike.${nicknameTrimmed},email.ilike.${email.trim()}`);
+
+    if (error) {
+      setSubmitting(false);
+      setServerError("Ошибка проверки данных, попробуйте ещё раз");
+      return;
+    }
+
+    const nickTaken = existing?.some((p) => p.nickname.toLowerCase() === nicknameTrimmed.toLowerCase());
+    const emailTaken = existing?.some((p) => p.email.toLowerCase() === email.trim().toLowerCase());
+
+    if (nickTaken) {
+      setSubmitting(false);
+      setServerError(`Никнейм "${nicknameTrimmed}" уже занят`);
+      return;
+    }
+    if (emailTaken) {
+      setSubmitting(false);
+      setServerError("Эта почта уже привязана к другому аккаунту");
+      return;
+    }
+
+    const { error: insertError } = await supabase.from("profiles").insert({
       nickname: nicknameTrimmed,
       email: email.trim(),
       bio: bio.trim(),
-      avatarUrl,
+      avatar_url: avatarUrl,
       emoji: avatarUrl ? null : previewEmoji,
+      wallet_address: walletAddress || null,
     });
+
+    setSubmitting(false);
+
+    if (insertError) {
+      setServerError("Не удалось создать аккаунт, попробуйте ещё раз");
+      return;
+    }
   }
+
+  onSubmit({
+    nickname: nicknameTrimmed,
+    email: email.trim(),
+    bio: bio.trim(),
+    avatarUrl,
+    emoji: avatarUrl ? null : previewEmoji,
+  });
+}
+
 
   return (
     <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(2,2,4,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }} onClick={onClose}>
