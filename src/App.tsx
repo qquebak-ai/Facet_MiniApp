@@ -2140,7 +2140,7 @@ useEffect(() => {
       <Toast toast={toast} />
 
       <ConnectModal open={connectModalOpen} onClose={() => setConnectModalOpen(false)} onConnect={() => tonConnectUI.openModal()} />
-      <CreateAccountModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} onSubmit={submitProfile} initial={profile} mode={profileModalMode} />
+      <CreateAccountModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} onSubmit={submitProfile} initial={profile} mode={profileModalMode} walletAddress={walletAddress} />
       <SettingsPanel
         item={settingsItem}
         onClose={() => setSettingsItem(null)}
