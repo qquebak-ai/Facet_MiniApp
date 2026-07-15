@@ -470,6 +470,19 @@ const FILTERS = [
   { id: "recent", label: "⚡ Recently Launched" },
 ];
 
+const MEME_LINES = [
+  "не финансовый совет 🚀",
+  "к луне или в закат",
+  "диаманты в руках 💎🙌",
+  "покупай слухи, продавай факты",
+  "это не пузырь, это ракета",
+  "wagmi 🚀",
+  "ngmi если продашь сейчас",
+  "заходи, пока не поздно",
+  "всё по плану, капитан",
+  "графики не врут (иногда)",
+];
+
 function randomMeme() {
   return MEME_LINES[Math.floor(Math.random() * MEME_LINES.length)];
 }
