@@ -1999,8 +1999,25 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // the root — exactly like ConnectModal already is — instead of being
   // nested inside ProfileView's own scrollable content, which was
   // clipping it off-screen.
-  const [accountCreated, setAccountCreated] = useState(false);
-  const [profile, setProfile] = useState({ nickname: "", email: "", bio: "", avatarUrl: null, emoji: null });
+  const [accountCreated, setAccountCreated] = useState(() => {
+  try { return localStorage.getItem("faceta_accountCreated") === "true"; } catch { return false; }
+});
+const [profile, setProfile] = useState(() => {
+  try {
+    const saved = localStorage.getItem("faceta_profile");
+    return saved ? JSON.parse(saved) : { nickname: "", email: "", bio: "", avatarUrl: null, emoji: null };
+  } catch {
+    return { nickname: "", email: "", bio: "", avatarUrl: null, emoji: null };
+  }
+});
+
+useEffect(() => {
+  try {
+    localStorage.setItem("faceta_accountCreated", String(accountCreated));
+    localStorage.setItem("faceta_profile", JSON.stringify(profile));
+  } catch {}
+}, [accountCreated, profile]);
+
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileModalMode, setProfileModalMode] = useState("create");
   const [settingsItem, setSettingsItem] = useState(null);
