@@ -599,7 +599,6 @@ function HomeView({ onOpen, onSearch }) {
           <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 6, lineHeight: 1.5 }} className="relative">
             Создавай, торгуй и расти с <span style={{ color: T.turquoise, fontWeight: 600 }}>0% комиссией платформы</span> первый месяц. Присоединяйся к экосистеме с первого дня.
           </div>
-        </div>
         <div className="fx-chip flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: T.surface, border: `1px solid ${searchOpen ? T.electric : T.line}`, boxShadow: searchOpen ? `0 0 0 3px rgba(255,255,255,0.14)` : "none" }}>
           <Search size={16} color={T.muted} />
           <input
