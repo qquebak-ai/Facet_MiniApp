@@ -101,6 +101,7 @@ function GlobalStyle() {
       @keyframes rocketUp { 0%{ transform:translateY(0) scale(0.75); opacity:0; } 18%{ opacity:0.9; } 100%{ transform:translateY(-70px) scale(1); opacity:0; } }
       @keyframes fallStreak { 0%{ transform:translateY(0) rotate(14deg); opacity:0; } 20%{ opacity:0.85; } 100%{ transform:translateY(78px) rotate(14deg); opacity:0; } }
       @keyframes candleGrow { from{ transform:scaleY(0); opacity:0; } to{ transform:scaleY(1); opacity:1; } }
+      @keyframes shake { 0%,100%{ transform:translateX(0); } 20%{ transform:translateX(-8px); } 40%{ transform:translateX(8px); } 60%{ transform:translateX(-6px); } 80%{ transform:translateX(6px); } }
       button { touch-action: manipulation; cursor: pointer; }
       .fx-card { animation: fadeInUp 480ms cubic-bezier(0.16,1,0.3,1) both; transition: transform ${SPRING}, border-color ${EASE}, box-shadow ${EASE}; will-change: transform; }
       .fx-card:active { transform: scale(0.97); transition: transform ${PRESS}; }
@@ -1330,6 +1331,171 @@ function MyTokenCard({ t, onManage }) {
   );
 }
 
+/* ---------------------------------------------------------
+   PIN-CODE — app-open lock. Three pieces:
+   - PinDots / PinKeypad: shared visual primitives
+   - PinSetupModal: bottom-sheet used from Security settings to
+     create / change / disable the PIN (asks for the current PIN
+     first when one already exists)
+   - PinLockScreen: full-screen gate shown on launch when the
+     PIN is enabled, blocking the app until the right code is typed
+--------------------------------------------------------- */
+
+const PIN_LENGTH = 4;
+
+function PinDots({ length = PIN_LENGTH, filled, error }) {
+  return (
+    <div className="flex items-center justify-center gap-3" style={{ animation: error ? "shake 340ms ease" : "none" }}>
+      {Array.from({ length }).map((_, i) => (
+        <div key={i} style={{
+          width: 14, height: 14, borderRadius: "50%",
+          background: i < filled ? (error ? T.down : PRISM) : "transparent",
+          border: `1.5px solid ${i < filled && !error ? "transparent" : error ? T.down : T.lineHi}`,
+          transition: `background ${EASE}, border-color ${EASE}`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+function PinKeypad({ onDigit, onBackspace }) {
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
+  return (
+    <div className="grid grid-cols-3 gap-4" style={{ width: "100%", maxWidth: 240, margin: "0 auto" }}>
+      {keys.map((k, idx) => {
+        if (k === "") return <div key={idx} />;
+        if (k === "back") {
+          return (
+            <button key={idx} onClick={onBackspace} className="fx-tap flex items-center justify-center" style={{ height: 58, borderRadius: "50%", background: "transparent" }}>
+              <span style={{ fontFamily: bodyFont, fontSize: 18, color: T.muted }}>⌫</span>
+            </button>
+          );
+        }
+        return (
+          <button key={idx} onClick={() => onDigit(k)} className="fx-tap flex items-center justify-center" style={{ height: 58, borderRadius: "50%", background: T.surfaceHi, border: `1px solid ${T.line}` }}>
+            <span style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 700, color: T.ice }}>{k}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PinSetupModal({ mode, currentPin, onClose, onComplete, onDisable, showToast }) {
+  const [stage, setStage] = useState(mode === "change" || mode === "disable" ? "verify" : "new");
+  const [entry, setEntry] = useState("");
+  const [firstNew, setFirstNew] = useState("");
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!mode) return;
+    setStage(mode === "change" || mode === "disable" ? "verify" : "new");
+    setEntry(""); setFirstNew(""); setError(false);
+  }, [mode]);
+
+  if (!mode) return null;
+
+  function shakeAnd(after) {
+    haptic();
+    setError(true);
+    setTimeout(() => { setError(false); setEntry(""); after && after(); }, 340);
+  }
+
+  function submitStage(code) {
+    if (stage === "verify") {
+      if (code === currentPin) {
+        setEntry("");
+        if (mode === "disable") onDisable();
+        else setStage("new");
+      } else {
+        showToast("Неверный текущий PIN-код");
+        shakeAnd();
+      }
+      return;
+    }
+    if (stage === "new") {
+      setFirstNew(code);
+      setEntry("");
+      setStage("confirm");
+      return;
+    }
+    if (stage === "confirm") {
+      if (code === firstNew) {
+        onComplete(code);
+      } else {
+        showToast("PIN-коды не совпадают, начни заново");
+        setFirstNew("");
+        shakeAnd(() => setStage("new"));
+      }
+    }
+  }
+
+  function handleDigit(d) {
+    if (entry.length >= PIN_LENGTH) return;
+    const next = entry + d;
+    setEntry(next);
+    if (next.length === PIN_LENGTH) setTimeout(() => submitStage(next), 120);
+  }
+  function handleBackspace() { setEntry((e) => e.slice(0, -1)); }
+
+  const titles = {
+    verify: "Введи текущий PIN-код",
+    new: "Придумай новый PIN-код",
+    confirm: "Повтори новый PIN-код",
+  };
+
+  return (
+    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 70, background: "rgba(2,2,4,0.82)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }} onClick={onClose}>
+      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: "22px 22px 0 0", padding: 22, paddingBottom: 34 }}>
+        <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
+        <div className="flex flex-col items-center text-center gap-1" style={{ marginTop: -8 }}>
+          <FacetFrame size={52} glow={`${T.electric}55`}><Lock size={20} color={T.electric} /></FacetFrame>
+          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700, marginTop: 8 }}>{titles[stage]}</div>
+        </div>
+        <div style={{ margin: "26px 0" }}><PinDots filled={entry.length} error={error} /></div>
+        <PinKeypad onDigit={handleDigit} onBackspace={handleBackspace} />
+      </div>
+    </div>
+  );
+}
+
+function PinLockScreen({ pin, profile, onUnlock, onForgot }) {
+  const [entry, setEntry] = useState("");
+  const [error, setError] = useState(false);
+
+  function handleDigit(d) {
+    if (entry.length >= PIN_LENGTH) return;
+    const next = entry + d;
+    setEntry(next);
+    if (next.length === PIN_LENGTH) {
+      setTimeout(() => {
+        if (next === pin) { onUnlock(); }
+        else {
+          haptic();
+          setError(true);
+          setTimeout(() => { setError(false); setEntry(""); }, 340);
+        }
+      }, 100);
+    }
+  }
+  function handleBackspace() { setEntry((e) => e.slice(0, -1)); }
+
+  return (
+    <div className="fx-view" style={{ position: "absolute", inset: 0, zIndex: 200, background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <FacetFrame size={60} glow={`${T.electric}55`}><Lock size={24} color={T.electric} /></FacetFrame>
+      <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700, marginTop: 16 }}>Введи PIN-код</div>
+      {profile && profile.nickname ? (
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 4 }}>{profile.nickname}</div>
+      ) : null}
+      <div style={{ margin: "30px 0" }}><PinDots filled={entry.length} error={error} /></div>
+      <PinKeypad onDigit={handleDigit} onBackspace={handleBackspace} />
+      <button onClick={onForgot} className="fx-tap" style={{ marginTop: 26, fontFamily: bodyFont, fontSize: 12.5, color: T.muted, textDecoration: "underline", textUnderlineOffset: 3 }}>
+        Забыл(а) PIN-код?
+      </button>
+    </div>
+  );
+}
+
 function ConnectModal({ open, onClose, onConnect }) {
   if (!open) return null;
   return (
@@ -1391,6 +1557,7 @@ function SettingsPanel({
   item, onClose, appSettings, onUpdateSetting,
   connected, onConnectWallet, onDisconnectWallet, onCopyAddress,
   onOpenEditProfile, profile, showToast,
+  onTogglePin, onChangePin,
 }) {
   if (!item) return null;
   const Icon = item.icon;
@@ -1461,7 +1628,14 @@ function SettingsPanel({
           <SettingsRow label="Двухфакторная аутентификация" sub="Подтверждение входа кодом">
             <ToggleSwitch on={appSettings.twoFA} onChange={(v) => onUpdateSetting("twoFA", v)} />
           </SettingsRow>
-          <button onClick={() => showToast("Отправили ссылку для смены PIN-кода")} className="fx-tap w-full flex items-center justify-center gap-2 rounded-xl py-3 mt-3" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}>
+          <SettingsRow label="PIN-код" sub="Запрашивать код при каждом открытии Faceta">
+            <ToggleSwitch on={appSettings.pinEnabled} onChange={onTogglePin} />
+          </SettingsRow>
+          <button
+            onClick={() => { if (appSettings.pinEnabled) onChangePin(); else showToast("Сначала включи PIN-код"); }}
+            className="fx-tap w-full flex items-center justify-center gap-2 rounded-xl py-3 mt-3"
+            style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: appSettings.pinEnabled ? T.ice : T.muted, opacity: appSettings.pinEnabled ? 1 : 0.55 }}
+          >
             <Lock size={14} color={T.muted} /> Сменить PIN-код
           </button>
         </div>
@@ -2333,10 +2507,67 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [settingsItem, setSettingsItem] = useState(null);
   const [manageToken_, setManageToken_] = useState(null);
   const [tradeModal, setTradeModal] = useState(null); // { mode: 'buy' | 'sell' }
-  const [appSettings, setAppSettings] = useState({ pushNotif: true, emailNotif: false, twoFA: false, language: "RU", theme: "Dark" });
+  const [appSettings, setAppSettings] = useState({ pushNotif: true, emailNotif: false, twoFA: false, language: "RU", theme: "Dark", pinEnabled: false });
   function updateAppSetting(key, value) {
     setAppSettings((s) => ({ ...s, [key]: value }));
     showToast("Настройки сохранены");
+  }
+
+  // PIN-код при входе — код хранится только на устройстве (localStorage),
+  // это локальная блокировка приложения, а не серверная авторизация.
+  // При включённом PIN экран блокировки перекрывает весь интерфейс,
+  // пока не введён верный код.
+  const [pinCode, setPinCode] = useState(null);
+  const [pinModal, setPinModal] = useState(null); // { mode: "create" | "change" | "disable" } | null
+  const [pinLocked, setPinLocked] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedEnabled = window.localStorage.getItem("faceta_pin_enabled") === "1";
+      const storedPin = window.localStorage.getItem("faceta_pin");
+      if (storedEnabled && storedPin) {
+        setPinCode(storedPin);
+        setAppSettings((s) => ({ ...s, pinEnabled: true }));
+        setPinLocked(true);
+      }
+    } catch (e) { /* localStorage unavailable */ }
+  }, []);
+
+  function persistPin(enabled, code) {
+    try {
+      if (enabled && code) {
+        window.localStorage.setItem("faceta_pin", code);
+        window.localStorage.setItem("faceta_pin_enabled", "1");
+      } else {
+        window.localStorage.removeItem("faceta_pin");
+        window.localStorage.removeItem("faceta_pin_enabled");
+      }
+    } catch (e) { /* localStorage unavailable */ }
+  }
+
+  function handleTogglePin(v) { setPinModal({ mode: v ? "create" : "disable" }); }
+  function requestChangePin() { setPinModal({ mode: "change" }); }
+  function completePinSetup(code) {
+    const wasChange = pinModal && pinModal.mode === "change";
+    setPinCode(code);
+    setAppSettings((s) => ({ ...s, pinEnabled: true }));
+    persistPin(true, code);
+    setPinModal(null);
+    showToast(wasChange ? "PIN-код изменён" : "PIN-код включён");
+  }
+  function completePinDisable() {
+    setPinCode(null);
+    setAppSettings((s) => ({ ...s, pinEnabled: false }));
+    persistPin(false, null);
+    setPinModal(null);
+    showToast("PIN-код отключён");
+  }
+  function forgotPin() {
+    setPinCode(null);
+    setAppSettings((s) => ({ ...s, pinEnabled: false }));
+    persistPin(false, null);
+    setPinLocked(false);
+    showToast("PIN-код сброшен — включи новый в настройках безопасности");
   }
 
   function openToken(t) { setToken(t); setView("token"); }
@@ -2423,6 +2654,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       <CyberGrid />
       <Toast toast={toast} />
 
+      {pinLocked && appSettings.pinEnabled && pinCode && (
+        <PinLockScreen pin={pinCode} profile={profile} onUnlock={() => setPinLocked(false)} onForgot={forgotPin} />
+      )}
+
       <ConnectModal open={connectModalOpen} onClose={() => setConnectModalOpen(false)} onConnect={() => tonConnectUI.openModal()} />
       <AuthModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} onSubmit={submitProfile} initial={profile} mode={profileModalMode} walletAddress={walletAddress} />
       <SettingsPanel
@@ -2439,6 +2674,16 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         }}
         onOpenEditProfile={openEditProfile}
         profile={profile}
+        showToast={showToast}
+        onTogglePin={handleTogglePin}
+        onChangePin={requestChangePin}
+      />
+      <PinSetupModal
+        mode={pinModal ? pinModal.mode : null}
+        currentPin={pinCode}
+        onClose={() => setPinModal(null)}
+        onComplete={completePinSetup}
+        onDisable={completePinDisable}
         showToast={showToast}
       />
       <TokenManageSheet token={manageToken_} onClose={() => setManageToken_(null)} showToast={showToast} />
