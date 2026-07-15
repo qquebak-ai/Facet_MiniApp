@@ -600,13 +600,6 @@ function HomeView({ onOpen, onSearch }) {
             Создавай, торгуй и расти с <span style={{ color: T.turquoise, fontWeight: 600 }}>0% комиссией платформы</span> первый месяц. Присоединяйся к экосистеме с первого дня.
           </div>
         </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <StatChip icon={Flame} label="24ч объём" value="$2.4M" />
-          <StatChip icon={TrendingUp} label="Новых сегодня" value="184" />
-          <StatChip icon={Clock} label="Live-сделок" value="932" />
-        </div>
-
         <div className="fx-chip flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: T.surface, border: `1px solid ${searchOpen ? T.electric : T.line}`, boxShadow: searchOpen ? `0 0 0 3px rgba(255,255,255,0.14)` : "none" }}>
           <Search size={16} color={T.muted} />
           <input
