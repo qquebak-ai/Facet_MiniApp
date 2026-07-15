@@ -549,10 +549,7 @@ function TokenCard({ t, onOpen, index }) {
         </div>
       </div>
       <div className="flex items-center gap-3 mt-2 pt-2" style={{ borderTop: `1px solid ${T.line}` }}>
-        <CardStat icon={Wallet}>${t.liq}</CardStat>
         <CardStat icon={User}>{t.holders.toLocaleString("ru-RU")}</CardStat>
-        <CardStat icon={Flame}>${t.vol}</CardStat>
-        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 10, marginLeft: "auto" }}>{fmtPrice(t.price)}</span>
       </div>
     </button>
   );
