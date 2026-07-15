@@ -35,23 +35,39 @@ const DARK_THEME = {
   down: "#FF4D4D",
 };
 
+/* White theme is a distinct look, not a flat color-invert of Dark:
+   a soft off-white canvas (so pure-white cards still read as raised),
+   near-black ink for text, and a real accent color (indigo) standing
+   in for the neon-white glow the dark theme uses — a flat black
+   "accent" would just look like unstyled default text with no pop. */
 const WHITE_THEME = {
-  bg: "#FFFFFF",
-  surface: "#F4F4F6",
-  surfaceHi: "#EAEAED",
-  line: "rgba(0,0,0,0.09)",
-  lineHi: "rgba(0,0,0,0.20)",
-  ice: "#0B0B0D",
-  muted: "#6B6B73",
-  electric: "#0B0B0D",
-  turquoise: "#0B0B0D",
-  violet: "#3A3A40",
-  rose: "#8A8A92",
-  up: "#1FA85F",
+  bg: "#F5F5F7",
+  surface: "#FFFFFF",
+  surfaceHi: "#F0EFF4",
+  line: "rgba(20,20,30,0.08)",
+  lineHi: "rgba(20,20,30,0.16)",
+  ice: "#131316",
+  muted: "#75757F",
+  electric: "#4F46E5",
+  turquoise: "#4F46E5",
+  violet: "#7C3AED",
+  rose: "#9A5B4A",
+  up: "#1D9A57",
   down: "#E23D3D",
 };
 
 const THEMES = { Dark: DARK_THEME, White: WHITE_THEME };
+
+/* hexA(hex, alpha) -> "rgba(r,g,b,alpha)". Lets glow/ring/shadow effects
+   that used to be hardcoded to white (e.g. "rgba(255,255,255,0.3)")
+   instead track whatever the current theme's accent or ink color is,
+   so they still make sense once the palette flips. */
+function hexA(hex, alpha) {
+  const h = hex.replace("#", "");
+  const bigint = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
+  const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 /* T is intentionally a mutable object (not reassigned) so that every
    component in this file — which reads T.xxx directly at render time —
@@ -59,11 +75,18 @@ const THEMES = { Dark: DARK_THEME, White: WHITE_THEME };
    thread theme props through the whole tree. applyTheme() mutates T's
    own keys in place; React's normal re-render (triggered by the
    appSettings state update in App()) then repaints everything with the
-   fresh values. */
+   fresh values. glow(alpha) is the accent-based replacement for the old
+   hardcoded white glows; ink(alpha) is the same idea for structural
+   (grid line / vignette) effects that used to assume a dark backdrop. */
 let T = { ...DARK_THEME };
 function applyTheme(mode) {
   Object.assign(T, THEMES[mode] || DARK_THEME);
+  PRISM = mode === "White" ? LIGHT_PRISM : DARK_PRISM;
+  PRISM_TEXT = mode === "White" ? "#FFFFFF" : "#08080A";
 }
+function glow(alpha) { return hexA(T.turquoise, alpha); }
+function ink(alpha) { return hexA(T.ice, alpha); }
+
 
 /* ---------------------------------------------------------
    LANGUAGE / TRANSLATIONS
@@ -122,7 +145,10 @@ function t(key) {
   return (STR[lang] && STR[lang][key]) || STR.RU[key] || key;
 }
 
-const PRISM = `linear-gradient(135deg, #FFFFFF 0%, #9A9AA3 100%)`;
+const DARK_PRISM = `linear-gradient(135deg, #FFFFFF 0%, #9A9AA3 100%)`;
+const LIGHT_PRISM = `linear-gradient(135deg, #6D5EF0 0%, #4F46E5 100%)`;
+let PRISM = DARK_PRISM;
+let PRISM_TEXT = "#08080A"; // dark text reads on the light Dark-theme gradient; White theme's gradient is saturated indigo, so it flips to white
 const FACET = "polygon(18% 0%, 100% 0%, 100% 82%, 82% 100%, 0% 100%, 0% 18%)";
 
 const displayFont = "'Space Grotesk', 'Segoe UI', sans-serif";
@@ -183,7 +209,7 @@ function GlobalStyle() {
       @keyframes glowPulse { 0%,100%{opacity:.35;} 50%{opacity:.75;} }
       @keyframes shimmer { from{background-position:-300px 0;} to{background-position:300px 0;} }
       @keyframes mcapGlow { 0%,100%{text-shadow:0 0 10px currentColor,0 0 2px currentColor;} 50%{text-shadow:0 0 18px currentColor,0 0 4px currentColor;} }
-      @keyframes ringPulse { 0%{box-shadow:0 0 0 0 rgba(255,255,255,0.35);} 100%{box-shadow:0 0 0 14px rgba(255,255,255,0);} }
+      @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
       @keyframes toastIn { from{opacity:0; transform:translateY(-10px) translateX(-50%);} to{opacity:1; transform:translateY(0) translateX(-50%);} }
       @keyframes rocketUp { 0%{ transform:translateY(0) scale(0.75); opacity:0; } 18%{ opacity:0.9; } 100%{ transform:translateY(-70px) scale(1); opacity:0; } }
       @keyframes fallStreak { 0%{ transform:translateY(0) rotate(14deg); opacity:0; } 20%{ opacity:0.85; } 100%{ transform:translateY(78px) rotate(14deg); opacity:0; } }
@@ -204,7 +230,7 @@ function GlobalStyle() {
       .fx-avatar { transition: transform ${SPRING}, box-shadow ${EASE}; will-change: transform; }
       .fx-avatar:active { transform: scale(0.92); transition: transform ${PRESS}; }
       .cta-launch { transition: transform ${SPRING}, box-shadow ${EASE}; will-change: transform; }
-      .cta-launch:hover { transform: scale(1.015); box-shadow: 0 0 34px rgba(255,255,255,0.4); }
+      .cta-launch:hover { transform: scale(1.015); box-shadow: 0 0 34px ${glow(0.4)}; }
       .cta-launch:active { transform: scale(0.97); transition: transform ${PRESS}; }
       .tf-btn { transition: background ${EASE}, color ${EASE}, transform ${SPRING}; will-change: transform; }
       .tf-btn:active { transform: scale(0.92); transition: background ${EASE}, color ${EASE}, transform ${PRESS}; }
@@ -223,27 +249,31 @@ function seededRand(seed) {
   };
 }
 
-function CyberGrid() {
+function CyberGrid({ forceDark }) {
+  const lineC = forceDark ? "rgba(255,255,255,0.05)" : ink(0.05);
+  const strokeC = forceDark ? "#FFFFFF" : T.ice;
+  const washC = forceDark ? "rgba(255,255,255,0.09)" : ink(0.09);
+  const vignetteC = forceDark ? "rgba(0,0,0,0.6)" : ink(0.12);
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
       {/* animated grid — the circuit / star-chart lattice, drifting slowly */}
       <div style={{
         position: "absolute", inset: -140,
-        backgroundImage: `linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)`,
+        backgroundImage: `linear-gradient(${lineC} 1px, transparent 1px), linear-gradient(90deg, ${lineC} 1px, transparent 1px)`,
         backgroundSize: "28px 28px, 28px 28px", transform: "rotate(6deg)", animation: "gridDrift 22s linear infinite",
       }} />
 
       {/* faint outlined facets — distant satellites / debris catching moonlight */}
       <svg style={{ position: "absolute", top: "-6%", right: "-14%", width: 260, height: 260, opacity: 0.12 }} viewBox="0 0 100 100">
-        <polygon points="18,0 100,0 100,82 82,100 0,100 0,18" fill="none" stroke="#FFFFFF" strokeWidth="0.6" />
+        <polygon points="18,0 100,0 100,82 82,100 0,100 0,18" fill="none" stroke={strokeC} strokeWidth="0.6" />
       </svg>
       <svg style={{ position: "absolute", bottom: "4%", left: "-16%", width: 220, height: 220, opacity: 0.09 }} viewBox="0 0 100 100">
-        <polygon points="18,0 100,0 100,82 82,100 0,100 0,18" fill="none" stroke="#FFFFFF" strokeWidth="0.6" />
+        <polygon points="18,0 100,0 100,82 82,100 0,100 0,18" fill="none" stroke={strokeC} strokeWidth="0.6" />
       </svg>
 
       {/* soft moonlight wash — held static and subtle, greyscale only */}
-      <div style={{ position: "absolute", top: "-16%", right: "-12%", width: 320, height: 320, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.09) 0%, transparent 70%)", filter: "blur(6px)" }} />
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.6) 100%)" }} />
+      <div style={{ position: "absolute", top: "-16%", right: "-12%", width: 320, height: 320, borderRadius: "50%", background: `radial-gradient(circle, ${washC} 0%, transparent 70%)`, filter: "blur(6px)" }} />
+      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at center, transparent 55%, ${vignetteC} 100%)` }} />
     </div>
   );
 }
@@ -428,8 +458,8 @@ function TrendFX({ up, seedKey = 1 }) {
               size={it.size}
               style={{
                 position: "absolute", left: `${it.left}%`, bottom: "-20%",
-                color: "#FFFFFF",
-                filter: "drop-shadow(0 0 1px #000000) drop-shadow(0 0 4px rgba(255,255,255,0.55))",
+                color: T.ice,
+                filter: `drop-shadow(0 0 1px ${T.bg}) drop-shadow(0 0 4px ${glow(0.55)})`,
                 animation: `rocketUp ${it.dur}s cubic-bezier(0.3,0.1,0.4,1) ${it.delay}s infinite`,
               }}
             />
@@ -519,9 +549,12 @@ function Toast({ toast }) {
   if (!toast) return null;
   return (
     <div style={{ position: "absolute", top: 14, left: "50%", zIndex: 50, animation: "toastIn 240ms cubic-bezier(0.16,1,0.3,1) both" }}>
-      <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ background: "rgba(24,24,26,0.95)", border: `1px solid ${T.lineHi}`, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
-        <CheckCircle2 size={14} color={T.turquoise} />
-        <span style={{ fontFamily: bodyFont, fontSize: 12, color: T.ice, whiteSpace: "nowrap" }}>{toast}</span>
+      {/* toast intentionally ignores the app theme — like a native OS toast it
+          stays a fixed dark pill with light text/icon so it's always legible,
+          instead of flipping to (illegible) dark-on-dark under the White theme */}
+      <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ background: "rgba(24,24,26,0.95)", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+        <CheckCircle2 size={14} color="#31D07B" />
+        <span style={{ fontFamily: bodyFont, fontSize: 12, color: "#F3F3F6", whiteSpace: "nowrap" }}>{toast}</span>
       </div>
     </div>
   );
@@ -700,7 +733,7 @@ function HomeView({ onOpen, onSearch }) {
           </div>
         </div>
 
-        <div className="fx-chip flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: T.surface, border: `1px solid ${searchOpen ? T.electric : T.line}`, boxShadow: searchOpen ? `0 0 0 3px rgba(255,255,255,0.14)` : "none" }}>
+        <div className="fx-chip flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: T.surface, border: `1px solid ${searchOpen ? T.electric : T.line}`, boxShadow: searchOpen ? `0 0 0 3px ${glow(0.14)}` : "none" }}>
           <Search size={16} color={T.muted} />
           <input
             value={query}
@@ -726,7 +759,7 @@ function HomeView({ onOpen, onSearch }) {
                   fontFamily: bodyFont, fontSize: 12, background: active ? T.ice : T.surface,
                   color: active ? T.bg : T.muted, border: `1px solid ${active ? T.ice : T.line}`,
                   transform: active ? "scale(1.04)" : "scale(1)",
-                  boxShadow: active ? `0 4px 14px rgba(0,0,0,0.25), 0 0 12px rgba(255,255,255,0.25)` : "none",
+                  boxShadow: active ? `0 4px 14px rgba(0,0,0,0.25), 0 0 12px ${ink(0.25)}` : "none",
                 }}>
                 {f.label}
               </button>
@@ -982,7 +1015,7 @@ function TokenDetail({ t, onBack, showToast, onBuy, onSell, unlocked = true }) {
       </div>
 
       <div className="flex gap-2">
-        <button onClick={onBuy} className="fx-tap flex-1 rounded-xl py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14, background: T.turquoise, color: "#08080A", boxShadow: `0 0 20px rgba(255,255,255,0.3)`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}Купить</button>
+        <button onClick={onBuy} className="fx-tap flex-1 rounded-xl py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14, background: PRISM, color: PRISM_TEXT, boxShadow: `0 0 20px ${glow(0.3)}`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}Купить</button>
         <button onClick={onSell} className="fx-tap flex-1 rounded-xl py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14, background: "transparent", color: T.rose, border: `1px solid ${T.rose}`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}Продать</button>
       </div>
 
@@ -1077,7 +1110,7 @@ function TradeModal({ t, tradeModal, onClose, onConfirm }) {
                 style={{
                   fontFamily: displayFont, fontWeight: 700, fontSize: 13,
                   background: active ? (o.id === "buy" ? T.turquoise : T.rose) : "transparent",
-                  color: active ? (o.id === "buy" ? "#08080A" : "#08080A") : T.muted,
+                  color: active ? PRISM_TEXT : T.muted,
                 }}>
                 {o.label}
               </button>
@@ -1141,9 +1174,9 @@ function TradeModal({ t, tradeModal, onClose, onConfirm }) {
         <button onClick={handleConfirm} disabled={!canConfirm} className="fx-tap w-full rounded-xl py-3 mt-5" style={{
           fontFamily: displayFont, fontWeight: 700, fontSize: 14,
           background: canConfirm ? (isBuy ? T.turquoise : T.rose) : T.surfaceHi,
-          color: canConfirm ? (isBuy ? "#08080A" : "#08080A") : T.muted,
+          color: canConfirm ? PRISM_TEXT : T.muted,
           opacity: canConfirm ? 1 : 0.6,
-          boxShadow: canConfirm ? `0 0 20px ${isBuy ? "rgba(255,255,255,0.3)" : "rgba(140,140,148,0.25)"}` : "none",
+          boxShadow: canConfirm ? `0 0 20px ${isBuy ? glow(0.3) : hexA(T.rose, 0.25)}` : "none",
         }}>
           {amount > 0 ? (isBuy ? `Купить за $${amount.toFixed(2)}` : `Продать ${amount.toLocaleString("ru-RU")} ${t.ticker}`) : "Введите сумму"}
         </button>
@@ -1184,7 +1217,7 @@ function Field({ label, placeholder, area, value, onChange, type = "text", icon:
             border: `1px solid ${focus ? T.electric : T.line}`, outline: "none",
             resize: area ? "none" : undefined,
             paddingLeft: Icon ? 32 : 12, paddingRight: isPassword ? 34 : 12,
-            boxShadow: focus ? `0 0 0 3px rgba(255,255,255,0.14)` : "none",
+            boxShadow: focus ? `0 0 0 3px ${glow(0.14)}` : "none",
             transition: `border-color ${EASE}, box-shadow ${EASE}`,
           }}
         />
@@ -1242,12 +1275,12 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
         </p>
         <div className="flex flex-col gap-2 w-full mt-2" style={{ maxWidth: 260 }}>
           {!accountCreated && (
-            <button onClick={onOpenCreateProfile} className="fx-tap w-full rounded-xl py-3" style={{ background: PRISM, color: "#08080A", fontFamily: displayFont, fontWeight: 700, fontSize: 13.5 }}>
+            <button onClick={onOpenCreateProfile} className="fx-tap w-full rounded-xl py-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 13.5 }}>
               Создать аккаунт
             </button>
           )}
           {!connected && (
-            <button onClick={onOpenConnectModal} className="fx-tap w-full flex items-center justify-center gap-2 rounded-xl py-3" style={{ background: accountCreated ? PRISM : T.surfaceHi, color: accountCreated ? "#08080A" : T.ice, border: accountCreated ? "none" : `1px solid ${T.line}`, fontFamily: displayFont, fontWeight: 700, fontSize: 13.5 }}>
+            <button onClick={onOpenConnectModal} className="fx-tap w-full flex items-center justify-center gap-2 rounded-xl py-3" style={{ background: accountCreated ? PRISM : T.surfaceHi, color: accountCreated ? PRISM_TEXT : T.ice, border: accountCreated ? "none" : `1px solid ${T.line}`, fontFamily: displayFont, fontWeight: 700, fontSize: 13.5 }}>
               <Wallet size={15} /> Подключить кошелёк
             </button>
           )}
@@ -1302,12 +1335,12 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
         </div>
       </div>
 
-      <div className="rounded-2xl p-4 flex items-center gap-2.5" style={{ background: "rgba(255,255,255,0.07)", border: `1px solid rgba(255,255,255,0.22)` }}>
+      <div className="rounded-2xl p-4 flex items-center gap-2.5" style={{ background: ink(0.07), border: `1px solid ${ink(0.22)}` }}>
         <Wallet size={16} color={T.electric} />
         <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 12.5 }}>Подключи кошелёк TON, чтобы подтвердить эмиссию</span>
       </div>
 
-      <button onClick={handleLaunch} className="cta-launch fx-tap rounded-2xl" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 16, color: "#08080A", background: PRISM, boxShadow: "0 0 30px rgba(255,255,255,0.38)", position: "sticky", bottom: 12, padding: "18px 0" }}>
+      <button onClick={handleLaunch} className="cta-launch fx-tap rounded-2xl" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 16, color: PRISM_TEXT, background: PRISM, boxShadow: `0 0 30px ${glow(0.38)}`, position: "sticky", bottom: 12, padding: "18px 0" }}>
         🚀 Запустить токен
       </button>
     </div>
@@ -1331,7 +1364,7 @@ function WalletCard({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
         <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 }}>
           Подключи TON-кошелёк, чтобы видеть портфель и торговать. Поддерживаются Tonkeeper, MyTonWallet, Tonhub, OpenMask и другие TON Connect-кошельки.
         </p>
-        <button onClick={onConnect} className="fx-tap w-full rounded-xl py-3 flex items-center justify-center gap-2" style={{ background: PRISM, color: "#08080A", fontFamily: displayFont, fontWeight: 700, fontSize: 14, boxShadow: "0 0 22px rgba(255,255,255,0.28)" }}>
+        <button onClick={onConnect} className="fx-tap w-full rounded-xl py-3 flex items-center justify-center gap-2" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14, boxShadow: `0 0 22px ${glow(0.28)}` }}>
           <Wallet size={16} /> Connect TON Wallet
         </button>
       </GlassCard>
@@ -1438,7 +1471,7 @@ function PinDots({ length = PIN_LENGTH, filled, error }) {
         <div key={i} style={{
           width: 14, height: 14, borderRadius: "50%",
           background: i < filled ? (error ? T.down : PRISM) : "transparent",
-          border: `1.5px solid ${i < filled && !error ? "transparent" : error ? T.down : T.lineHi}`,
+          border: `1.5px solid ${i < filled && !error ? "transparent" : error ? T.down : "rgba(255,255,255,0.20)"}`,
           transition: `background ${EASE}, border-color ${EASE}`,
         }} />
       ))}
@@ -1455,7 +1488,7 @@ function PinKeypad({ onDigit, onBackspace }) {
         if (k === "back") {
           return (
             <button key={idx} onClick={onBackspace} className="fx-tap flex items-center justify-center" style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: "50%", background: "transparent" }}>
-              <span style={{ fontFamily: bodyFont, fontSize: 19, color: T.muted }}>⌫</span>
+              <span style={{ fontFamily: bodyFont, fontSize: 19, color: "#85858D" }}>⌫</span>
             </button>
           );
         }
@@ -1469,11 +1502,11 @@ function PinKeypad({ onDigit, onBackspace }) {
               aspectRatio: "1 / 1",
               borderRadius: "50%",
               background: "radial-gradient(circle at 32% 28%, rgba(255,255,255,0.09), rgba(255,255,255,0.02) 60%, rgba(255,255,255,0) 100%), #0A0A0C",
-              border: `1px solid ${T.line}`,
+              border: "1px solid rgba(255,255,255,0.09)",
               boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 14px rgba(0,0,0,0.55)",
             }}
           >
-            <span style={{ fontFamily: displayFont, fontSize: 21, fontWeight: 700, color: T.ice }}>{k}</span>
+            <span style={{ fontFamily: displayFont, fontSize: 21, fontWeight: 700, color: "#F3F3F6" }}>{k}</span>
           </button>
         );
       })}
@@ -1591,10 +1624,10 @@ function PinLockScreen({ pin, profile, onUnlock, onForgot }) {
         background: "radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.03) 45%, rgba(0,0,0,0) 72%)",
         pointerEvents: "none",
       }} />
-      <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}><CyberGrid /></div>
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}><CyberGrid forceDark /></div>
 
       <div style={{ position: "relative", flex: 1, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em", textAlign: "center" }}>
+        <div style={{ fontFamily: displayFont, color: "#F3F3F6", fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em", textAlign: "center" }}>
           {hasName ? <>Привет, {profile.nickname}</> : "С возвращением"}
         </div>
 
@@ -1602,22 +1635,22 @@ function PinLockScreen({ pin, profile, onUnlock, onForgot }) {
           <div style={{
             width: 76, height: 76, borderRadius: "50%", overflow: "hidden",
             background: profile && profile.avatarUrl ? `center/cover no-repeat url(${profile.avatarUrl})` : "linear-gradient(160deg, #1B1B1F, #0A0A0C)",
-            border: `1px solid ${T.lineHi}`, display: "flex", alignItems: "center", justifyContent: "center",
+            border: "1px solid rgba(255,255,255,0.20)", display: "flex", alignItems: "center", justifyContent: "center",
             boxShadow: "0 0 26px rgba(255,255,255,0.10), inset 0 1px 0 rgba(255,255,255,0.08)",
           }}>
             {!(profile && profile.avatarUrl) && (
               profile && profile.emoji
                 ? <span style={{ fontSize: 32 }}>{profile.emoji}</span>
-                : <Lock size={26} color={T.ice} />
+                : <Lock size={26} color="#F3F3F6" />
             )}
           </div>
         </div>
 
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 14 }}>Введи PIN-код, чтобы продолжить</div>
+        <div style={{ fontFamily: bodyFont, color: "#85858D", fontSize: 12.5, marginTop: 14 }}>Введи PIN-код, чтобы продолжить</div>
 
         <div style={{ margin: "28px 0" }}><PinDots filled={entry.length} error={error} /></div>
         <PinKeypad onDigit={handleDigit} onBackspace={handleBackspace} />
-        <button onClick={onForgot} className="fx-tap" style={{ marginTop: 26, fontFamily: bodyFont, fontSize: 12.5, color: T.muted, textDecoration: "underline", textUnderlineOffset: 3 }}>
+        <button onClick={onForgot} className="fx-tap" style={{ marginTop: 26, fontFamily: bodyFont, fontSize: 12.5, color: "#85858D", textDecoration: "underline", textUnderlineOffset: 3 }}>
           Забыл(а) PIN-код?
         </button>
       </div>
@@ -1636,7 +1669,7 @@ function ConnectModal({ open, onClose, onConnect }) {
           <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700, marginTop: 6 }}>Connect your TON Wallet to continue</div>
           <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>Покупка, продажа и запуск токенов доступны после подключения кошелька.</div>
         </div>
-        <button onClick={() => { onConnect(); onClose(); }} className="fx-tap w-full rounded-xl py-3 mt-5" style={{ background: PRISM, color: "#08080A", fontFamily: displayFont, fontWeight: 700, fontSize: 14, boxShadow: "0 0 22px rgba(255,255,255,0.28)" }}>
+        <button onClick={() => { onConnect(); onClose(); }} className="fx-tap w-full rounded-xl py-3 mt-5" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14, boxShadow: `0 0 22px ${glow(0.28)}` }}>
           Connect Wallet
         </button>
       </div>
@@ -1658,7 +1691,7 @@ function ToggleSwitch({ on, onChange }) {
     >
       <div style={{
         position: "absolute", top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: "50%",
-        background: on ? "#08080A" : T.muted, transition: `left ${SPRING}`,
+        background: on ? PRISM_TEXT : T.muted, transition: `left ${SPRING}`,
       }} />
     </button>
   );
@@ -1709,7 +1742,7 @@ function SettingsPanel({
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, textAlign: "center" }}>
             Никнейм, аватар, почта и описание профиля.
           </p>
-          <button onClick={openEditFromSettings} className="fx-tap w-full rounded-xl py-3 mt-4" style={{ background: PRISM, color: "#08080A", fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
+          <button onClick={openEditFromSettings} className="fx-tap w-full rounded-xl py-3 mt-4" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
             Редактировать профиль
           </button>
         </>
@@ -1732,7 +1765,7 @@ function SettingsPanel({
               </button>
             </div>
           ) : (
-            <button onClick={() => { onConnectWallet(); onClose(); }} className="fx-tap w-full rounded-xl py-3" style={{ background: PRISM, color: "#08080A", fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
+            <button onClick={() => { onConnectWallet(); onClose(); }} className="fx-tap w-full rounded-xl py-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
               Connect TON Wallet
             </button>
           )}
@@ -1814,7 +1847,7 @@ function SettingsPanel({
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, textAlign: "center" }}>
             Ответим в течение суток в Telegram-поддержке.
           </p>
-          <button onClick={contactSupport} className="fx-tap w-full flex items-center justify-center gap-2 rounded-xl py-3 mt-4" style={{ background: PRISM, color: "#08080A", fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
+          <button onClick={contactSupport} className="fx-tap w-full flex items-center justify-center gap-2 rounded-xl py-3 mt-4" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
             <Send size={14} /> Написать в поддержку
           </button>
         </>
@@ -2138,7 +2171,7 @@ async function uploadAvatarIfNeeded(userId) {
                   className="fx-tap tf-btn flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2"
                   style={{
                     background: active ? PRISM : "transparent",
-                    color: active ? "#08080A" : T.muted,
+                    color: active ? PRISM_TEXT : T.muted,
                     fontFamily: displayFont, fontWeight: 700, fontSize: 12.5,
                   }}
                 >
@@ -2181,7 +2214,7 @@ async function uploadAvatarIfNeeded(userId) {
           {!isLogin && <Field label="О себе (необязательно)" placeholder="Пара слов о себе" area value={bio} onChange={(e) => setBio(e.target.value)} />}
         </div>
         {serverError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12, marginTop: 10, display: "block" }}>{serverError}</span>}
-        <button onClick={handleSubmit} disabled={submitting} className="fx-tap w-full rounded-xl py-3 mt-5" style={{ background: canSubmit ? PRISM : T.surfaceHi, color: canSubmit ? "#08080A" : T.muted, fontFamily: displayFont, fontWeight: 700, fontSize: 14, boxShadow: canSubmit ? "0 0 22px rgba(255,255,255,0.28)" : "none", opacity: submitting ? 0.6 : 1 }}>
+        <button onClick={handleSubmit} disabled={submitting} className="fx-tap w-full rounded-xl py-3 mt-5" style={{ background: canSubmit ? PRISM : T.surfaceHi, color: canSubmit ? PRISM_TEXT : T.muted, fontFamily: displayFont, fontWeight: 700, fontSize: 14, boxShadow: canSubmit ? `0 0 22px ${glow(0.28)}` : "none", opacity: submitting ? 0.6 : 1 }}>
           {submitting ? "Проверяем..." : isEdit ? "Сохранить изменения" : isLogin ? "Войти" : "Создать аккаунт"}
         </button>
       </div>
@@ -2276,7 +2309,7 @@ function ProfileView({
                 <button onClick={onOpenLogin} className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5" style={{ background: T.surface, border: `1px solid ${T.lineHi}`, fontFamily: displayFont, fontWeight: 700, fontSize: 12.5, color: T.ice }}>
                   <LogIn size={14} /> Войти
                 </button>
-                <button onClick={onOpenCreateProfile} className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5" style={{ background: PRISM, color: "#08080A", fontFamily: displayFont, fontWeight: 700, fontSize: 12.5 }}>
+                <button onClick={onOpenCreateProfile} className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 12.5 }}>
                   <Sparkles size={14} /> Создать
                 </button>
               </div>
@@ -2306,7 +2339,7 @@ function ProfileView({
             <GlassCard style={{ padding: 22 }} className="flex flex-col items-center text-center gap-3">
               <FacetFrame size={48} glow={`${T.violet}55`}><Wallet size={18} color={T.violet} /></FacetFrame>
               <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5 }}>Connect your TON Wallet to view your portfolio and start trading.</p>
-              <button onClick={connectWallet} className="fx-tap rounded-xl px-5 py-2.5" style={{ background: PRISM, color: "#08080A", fontFamily: displayFont, fontWeight: 700, fontSize: 13 }}>Connect Wallet</button>
+              <button onClick={connectWallet} className="fx-tap rounded-xl px-5 py-2.5" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 13 }}>Connect Wallet</button>
             </GlassCard>
           ) : loading ? (
             <div className="flex flex-col gap-2">
@@ -2844,7 +2877,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           <button onClick={() => goTab("home")} className="fx-tap flex items-center gap-1.5">
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>Facet</span>
           </button>
-          <button onClick={handleHeaderWalletClick} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${connected ? "rgba(255,255,255,0.35)" : T.line}` }}>
+          <button onClick={handleHeaderWalletClick} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${connected ? glow(0.35) : T.line}` }}>
             <Wallet size={13} color={connected ? T.turquoise : T.ice} />
             <span style={{ fontFamily: monoFont, color: connected ? T.turquoise : T.ice, fontSize: 11 }}>{connected ? walletAddressShort : t("connect")}</span>
           </button>
@@ -2901,7 +2934,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             const active = tab === id;
             return (
               <button key={id} onClick={() => goTab(id)} className="fx-tap flex flex-col items-center gap-1.5" style={{ position: "relative" }}>
-                <Icon size={26} color={active ? T.turquoise : T.muted} style={{ transition: `color ${EASE}, filter ${EASE}`, filter: active ? `drop-shadow(0 0 6px rgba(255,255,255,0.55))` : "none" }} />
+                <Icon size={26} color={active ? T.turquoise : T.muted} style={{ transition: `color ${EASE}, filter ${EASE}`, filter: active ? `drop-shadow(0 0 6px ${glow(0.55)})` : "none" }} />
                 {locked && (
                   <div style={{ position: "absolute", top: -3, right: -3, width: 14, height: 14, borderRadius: "50%", background: T.surface, border: `1px solid ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <Lock size={8} color={T.muted} />
