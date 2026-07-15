@@ -522,23 +522,26 @@ function TokenCard({ t, onOpen, index }) {
   const chartData = useMemo(() => mcapSeries(t.mcapNum, t.seed), [t.mcapNum, t.seed]);
   return (
     <button onClick={() => onOpen(t)} className="fx-card w-full text-left rounded-2xl" style={{ background: T.surface, border: `1px solid ${up ? "rgba(49,208,123,0.28)" : "rgba(255,77,77,0.24)"}`, padding: "9px 12px", animationDelay: `${index * 55}ms`, position: "relative", overflow: "hidden" }}>
-      <TrendFX up={up} seedKey={t.seed} />
-      <div className="flex items-center gap-2.5" style={{ position: "relative", zIndex: 1 }}>
-        <TokenAvatar size={42} tone={up ? "up" : "down"}>{t.emoji}</TokenAvatar>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600 }}>{t.name}</span>
-            {t.verified && <ShieldCheck size={11} color={T.electric} />}
-            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 9.5 }}>${t.ticker} · {t.cat}</span>
+      {/* ракеты теперь ограничены только этим блоком, не всей карточкой */}
+      <div style={{ position: "relative", overflow: "hidden", borderRadius: 10 }}>
+        <TrendFX up={up} seedKey={t.seed} />
+        <div className="flex items-center gap-2.5" style={{ position: "relative", zIndex: 1 }}>
+          <TokenAvatar size={42} tone={up ? "up" : "down"}>{t.emoji}</TokenAvatar>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600 }}>{t.name}</span>
+              {t.verified && <ShieldCheck size={11} color={T.electric} />}
+              <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 9.5 }}>${t.ticker} · {t.cat}</span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 17, color: T.ice, opacity: 0.92 }}>{fmtUSD(t.mcapNum)}</span>
+              <ChangeBadge value={t.change} />
+            </div>
           </div>
-          <div className="flex items-baseline gap-2 mt-0.5">
-            <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 17, color: T.ice, opacity: 0.92 }}>{fmtUSD(t.mcapNum)}</span>
-            <ChangeBadge value={t.change} />
-          </div>
+          <MiniChart data={chartData} positive={up} id={t.id} width={62} height={30} />
         </div>
-        <MiniChart data={chartData} positive={up} id={t.id} width={62} height={30} />
       </div>
-      <div className="flex items-center gap-3 mt-2 pt-2" style={{ borderTop: `1px solid ${T.line}`, position: "relative", zIndex: 1, background: T.surface }}>
+      <div className="flex items-center gap-3 mt-2 pt-2" style={{ borderTop: `1px solid ${T.line}` }}>
         <CardStat icon={Wallet}>${t.liq}</CardStat>
         <CardStat icon={User}>{t.holders.toLocaleString("ru-RU")}</CardStat>
         <CardStat icon={Flame}>${t.vol}</CardStat>
