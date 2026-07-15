@@ -19,7 +19,7 @@ import { supabase } from "./supabaseClient";
    DESIGN TOKENS — shared by every screen (Home, Token, Create, Profile)
 --------------------------------------------------------- */
 
-const T = {
+const DARK_THEME = {
   bg: "#020203",
   surface: "#101012",
   surfaceHi: "#1B1B1F",
@@ -34,6 +34,93 @@ const T = {
   up: "#31D07B",
   down: "#FF4D4D",
 };
+
+const WHITE_THEME = {
+  bg: "#FFFFFF",
+  surface: "#F4F4F6",
+  surfaceHi: "#EAEAED",
+  line: "rgba(0,0,0,0.09)",
+  lineHi: "rgba(0,0,0,0.20)",
+  ice: "#0B0B0D",
+  muted: "#6B6B73",
+  electric: "#0B0B0D",
+  turquoise: "#0B0B0D",
+  violet: "#3A3A40",
+  rose: "#8A8A92",
+  up: "#1FA85F",
+  down: "#E23D3D",
+};
+
+const THEMES = { Dark: DARK_THEME, White: WHITE_THEME };
+
+/* T is intentionally a mutable object (not reassigned) so that every
+   component in this file — which reads T.xxx directly at render time —
+   picks up new colors the instant the theme changes, without needing to
+   thread theme props through the whole tree. applyTheme() mutates T's
+   own keys in place; React's normal re-render (triggered by the
+   appSettings state update in App()) then repaints everything with the
+   fresh values. */
+let T = { ...DARK_THEME };
+function applyTheme(mode) {
+  Object.assign(T, THEMES[mode] || DARK_THEME);
+}
+
+/* ---------------------------------------------------------
+   LANGUAGE / TRANSLATIONS
+   Same pattern as the theme above: `lang` is a mutable module
+   variable, t(key) looks a string up in the current language and
+   falls back to Russian (then to the key itself) if missing.
+   setLang() just updates the variable — the actual re-paint happens
+   because changing appSettings.language re-renders the whole tree.
+--------------------------------------------------------- */
+let lang = "RU";
+function setLang(v) { lang = v === "EN" ? "EN" : "RU"; }
+
+const STR = {
+  RU: {
+    navHome: "Главная", navCreate: "Создать", navProfile: "Профиль",
+    connect: "Connect", connected: "Подключён",
+    settingsSaved: "Настройки сохранены",
+    langTitle: "Language", themeTitle: "Appearance",
+    themeDark: "Dark", themeWhite: "White",
+    langFullNote: "Интерфейс переведён на выбранный язык.",
+    search: "Поиск токенов",
+    buy: "Купить", sell: "Продать", cancel: "Отмена", confirm: "Подтвердить",
+    follow: "Подписаться", following: "Вы подписаны", share: "Поделиться",
+    copyAddress: "Скопировать адрес", disconnectWallet: "Отключить кошелёк",
+    connectWallet: "Connect TON Wallet",
+    editProfile: "Редактировать профиль",
+    logOut: "Выйти", deleteAccount: "Удалить аккаунт",
+    createToken: "Создать токен",
+    settings: "Настройки",
+    notifications: "Уведомления", security: "Безопасность",
+    wallet: "Кошелёк", profileSettings: "Профиль", referral: "Реферальная программа",
+    privacy: "Конфиденциальность", terms: "Условия использования", support: "Поддержка",
+  },
+  EN: {
+    navHome: "Home", navCreate: "Create", navProfile: "Profile",
+    connect: "Connect", connected: "Connected",
+    settingsSaved: "Settings saved",
+    langTitle: "Language", themeTitle: "Appearance",
+    themeDark: "Dark", themeWhite: "White",
+    langFullNote: "The interface is translated into the selected language.",
+    search: "Search tokens",
+    buy: "Buy", sell: "Sell", cancel: "Cancel", confirm: "Confirm",
+    follow: "Follow", following: "Following", share: "Share",
+    copyAddress: "Copy address", disconnectWallet: "Disconnect wallet",
+    connectWallet: "Connect TON Wallet",
+    editProfile: "Edit profile",
+    logOut: "Log out", deleteAccount: "Delete account",
+    createToken: "Create token",
+    settings: "Settings",
+    notifications: "Notifications", security: "Security",
+    wallet: "Wallet", profileSettings: "Profile", referral: "Referral program",
+    privacy: "Privacy", terms: "Terms of use", support: "Support",
+  },
+};
+function t(key) {
+  return (STR[lang] && STR[lang][key]) || STR.RU[key] || key;
+}
 
 const PRISM = `linear-gradient(135deg, #FFFFFF 0%, #9A9AA3 100%)`;
 const FACET = "polygon(18% 0%, 100% 0%, 100% 82%, 82% 100%, 0% 100%, 0% 18%)";
@@ -983,7 +1070,7 @@ function TradeModal({ t, tradeModal, onClose, onConfirm }) {
         </div>
 
         <div className="flex rounded-xl p-1" style={{ background: T.bg, border: `1px solid ${T.line}` }}>
-          {[{ id: "buy", label: "Купить" }, { id: "sell", label: "Продать" }].map(o => {
+          {[{ id: "buy", label: t("buy") }, { id: "sell", label: t("sell") }].map(o => {
             const active = mode === o.id;
             return (
               <button key={o.id} onClick={() => { setMode(o.id); setAmountStr(""); }} className="fx-tap flex-1 rounded-lg py-2"
@@ -1692,17 +1779,17 @@ function SettingsPanel({
               {appSettings.language === lng && <CheckCircle2 size={16} color={T.turquoise} />}
             </button>
           ))}
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.5, marginTop: 2 }}>Полный перевод интерфейса появится в одном из следующих обновлений.</p>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.5, marginTop: 2 }}>{t("langFullNote")}</p>
         </div>
       );
       break;
     case "appearance":
       body = (
         <div className="flex flex-col gap-2 mt-2">
-          {["Dark", "OLED Black"].map((th) => (
-            <button key={th} onClick={() => onUpdateSetting("theme", th)} className="fx-tap w-full flex items-center justify-between rounded-xl py-3 px-3.5" style={{ background: T.surfaceHi, border: `1px solid ${appSettings.theme === th ? T.turquoise : T.line}` }}>
-              <span style={{ fontFamily: bodyFont, fontSize: 13, color: T.ice }}>{th}</span>
-              {appSettings.theme === th && <CheckCircle2 size={16} color={T.turquoise} />}
+          {[{ id: "Dark", label: t("themeDark") }, { id: "White", label: t("themeWhite") }].map((th) => (
+            <button key={th.id} onClick={() => onUpdateSetting("theme", th.id)} className="fx-tap w-full flex items-center justify-between rounded-xl py-3 px-3.5" style={{ background: T.surfaceHi, border: `1px solid ${appSettings.theme === th.id ? T.turquoise : T.line}` }}>
+              <span style={{ fontFamily: bodyFont, fontSize: 13, color: T.ice }}>{th.label}</span>
+              {appSettings.theme === th.id && <CheckCircle2 size={16} color={T.turquoise} />}
             </button>
           ))}
         </div>
@@ -2549,10 +2636,31 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [settingsItem, setSettingsItem] = useState(null);
   const [manageToken_, setManageToken_] = useState(null);
   const [tradeModal, setTradeModal] = useState(null); // { mode: 'buy' | 'sell' }
-  const [appSettings, setAppSettings] = useState({ pushNotif: true, emailNotif: false, twoFA: false, language: "RU", theme: "Dark", pinEnabled: false });
+  const [appSettings, setAppSettings] = useState(() => {
+    const base = { pushNotif: true, emailNotif: false, twoFA: false, language: "RU", theme: "Dark", pinEnabled: false };
+    try {
+      if (typeof window !== "undefined") {
+        const savedTheme = window.localStorage.getItem("faceta_theme");
+        const savedLang = window.localStorage.getItem("faceta_language");
+        if (savedTheme) base.theme = savedTheme;
+        if (savedLang) base.language = savedLang;
+      }
+    } catch (e) { /* localStorage unavailable */ }
+    applyTheme(base.theme);
+    setLang(base.language);
+    return base;
+  });
   function updateAppSetting(key, value) {
+    if (key === "theme") applyTheme(value);
+    if (key === "language") setLang(value);
     setAppSettings((s) => ({ ...s, [key]: value }));
-    showToast("Настройки сохранены");
+    try {
+      if (typeof window !== "undefined") {
+        if (key === "theme") window.localStorage.setItem("faceta_theme", value);
+        if (key === "language") window.localStorage.setItem("faceta_language", value);
+      }
+    } catch (e) { /* localStorage unavailable */ }
+    showToast(key === "theme" ? (value === "White" ? "Тема изменена: Белая" : "Тема изменена: Тёмная") : t("settingsSaved"));
   }
 
   // PIN-код при входе — код хранится только на устройстве (localStorage),
@@ -2738,7 +2846,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           </button>
           <button onClick={handleHeaderWalletClick} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${connected ? "rgba(255,255,255,0.35)" : T.line}` }}>
             <Wallet size={13} color={connected ? T.turquoise : T.ice} />
-            <span style={{ fontFamily: monoFont, color: connected ? T.turquoise : T.ice, fontSize: 11 }}>{connected ? walletAddressShort : "Connect"}</span>
+            <span style={{ fontFamily: monoFont, color: connected ? T.turquoise : T.ice, fontSize: 11 }}>{connected ? walletAddressShort : t("connect")}</span>
           </button>
         </div>
 
@@ -2786,9 +2894,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
 
         <div className="flex items-center justify-around px-2 py-4" style={{ borderTop: `1px solid ${T.line}`, background: "rgba(19,19,19,0.88)", backdropFilter: "blur(12px)", flexShrink: 0, paddingBottom: insetBottom + 16 }}>
           {[
-            { id: "home", label: "Главная", icon: HomeIcon },
-            { id: "create", label: "Создать", icon: PlusCircle, locked: !(accountCreated && connected) },
-            { id: "profile", label: "Профиль", icon: User },
+            { id: "home", label: t("navHome"), icon: HomeIcon },
+            { id: "create", label: t("navCreate"), icon: PlusCircle, locked: !(accountCreated && connected) },
+            { id: "profile", label: t("navProfile"), icon: User },
           ].map(({ id, label, icon: Icon, locked }) => {
             const active = tab === id;
             return (
