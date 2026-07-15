@@ -1928,7 +1928,6 @@ function ProfileView({
     onGoCreate();
   }
   function openSettingItem(item) {
-    if (!requireUnlock()) return;
     onOpenSetting(item);
   }
   function exploreWallet() { if (typeof window !== "undefined") window.open("https://tonviewer.com", "_blank", "noopener,noreferrer"); }
@@ -2116,20 +2115,12 @@ function ProfileView({
 
         <div className="mt-5">
           <SectionTitle>Settings</SectionTitle>
-          {!unlocked && (
-            <div className="flex items-center gap-2 rounded-xl px-3.5 py-2.5 mb-2" style={{ background: "rgba(255,255,255,0.07)", border: `1px solid rgba(255,255,255,0.22)` }}>
-              <Lock size={13} color={T.electric} />
-              <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 11.5 }}>
-                {!accountCreated ? "Создай аккаунт и подключи кошелёк, чтобы открыть настройки" : "Подключи TON-кошелёк, чтобы открыть настройки"}
-              </span>
-            </div>
-          )}
           <GlassCard style={{ padding: "4px 16px" }}>
             {SETTINGS_ITEMS.map((s, i) => (
-              <button key={s.label} onClick={() => openSettingItem(s)} className="fx-tap w-full flex items-center gap-3 py-3" style={{ borderBottom: i < SETTINGS_ITEMS.length - 1 ? `1px solid ${T.line}` : "none", opacity: unlocked ? 1 : 0.45 }}>
+              <button key={s.label} onClick={() => openSettingItem(s)} className="fx-tap w-full flex items-center gap-3 py-3" style={{ borderBottom: i < SETTINGS_ITEMS.length - 1 ? `1px solid ${T.line}` : "none", opacity: 1 }}>
                 <s.icon size={16} color={T.muted} />
                 <span style={{ fontFamily: bodyFont, fontSize: 13, color: T.ice, flex: 1, textAlign: "left" }}>{s.label}</span>
-                {unlocked ? <ChevronRight size={14} color={T.muted} /> : <Lock size={13} color={T.muted} />}
+                <ChevronRight size={14} color={T.muted} />
               </button>
             ))}
           </GlassCard>
