@@ -470,18 +470,6 @@ const FILTERS = [
   { id: "recent", label: "⚡ Recently Launched" },
 ];
 
-/* чисто декоративные мем-фразочки — крутятся в пустых состояниях и тостах,
-   на функциональность никак не влияют */
-const MEME_LINES = [
-  "wagmi 🚀",
-  "diamond hands only 💎🙌",
-  "гмонки, сегодня пампим",
-  "not financial advice, но выглядит сочно 👀",
-  "это норм, это часть плана 🔥🐶",
-  "ngmi если сидишь и не торгуешь",
-  "чарт красный? значит скоро зелёный",
-  "лучше поздно, чем на хаях",
-];
 function randomMeme() {
   return MEME_LINES[Math.floor(Math.random() * MEME_LINES.length)];
 }
