@@ -1606,6 +1606,7 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [previewEmoji, setPreviewEmoji] = useState(() => randomProfileEmoji());
   const [touched, setTouched] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
   const avatarInputRef = useRef(null);
   const isLogin = !isEdit && authTab === "login";
 
@@ -1617,6 +1618,7 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
       setPassword("");
       setBio(initial && initial.bio ? initial.bio : "");
       setAvatarUrl(initial && initial.avatarUrl ? initial.avatarUrl : null);
+      setAvatarFile(null);
       setPreviewEmoji(initial && initial.emoji ? initial.emoji : randomProfileEmoji());
       setTouched(false);
       setServerError("");
@@ -1630,7 +1632,6 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
   const emailValid = email.trim() !== "" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const passwordValid = isEdit || password.length >= 6;
   const canSubmit = nicknameValid && emailValid && passwordValid;
-  const [avatarFile, setAvatarFile] = useState(null);
 
   function onPickAvatar(e) {
   const file = e.target.files && e.target.files[0];
@@ -1764,7 +1765,7 @@ async function uploadAvatarIfNeeded(userId) {
           wallet_address: walletAddress || null,
         },
       },
-1    });
+    });
     if (error) {
       setSubmitting(false);
       setServerError(friendlyAuthError(error.message));
@@ -1807,20 +1808,6 @@ async function uploadAvatarIfNeeded(userId) {
       bio: bio.trim(),
       avatarUrl: uploadedUrl,
       emoji: uploadedUrl ? null : previewEmoji,
-    });
-  }U
-      // Email confirmation is turned on in the Supabase project — there's
-      // no session yet, so we can't unlock the app. Ask the user to verify.
-      setServerError("Мы отправили письмо для подтверждения — перейди по ссылке, потом войди");
-      return;
-    }
-
-    onSubmit({
-      nickname: nicknameTrimmed,
-      email: email.trim(),
-      bio: bio.trim(),
-      avatarUrl,
-      emoji: avatarUrl ? null : previewEmoji,
     });
   }
 
