@@ -1630,13 +1630,30 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
   const emailValid = email.trim() !== "" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const passwordValid = isEdit || password.length >= 6;
   const canSubmit = nicknameValid && emailValid && passwordValid;
+  const [avatarFile, setAvatarFile] = useState(null);
 
   function onPickAvatar(e) {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    setAvatarUrl(URL.createObjectURL(file));
-  }
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  setAvatarUrl(URL.createObjectURL(file)); // только превью, в БД не пишем
+  setAvatarFile(file);
+}
 
+// Загружает файл в Supabase Storage и возвращает публичный URL
+async function uploadAvatarIfNeeded(userId) {
+  if (!avatarFile) return avatarUrl; // ничего не выбирали — оставляем как было
+  const ext = avatarFile.name.split(".").pop();
+  const path = `${userId}/${Date.now()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from("avatars")
+    .upload(path, avatarFile, { upsert: true });
+  if (uploadError) {
+    setServerError("Не удалось загрузить аватар: " + uploadError.message);
+    return null;
+  }
+  const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+  return data.publicUrl;
+}
   function friendlyAuthError(message) {
     const m = (message || "").toLowerCase();
     if (m.includes("already registered") || m.includes("already exists")) return "Эта почта уже зарегистрирована — попробуй вкладку «Войти»";
@@ -1684,18 +1701,23 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
       return;
     }
 
-    // ---------- EDIT (no auth call — just updates the row) ----------
+// ---------- EDIT (no auth call — just updates the row) ----------
     if (isEdit) {
       const { data: sessionData } = await supabase.auth.getUser();
       const userId = sessionData?.user?.id;
+      let uploadedUrl = avatarUrl; // если userId вдруг не найден — оставляем как было
+
       if (userId) {
+        uploadedUrl = await uploadAvatarIfNeeded(userId);
+        if (avatarFile && !uploadedUrl) { setSubmitting(false); return; } // загрузка не удалась
+
         const { error: updateError } = await supabase
           .from("profiles")
           .update({
             nickname: nicknameTrimmed,
             bio: bio.trim(),
-            avatar_url: avatarUrl,
-            emoji: avatarUrl ? null : previewEmoji,
+            avatar_url: uploadedUrl,
+            emoji: uploadedUrl ? null : previewEmoji,
           })
           .eq("id", userId);
         setSubmitting(false);
@@ -1706,17 +1728,18 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
       } else {
         setSubmitting(false);
       }
+
       onSubmit({
         nickname: nicknameTrimmed,
         email: email.trim(),
         bio: bio.trim(),
-        avatarUrl,
-        emoji: avatarUrl ? null : previewEmoji,
+        avatarUrl: uploadedUrl,
+        emoji: uploadedUrl ? null : previewEmoji,
       });
       return;
     }
 
-    // ---------- CREATE (real signUp; a DB trigger auto-creates the
+// ---------- CREATE (real signUp; a DB trigger auto-creates the
     // profiles row from the metadata below — see SQL setup) ----------
     const { data: existing } = await supabase
       .from("profiles")
@@ -1736,20 +1759,56 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
         data: {
           nickname: nicknameTrimmed,
           bio: bio.trim(),
-          avatar_url: avatarUrl,
-          emoji: avatarUrl ? null : previewEmoji,
+          avatar_url: null, // ещё не загружен — загрузим ПОСЛЕ signUp, когда будет userId
+          emoji: previewEmoji,
           wallet_address: walletAddress || null,
         },
       },
-    });
-
-    setSubmitting(false);
+1    });
     if (error) {
+      setSubmitting(false);
       setServerError(friendlyAuthError(error.message));
       return;
     }
 
     if (!data.session) {
+      // Email confirmation is turned on in the Supabase project — there's
+      // no session yet, so we can't unlock the app. Ask the user to verify.
+      setSubmitting(false);
+      setServerError("Мы отправили письмо для подтверждения — перейди по ссылке, потом войди");
+      return;
+    }
+
+    // Триггер уже создал строку в profiles с avatar_url: null.
+    // Теперь, когда есть data.user.id, загружаем файл (если он был выбран)
+    // и обновляем эту же строку реальным публичным URL.
+    let uploadedUrl = null;
+    if (avatarFile) {
+      uploadedUrl = await uploadAvatarIfNeeded(data.user.id);
+      if (!uploadedUrl) {
+        setSubmitting(false);
+        return; // ошибка загрузки уже показана внутри uploadAvatarIfNeeded
+      }
+      const { error: avatarUpdateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: uploadedUrl, emoji: null })
+        .eq("id", data.user.id);
+      if (avatarUpdateError) {
+        setSubmitting(false);
+        setServerError(friendlyAuthError(avatarUpdateError.message));
+        return;
+      }
+    }
+
+    setSubmitting(false);
+    onSubmit({
+      nickname: nicknameTrimmed,
+      email: email.trim(),
+      bio: bio.trim(),
+      avatarUrl: uploadedUrl,
+      emoji: uploadedUrl ? null : previewEmoji,
+    });
+  }U
       // Email confirmation is turned on in the Supabase project — there's
       // no session yet, so we can't unlock the app. Ask the user to verify.
       setServerError("Мы отправили письмо для подтверждения — перейди по ссылке, потом войди");
