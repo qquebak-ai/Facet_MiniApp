@@ -2119,8 +2119,8 @@ useEffect(() => {
       <div style={{ position: "relative", zIndex: 1, height: "100%", display: "flex", flexDirection: "column" }}>
         <div className="flex items-center justify-between px-4 pt-4 pb-2" style={{ flexShrink: 0 }}>
           <button onClick={() => goTab("home")} className="fx-tap flex items-center gap-1.5">
-            <div style={{ width: 8, height: 8, clipPath: FACET, background: PRISM, animation: "glowPulse 2.4s ease-in-out infinite" }} />
-            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em" }}>faceta</span>
+          <div style={{ width: 14, height: 14, clipPath: FACET, background: PRISM, animation: "glowPulse 2.4s ease-in-out infinite" }} />
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>faceta</span>
           </button>
           <button onClick={handleHeaderWalletClick} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${connected ? "rgba(255,255,255,0.35)" : T.line}` }}>
             <Wallet size={13} color={connected ? T.turquoise : T.ice} />
