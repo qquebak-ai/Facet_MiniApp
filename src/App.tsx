@@ -325,7 +325,14 @@ function TrendFX({ up, seedKey = 1 }) {
   }, [up, seedKey]);
 
   return (
-    <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", borderRadius: "inherit" }}>
+    <div style={{
+      position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", borderRadius: "inherit",
+      /* мягкая маска по верхнему/нижнему краю: ракеты и полосы затухают в прозрачность
+         ДО того, как долетят до границы overflow:hidden, поэтому их больше не "срезает"
+         жёсткой невидимой линией на краю виджета */
+      WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, #000 14%, #000 82%, transparent 100%)",
+      maskImage: "linear-gradient(to bottom, transparent 0%, #000 14%, #000 82%, transparent 100%)",
+    }}>
       {up
         ? items.map((it, i) => (
             <Rocket
