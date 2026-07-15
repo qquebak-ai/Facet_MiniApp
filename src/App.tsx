@@ -3,7 +3,7 @@ import {
   Search, Flame, TrendingUp, Clock, Sparkles, ArrowUpRight, ArrowDownRight,
   Wallet, Home as HomeIcon, PlusCircle, User, ChevronLeft, Share2, Star,
   Flag, ShieldCheck, ShieldAlert, Globe, Globe2, Send, Twitter, Image as ImageIcon, Upload,
-  Copy, ExternalLink, LogOut, ChevronRight, Rocket, Gem,
+  Copy, ExternalLink, LogOut, ChevronRight, Rocket,
   Settings as SettingsIcon, Bell, Lock, Palette, Gift, LifeBuoy,
   FileText, ShieldQuestion, ArrowDownToLine, ArrowUpFromLine, Link2, CheckCircle2, RefreshCw, X,
   Eye, EyeOff, LogIn, Mail, KeyRound
@@ -1835,11 +1835,20 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
 
 function ProfileView({
   connected, walletAddress, tonBalance, tonPriceUsd, onConnect, onDisconnect, onOpenConnectModal, showToast,
-  accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut,
+  accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut, onDeleteAccount,
   onOpenSetting, onManageToken, onGoCreate, onOpenToken,
 }) {
   const [loading, setLoading] = useState(true);
   const [verifyStatus, setVerifyStatus] = useState("none");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function confirmDeleteAccount() {
+    setDeleting(true);
+    await onDeleteAccount();
+    setDeleting(false);
+    setDeleteConfirmOpen(false);
+  }
 
   useEffect(() => { const t = setTimeout(() => setLoading(false), 650); return () => clearTimeout(t); }, []);
 
@@ -2072,7 +2081,42 @@ function ProfileView({
             ))}
           </GlassCard>
         </div>
+
+        {accountCreated && (
+          <div className="mt-5">
+            <SectionTitle>Danger Zone</SectionTitle>
+            <button
+              onClick={() => setDeleteConfirmOpen(true)}
+              className="fx-tap w-full flex items-center justify-center gap-2 rounded-xl py-3"
+              style={{ background: "transparent", border: `1px solid rgba(255,77,77,0.35)`, fontFamily: displayFont, fontWeight: 700, fontSize: 13, color: T.down }}
+            >
+              <ShieldAlert size={15} /> Удалить аккаунт навсегда
+            </button>
+          </div>
+        )}
       </div>
+
+      {deleteConfirmOpen && (
+        <div className="fx-modal-back" style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(2,2,4,0.8)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => !deleting && setDeleteConfirmOpen(false)}>
+          <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 20, padding: 22 }}>
+            <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
+              <ShieldAlert size={18} color={T.down} />
+              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>Удалить аккаунт?</span>
+            </div>
+            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginBottom: 18 }}>
+              Это действие необратимо. Профиль, статистика и достижения будут удалены навсегда, ты выйдешь из аккаунта.
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setDeleteConfirmOpen(false)} disabled={deleting} className="fx-tap flex-1 rounded-xl py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice, opacity: deleting ? 0.6 : 1 }}>
+                Отмена
+              </button>
+              <button onClick={confirmDeleteAccount} disabled={deleting} className="fx-tap flex-1 rounded-xl py-2.5" style={{ background: T.down, border: "none", fontFamily: displayFont, fontWeight: 700, fontSize: 13, color: "#1a0000", opacity: deleting ? 0.6 : 1 }}>
+                {deleting ? "Удаляем..." : "Удалить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2275,6 +2319,22 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     if (connected) tonConnectUI.disconnect();
     showToast("Вы вышли из аккаунта");
   }
+  async function deleteAccountForever() {
+    // Удаляем профиль из таблицы profiles и выходим из сессии.
+    // Полное удаление самой auth-записи пользователя требует серверного
+    // вызова с service_role ключом (например, через Supabase Edge Function),
+    // так как анонимный/публичный ключ на клиенте не имеет прав это делать.
+    const { data: sessionData } = await supabase.auth.getUser();
+    const userId = sessionData?.user?.id;
+    if (userId) {
+      await supabase.from("profiles").delete().eq("id", userId);
+    }
+    await supabase.auth.signOut();
+    setAccountCreated(false);
+    setProfile(EMPTY_PROFILE);
+    if (connected) tonConnectUI.disconnect();
+    showToast("Аккаунт удалён");
+  }
   function openLoginProfile() { setProfileModalMode("login"); setProfileModalOpen(true); }
   function requireUnlockRoot() {
     if (!accountCreated) { setProfileModalMode("create"); setProfileModalOpen(true); showToast("Сначала создай аккаунт"); return false; }
@@ -2343,7 +2403,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       <div style={{ position: "relative", zIndex: 1, height: "100%", display: "flex", flexDirection: "column" }}>
         <div className="flex items-center justify-between px-4 pt-4 pb-2" style={{ flexShrink: 0 }}>
           <button onClick={() => goTab("home")} className="fx-tap flex items-center gap-1.5">
-          <Gem size={22} color={T.ice} style={{ animation: "spin360 3s linear infinite" }} />
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>Facet</span>
           </button>
           <button onClick={handleHeaderWalletClick} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${connected ? "rgba(255,255,255,0.35)" : T.line}` }}>
@@ -2385,6 +2444,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onOpenLogin={openLoginProfile}
               onOpenEditProfile={openEditProfile}
               onLogOut={logOutProfile}
+              onDeleteAccount={deleteAccountForever}
               onOpenSetting={(item) => setSettingsItem(item)}
               onManageToken={(tok) => setManageToken_(tok)}
               onGoCreate={() => goTab("create")}
