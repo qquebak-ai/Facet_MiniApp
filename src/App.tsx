@@ -1361,19 +1361,31 @@ function PinDots({ length = PIN_LENGTH, filled, error }) {
 function PinKeypad({ onDigit, onBackspace }) {
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
   return (
-    <div className="grid grid-cols-3 gap-4" style={{ width: "100%", maxWidth: 240, margin: "0 auto" }}>
+    <div className="grid grid-cols-3 gap-5" style={{ width: "100%", maxWidth: 264, margin: "0 auto" }}>
       {keys.map((k, idx) => {
         if (k === "") return <div key={idx} />;
         if (k === "back") {
           return (
-            <button key={idx} onClick={onBackspace} className="fx-tap flex items-center justify-center" style={{ height: 58, borderRadius: "50%", background: "transparent" }}>
-              <span style={{ fontFamily: bodyFont, fontSize: 18, color: T.muted }}>⌫</span>
+            <button key={idx} onClick={onBackspace} className="fx-tap flex items-center justify-center" style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: "50%", background: "transparent" }}>
+              <span style={{ fontFamily: bodyFont, fontSize: 19, color: T.muted }}>⌫</span>
             </button>
           );
         }
         return (
-          <button key={idx} onClick={() => onDigit(k)} className="fx-tap flex items-center justify-center" style={{ height: 58, borderRadius: "50%", background: T.surfaceHi, border: `1px solid ${T.line}` }}>
-            <span style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 700, color: T.ice }}>{k}</span>
+          <button
+            key={idx}
+            onClick={() => onDigit(k)}
+            className="fx-tap flex items-center justify-center"
+            style={{
+              width: "100%",
+              aspectRatio: "1 / 1",
+              borderRadius: "50%",
+              background: "radial-gradient(circle at 32% 28%, rgba(255,255,255,0.09), rgba(255,255,255,0.02) 60%, rgba(255,255,255,0) 100%), #0A0A0C",
+              border: `1px solid ${T.line}`,
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 14px rgba(0,0,0,0.55)",
+            }}
+          >
+            <span style={{ fontFamily: displayFont, fontSize: 21, fontWeight: 700, color: T.ice }}>{k}</span>
           </button>
         );
       })}
@@ -1480,18 +1492,47 @@ function PinLockScreen({ pin, profile, onUnlock, onForgot }) {
   }
   function handleBackspace() { setEntry((e) => e.slice(0, -1)); }
 
+  const hasName = profile && profile.nickname;
+
   return (
-    <div className="fx-view" style={{ position: "absolute", inset: 0, zIndex: 200, background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <FacetFrame size={60} glow={`${T.electric}55`}><Lock size={24} color={T.electric} /></FacetFrame>
-      <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700, marginTop: 16 }}>Введи PIN-код</div>
-      {profile && profile.nickname ? (
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 4 }}>{profile.nickname}</div>
-      ) : null}
-      <div style={{ margin: "30px 0" }}><PinDots filled={entry.length} error={error} /></div>
-      <PinKeypad onDigit={handleDigit} onBackspace={handleBackspace} />
-      <button onClick={onForgot} className="fx-tap" style={{ marginTop: 26, fontFamily: bodyFont, fontSize: 12.5, color: T.muted, textDecoration: "underline", textUnderlineOffset: 3 }}>
-        Забыл(а) PIN-код?
-      </button>
+    <div className="fx-view" style={{ position: "absolute", inset: 0, zIndex: 200, background: "#000000", display: "flex", flexDirection: "column", alignItems: "center", overflow: "hidden" }}>
+      {/* soft ambient glow behind the avatar — keeps the black from feeling flat */}
+      <div style={{
+        position: "absolute", top: "-10%", left: "50%", transform: "translateX(-50%)",
+        width: 340, height: 340, borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.03) 45%, rgba(0,0,0,0) 72%)",
+        pointerEvents: "none",
+      }} />
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}><CyberGrid /></div>
+
+      <div style={{ position: "relative", flex: 1, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em", textAlign: "center" }}>
+          {hasName ? <>Привет, {profile.nickname}</> : "С возвращением"}
+        </div>
+
+        <div style={{ marginTop: 22, position: "relative" }}>
+          <div style={{
+            width: 76, height: 76, borderRadius: "50%", overflow: "hidden",
+            background: profile && profile.avatarUrl ? `center/cover no-repeat url(${profile.avatarUrl})` : "linear-gradient(160deg, #1B1B1F, #0A0A0C)",
+            border: `1px solid ${T.lineHi}`, display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 0 26px rgba(255,255,255,0.10), inset 0 1px 0 rgba(255,255,255,0.08)",
+          }}>
+            {!(profile && profile.avatarUrl) && (
+              profile && profile.emoji
+                ? <span style={{ fontSize: 32 }}>{profile.emoji}</span>
+                : <Lock size={26} color={T.ice} />
+            )}
+          </div>
+        </div>
+
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 14 }}>Введи PIN-код, чтобы продолжить</div>
+
+        <div style={{ margin: "28px 0" }}><PinDots filled={entry.length} error={error} /></div>
+        <PinKeypad onDigit={handleDigit} onBackspace={handleBackspace} />
+        <button onClick={onForgot} className="fx-tap" style={{ marginTop: 26, fontFamily: bodyFont, fontSize: 12.5, color: T.muted, textDecoration: "underline", textUnderlineOffset: 3 }}>
+          Забыл(а) PIN-код?
+        </button>
+      </div>
     </div>
   );
 }
