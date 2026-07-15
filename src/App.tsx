@@ -1548,6 +1548,8 @@ const NICKNAME_RE = /^[A-Za-z][A-Za-z0-9_.]{1,19}$/;
    email and bio are all optional. No avatar → a random emoji becomes
    the profile picture instead. */
 function CreateAccountModal({ open, onClose, onSubmit, initial, mode = "create", walletAddress }) {onSubmit, initial, mode = "create" }) {
+  const [serverError, setServerError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
   const [bio, setBio] = useState("");
