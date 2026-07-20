@@ -11,7 +11,6 @@ import {
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, toNano} from "@ton/core";
 import { supabase } from "./supabaseClient";
-import { createChart, CandlestickSeries, HistogramSeries, CrosshairMode, ColorType } from "lightweight-charts";
 
 /* ---------------------------------------------------------
    DESIGN TOKENS — shared by every screen (Home, Token, Create, Profile)
