@@ -18,7 +18,7 @@
     "recharts": "^2.12.7",
     "@ton-community/assets-sdk": "*",
     "@ton/ton": "*",
-    "@ston-fi/sdk": "*",
+    "@ston-fi/sdk": "*"
 
   },
   "devDependencies": {
