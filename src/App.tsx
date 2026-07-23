@@ -145,8 +145,6 @@ const STR = {
     ohlcOpen: "О", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
     statPrice: "Цена", statLiquidity: "Ликвидность", statHolders: "Держателей", statVolume24h: "Объём 24ч",
     aboutToken: "О токене",
-    creatorLabel: "создатель",
-    mockTokenDesc: "Быстрая, честная эмиссия без предпродажи команде. Ликвидность заблокирована на 12 месяцев с момента запуска.",
     youPay: "Вы платите", youSell: "Вы продаёте", youReceive: "Вы получите",
     available: "Доступно",
     insufficientFunds: "Недостаточно средств для этой суммы",
@@ -346,8 +344,6 @@ const STR = {
     ohlcOpen: "O", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
     statPrice: "Price", statLiquidity: "Liquidity", statHolders: "Holders", statVolume24h: "24h Volume",
     aboutToken: "About the token",
-    creatorLabel: "creator",
-    mockTokenDesc: "A fast, fair launch with no pre-sale to the team. Liquidity is locked for 12 months from launch.",
     youPay: "You pay", youSell: "You sell", youReceive: "You receive",
     available: "Available",
     insufficientFunds: "Not enough funds for this amount",
@@ -910,13 +906,21 @@ function resampleCandles(candles, groupSize) {
 // can keep showing the bundled fallback list instead of an empty feed.
 async function fetchTonMemePools(limit = 18) {
   try {
-    const res = await fetch(`${GT_BASE}/networks/${GT_NETWORK}/trending_pools?page=1`);
+    // include=base_token pulls the actual token record (real name, symbol,
+    // on-chain address, and logo image_url) for every pool in one request,
+    // instead of guessing the ticker from the pool's "X / TON" name string.
+    const res = await fetch(`${GT_BASE}/networks/${GT_NETWORK}/trending_pools?page=1&include=base_token`);
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const rows = (json?.data || []).slice(0, limit);
+    const included = json?.included || [];
+    const tokensById = new Map(included.filter(x => x.type === "token").map(x => [x.id, x.attributes || {}]));
     return rows.map((row) => {
       const a = row.attributes || {};
-      const ticker = (a.name || "TOKEN/TON").split("/")[0].trim().toUpperCase().slice(0, 10) || "TOKEN";
+      const baseTokenId = row.relationships?.base_token?.data?.id;
+      const bt = (baseTokenId && tokensById.get(baseTokenId)) || {};
+      const name = bt.name || (a.name || "TOKEN/TON").split("/")[0].trim();
+      const ticker = (bt.symbol || name || "TOKEN").toUpperCase().slice(0, 10);
       const price = parseFloat(a.base_token_price_usd) || 0;
       const mcapNum = parseFloat(a.market_cap_usd) || parseFloat(a.fdv_usd) || 0;
       const change = parseFloat(a.price_change_percentage?.h24) || 0;
@@ -926,8 +930,10 @@ async function fetchTonMemePools(limit = 18) {
       return {
         id: row.id,
         poolAddress: a.address,
-        name: ticker,
+        tokenAddress: bt.address || null,
+        name,
         ticker,
+        logoUrl: bt.image_url && !bt.image_url.includes("missing_small") ? bt.image_url : null,
         emoji: emojiForTicker(ticker),
         price,
         change,
@@ -940,9 +946,38 @@ async function fetchTonMemePools(limit = 18) {
         verified: liqNum > 50_000,
         live: true,
       };
-    }).filter(t => t && t.id && t.poolAddress && t.price > 0);
+    }).filter(t => t.poolAddress && t.price > 0);
   } catch (err) {
-    return null; // caller falls back to bundled mock tokens
+    return null; // caller keeps showing the last successfully fetched list
+  }
+}
+
+// Real per-token description + socials, from GeckoTerminal's token-info
+// endpoint (name/image/description/website/telegram/twitter). Cached per
+// token address and only fetched lazily when a token is actually opened —
+// calling this for every card in the feed would blow through the free API's
+// rate limit for no benefit, since the list view never shows the description.
+const tokenInfoCache = new Map(); // tokenAddress -> info | null
+async function fetchTokenInfo(tokenAddress) {
+  if (!tokenAddress) return null;
+  if (tokenInfoCache.has(tokenAddress)) return tokenInfoCache.get(tokenAddress);
+  try {
+    const res = await fetch(`${GT_BASE}/networks/${GT_NETWORK}/tokens/${tokenAddress}/info`);
+    if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
+    const json = await res.json();
+    const a = json?.data?.attributes || {};
+    const info = {
+      description: a.description || null,
+      website: (a.websites && a.websites[0]) || null,
+      telegram: a.telegram_handle ? `https://t.me/${a.telegram_handle}` : null,
+      twitter: a.twitter_handle ? `https://x.com/${a.twitter_handle}` : null,
+      imageUrl: a.image_url && !a.image_url.includes("missing_small") ? a.image_url : null,
+    };
+    tokenInfoCache.set(tokenAddress, info);
+    return info;
+  } catch (err) {
+    tokenInfoCache.set(tokenAddress, null);
+    return null;
   }
 }
 
@@ -1400,7 +1435,8 @@ function MintlyFrame({ children, size = 52, glow }) {
 /* Premium circular token avatar: glass ring with a static gradient border.
    Used specifically for token logos (list cards, detail, portfolio) — the cut-corner
    MintlyFrame stays reserved for brand/utility chrome elsewhere. */
-function TokenAvatar({ children, size = 52, tone = "neutral" }) {
+function TokenAvatar({ children, size = 52, tone = "neutral", src }) {
+  const [broken, setBroken] = useState(false);
   return (
     <div className="fx-avatar" style={{ width: size, height: size, position: "relative", flexShrink: 0 }}>
       <div style={{
@@ -1413,9 +1449,19 @@ function TokenAvatar({ children, size = 52, tone = "neutral" }) {
       <div style={{
         position: "absolute", inset: 1.5, borderRadius: "50%", background: "rgba(24,24,26,0.75)",
         backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: size * 0.44, boxShadow: `inset 0 0 10px rgba(255,255,255,0.04)`,
+        fontSize: size * 0.44, boxShadow: `inset 0 0 10px rgba(255,255,255,0.04)`, overflow: "hidden",
       }}>
-        {children}
+        {/* Real token logo when GeckoTerminal has one for this pool's base
+            token; falls back to the deterministic emoji if there's no image
+            or it fails to load (broken CDN link, blocked host, etc). */}
+        {src && !broken ? (
+          <img
+            src={src}
+            alt=""
+            onError={() => setBroken(true)}
+            style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
+          />
+        ) : children}
       </div>
     </div>
   );
@@ -1478,15 +1524,6 @@ function catLabel(cat) {
   return map[cat] ? t(map[cat]) : cat;
 }
 
-const TOKENS = [
-  { id: "dogton", name: "DogTON", ticker: "DOGT", emoji: "🐕", price: 0.00042, change: 18.4, mcapNum: 1_200_000, liq: "310K", holders: 4210, cat: "Мемы", vol: "820K", seed: 3, verified: false },
-  { id: "prismcat", name: "Prism Cat", ticker: "PRSM", emoji: "🐱", price: 0.00118, change: 42.9, mcapNum: 3_400_000, liq: "540K", holders: 8890, cat: "Мемы", vol: "1.9M", seed: 7, verified: true },
-  { id: "gemrush", name: "Gem Rush", ticker: "GEMR", emoji: "💎", price: 0.00891, change: -6.2, mcapNum: 980_000, liq: "120K", holders: 2310, cat: "Игры", vol: "410K", seed: 1, verified: false },
-  { id: "aitao", name: "AiTao", ticker: "AITAO", emoji: "🤖", price: 0.00027, change: 9.1, mcapNum: 610_000, liq: "95K", holders: 1540, cat: "AI", vol: "205K", seed: 5, verified: true },
-  { id: "grinvillage", name: "Grin Village", ticker: "GRIN", emoji: "🌾", price: 0.00006, change: 3.4, mcapNum: 210_000, liq: "44K", holders: 890, cat: "Соц", vol: "60K", seed: 2, verified: false },
-  { id: "vaultly", name: "Vaultly", ticker: "VLTY", emoji: "🔐", price: 0.00351, change: -2.1, mcapNum: 1_500_000, liq: "290K", holders: 3120, cat: "Утилиты", vol: "540K", seed: 4, verified: true },
-];
-
 const FILTERS = [
   { id: "gems", label: "💎 Gems" },
   { id: "trending", label: "🔥 Trending" },
@@ -1501,11 +1538,6 @@ const FILTERS = [
   { id: "community", label: "⭐ Community Picks" },
   { id: "recent", label: "⚡ Recently Launched" },
 ];
-
-const DETAIL_EXTRA = {
-  creator: "@leo_builds",
-  verified: true,
-};
 
 /* MOCK DATA — profile */
 
@@ -1548,7 +1580,7 @@ function TokenCard({ t, onOpen, index }) {
       <div style={{ position: "relative", overflow: "hidden", borderRadius: 10 }}>
         <TrendFX up={up} seedKey={t.seed} />
         <div className="flex items-center gap-2.5" style={{ position: "relative", zIndex: 1 }}>
-          <TokenAvatar size={42} tone={up ? "up" : "down"}>{t.emoji}</TokenAvatar>
+          <TokenAvatar size={42} tone={up ? "up" : "down"} src={t.logoUrl}>{t.emoji}</TokenAvatar>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600 }}>{t.name}</span>
@@ -1588,23 +1620,32 @@ function TokenCardSkeleton({ index }) {
   );
 }
 
+// Real tokens only — no bundled/demo list. The feed starts empty and
+// fills in as soon as the first live GeckoTerminal fetch resolves.
+const TOKEN_REFRESH_MS = 2500;
+
 function HomeView({ onOpen, onSearch }) {
   const [filter, setFilter] = useState("trending");
-  const [tokens, setTokens] = useState(TOKENS);
+  const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
+  // Polls the real trending-pools feed every 2.5s so prices, market caps
+  // and rankings stay live without a manual refresh. A failed poll (rate
+  // limit, offline, etc) just keeps showing the last good list instead of
+  // clearing it or falling back to invented data.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    async function poll() {
       const live = await fetchTonMemePools(18);
-      if (!cancelled) {
-        if (live && live.length) setTokens(live);
-        setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+      if (cancelled) return;
+      if (live && live.length) setTokens(live);
+      setLoading(false);
+    }
+    poll();
+    const iv = setInterval(poll, TOKEN_REFRESH_MS);
+    return () => { cancelled = true; clearInterval(iv); };
   }, []);
 
   const list = useMemo(() => {
@@ -1776,10 +1817,24 @@ function TokenDetail({ t, onBack, showToast, onBuy, onSell, unlocked = true, the
     setReported(true);
     showToast(tr("reportSent"));
   }
-  function openSocial(kind) {
-    const handle = DETAIL_EXTRA.creator.replace("@", "");
-    const urls = { tg: `https://t.me/${handle}`, x: `https://x.com/${handle}`, site: `https://${t.ticker.toLowerCase()}.xyz` };
-    if (typeof window !== "undefined") window.open(urls[kind], "_blank", "noopener,noreferrer");
+
+  // Real description + social links for this token, fetched once per
+  // token address from GeckoTerminal's info endpoint (cached — see
+  // fetchTokenInfo). null while loading or if GeckoTerminal has nothing
+  // on file for this token, in which case the About card is simply
+  // omitted instead of showing an invented bio.
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    setInfo(null);
+    if (t.tokenAddress) {
+      fetchTokenInfo(t.tokenAddress).then((res) => { if (!cancelled) setInfo(res); });
+    }
+    return () => { cancelled = true; };
+  }, [t.tokenAddress]);
+
+  function openSocial(url) {
+    if (typeof window !== "undefined" && url) window.open(url, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -1796,11 +1851,11 @@ function TokenDetail({ t, onBack, showToast, onBuy, onSell, unlocked = true, the
       </div>
 
       <div className="flex items-center gap-3">
-        <TokenAvatar size={56} tone={up ? "up" : "down"}>{t.emoji}</TokenAvatar>
+        <TokenAvatar size={56} tone={up ? "up" : "down"} src={t.logoUrl}>{t.emoji}</TokenAvatar>
         <div>
           <div className="flex items-center gap-1.5">
             <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{t.name}</span>
-            {DETAIL_EXTRA.verified && <ShieldCheck size={14} color={T.electric} />}
+            {t.verified && <ShieldCheck size={14} color={T.electric} />}
           </div>
           <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>${t.ticker} · {catLabel(t.cat)}</span>
         </div>
@@ -1869,16 +1924,21 @@ function TokenDetail({ t, onBack, showToast, onBuy, onSell, unlocked = true, the
         <button onClick={onSell} className="fx-tap flex-1 rounded-xl py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14, background: "transparent", color: T.rose, border: `1px solid ${T.rose}`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("sell")}</button>
       </div>
 
-      <div className="rounded-2xl p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{tr("aboutToken")}</div>
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5 }}>{tr("mockTokenDesc")}</p>
-        <div className="flex items-center gap-4 mt-3">
-          <button onClick={() => openSocial("tg")} className="fx-tap"><Send size={15} color={T.muted} /></button>
-          <button onClick={() => openSocial("x")} className="fx-tap"><Twitter size={15} color={T.muted} /></button>
-          <button onClick={() => openSocial("site")} className="fx-tap"><Globe size={15} color={T.muted} /></button>
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, marginLeft: "auto" }}>{tr("creatorLabel")} {DETAIL_EXTRA.creator}</span>
+      {(info?.description || info?.telegram || info?.twitter || info?.website) && (
+        <div className="rounded-2xl p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{tr("aboutToken")}</div>
+          {info.description && (
+            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5 }}>{info.description}</p>
+          )}
+          {(info.telegram || info.twitter || info.website) && (
+            <div className="flex items-center gap-4 mt-3">
+              {info.telegram && <button onClick={() => openSocial(info.telegram)} className="fx-tap"><Send size={15} color={T.muted} /></button>}
+              {info.twitter && <button onClick={() => openSocial(info.twitter)} className="fx-tap"><Twitter size={15} color={T.muted} /></button>}
+              {info.website && <button onClick={() => openSocial(info.website)} className="fx-tap"><Globe size={15} color={T.muted} /></button>}
+            </div>
+          )}
         </div>
-      </div>
+      )}
       </div>
     </div>
   );
@@ -1946,7 +2006,7 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: "22px 22px 0 0", padding: 20, maxHeight: "88%", overflowY: "auto" }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
           <div className="flex items-center gap-2">
-            <TokenAvatar size={34}>{token.emoji}</TokenAvatar>
+            <TokenAvatar size={34} src={token.logoUrl}>{token.emoji}</TokenAvatar>
             <div>
               <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>{token.name}</div>
               <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 10.5 }}>${token.ticker} · {fmtPrice(token.price)}</div>
@@ -2514,7 +2574,7 @@ function PortfolioTokenCard({ t, onOpen }) {
   return (
     <button onClick={() => onOpen(t)} className="fx-card w-full flex items-center gap-3 rounded-2xl text-left" style={{ background: T.surface, border: `1px solid ${up ? "rgba(49,208,123,0.28)" : "rgba(255,77,77,0.24)"}`, padding: "12px 14px", position: "relative", overflow: "hidden" }}>
       <TrendFX up={up} seedKey={t.seed} />
-      <TokenAvatar tone={up ? "up" : "down"}>{t.emoji}</TokenAvatar>
+      <TokenAvatar tone={up ? "up" : "down"} src={t.logoUrl}>{t.emoji}</TokenAvatar>
       <div className="flex-1 min-w-0" style={{ position: "relative", zIndex: 1 }}>
         <div className="flex items-center gap-1.5">
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 600 }}>{t.name}</span>
@@ -2534,7 +2594,7 @@ function PortfolioTokenCard({ t, onOpen }) {
 function MyTokenCard({ t, onManage }) {
   return (
     <GlassCard style={{ padding: "12px 14px" }} className="flex items-center gap-3">
-      <TokenAvatar tone={t.verified ? "neutral" : "neutral"}>{t.emoji}</TokenAvatar>
+      <TokenAvatar tone={t.verified ? "neutral" : "neutral"} src={t.logoUrl}>{t.emoji}</TokenAvatar>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 600 }}>{t.name}</span>
@@ -2987,7 +3047,7 @@ function TokenManageSheet({ token, onClose, showToast }) {
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: "22px 22px 0 0", padding: 22 }}>
         <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
         <div className="flex items-center gap-3" style={{ marginTop: -8, marginBottom: 14 }}>
-          <TokenAvatar size={44}>{token.emoji}</TokenAvatar>
+          <TokenAvatar size={44} src={token.logoUrl}>{token.emoji}</TokenAvatar>
           <div>
             <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700 }}>{token.name}</div>
             <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>${token.ticker}</div>
@@ -3457,7 +3517,7 @@ function ProfileView({
               <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("noTokensYet")}</p>
             </GlassCard>
           ) : (
-            <div className="flex flex-col gap-2">{[...myTokens, ...MY_TOKENS].filter(t => t && t.id).map(t => <MyTokenCard key={t.id} t={t} onManage={onManageToken} />)}</div>
+            <div className="flex flex-col gap-2">{[...myTokens, ...MY_TOKENS].map(t => <MyTokenCard key={t.id} t={t} onManage={onManageToken} />)}</div>
           )}
         </div>
 
@@ -3670,7 +3730,7 @@ const FEE_ADDRESS = "UQD8ipaRIc2X1zJw0C8S9XfsKQOYiNAEPRUpfNidEZ3pIDdo";
 const FEE_PERCENT = 0.01; // 1% комиссии
   const [view, setView] = useState("home");
   const [tab, setTab] = useState("home");
-  const [token, setToken] = useState(TOKENS[1]);
+  const [token, setToken] = useState(null);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const { height, insetBottom } = useTelegramViewport();
 
@@ -3822,16 +3882,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     try {
       if (typeof window !== "undefined") {
         const saved = window.localStorage.getItem("mintly_my_tokens");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          // Defensive: older/corrupted localStorage data could contain
-          // null entries or entries missing an id — filtering those out
-          // here stops them from crashing every screen that does
-          // `t.id`/`key={t.id}` over this list (e.g. right after mount).
-          if (Array.isArray(parsed)) {
-            return parsed.filter((t) => t && typeof t === "object" && t.id);
-          }
-        }
+        if (saved) return JSON.parse(saved);
       }
     } catch (e) { /* localStorage unavailable */ }
     return [];
@@ -3846,10 +3897,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     try {
       if (typeof window !== "undefined") {
         const saved = window.localStorage.getItem("mintly_holdings");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
-        }
+        if (saved) return JSON.parse(saved);
       }
     } catch (e) { /* localStorage unavailable */ }
     return {};
@@ -4135,7 +4183,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         showToast={showToast}
       />
       <TokenManageSheet token={manageToken_} onClose={() => setManageToken_(null)} showToast={showToast} />
-      <TradeModal t={token} tradeModal={tradeModal} onClose={() => setTradeModal(null)} onConfirm={confirmTrade} walletTonBalance={tonBalance} tonPriceUsd={tonPriceUsd} heldAmount={holdings[token.id] || 0} />
+      <TradeModal t={token} tradeModal={tradeModal} onClose={() => setTradeModal(null)} onConfirm={confirmTrade} walletTonBalance={tonBalance} tonPriceUsd={tonPriceUsd} heldAmount={holdings[token?.id] || 0} />
       <TokenLaunchOverlay
         open={!!launchRequest}
         form={launchRequest ? launchRequest.form : EMPTY_LAUNCH_FORM}
