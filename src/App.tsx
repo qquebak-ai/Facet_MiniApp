@@ -773,21 +773,41 @@ const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, posit
   useEffect(() => {
     if (!poolAddress || !visible) return;
     let cancelled = false;
-    fetchSparkCloses(poolAddress, length).then((res) => {
-      if (!cancelled && res) setCloses(res);
-    });
-    return () => { cancelled = true; };
+    function load() {
+      fetchSparkCloses(poolAddress, length).then((res) => {
+        if (!cancelled && res) setCloses(res);
+      });
+    }
+    load();
+    // Cards can stay mounted a long time in the feed; periodically pull a
+    // fresh real shape (throttled by fetchSparkCloses's own TTL/cache, so
+    // this doesn't add extra network load beyond what the cache allows).
+    const iv = setInterval(load, SPARK_TTL_MS);
+    return () => { cancelled = true; clearInterval(iv); };
   }, [poolAddress, visible, length]);
 
-  // Real pools: keep the line anchored to the actually-fetched prices,
-  // with a small tick-driven wiggle so it still feels alive between
-  // refreshes instead of hammering the API every couple seconds. Demo
-  // tokens (no pool): fully synthetic, phase-shifted by the same shared
-  // tick so those aren't frozen either.
+  // Real pools: the fetched OHLCV shape is the true recent history, but it
+  // only actually refreshes every SPARK_TTL_MS — without this, the line
+  // would sit frozen in between even though the feed's price/mcap keeps
+  // arriving every 2.5s. Instead we scale that real shape by how much
+  // `base` (the live mcap from the current poll) has moved since the shape
+  // was last fetched, so the sparkline actually tracks live price changes
+  // rather than just wiggling in place. Demo tokens (no pool): fully
+  // synthetic, phase-shifted by the same shared tick so those aren't
+  // frozen either.
+  const fetchBaseRef = useRef(null);
+  useEffect(() => {
+    if (closes && closes.length > 1) {
+      fetchBaseRef.current = base || 1;
+    }
+  }, [closes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const data = useMemo(() => {
     if (closes && closes.length > 1) {
+      const fetchBase = fetchBaseRef.current || base || 1;
+      const ratio = fetchBase ? (base || fetchBase) / fetchBase : 1;
       const anchor = closes[closes.length - 1] || 1;
-      return closes.map((v, i) => ({ i, mcap: v + Math.sin((i + tick) * 0.7 + seed) * anchor * 0.0025 }));
+      return closes.map((v, i) => ({ i, mcap: v * ratio + Math.sin((i + tick) * 0.7 + seed) * anchor * 0.0015 }));
     }
     return mcapSeries(base, seed, length, tick);
   }, [closes, base, seed, length, tick]);
@@ -1012,21 +1032,25 @@ async function fetchPoolOHLCV(poolAddress, tf) {
 // cards, portfolio rows). Reuses the exact same GeckoTerminal OHLCV
 // endpoint as the main candlestick chart — these are real, already-
 // trading TON pools, not invented numbers — just at a coarse timeframe
-// and short window, since a sparkline only needs the recent shape. Every
-// pool is fetched at most once: results are cached in-memory, so
-// scrolling a list back and forth never re-hits the network.
-const sparkCache = new Map(); // poolAddress -> number[] closes (oldest→newest)
+// and short window, since a sparkline only needs the recent shape.
+// Cached per pool with a TTL: cheap re-scrolling doesn't re-hit the
+// network, but the shape itself still periodically refreshes instead of
+// staying frozen on the very first fetch forever (the live "wiggle" +
+// base-ratio scaling in MiniChart covers the seconds in between).
+const SPARK_TTL_MS = 45_000;
+const sparkCache = new Map(); // poolAddress -> { closes, ts }
 const sparkInflight = new Map(); // poolAddress -> Promise, to de-dupe concurrent callers
 async function fetchSparkCloses(poolAddress, n = 24) {
   if (!poolAddress) return null;
-  if (sparkCache.has(poolAddress)) return sparkCache.get(poolAddress);
+  const cached = sparkCache.get(poolAddress);
+  if (cached && Date.now() - cached.ts < SPARK_TTL_MS) return cached.closes;
   if (sparkInflight.has(poolAddress)) return sparkInflight.get(poolAddress);
   const p = (async () => {
     const result = await fetchPoolOHLCV(poolAddress, "M15");
     const closes = result?.candles?.length ? result.candles.slice(-n).map(c => c.close) : null;
-    if (closes && closes.length > 1) sparkCache.set(poolAddress, closes);
+    if (closes && closes.length > 1) sparkCache.set(poolAddress, { closes, ts: Date.now() });
     sparkInflight.delete(poolAddress);
-    return closes;
+    return closes || (cached ? cached.closes : null);
   })();
   sparkInflight.set(poolAddress, p);
   return p;
@@ -1624,29 +1648,10 @@ function TokenCardSkeleton({ index }) {
 // fills in as soon as the first live GeckoTerminal fetch resolves.
 const TOKEN_REFRESH_MS = 2500;
 
-function HomeView({ onOpen, onSearch }) {
+function HomeView({ onOpen, tokens, loading }) {
   const [filter, setFilter] = useState("trending");
-  const [tokens, setTokens] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
-
-  // Polls the real trending-pools feed every 2.5s so prices, market caps
-  // and rankings stay live without a manual refresh. A failed poll (rate
-  // limit, offline, etc) just keeps showing the last good list instead of
-  // clearing it or falling back to invented data.
-  useEffect(() => {
-    let cancelled = false;
-    async function poll() {
-      const live = await fetchTonMemePools(18);
-      if (cancelled) return;
-      if (live && live.length) setTokens(live);
-      setLoading(false);
-    }
-    poll();
-    const iv = setInterval(poll, TOKEN_REFRESH_MS);
-    return () => { cancelled = true; clearInterval(iv); };
-  }, []);
 
   const list = useMemo(() => {
     let arr = [...tokens];
@@ -3734,6 +3739,36 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const { height, insetBottom } = useTelegramViewport();
 
+  // Real, live TON meme-pool feed — polled every 2.5s. Lives at the root
+  // (not inside HomeView) so the currently-open token detail can also stay
+  // synced to fresh data below, instead of freezing at whatever price it
+  // had the moment it was tapped.
+  const [tokens, setTokens] = useState([]);
+  const [tokensLoading, setTokensLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      const live = await fetchTonMemePools(18);
+      if (cancelled) return;
+      if (live && live.length) setTokens(live);
+      setTokensLoading(false);
+    }
+    poll();
+    const iv = setInterval(poll, TOKEN_REFRESH_MS);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, []);
+  // Whenever a fresh poll comes in, refresh the currently-viewed token (if
+  // any) with its updated row from that same poll — so price, market cap
+  // and the header stats on the detail screen move in step with the feed
+  // instead of staying pinned to the value at tap-time.
+  useEffect(() => {
+    if (!token) return;
+    const fresh = tokens.find(x => x.id === token.id);
+    if (fresh && fresh !== token) setToken(fresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokens]);
+
+
   // Настоящее подключение кошелька через TonConnect. `wallet` — null,
   // пока пользователь не подключил кошелёк; после подключения содержит
   // реальные данные (адрес и т.д.), которые прилетают от Tonkeeper/др.
@@ -4215,7 +4250,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             search/filters, scrollable feed below), so it opts out of the
             outer page scroll to avoid a second, redundant scrollbar. */}
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: view === "home" ? "hidden" : "auto", minHeight: 0 }} key={view}>
-          {view === "home" && <HomeView onOpen={openToken} />}
+          {view === "home" && <HomeView onOpen={openToken} tokens={tokens} loading={tokensLoading} />}
           {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} themeKey={appSettings.theme} />}
           {view === "create" && (
             <CreateView
