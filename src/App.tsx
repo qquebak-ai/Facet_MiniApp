@@ -98,7 +98,7 @@ function setLang(v) { lang = v === "EN" ? "EN" : "RU"; }
 
 const STR = {
   RU: {
-    navHome: "Главная", navCreate: "Создать", navProfile: "Профиль",
+    navHome: "Главная", navMempad: "Мемпад", navCreate: "Создать", navProfile: "Профиль",
     connect: "Connect", connected: "Подключён",
     settingsSaved: "Настройки сохранены",
     langTitle: "Language", themeTitle: "Appearance",
@@ -133,6 +133,7 @@ const STR = {
     heroBodyLead: "Создавай, торгуй и расти с ",
     heroBodyTail: " первый месяц. Присоединяйся к экосистеме с первого дня.",
     heroFee: "0% комиссией платформы",
+    mempadComingSoon: "Здесь скоро появится что-то ещё 👀",
     searchPlaceholder: "Найти токен или тикер",
     emptyFilter: "По этому фильтру пока пусто — попробуй другой или загляни позже.",
     catAll: "Все", catMemes: "Мемы", catUtility: "Утилиты", catGames: "Игры", catAI: "AI", catSocial: "Соц",
@@ -297,7 +298,7 @@ const STR = {
     authConfirmEmailSent: "Мы отправили письмо для подтверждения — перейди по ссылке, потом войди",
   },
   EN: {
-    navHome: "Home", navCreate: "Create", navProfile: "Profile",
+    navHome: "Home", navMempad: "Mempad", navCreate: "Create", navProfile: "Profile",
     connect: "Connect", connected: "Connected",
     settingsSaved: "Settings saved",
     langTitle: "Language", themeTitle: "Appearance",
@@ -332,6 +333,7 @@ const STR = {
     heroBodyLead: "Create, trade and grow with ",
     heroBodyTail: " for the first month. Join the ecosystem from day one.",
     heroFee: "0% platform fee",
+    mempadComingSoon: "Something else is coming here soon 👀",
     searchPlaceholder: "Search token or ticker",
     emptyFilter: "Nothing here for this filter yet — try another or check back later.",
     catAll: "All", catMemes: "Memes", catUtility: "Utility", catGames: "Games", catAI: "AI", catSocial: "Social",
@@ -1648,6 +1650,39 @@ function TokenCardSkeleton({ index }) {
 // fills in as soon as the first live GeckoTerminal fetch resolves.
 const TOKEN_REFRESH_MS = 2500;
 
+function PromoHero() {
+  return (
+    <div className="fx-card rounded-2xl p-4 relative overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+      <div className="absolute -right-6 -top-8 w-28 h-28 rounded-full" style={{ background: PRISM, opacity: 0.2, filter: "blur(20px)", animation: "glowPulse 5s ease-in-out infinite" }} />
+      <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16.5, fontWeight: 700, lineHeight: 1.3 }} className="relative">
+        {t("heroTitle")}
+      </div>
+      <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 6, lineHeight: 1.5 }} className="relative">
+        {t("heroBodyLead")}<span style={{ color: T.turquoise, fontWeight: 600 }}>{t("heroFee")}</span>{t("heroBodyTail")}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   МЕМПАД — separate tab (between Home and Create). For now: the
+   promo banner + a placeholder for whatever comes next, so the tab
+   isn't empty while more content gets defined.
+--------------------------------------------------------- */
+function MempadView() {
+  return (
+    <div className="flex flex-col gap-4" style={{ paddingBottom: 12 }}>
+      <PromoHero />
+      <div className="fx-view rounded-2xl p-5 flex flex-col items-center text-center gap-2" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
+        <Sparkles size={20} color={T.muted} />
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5 }}>
+          {t("mempadComingSoon")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HomeView({ onOpen, tokens, loading }) {
   const [filter, setFilter] = useState("trending");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1673,15 +1708,7 @@ function HomeView({ onOpen, tokens, loading }) {
   return (
     <div className="flex flex-col" style={{ height: "100%", minHeight: 0 }}>
       <div className="flex flex-col gap-4 flex-shrink-0" style={{ paddingBottom: 12 }}>
-        <div className="fx-card rounded-2xl p-4 relative overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-          <div className="absolute -right-6 -top-8 w-28 h-28 rounded-full" style={{ background: PRISM, opacity: 0.2, filter: "blur(20px)", animation: "glowPulse 5s ease-in-out infinite" }} />
-          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16.5, fontWeight: 700, lineHeight: 1.3 }} className="relative">
-            {t("heroTitle")}
-          </div>
-          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 6, lineHeight: 1.5 }} className="relative">
-            {t("heroBodyLead")}<span style={{ color: T.turquoise, fontWeight: 600 }}>{t("heroFee")}</span>{t("heroBodyTail")}
-          </div>
-        </div>
+        <PromoHero />
 
         <div className="fx-chip flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: T.surface, border: `1px solid ${searchOpen ? T.electric : T.line}`, boxShadow: searchOpen ? `0 0 0 3px ${glow(0.14)}` : "none" }}>
           <Search size={16} color={T.muted} />
@@ -1777,7 +1804,16 @@ function TokenDetail({ t, onBack, showToast, onBuy, onSell, unlocked = true, the
 
   // Live tick: for real pools, refetch the latest candles every few
   // seconds. For the synthetic fallback, wiggle the last candle locally
-  // like a simulated feed.
+  // like a simulated feed. Deliberately NOT depending on t.price here:
+  // the root now syncs the open token's price/mcap every 2.5s, and if
+  // this effect depended on t.price it would tear down and recreate the
+  // interval every 2.5s too — meaning the 8000ms timer would never
+  // actually survive long enough to fire, and the chart would never
+  // refetch. priceRef always holds the latest price for the fallback
+  // branch without needing to be a dependency.
+  const priceRef = useRef(t.price);
+  useEffect(() => { priceRef.current = t.price; }, [t.price]);
+
   useEffect(() => {
     if (!chartData) return;
     const iv = setInterval(async () => {
@@ -1792,8 +1828,9 @@ function TokenDetail({ t, onBack, showToast, onBuy, onSell, unlocked = true, the
           const candles = [...prev.candles];
           const volume = [...prev.volume];
           const last = { ...candles[candles.length - 1] };
-          const wig = t.price * 0.006;
-          last.close = Math.max(t.price * 0.3, last.close + (Math.random() - 0.5) * wig);
+          const price = priceRef.current;
+          const wig = price * 0.006;
+          last.close = Math.max(price * 0.3, last.close + (Math.random() - 0.5) * wig);
           last.high = Math.max(last.high, last.close);
           last.low = Math.min(last.low, last.close);
           candles[candles.length - 1] = last;
@@ -1802,8 +1839,7 @@ function TokenDetail({ t, onBack, showToast, onBuy, onSell, unlocked = true, the
       }
     }, t.poolAddress ? 8000 : 1000);
     return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t.id, t.poolAddress, tf, t.price, !!chartData]);
+  }, [t.id, t.poolAddress, tf, !!chartData]);
 
   const [reported, setReported] = useState(false);
   function handleShare() {
@@ -4251,6 +4287,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             outer page scroll to avoid a second, redundant scrollbar. */}
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: view === "home" ? "hidden" : "auto", minHeight: 0 }} key={view}>
           {view === "home" && <HomeView onOpen={openToken} tokens={tokens} loading={tokensLoading} />}
+          {view === "mempad" && <MempadView />}
           {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} themeKey={appSettings.theme} />}
           {view === "create" && (
             <CreateView
@@ -4292,6 +4329,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         <div className="flex items-center justify-around px-2 py-4" style={{ borderTop: `1px solid ${T.line}`, background: "rgba(19,19,19,0.88)", backdropFilter: "blur(12px)", flexShrink: 0, paddingBottom: insetBottom + 16 }}>
           {[
             { id: "home", label: t("navHome"), icon: HomeIcon },
+            { id: "mempad", label: t("navMempad"), icon: Rocket },
             { id: "create", label: t("navCreate"), icon: PlusCircle, locked: !(accountCreated && connected) },
             { id: "profile", label: t("navProfile"), icon: User },
           ].map(({ id, label, icon: Icon, locked }) => {
