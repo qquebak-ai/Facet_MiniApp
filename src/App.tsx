@@ -583,6 +583,14 @@ function generateFakeTxHash() {
 function fmtPrice(p) {
   return "$" + p.toFixed(p < 0.001 ? 6 : 4);
 }
+function fmtCountdown(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (v) => String(v).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
 function mcapSeries(base, seed, n = 22, offset = 0) {
   let v = base;
   const out = [];
@@ -725,7 +733,6 @@ function seededRand(seed) {
 function CyberGrid({ forceDark }) {
   const lineC = forceDark ? "rgba(255,255,255,0.05)" : ink(0.05);
   const strokeC = forceDark ? "#FFFFFF" : T.ice;
-  const washC = forceDark ? "rgba(255,255,255,0.09)" : ink(0.09);
   const vignetteC = forceDark ? "rgba(0,0,0,0.6)" : ink(0.12);
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
@@ -744,8 +751,8 @@ function CyberGrid({ forceDark }) {
         <polygon points="18,0 100,0 100,82 82,100 0,100 0,18" fill="none" stroke={strokeC} strokeWidth="0.6" />
       </svg>
 
-      {/* soft moonlight wash — held static and subtle, greyscale only */}
-      <div style={{ position: "absolute", top: "-16%", right: "-12%", width: 320, height: 320, borderRadius: "50%", background: `radial-gradient(circle, ${washC} 0%, transparent 70%)`, filter: "blur(6px)" }} />
+      {/* darkened edges only — no white wash, so the corners/sides never
+          brighten, just fade the grid/lattice out toward the frame */}
       <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at center, transparent 55%, ${vignetteC} 100%)` }} />
     </div>
   );
@@ -1399,17 +1406,17 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     }
     ctx.textAlign = "left";
 
-    // Live current-price pill — the highlighted price + the time this
-    // candle actually closes at (bar open time + this timeframe's bar
-    // duration), drawn last so it sits on top of both candles and axis.
+    // Live current-price pill — the highlighted price + a live countdown
+    // to when the current (rightmost) bar closes and the next candle
+    // starts — e.g. counts down from 60s on the 1-minute timeframe. Ticks
+    // every second via the redraw interval below.
     if (lastCandle && pillTop != null) {
       const lastUp = lastCandle.close >= lastCandle.open;
       const lastColor = lastUp ? T.up : T.down;
       const priceLabel = fmt(lastCandle.close);
       const barSec = TF_SECONDS[tf] || 3600;
-      const closeDate = new Date((lastCandle.time + barSec) * 1000);
-      const pad2 = (v) => String(v).padStart(2, "0");
-      const closeTimeLabel = `${pad2(closeDate.getHours())}:${pad2(closeDate.getMinutes())}`;
+      const closeAtMs = (lastCandle.time + barSec) * 1000;
+      const countdownLabel = fmtCountdown(closeAtMs - Date.now());
       ctx.fillStyle = lastColor;
       ctx.fillRect(widthPx - CHART_GUTTER_W, pillTop, CHART_GUTTER_W, pillTop + 32 - pillTop);
       ctx.fillStyle = T.bg;
@@ -1417,7 +1424,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       ctx.font = "700 11px " + monoFont;
       ctx.fillText(priceLabel, widthPx - CHART_GUTTER_W / 2, pillTop + 13);
       ctx.font = "9px " + monoFont;
-      ctx.fillText(closeTimeLabel, widthPx - CHART_GUTTER_W / 2, pillTop + 26);
+      ctx.fillText(countdownLabel, widthPx - CHART_GUTTER_W / 2, pillTop + 26);
       ctx.textAlign = "left";
     }
 
@@ -1440,6 +1447,13 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   // never touches viewRef, so the user's pan/zoom position survives a
   // live update untouched (no snapping back).
   useEffect(() => { draw(); });
+
+  // The bar-close countdown needs a redraw every second even when nothing
+  // else about the data has changed, or it would just sit frozen.
+  useEffect(() => {
+    const iv = setInterval(() => draw(), 1000);
+    return () => clearInterval(iv);
+  }, [tf, n]);
 
   function xFromEvent(clientX) {
     const rect = wrapRef.current?.getBoundingClientRect();
@@ -1930,7 +1944,6 @@ function HomeHero({ onGoTab }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="fx-card rounded-2xl p-5 relative overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-        <div className="absolute -right-8 -top-10 w-32 h-32 rounded-full" style={{ background: PRISM, opacity: 0.22, filter: "blur(26px)", animation: "glowPulse 5s ease-in-out infinite" }} />
         <div className="relative" style={{ fontFamily: displayFont, color: T.ice, fontSize: 20, fontWeight: 800, lineHeight: 1.25 }}>
           {t("heroTitle")}
         </div>
