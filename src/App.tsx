@@ -17,7 +17,7 @@ import { launchRealToken } from "./tonLaunch";
 --------------------------------------------------------- */
 
 const DARK_THEME = {
-  bg: "#020203",
+  bg: "#000000",
   surface: "rgba(22,22,25,0.58)",
   surfaceHi: "rgba(32,32,37,0.62)",
   line: "rgba(255,255,255,0.09)",
