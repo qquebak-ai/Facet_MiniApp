@@ -150,7 +150,6 @@ const STR = {
     perToken: "/ токен",
     chartLoading: "загрузка графика…",
     ohlcOpen: "О", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
-    chartCloseLabel: "Закрытие",
     statPrice: "Цена", statLiquidity: "Ликвидность", statHolders: "Держателей", statVolume24h: "Объём 24ч",
     statTransactions: "Транзакции",
     tabChart: "График", tabInfo: "Инфо", tabTx: "Транзакции",
@@ -362,7 +361,6 @@ const STR = {
     perToken: "/ token",
     chartLoading: "loading chart…",
     ohlcOpen: "O", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
-    chartCloseLabel: "Close",
     statPrice: "Price", statLiquidity: "Liquidity", statHolders: "Holders", statVolume24h: "24h Volume",
     statTransactions: "Transactions",
     tabChart: "Chart", tabInfo: "Info", tabTx: "Transactions",
@@ -1401,13 +1399,17 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     }
     ctx.textAlign = "left";
 
-    // Live current-price pill — the highlighted price + a static "Close"
-    // label, drawn last so it sits on top of both the candles and the axis.
+    // Live current-price pill — the highlighted price + the time this
+    // candle actually closes at (bar open time + this timeframe's bar
+    // duration), drawn last so it sits on top of both candles and axis.
     if (lastCandle && pillTop != null) {
       const lastUp = lastCandle.close >= lastCandle.open;
       const lastColor = lastUp ? T.up : T.down;
       const priceLabel = fmt(lastCandle.close);
-      const closeLabel = t("chartCloseLabel");
+      const barSec = TF_SECONDS[tf] || 3600;
+      const closeDate = new Date((lastCandle.time + barSec) * 1000);
+      const pad2 = (v) => String(v).padStart(2, "0");
+      const closeTimeLabel = `${pad2(closeDate.getHours())}:${pad2(closeDate.getMinutes())}`;
       ctx.fillStyle = lastColor;
       ctx.fillRect(widthPx - CHART_GUTTER_W, pillTop, CHART_GUTTER_W, pillTop + 32 - pillTop);
       ctx.fillStyle = T.bg;
@@ -1415,7 +1417,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       ctx.font = "700 11px " + monoFont;
       ctx.fillText(priceLabel, widthPx - CHART_GUTTER_W / 2, pillTop + 13);
       ctx.font = "9px " + monoFont;
-      ctx.fillText(closeLabel, widthPx - CHART_GUTTER_W / 2, pillTop + 26);
+      ctx.fillText(closeTimeLabel, widthPx - CHART_GUTTER_W / 2, pillTop + 26);
       ctx.textAlign = "left";
     }
 
