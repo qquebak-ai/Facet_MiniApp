@@ -1272,9 +1272,13 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       // First time we have something to draw: auto-fit the price window
       // to what's currently visible, with a little breathing room. After
       // this it's frozen — only manual vertical drag / the scale handle
-      // touch it again, never an automatic recompute.
-      const highs = visible.map(c => c.high), lows = visible.map(c => c.low);
-      const rawMax = Math.max(...highs), rawMin = Math.min(...lows);
+      // touch it again, never an automatic recompute. Only finite values
+      // count here — a single bad candle (NaN/Infinity from a data
+      // hiccup) must never be allowed to blow up the whole scale.
+      const highs = visible.map(c => c.high).filter(Number.isFinite);
+      const lows = visible.map(c => c.low).filter(Number.isFinite);
+      const rawMax = highs.length ? Math.max(...highs) : 1;
+      const rawMin = lows.length ? Math.min(...lows) : 0;
       const rawRange = (rawMax - rawMin) || (rawMax * 0.02) || 1;
       const pad = rawRange * 0.08;
       yViewRef.current = { min: rawMin - pad, max: rawMax + pad };
@@ -1286,7 +1290,14 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     const plotW = Math.max(1, widthPx - CHART_GUTTER_W);
     const slot = plotW / count;
     const bodyW = Math.max(2, Math.min(14, slot * 0.7));
-    const yFor = (price) => padTop + (1 - (price - min) / range) * drawHeight;
+    // Clamp so a stray out-of-range price (bad tick, huge wick) draws a
+    // flat line pinned at the edge instead of shooting off into a wild
+    // diagonal streak or resizing anything else on screen.
+    const yFor = (price) => {
+      if (!Number.isFinite(price)) price = min;
+      const t = padTop + (1 - (price - min) / range) * drawHeight;
+      return Math.max(-height, Math.min(height * 2, t));
+    };
     const xFor = (idx) => (idx - v.start + 0.5) * slot;
     return { startI, endI, min, max, range, slot, bodyW, yFor, xFor, padTop, padBottom, drawHeight, plotW };
   }
@@ -1345,6 +1356,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     for (let i = startI; i < endI; i++) {
       const c = candles[i];
       if (!c) continue;
+      if (![c.open, c.high, c.low, c.close].every(Number.isFinite)) continue;
       const x = xFor(i);
       if (x < -bodyW || x > plotW + bodyW) continue;
       const up = c.close >= c.open;
@@ -1361,7 +1373,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       ctx.fillRect(x - bodyW / 2, top, bodyW, h);
     }
 
-    const lastCandle = candles[n - 1];
+    const lastCandle = Number.isFinite(candles[n - 1]?.close) ? candles[n - 1] : null;
     let pillTop = null, pillBottom = null; // reserved zone so grid labels don't collide with the pill
 
     if (lastCandle) {
