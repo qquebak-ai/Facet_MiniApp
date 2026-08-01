@@ -2498,24 +2498,28 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
   // itself doesn't fail for insufficient gas, and don't let anyone "buy"
   // before the real wallet balance/price have actually loaded.
   const spendableTon = Math.max(0, walletTonBalance - NETWORK_FEE_TON);
-  const availableUSD = tonPriceUsd > 0 ? spendableTon * tonPriceUsd : 0;
   const amount = parseAmount(amountStr);
   const isBuy = mode === "buy";
 
-  const maxAmount = isBuy ? availableUSD : holdingTokens;
+  // Покупка теперь считается в TON, а не в долларах: пользователь вводит
+  // сумму в TON, и она напрямую ограничена доступным балансом кошелька.
+  const maxAmount = isBuy ? spendableTon : holdingTokens;
   const overMax = amount > maxAmount;
-  const estimate = isBuy ? amount / token.price : amount * token.price;
+  // Курс токена (token.price) хранится в USD, поэтому для оценки
+  // количества токенов TON всё ещё конвертируется через tonPriceUsd —
+  // но это только для отображения "вы получите", сама сделка идёт в TON.
+  const estimate = isBuy ? (amount * tonPriceUsd) / token.price : amount * token.price;
   const feeUsd = NETWORK_FEE_TON * tonPriceUsd;
   const canConfirm = amount > 0 && !overMax && (!isBuy || tonPriceUsd > 0);
 
   function setPct(pct) {
     const v = maxAmount * pct;
-    setAmountStr(isBuy ? v.toFixed(2) : v.toFixed(v < 10 ? 4 : 0));
+    setAmountStr(isBuy ? v.toFixed(v < 10 ? 4 : 2) : v.toFixed(v < 10 ? 4 : 0));
   }
 
   function handleConfirm() {
     if (!canConfirm) return;
-    const payAmount = isBuy ? `$${amount.toFixed(2)}` : `${amount.toLocaleString("ru-RU")}`;
+    const payAmount = isBuy ? `${amount.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON` : `${amount.toLocaleString("ru-RU")}`;
     const receiveAmount = isBuy ? estimate.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) : `$${estimate.toFixed(2)}`;
     const unit = isBuy ? "" : "";
     onConfirm(mode, payAmount, receiveAmount, unit, amount, estimate);
@@ -2554,11 +2558,10 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
         <div className="flex items-center justify-between" style={{ marginTop: 16 }}>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{isBuy ? t("youPay") : t("youSell")}</span>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>
-            {t("available")}: {isBuy ? `$${availableUSD.toFixed(2)}` : `${holdingTokens.toLocaleString("ru-RU")} ${token.ticker}`}
+            {t("available")}: {isBuy ? `${spendableTon.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON` : `${holdingTokens.toLocaleString("ru-RU")} ${token.ticker}`}
           </span>
         </div>
         <div className="flex items-center gap-2 rounded-xl px-3.5 py-3 mt-1.5" style={{ background: T.bg, border: `1px solid ${overMax ? T.rose : T.line}` }}>
-          <span style={{ fontFamily: displayFont, color: T.muted, fontSize: 15 }}>{isBuy ? "$" : ""}</span>
           <input
             value={amountStr}
             onChange={(e) => setAmountStr(e.target.value.replace(/[^0-9.,]/g, ""))}
@@ -2566,7 +2569,7 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
             inputMode="decimal"
             style={{ fontFamily: displayFont, fontWeight: 700, color: T.ice, fontSize: 20, background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 0 }}
           />
-          {!isBuy && <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>${token.ticker}</span>}
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>{isBuy ? "TON" : `$${token.ticker}`}</span>
         </div>
         {overMax && <div style={{ fontFamily: bodyFont, color: T.rose, fontSize: 11, marginTop: 4 }}>{t("insufficientFunds")}</div>}
 
@@ -2611,7 +2614,7 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
           opacity: canConfirm ? 1 : 0.6,
           boxShadow: canConfirm ? `0 0 20px ${isBuy ? glow(0.3) : hexA(T.rose, 0.25)}` : "none",
         }}>
-          {amount > 0 ? (isBuy ? `${t("buyFor")} $${amount.toFixed(2)}` : `${t("sellFor")} ${amount.toLocaleString("ru-RU")} ${token.ticker}`) : (isBuy && tonPriceUsd <= 0 ? t("rateLoading") : !isBuy && holdingTokens <= 0 ? t("nothingToSell") : t("enterAmount"))}
+          {amount > 0 ? (isBuy ? `${t("buyFor")} ${amount.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON` : `${t("sellFor")} ${amount.toLocaleString("ru-RU")} ${token.ticker}`) : (isBuy && tonPriceUsd <= 0 ? t("rateLoading") : !isBuy && holdingTokens <= 0 ? t("nothingToSell") : t("enterAmount"))}
         </button>
       </div>
     </div>
@@ -4248,6 +4251,17 @@ export default function TonLaunchApp() {
   const TREASURY_ADDRESS = "UQD8ipaRIc2X1zJw0C8S9XfsKQOYiNAEPRUpfNidEZ3pIDdo";
 const FEE_ADDRESS = "UQD8ipaRIc2X1zJw0C8S9XfsKQOYiNAEPRUpfNidEZ3pIDdo";
 const FEE_PERCENT = 0.01; // 1% комиссии
+  // Балансовый API (tonapi.io) по умолчанию смотрит в mainnet. Если
+  // кошелёк подключён в testnet (например, для проверки покупки на
+  // тестовых TON), запрос к mainnet-адресу вернёт пустой/нулевой баланс,
+  // и любая покупка будет падать в "недостаточно средств" — это и была
+  // причина того, что покупка "не работала" при тесте. Переключатель
+  // ниже отправляет запросы в testnet-API вместо mainnet. Важно: сам
+  // TonConnectUIProvider (обычно настраивается в index/main файле, не
+  // в этом) тоже должен быть сконфигурирован под testnet — иначе
+  // подключаемый кошелёк не будет знать, что вы работаете в тестовой сети.
+  const TON_TESTNET = true;
+  const TONAPI_HOST = TON_TESTNET ? "testnet.tonapi.io" : "tonapi.io";
   const VALID_TABS = ["home", "mempad", "create", "profile"];
   function readSavedTab() {
     try {
@@ -4318,7 +4332,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [tonPriceUsd, setTonPriceUsd] = useState(0);
   useEffect(() => {
     if (!walletAddress) { setTonBalance(0); return; }
-    fetch(`https://tonapi.io/v2/accounts/${walletAddress}`)
+    fetch(`https://${TONAPI_HOST}/v2/accounts/${walletAddress}`)
       .then((r) => r.json())
       .then((d) => setTonBalance(d && d.balance ? Number(d.balance) / 1e9 : 0))
       .catch(() => setTonBalance(0));
@@ -4654,11 +4668,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   function handleSell() { if (requireUnlockRoot()) setTradeModal({ mode: "sell" }); }
   async function confirmTrade(mode, payAmount, receiveAmount, unit, rawAmount, rawEstimate) {
     if (mode === "buy") {
-      // rawAmount is USD the person typed; the on-chain transfer has to be
-      // in TON, so convert with the real TON/USD price — not the token's
-      // USD price, which was the previous (wrong) conversion here.
+      // rawAmount is now the TON amount the person typed directly (the
+      // modal is denominated in TON, not USD), so no USD conversion is
+      // needed here — we only still require tonPriceUsd to be loaded so
+      // the estimated token amount shown to the user was computed correctly.
       if (!(tonPriceUsd > 0)) { showToast(t("rateLoadingRetry")); return; }
-      const totalTon = rawAmount / tonPriceUsd;
+      const totalTon = rawAmount;
       const spendableTon = Math.max(0, tonBalance - NETWORK_FEE_TON);
       if (totalTon > spendableTon) { showToast(t("insufficientTon")); return; }
       const feeTon = totalTon * FEE_PERCENT;
