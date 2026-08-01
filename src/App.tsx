@@ -4332,10 +4332,28 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [tonPriceUsd, setTonPriceUsd] = useState(0);
   useEffect(() => {
     if (!walletAddress) { setTonBalance(0); return; }
+    // wallet.account.chain — это то, в какой сети реально сидит
+    // подключённый кошелёк ("-239" = mainnet, "-3" = testnet). Если он
+    // не равен "-3", кошелёк подключён не в testnet, и никакой запрос
+    // к testnet.tonapi.io не покажет ваши тестовые TON, потому что
+    // TonConnectUIProvider (в index/main файле) настроен на mainnet-
+    // манифест. Смотрите это значение в консоли браузера.
+    console.log("[ton-debug] wallet.account.chain:", wallet?.account?.chain, "address:", walletAddress);
     fetch(`https://${TONAPI_HOST}/v2/accounts/${walletAddress}`)
-      .then((r) => r.json())
-      .then((d) => setTonBalance(d && d.balance ? Number(d.balance) / 1e9 : 0))
-      .catch(() => setTonBalance(0));
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        if (!r.ok) {
+          console.error("[ton-debug] tonapi error", r.status, body);
+          setTonBalance(0);
+          return;
+        }
+        console.log("[ton-debug] tonapi response:", body);
+        setTonBalance(body && body.balance ? Number(body.balance) / 1e9 : 0);
+      })
+      .catch((err) => {
+        console.error("[ton-debug] tonapi fetch failed:", err);
+        setTonBalance(0);
+      });
   }, [walletAddress]);
   useEffect(() => {
     fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd")
