@@ -186,18 +186,18 @@ const STR = {
     connectWalletCta: "Подключить кошелёк",
     launchTokenTitle: "Запусти токен",
     launchTokenSub: "Эмиссия происходит в сети TON сразу после подтверждения",
-    logoLabel: "Логотип",
+    logoLabel: "Логотип *",
     logoShort: "Лого",
     bannerOptional: "Баннер 1200×400 (необязательно)",
     logoRequiredShort: "Логотип обязателен",
     nameLabel: "Название",
     tickerLabel: "Тикет",
-    descLabel: "Описание",
+    descLabel: "Описание *",
     descPlaceholder: "О чём этот токен и почему он появился",
     descRequiredShort: "Описание обязательно — после запуска изменить его будет нельзя",
     siteLabel: "Сайт",
     categoryLabel: "Категория",
-    launchAmountLabel: "Сумма для запуска (TON)",
+    launchAmountLabel: "Сумма для запуска (TON) *",
     launchAmountNote: "На эту сумму сразу после запуска будут выкуплены первые токены — это стартовая ликвидность и первая цена токена.",
     youWillGet: "Ты получишь ≈",
     supplyShare: "выпуска",
@@ -241,12 +241,12 @@ const STR = {
     editHint: "Никнейм обязателен, остальное можно заполнить позже.",
     loginHint: "Войди в свой аккаунт по почте и паролю.",
     createHint: "Никнейм, почта и пароль обязательны, остальное можно заполнить позже.",
-    nicknameLabel: "Никнейм",
+    nicknameLabel: "Никнейм *",
     nicknameError: "2–20 символов, только латинские буквы, цифры, _ и ., начинается с буквы",
-    emailLabel: "Почта",
+    emailLabel: "Почта *",
     emailRequired: "Укажите email — поле обязательно",
     emailInvalid: "Введите корректный email",
-    passwordLabel: "Пароль",
+    passwordLabel: "Пароль *",
     passwordPlaceholder: "Минимум 6 символов",
     passwordError: "Пароль должен быть не короче 6 символов",
     bioLabel: "О себе (необязательно)",
@@ -424,18 +424,18 @@ const STR = {
     connectWalletCta: "Connect wallet",
     launchTokenTitle: "Launch a token",
     launchTokenSub: "Minting happens on the TON network right after confirmation",
-    logoLabel: "Logo",
+    logoLabel: "Logo *",
     logoShort: "Logo",
     bannerOptional: "Banner 1200×400 (optional)",
     logoRequiredShort: "Logo is required",
     nameLabel: "Name",
     tickerLabel: "Ticker",
-    descLabel: "Description",
+    descLabel: "Description *",
     descPlaceholder: "What this token is about and why it exists",
     descRequiredShort: "Description is required — it can't be changed after launch",
     siteLabel: "Website",
     categoryLabel: "Category",
-    launchAmountLabel: "Launch amount (TON)",
+    launchAmountLabel: "Launch amount (TON) *",
     launchAmountNote: "This amount buys the first tokens right after launch — it's the starting liquidity and initial price.",
     youWillGet: "You'll get ≈",
     supplyShare: "of supply",
@@ -479,12 +479,12 @@ const STR = {
     editHint: "Nickname is required, everything else can be filled in later.",
     loginHint: "Log in to your account with email and password.",
     createHint: "Nickname, email and password are required, everything else can be filled in later.",
-    nicknameLabel: "Nickname",
+    nicknameLabel: "Nickname *",
     nicknameError: "2–20 characters, Latin letters, digits, _ and . only, must start with a letter",
-    emailLabel: "Email",
+    emailLabel: "Email *",
     emailRequired: "Email is required",
     emailInvalid: "Enter a valid email",
-    passwordLabel: "Password",
+    passwordLabel: "Password *",
     passwordPlaceholder: "At least 6 characters",
     passwordError: "Password must be at least 6 characters",
     bioLabel: "Bio (optional)",
@@ -787,6 +787,8 @@ function GlobalStyle() {
       @keyframes spotlightPulse { 0%,100%{ opacity:0.45; transform:scale(1); } 50%{ opacity:0.85; transform:scale(1.06); } }
       @keyframes spotlightOrbit { from{ transform: rotate(0deg) translateX(var(--orbit-r)) rotate(0deg); } to{ transform: rotate(360deg) translateX(var(--orbit-r)) rotate(-360deg); } }
       @keyframes shake { 0%,100%{ transform:translateX(0); } 20%{ transform:translateX(-8px); } 40%{ transform:translateX(8px); } 60%{ transform:translateX(-6px); } 80%{ transform:translateX(6px); } }
+      @keyframes heroRocketFloat { 0%,100%{ transform: translateY(0) rotate(-3deg); } 50%{ transform: translateY(-7px) rotate(3deg); } }
+      @keyframes heroRocketFlame { 0%,100%{ opacity:0.55; transform: scaleY(0.85) scaleX(0.9); } 50%{ opacity:1; transform: scaleY(1.15) scaleX(1.05); } }
       button { touch-action: manipulation; cursor: pointer; }
       .fx-card { animation: fadeInUp 480ms cubic-bezier(0.16,1,0.3,1) both; transition: transform ${SPRING}, border-color ${EASE}; will-change: transform; }
       .fx-card:active { transform: scale(0.98); transition: transform ${PRESS}; }
@@ -2148,6 +2150,45 @@ function TokenCardSkeleton({ index }) {
 // fills in as soon as the first live GeckoTerminal fetch resolves.
 const TOKEN_REFRESH_MS = 2500;
 
+/* RocketLaunchBG — decorative animated rocket tucked into the corner of
+   the "Создать токен" quick-action card. Pure CSS/SVG (no external
+   assets), so it always loads instantly and matches the app's theme:
+   a softly floating rocket with a flickering flame and a few embers
+   drifting up behind it, faded out toward the top of the card. */
+function RocketLaunchBG() {
+  return (
+    <div style={{
+      position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", borderRadius: "inherit",
+      WebkitMaskImage: "linear-gradient(to top, #000 0%, #000 45%, transparent 92%)",
+      maskImage: "linear-gradient(to top, #000 0%, #000 45%, transparent 92%)",
+    }}>
+      {[...Array(5)].map((_, i) => (
+        <span
+          key={i}
+          style={{
+            position: "absolute", right: 14 + (i % 3) * 7, bottom: -4,
+            width: 3, height: 3, borderRadius: "50%",
+            background: T.electric,
+            filter: `drop-shadow(0 0 3px ${T.electric})`,
+            animation: `rocketUp ${1.7 + i * 0.35}s cubic-bezier(0.3,0.1,0.4,1) ${i * 0.4}s infinite`,
+          }}
+        />
+      ))}
+      <div style={{ position: "absolute", right: 4, bottom: -6, width: 60, height: 60, animation: "heroRocketFloat 3.4s ease-in-out infinite", transformOrigin: "center" }}>
+        <div
+          style={{
+            position: "absolute", left: 6, bottom: 10, width: 16, height: 16, borderRadius: "50%",
+            background: `radial-gradient(circle, ${T.warning} 0%, ${T.electric} 55%, transparent 75%)`,
+            filter: "blur(2px)",
+            animation: "heroRocketFlame 0.55s ease-in-out infinite",
+          }}
+        />
+        <Rocket size={34} strokeWidth={1.4} color={T.electric} style={{ position: "relative", filter: `drop-shadow(0 0 8px ${hexA(T.electric, 0.5)})` }} />
+      </div>
+    </div>
+  );
+}
+
 function HomeHero({ onGoTab }) {
   const actions = [
     { icon: Rocket, key: "homeActionLaunch", onClick: () => onGoTab("create") },
@@ -2167,12 +2208,21 @@ function HomeHero({ onGoTab }) {
       </div>
 
       <div className="flex items-center gap-2.5">
-        {actions.map(a => (
-          <button key={a.key} onClick={a.onClick} className="fx-tap fx-card flex-1 flex flex-col items-start gap-4 rounded-[20px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-            <a.icon size={19} strokeWidth={1.6} color={T.turquoise} />
-            <span style={{ fontFamily: bodyFont, fontSize: 12.5, fontWeight: 500, color: T.ice, textAlign: "left", lineHeight: 1.25 }}>{t(a.key)}</span>
-          </button>
-        ))}
+        {actions.map(a => {
+          const isLaunch = a.key === "homeActionLaunch";
+          return (
+            <button
+              key={a.key}
+              onClick={a.onClick}
+              className="fx-tap fx-card flex-1 flex flex-col items-start gap-4 rounded-[20px] p-4"
+              style={{ background: isLaunch ? "#000000" : T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden" }}
+            >
+              {isLaunch && <RocketLaunchBG />}
+              <a.icon size={19} strokeWidth={1.6} color={T.turquoise} style={{ position: "relative", zIndex: 1 }} />
+              <span style={{ fontFamily: bodyFont, fontSize: 12.5, fontWeight: 500, color: T.ice, textAlign: "left", lineHeight: 1.25, position: "relative", zIndex: 1 }}>{t(a.key)}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -3772,11 +3822,22 @@ function SettingsPanel({
   connected, onConnectWallet, onDisconnectWallet, onCopyAddress,
   onOpenEditProfile, profile, showToast,
   onTogglePin, onChangePin, insetBottom = 0,
+  accountCreated, onDeleteAccount,
 }) {
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   if (!item) return null;
   const Icon = item.icon;
 
   function openEditFromSettings() { onClose(); onOpenEditProfile(); }
+  async function confirmDeleteAccount() {
+    setDeleting(true);
+    await onDeleteAccount();
+    setDeleting(false);
+    setDeleteConfirmOpen(false);
+    onClose();
+  }
   function contactSupport() {
     if (typeof window !== "undefined") window.open("https://t.me/mintly_support", "_blank", "noopener,noreferrer");
   }
@@ -3797,6 +3858,36 @@ function SettingsPanel({
           <button onClick={openEditFromSettings} className="fx-tap w-full rounded-[20px] py-3 mt-4" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
             {t("editProfile")}
           </button>
+          {accountCreated && (
+            <button
+              onClick={() => setDeleteConfirmOpen(true)}
+              className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-3"
+              style={{ background: "transparent", border: `1px solid rgba(255,77,77,0.35)`, fontFamily: displayFont, fontWeight: 700, fontSize: 13, color: T.down }}
+            >
+              <ShieldAlert size={15} /> {t("deleteAccountForever")}
+            </button>
+          )}
+          {deleteConfirmOpen && (
+            <div className="fx-modal-back" style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => !deleting && setDeleteConfirmOpen(false)}>
+              <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 20, padding: 22 }}>
+                <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
+                  <ShieldAlert size={18} color={T.down} />
+                  <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{t("deleteAccountQ")}</span>
+                </div>
+                <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginBottom: 18 }}>
+                  {t("deleteAccountBody")}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setDeleteConfirmOpen(false)} disabled={deleting} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice, opacity: deleting ? 0.6 : 1 }}>
+                    {t("cancel")}
+                  </button>
+                  <button onClick={confirmDeleteAccount} disabled={deleting} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: T.down, border: "none", fontFamily: displayFont, fontWeight: 700, fontSize: 13, color: "#1a0000", opacity: deleting ? 0.6 : 1 }}>
+                    {deleting ? t("deletingText") : t("deleteShort")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       );
       break;
@@ -4294,20 +4385,11 @@ async function uploadAvatarIfNeeded(userId) {
 
 function ProfileView({
   connected, walletAddress, tonBalance, tonPriceUsd, onConnect, onDisconnect, onOpenConnectModal, showToast,
-  accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut, onDeleteAccount,
+  accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut,
   onOpenSetting, onManageToken, onGoCreate, onOpenToken, myTokens = [],
 }) {
   const [loading, setLoading] = useState(true);
   const [verifyStatus, setVerifyStatus] = useState("none");
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  async function confirmDeleteAccount() {
-    setDeleting(true);
-    await onDeleteAccount();
-    setDeleting(false);
-    setDeleteConfirmOpen(false);
-  }
 
   useEffect(() => { const t = setTimeout(() => setLoading(false), 650); return () => clearTimeout(t); }, []);
 
@@ -4528,41 +4610,7 @@ function ProfileView({
           </GlassCard>
         </div>
 
-        {accountCreated && (
-          <div className="mt-5">
-            <SectionTitle>{t("dangerZoneTitle")}</SectionTitle>
-            <button
-              onClick={() => setDeleteConfirmOpen(true)}
-              className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3"
-              style={{ background: "transparent", border: `1px solid rgba(255,77,77,0.35)`, fontFamily: displayFont, fontWeight: 700, fontSize: 13, color: T.down }}
-            >
-              <ShieldAlert size={15} /> {t("deleteAccountForever")}
-            </button>
-          </div>
-        )}
       </div>
-
-      {deleteConfirmOpen && (
-        <div className="fx-modal-back" style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => !deleting && setDeleteConfirmOpen(false)}>
-          <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 20, padding: 22 }}>
-            <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
-              <ShieldAlert size={18} color={T.down} />
-              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{t("deleteAccountQ")}</span>
-            </div>
-            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginBottom: 18 }}>
-              {t("deleteAccountBody")}
-            </p>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setDeleteConfirmOpen(false)} disabled={deleting} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice, opacity: deleting ? 0.6 : 1 }}>
-                {t("cancel")}
-              </button>
-              <button onClick={confirmDeleteAccount} disabled={deleting} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: T.down, border: "none", fontFamily: displayFont, fontWeight: 700, fontSize: 13, color: "#1a0000", opacity: deleting ? 0.6 : 1 }}>
-                {deleting ? t("deletingText") : t("deleteShort")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -5237,6 +5285,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         showToast={showToast}
         onTogglePin={handleTogglePin}
         onChangePin={requestChangePin}
+        accountCreated={accountCreated}
+        onDeleteAccount={deleteAccountForever}
       />
       <PinSetupModal
         mode={pinModal ? pinModal.mode : null}
@@ -5303,7 +5353,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onOpenLogin={openLoginProfile}
               onOpenEditProfile={openEditProfile}
               onLogOut={logOutProfile}
-              onDeleteAccount={deleteAccountForever}
               onOpenSetting={(item) => setSettingsItem(item)}
               onManageToken={(tok) => setManageToken_(tok)}
               onGoCreate={() => goTab("create")}
