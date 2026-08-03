@@ -2156,10 +2156,10 @@ const TOKEN_REFRESH_MS = 2500;
    underneath it (no glow behind the rocket itself). */
 function RocketIconFX() {
   return (
-    <div style={{ position: "relative", width: 34, height: 34 }}>
+    <div style={{ position: "relative", width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <Rocket
-        size={34}
-        strokeWidth={1.4}
+        size={27}
+        strokeWidth={1.6}
         color={T.electric}
         style={{ position: "relative", animation: "heroRocketFloat 3s ease-in-out infinite", transformOrigin: "center" }}
       />
