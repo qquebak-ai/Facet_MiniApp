@@ -1,1 +1,1 @@
-# Facet_MiniApp
+# Mintly_MiniApp
