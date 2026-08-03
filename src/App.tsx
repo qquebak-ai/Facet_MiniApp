@@ -197,7 +197,7 @@ const STR = {
     descRequiredShort: "Описание обязательно — после запуска изменить его будет нельзя",
     siteLabel: "Сайт",
     categoryLabel: "Категория",
-    launchAmountLabel: "Сумма для запуска (TON) *",
+    launchAmountLabel: "Сумма для запуска (TON)",
     launchAmountNote: "На эту сумму сразу после запуска будут выкуплены первые токены — это стартовая ликвидность и первая цена токена.",
     youWillGet: "Ты получишь ≈",
     supplyShare: "выпуска",
