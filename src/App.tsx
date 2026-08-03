@@ -599,7 +599,7 @@ const DARK_PRISM = "#FF6B35";
 const LIGHT_PRISM = "#FF6B35";
 let PRISM = DARK_PRISM;
 let PRISM_TEXT = "#0D1117"; // Midnight ink reads best set on solid Ember in both themes
-const FACET = "polygon(18% 0%, 100% 0%, 100% 82%, 82% 100%, 0% 100%, 0% 18%)";
+const Mintly = "polygon(18% 0%, 100% 0%, 100% 82%, 82% 100%, 0% 100%, 0% 18%)";
 
 /* Editorial serif for display type (hero numbers, page titles, section
    titles) paired with Inter for everything functional — body copy, labels,
