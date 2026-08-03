@@ -767,14 +767,14 @@ function GlobalStyle() {
       @keyframes starDriftLeft { from{ transform: translateX(560px); } to{ transform: translateX(-24px); } }
       @keyframes glowPulse { 0%,100%{opacity:.35;} 50%{opacity:.75;} }
       @keyframes shimmer { from{background-position:-300px 0;} to{background-position:300px 0;} }
-      @keyframes textSweep { 0%{background-position:-150% 0;} 100%{background-position:150% 0;} }
+      @keyframes textSweep { 0%{background-position:150% 0;} 100%{background-position:-150% 0;} }
       .fx-shine-text {
         background-image: linear-gradient(100deg, ${T.turquoise} 0%, ${T.turquoise} 40%, #ffffff 50%, ${T.turquoise} 60%, ${T.turquoise} 100%);
         background-size: 220% 100%;
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
-        animation: textSweep 2.6s linear infinite;
+        animation: textSweep 5s linear infinite;
       }
       @keyframes mcapGlow { 0%,100%{text-shadow:0 0 10px currentColor,0 0 2px currentColor;} 50%{text-shadow:0 0 18px currentColor,0 0 4px currentColor;} }
       @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
