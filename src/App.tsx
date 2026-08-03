@@ -787,7 +787,7 @@ function GlobalStyle() {
       @keyframes spotlightPulse { 0%,100%{ opacity:0.45; transform:scale(1); } 50%{ opacity:0.85; transform:scale(1.06); } }
       @keyframes spotlightOrbit { from{ transform: rotate(0deg) translateX(var(--orbit-r)) rotate(0deg); } to{ transform: rotate(360deg) translateX(var(--orbit-r)) rotate(-360deg); } }
       @keyframes shake { 0%,100%{ transform:translateX(0); } 20%{ transform:translateX(-8px); } 40%{ transform:translateX(8px); } 60%{ transform:translateX(-6px); } 80%{ transform:translateX(6px); } }
-      @keyframes heroRocketFloat { 0%,100%{ transform: translateY(0) rotate(-3deg); } 50%{ transform: translateY(-7px) rotate(3deg); } }
+      @keyframes heroRocketRise { 0%{ transform: translateY(0) rotate(-3deg); opacity: 0; } 12%{ opacity: 1; } 78%{ opacity: 1; } 100%{ transform: translateY(-92px) rotate(-3deg); opacity: 0; } }
       @keyframes heroRocketFlame { 0%,100%{ opacity:0.55; transform: scaleY(0.85) scaleX(0.9); } 50%{ opacity:1; transform: scaleY(1.15) scaleX(1.05); } }
       button { touch-action: manipulation; cursor: pointer; }
       .fx-card { animation: fadeInUp 480ms cubic-bezier(0.16,1,0.3,1) both; transition: transform ${SPRING}, border-color ${EASE}; will-change: transform; }
@@ -2162,19 +2162,7 @@ function RocketLaunchBG() {
       WebkitMaskImage: "linear-gradient(to top, #000 0%, #000 45%, transparent 92%)",
       maskImage: "linear-gradient(to top, #000 0%, #000 45%, transparent 92%)",
     }}>
-      {[...Array(5)].map((_, i) => (
-        <span
-          key={i}
-          style={{
-            position: "absolute", right: 14 + (i % 3) * 7, bottom: -4,
-            width: 3, height: 3, borderRadius: "50%",
-            background: T.electric,
-            filter: `drop-shadow(0 0 3px ${T.electric})`,
-            animation: `rocketUp ${1.7 + i * 0.35}s cubic-bezier(0.3,0.1,0.4,1) ${i * 0.4}s infinite`,
-          }}
-        />
-      ))}
-      <div style={{ position: "absolute", right: 4, bottom: -6, width: 60, height: 60, animation: "heroRocketFloat 3.4s ease-in-out infinite", transformOrigin: "center" }}>
+      <div style={{ position: "absolute", right: 4, bottom: -10, width: 60, height: 60, animation: "heroRocketRise 6s linear infinite", transformOrigin: "center" }}>
         <div
           style={{
             position: "absolute", left: 6, bottom: 10, width: 16, height: 16, borderRadius: "50%",
