@@ -2157,14 +2157,6 @@ const TOKEN_REFRESH_MS = 2500;
 function RocketIconFX() {
   return (
     <div style={{ position: "relative", width: 34, height: 34 }}>
-      <div
-        style={{
-          position: "absolute", left: 6, bottom: 8, width: 16, height: 16, borderRadius: "50%",
-          background: `radial-gradient(circle, ${T.warning} 0%, ${T.electric} 55%, transparent 75%)`,
-          filter: "blur(2px)",
-          animation: "heroRocketFlame 0.55s ease-in-out infinite",
-        }}
-      />
       <Rocket
         size={34}
         strokeWidth={1.4}
