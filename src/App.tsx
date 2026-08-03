@@ -2229,7 +2229,7 @@ function HomeHero({ onGoTab }) {
               {isLaunch ? (
                 <RocketIconFX />
               ) : (
-                <a.icon size={19} strokeWidth={1.6} color={T.turquoise} style={{ position: "relative", zIndex: 1 }} />
+                <a.icon size={34} strokeWidth={1.4} color={T.turquoise} style={{ position: "relative", zIndex: 1 }} />
               )}
               <span style={{ fontFamily: bodyFont, fontSize: 12.5, fontWeight: 500, color: T.ice, textAlign: "left", lineHeight: 1.25, position: "relative", zIndex: 1 }}>{t(a.key)}</span>
             </button>
