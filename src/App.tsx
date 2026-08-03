@@ -788,6 +788,8 @@ function GlobalStyle() {
       @keyframes spotlightOrbit { from{ transform: rotate(0deg) translateX(var(--orbit-r)) rotate(0deg); } to{ transform: rotate(360deg) translateX(var(--orbit-r)) rotate(-360deg); } }
       @keyframes shake { 0%,100%{ transform:translateX(0); } 20%{ transform:translateX(-8px); } 40%{ transform:translateX(8px); } 60%{ transform:translateX(-6px); } 80%{ transform:translateX(6px); } }
       @keyframes heroRocketFlame { 0%,100%{ opacity:0.55; transform: scaleY(0.85) scaleX(0.9); } 50%{ opacity:1; transform: scaleY(1.15) scaleX(1.05); } }
+      @keyframes heroRocketFloat { 0%,100%{ transform: translateY(0) rotate(-3deg); } 50%{ transform: translateY(-5px) rotate(3deg); } }
+      @keyframes widgetSparkRise { 0%{ transform:translateY(0) scale(0.7); opacity:0; } 15%{ opacity:0.9; } 85%{ opacity:0.5; } 100%{ transform:translateY(-130px) scale(1.05); opacity:0; } }
       button { touch-action: manipulation; cursor: pointer; }
       .fx-card { animation: fadeInUp 480ms cubic-bezier(0.16,1,0.3,1) both; transition: transform ${SPRING}, border-color ${EASE}; will-change: transform; }
       .fx-card:active { transform: scale(0.98); transition: transform ${PRESS}; }
@@ -2149,14 +2151,9 @@ function TokenCardSkeleton({ index }) {
 // fills in as soon as the first live GeckoTerminal fetch resolves.
 const TOKEN_REFRESH_MS = 2500;
 
-/* RocketLaunchBG — decorative animated rocket tucked into the corner of
-   the "Создать токен" quick-action card. Pure CSS/SVG (no external
-   assets), so it always loads instantly and matches the app's theme:
-   a softly floating rocket with a flickering flame and a few embers
-   drifting up behind it, faded out toward the top of the card. */
 /* RocketIconFX — the "Создать токен" icon in the corner: same rocket
-   glyph with a small glowing flame underneath it, but the rocket itself
-   stays put (no flight animation) — only the flame flickers. */
+   glyph, gently bobbing in place, with a small flickering flame
+   underneath it (no glow behind the rocket itself). */
 function RocketIconFX() {
   return (
     <div style={{ position: "relative", width: 34, height: 34 }}>
@@ -2168,7 +2165,42 @@ function RocketIconFX() {
           animation: "heroRocketFlame 0.55s ease-in-out infinite",
         }}
       />
-      <Rocket size={34} strokeWidth={1.4} color={T.electric} style={{ position: "relative", filter: `drop-shadow(0 0 8px ${hexA(T.electric, 0.5)})` }} />
+      <Rocket
+        size={34}
+        strokeWidth={1.4}
+        color={T.electric}
+        style={{ position: "relative", animation: "heroRocketFloat 3s ease-in-out infinite", transformOrigin: "center" }}
+      />
+    </div>
+  );
+}
+
+/* WidgetSparks — orange embers rising from the bottom edge all the way
+   up through the whole "Создать токен" card, spread across its width. */
+function WidgetSparks() {
+  const items = useMemo(() => {
+    const rand = seededRand(4242);
+    return Array.from({ length: 7 }).map(() => ({
+      left: 6 + rand() * 88,
+      delay: rand() * 2.6,
+      dur: 2.4 + rand() * 1.8,
+      size: 2 + rand() * 2.2,
+    }));
+  }, []);
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", borderRadius: "inherit" }}>
+      {items.map((it, i) => (
+        <span
+          key={i}
+          style={{
+            position: "absolute", left: `${it.left}%`, bottom: -6,
+            width: it.size, height: it.size, borderRadius: "50%",
+            background: T.electric,
+            filter: `drop-shadow(0 0 3px ${T.electric})`,
+            animation: `widgetSparkRise ${it.dur}s cubic-bezier(0.3,0.1,0.4,1) ${it.delay}s infinite`,
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -2201,6 +2233,7 @@ function HomeHero({ onGoTab }) {
               className="fx-tap fx-card flex-1 flex flex-col items-start gap-4 rounded-[20px] p-4"
               style={{ background: isLaunch ? "#000000" : T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden" }}
             >
+              {isLaunch && <WidgetSparks />}
               {isLaunch ? (
                 <RocketIconFX />
               ) : (
