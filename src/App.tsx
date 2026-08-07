@@ -211,6 +211,7 @@ const STR = {
     nameTickerRequired: "Укажи название и тикер токена",
     descRequiredWarning: "Опиши токен — после запуска описание изменить будет нельзя",
     buyAmountRequired: "Укажи сумму для запуска — на неё будут выкуплены первые токены",
+    initialBuyHint: "Списывается не при запуске, а следующим шагом: сразу после создания откроется покупка на эту сумму.",
     buyAmountTooLow: "Минимальная сумма запуска — ${min} (≈{tons} TON)",
     deleteToken: "Удалить токен из списка",
     confirmDelete: "Точно удалить?",
@@ -479,6 +480,7 @@ const STR = {
     nameTickerRequired: "Enter a token name and ticker",
     descRequiredWarning: "Describe the token — the description can't be changed after launch",
     buyAmountRequired: "Enter an amount for the launch — it buys the first tokens",
+    initialBuyHint: "Charged after the launch, not during it: the buy sheet opens with this amount as soon as the token is created.",
     buyAmountTooLow: "Minimum launch amount is ${min} (≈{tons} TON)",
     deleteToken: "Delete token from list",
     confirmDelete: "Delete for sure?",
@@ -4613,6 +4615,9 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
 
 function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCreateProfile, onOpenConnectModal, onLaunch }) {
   const [form, setForm] = useState({ name: "", ticker: "", buyAmount: "", desc: "", tg: "", x: "", site: "" });
+  // Подпись обязательна: сама транзакция запуска эту сумму не тратит —
+  // покупка идёт отдельным шагом сразу после создания. Без пояснения
+  // человек ждёт токены на кошельке и не понимает, почему их нет.
   const [category, setCategory] = useState(null);
   const [logoUrl, setLogoUrl] = useState(null);
   const [logoFile, setLogoFile] = useState(null);
@@ -4760,6 +4765,9 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
           />
           <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>TON</span>
         </div>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.5, marginTop: 6 }}>
+          {t("initialBuyHint")}
+        </p>
         {(() => {
           const buyNum = parseFloat(form.buyAmount.replace(",", "."));
           const minBuyTon = MIN_LAUNCH_USD / TON_USD;
