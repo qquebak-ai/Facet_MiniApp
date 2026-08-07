@@ -779,7 +779,7 @@ function GlobalStyle() {
       @keyframes scaleIn { from{opacity:0; transform:scale(0.92);} to{opacity:1; transform:scale(1);} }
       @keyframes gridDrift { from{background-position:0 0,0 0;} to{background-position:140px 140px,140px 140px;} }
       @keyframes starTwinkle { 0%,100%{opacity:.2;} 50%{opacity:1;} }
-      @keyframes starPulse { 0%,100%{opacity:calc(var(--o) * 0.3);} 50%{opacity:var(--o);} }
+      @keyframes starPulse { 0%,100%{opacity:0;} 50%{opacity:var(--o);} }
       @keyframes gridRunToward { from{ background-position: 0 0, 0 0; } to{ background-position: 0 44px, 0 0; } }
       @keyframes tickerSwap { 0%{opacity:0; transform:translateY(6px);} 12%,88%{opacity:1; transform:translateY(0);} 100%{opacity:0; transform:translateY(-6px);} }
       @media (prefers-reduced-motion: reduce) {
@@ -885,28 +885,38 @@ function CyberGrid({ forceDark }) {
       />
 
       {/* звёзды-искры */}
-      {stars.map((s, i) => (
-        <svg
-          key={i}
-          width={s.size}
-          height={s.size}
-          viewBox="0 0 10 10"
-          style={{
-            position: "absolute",
-            left: `${s.left}%`,
-            top: `${s.top}%`,
-            ["--o" as any]: s.opacity,
-            opacity: s.opacity,
-            animation: `starPulse ${s.dur}s ease-in-out ${s.delay}s infinite`,
-          }}
-        >
-          <path
-            d="M5 0 C5.4 3.2 6.8 4.6 10 5 C6.8 5.4 5.4 6.8 5 10 C4.6 6.8 3.2 5.4 0 5 C3.2 4.6 4.6 3.2 5 0 Z"
-            fill={starColor}
-          />
-        </svg>
-      ))}
+      {stars.map((s, i) => <FxStar key={i} star={s} color={starColor} />)}
     </div>
+  );
+}
+
+/* Одна звёздочка. Цикл анимации ведёт её от полной прозрачности к своей
+   яркости и обратно в ноль; в момент, когда цикл замкнулся (то есть
+   звезда невидима), onAnimationIteration переставляет её в новую
+   случайную точку — так они мигают с прежней скоростью, но каждый раз
+   загораются в другом месте. */
+function FxStar({ star, color }) {
+  const [pos, setPos] = useState({ left: star.left, top: star.top });
+  return (
+    <svg
+      width={star.size}
+      height={star.size}
+      viewBox="0 0 10 10"
+      onAnimationIteration={() => setPos({ left: Math.random() * 100, top: Math.random() * 100 })}
+      style={{
+        position: "absolute",
+        left: `${pos.left}%`,
+        top: `${pos.top}%`,
+        ["--o" as any]: star.opacity,
+        opacity: 0,
+        animation: `starPulse ${star.dur}s ease-in-out ${star.delay}s infinite`,
+      }}
+    >
+      <path
+        d="M5 0 C5.4 3.2 6.8 4.6 10 5 C6.8 5.4 5.4 6.8 5 10 C4.6 6.8 3.2 5.4 0 5 C3.2 4.6 4.6 3.2 5 0 Z"
+        fill={color}
+      />
+    </svg>
   );
 }
 
