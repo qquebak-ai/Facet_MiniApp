@@ -1229,15 +1229,34 @@ function resampleCandles(candles, groupSize) {
 // the app's existing token model so every screen (cards, detail, stats)
 // keeps working unchanged. Falls back to null on any failure so callers
 // can keep showing the bundled fallback list instead of an empty feed.
-async function fetchTonMemePools(limit = 18) {
+async function fetchTonMemePools(limit = 18, pages = 1) {
+  // Одна страница GeckoTerminal — это 20 пулов, и на «Горячие» с «DEX»
+  // такого списка мало. Ходим по нескольким страницам подряд и склеиваем
+  // результат, отсеивая повторы по id пула.
+  const collected = [];
+  const seen = new Set();
+  for (let page = 1; page <= pages; page++) {
+    const rows = await fetchPoolsPage(page);
+    if (!rows) break; // страница не отдалась — довольствуемся тем, что есть
+    rows.forEach((tok) => {
+      if (seen.has(tok.id)) return;
+      seen.add(tok.id);
+      collected.push(tok);
+    });
+    if (collected.length >= limit) break;
+  }
+  return collected.length ? collected.slice(0, limit) : null;
+}
+
+async function fetchPoolsPage(page) {
   try {
     // include=base_token,dex pulls the actual token record (real name,
     // symbol, on-chain address, logo image_url) and the DEX the pool
     // trades on, for every pool in one request.
-    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/trending_pools?page=1&include=base_token,dex`);
+    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/trending_pools?page=${page}&include=base_token,dex`);
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
-    const rows = (json?.data || []).slice(0, limit);
+    const rows = json?.data || [];
     const included = json?.included || [];
     const tokensById = new Map(included.filter(x => x.type === "token").map(x => [x.id, x.attributes || {}]));
     const dexById = new Map(included.filter(x => x.type === "dex").map(x => [x.id, x.attributes || {}]));
@@ -2576,6 +2595,15 @@ function TokenCardSkeleton({ index }) {
 // транзакциям, ленте покупок — доставались 429. Цены на мемкоинах не
 // меняются настолько быстро, чтобы это того стоило.
 const TOKEN_REFRESH_MS = 15000;
+
+// Сколько пулов держим в ленте и с какой глубины их собираем. Одна
+// страница GeckoTerminal — 20 пулов; пяти страниц хватает, чтобы во
+// вкладках «Горячие» и «DEX» был длинный список, а не десяток строк.
+const FEED_PAGES = 5;
+const FEED_LIMIT = 100;
+// Каждый N-й опрос ходит вглубь; остальные обновляют только первую
+// страницу, чтобы не жечь лимит запросов.
+const FEED_DEEP_EVERY = 8;
 
 // Сколько токенов крутится в «центре внимания» и как часто меняется.
 const SPOTLIGHT_COUNT = 5;
@@ -6119,14 +6147,38 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [tokensLoading, setTokensLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
-    async function poll() {
-      const live = await fetchTonMemePools(18);
-      if (cancelled) return;
-      if (live && live.length) setTokens(live);
+    let tick = 0;
+
+    // Глубокий проход собирает много страниц — им наполняются «Горячие» и
+    // «DEX». Гонять столько запросов каждые 15 секунд нельзя (упрёмся в
+    // лимит API), поэтому обычный опрос обновляет только первую страницу,
+    // а остальное освежается раз в пару минут.
+    async function poll(deep) {
+      const live = deep
+        ? await fetchTonMemePools(FEED_LIMIT, FEED_PAGES)
+        : await fetchTonMemePools(20, 1);
+      if (cancelled || !live || !live.length) { setTokensLoading(false); return; }
+
+      setTokens((prev) => {
+        if (deep || !prev.length) return live;
+        // Свежие цифры по верхушке накладываем на уже собранный список,
+        // не теряя пулы с дальних страниц.
+        const fresh = new Map(live.map((tok) => [tok.id, tok]));
+        const merged = prev.map((tok) => fresh.get(tok.id) || tok);
+        const known = new Set(prev.map((tok) => tok.id));
+        live.forEach((tok) => { if (!known.has(tok.id)) merged.push(tok); });
+        return merged;
+      });
       setTokensLoading(false);
     }
-    poll();
-    const iv = setInterval(poll, TOKEN_REFRESH_MS);
+
+    // Сначала быстрый проход по первой странице — он снимает заставку, —
+    // и только потом добор остальных страниц в фоне.
+    poll(false).then(() => { if (!cancelled) poll(true); });
+    const iv = setInterval(() => {
+      tick += 1;
+      poll(tick % FEED_DEEP_EVERY === 0);
+    }, TOKEN_REFRESH_MS);
     return () => { cancelled = true; clearInterval(iv); };
   }, []);
   // Whenever a fresh poll comes in, refresh the currently-viewed token (if
