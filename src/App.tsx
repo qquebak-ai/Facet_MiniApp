@@ -2729,7 +2729,7 @@ async function fetchCreatorProfile(userId) {
   if (creatorCache.has(userId)) return creatorCache.get(userId);
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, nickname, bio, avatar_url, emoji")
+    .select("id, nickname, bio, avatar_url, emoji, frame_id, card_id")
     .eq("id", userId)
     .maybeSingle();
   const profile = error ? null : data;
@@ -2898,7 +2898,7 @@ function FollowButton({ follow, onNeedAuth, size = "sm" }) {
 /* PublicProfileView — профиль чужого пользователя: кто он, сколько у
    него подписчиков и какие токены он запускал. Открывается по нажатию
    на создателя на карточке токена. */
-function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken, onNeedAuth, showToast }) {
+function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken, onNeedAuth, showToast, insetTop = 0 }) {
   const [profile, setProfile] = useState(null);
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2925,71 +2925,96 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
     return () => { cancelled = true; };
   }, [ownerId]);
 
-  return (
-    <div className="fx-view flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 13, background: T.surface, border: `1px solid ${T.line}` }}>
+  if (loading && !profile) {
+    return (
+      <div className="fx-view flex flex-col items-center gap-3" style={{ marginTop: 24 }}>
+        <div className="fx-skeleton" style={{ width: 128, height: 128, borderRadius: "50%" }} />
+        <div className="fx-skeleton" style={{ width: 120, height: 14, borderRadius: 4 }} />
+        <div className="fx-skeleton" style={{ width: 200, height: 10, borderRadius: 4 }} />
+      </div>
+    );
+  }
+  if (!profile) {
+    return (
+      <div className="fx-view flex flex-col gap-4">
+        <button onClick={onBack} className="fx-tap self-start flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 13, background: T.surface, border: `1px solid ${T.line}` }}>
           <ChevronLeft size={16} /> {tr("back")}
         </button>
-      </div>
-
-      {loading && !profile ? (
-        <div className="flex flex-col items-center gap-3" style={{ marginTop: 12 }}>
-          <div className="fx-skeleton" style={{ width: 96, height: 96, borderRadius: "50%" }} />
-          <div className="fx-skeleton" style={{ width: 120, height: 14, borderRadius: 4 }} />
-        </div>
-      ) : !profile ? (
         <div className="rounded-[22px] p-6 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("profileNotFound")}</span>
         </div>
-      ) : (
-        <>
-          <div className="flex flex-col items-center text-center gap-2.5">
-            <TokenAvatar size={96} src={profile.avatar_url}>{profile.emoji || "🚀"}</TokenAvatar>
-            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{profile.nickname}</span>
-            {profile.bio ? (
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 280, lineHeight: 1.5 }}>{profile.bio}</p>
-            ) : null}
-            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>
-              {follow.followers} {followersWord(follow.followers)}
-            </span>
-            <div style={{ marginTop: 4 }}>
-              <FollowButton follow={follow} onNeedAuth={onNeedAuth} size="lg" />
-            </div>
-          </div>
+      </div>
+    );
+  }
 
-          <div>
-            <SectionTitle>{tr("creatorTokens")}</SectionTitle>
-            {loading ? (
-              <div className="flex flex-col gap-2">
-                {[0, 1].map((i) => <MempadRowSkeleton key={i} index={i} />)}
-              </div>
-            ) : tokens.length === 0 ? (
-              <div className="rounded-[22px] p-5 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
-                <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("creatorNoTokens")}</span>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {tokens.map((row) => (
-                  <button
-                    key={row.id}
-                    onClick={() => onOpenToken(row)}
-                    className="fx-card flex items-center gap-3 rounded-[22px] w-full"
-                    style={{ background: T.surface, border: `1px solid ${T.line}`, padding: "12px 14px" }}
-                  >
-                    <TokenAvatar size={40} src={row.logo_url}>🚀</TokenAvatar>
-                    <div className="flex-1 min-w-0 flex flex-col items-start">
-                      <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{row.ticker}</span>
-                      <span className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{row.name}</span>
-                    </div>
-                    <ChevronRight size={16} color={T.muted} />
-                  </button>
-                ))}
-              </div>
-            )}
+  const frame = FRAME_BY_ID[profile.frame_id] ? profile.frame_id : "none";
+  const card = CARD_BY_ID[profile.card_id] ? profile.card_id : "none";
+
+  return (
+    <div className="fx-view" style={{ position: "relative" }}>
+      {/* Шапка ровно та же, что и у своего профиля: подложка во всю
+          ширину и рамка вокруг аватарки. Ради этого предметы из магазина
+          и покупаются — их должно быть видно со стороны. */}
+      <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: 10, position: "relative", zIndex: 0 }}>
+        <ProfileCardBg cardId={card} height={320} radius={0} bleed={16} top={-(insetTop + 66)} />
+
+        <button onClick={onBack} className="fx-tap flex items-center gap-1" style={{ position: "absolute", top: 0, left: 0, zIndex: 2, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 12, color: T.ice }}>
+          <ChevronLeft size={14} /> {tr("back")}
+        </button>
+
+        <div style={{ position: "relative", zIndex: 1, lineHeight: 0 }}>
+          <AvatarFrame frameId={frame} size={128}>
+            <div style={{
+              width: "100%", height: "100%", borderRadius: "50%",
+              background: profile.avatar_url ? `center/cover no-repeat url(${profile.avatar_url})` : T.surfaceHi,
+              border: frame === "none" ? `2px solid ${T.lineHi}` : "none",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 52,
+            }}>
+              {!profile.avatar_url && (profile.emoji || <User size={40} color={T.muted} />)}
+            </div>
+          </AvatarFrame>
+        </div>
+
+        <div className="flex flex-col items-center gap-2" style={{ position: "relative", zIndex: 1, width: "100%" }}>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, marginTop: 4 }}>{profile.nickname}</span>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
+            {profile.bio || tr("bioEmptyPlaceholder")}
+          </p>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>
+            {follow.followers} {followersWord(follow.followers)}
+          </span>
+          <div style={{ marginTop: 4 }}>
+            <FollowButton follow={follow} onNeedAuth={onNeedAuth} size="lg" />
           </div>
-        </>
-      )}
+        </div>
+      </div>
+
+      <div className="mt-5 pb-4">
+        <SectionTitle>{tr("creatorTokens")}</SectionTitle>
+        {tokens.length === 0 ? (
+          <div className="rounded-[22px] p-5 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("creatorNoTokens")}</span>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {tokens.map((row) => (
+              <button
+                key={row.id}
+                onClick={() => onOpenToken(row)}
+                className="fx-card flex items-center gap-3 rounded-[22px] w-full"
+                style={{ background: T.surface, border: `1px solid ${T.line}`, padding: "12px 14px" }}
+              >
+                <TokenAvatar size={40} src={row.logo_url}>🚀</TokenAvatar>
+                <div className="flex-1 min-w-0 flex flex-col items-start">
+                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{row.ticker}</span>
+                  <span className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{row.name}</span>
+                </div>
+                <ChevronRight size={16} color={T.muted} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -6094,12 +6119,18 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
     const { data: prof, error } = await supabase
       .from("profiles")
-      .select("nickname, email, bio, avatar_url, emoji")
+      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id")
       .eq("id", user.id)
       .single();
     if (error || !prof) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
     setProfile({ nickname: prof.nickname, email: prof.email, bio: prof.bio || "", avatarUrl: prof.avatar_url, emoji: prof.emoji });
     setAccountCreated(true);
+    // Косметика хранится в профиле, а не только на устройстве — иначе её
+    // не увидят другие. То, что пришло с сервера, главнее локального.
+    setCosmetics({
+      frame: FRAME_BY_ID[prof.frame_id] ? prof.frame_id : "none",
+      card: CARD_BY_ID[prof.card_id] ? prof.card_id : "none",
+    });
     loadMyTokens(user.id);
   }
 
@@ -6236,6 +6267,17 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         window.localStorage.setItem(kind === "frame" ? "mintly_frame" : "mintly_card", id);
       }
     } catch (e) { /* localStorage unavailable */ }
+    // localStorage оставляем для мгновенного отклика и гостей, но выбор
+    // вошедшего уходит в профиль — иначе его предметы не увидит никто.
+    if (userId) {
+      supabase
+        .from("profiles")
+        .update(kind === "frame" ? { frame_id: id } : { card_id: id })
+        .eq("id", userId)
+        .then(({ error }) => {
+          if (error) console.warn("[mintly] failed to save cosmetics:", error.message);
+        });
+    }
     showToast(id === "none" ? t("cosmeticRemoved") : t("cosmeticApplied"));
   }
 
@@ -6711,7 +6753,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   return (
     <div style={{ background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden" }}>
       <GlobalStyle />
-      <CyberGrid showStars={view !== "profile"} />
+      <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast toast={toast} insetTop={insetTop} />
 
@@ -6788,6 +6830,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onOpenToken={(row) => openToken(localTokenToFeedShape(mapTokenRow(row)))}
               onNeedAuth={openCreateProfile}
               showToast={showToast}
+              insetTop={insetTop}
             />
           )}
           {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} onOpenProfile={openUserProfile} />}
