@@ -7142,7 +7142,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         showToast(tf("soldToast", { pay: payAmount, ticker: token.ticker, receive: receiveAmount, unit }));
         setTimeout(() => setBalanceRefreshTick((n) => n + 1), 4000);
       } catch (err) {
-        showToast(t("txCancelled"));
+        // Текст ошибки показываем целиком: консоли внутри Telegram нет, а
+        // отличить отказ пользователя от отклонённого запроса иначе
+        // невозможно.
+        const detail = (err && (err.message || String(err))) || "";
+        console.error("[mintly] продажа не прошла:", err);
+        showToast(detail ? `${t("txCancelled")} — ${detail.slice(0, 140)}` : t("txCancelled"));
       }
     }
   }
