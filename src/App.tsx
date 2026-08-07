@@ -7086,7 +7086,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     } else {
       // Can't sell more than is actually held — re-checked here too, not
       // just in the modal, in case the ledger changed since it opened.
-      const held = holdings[token.id] || 0;
+      // Баланс берём тот же, что показан в окне, — из сети. Локальный
+      // счётчик знает только о сделках через это приложение, поэтому у
+      // него ноль, и продажа молча обрывалась здесь же.
+      const held = chainHolding != null ? chainHolding : (holdings[token.id] || 0);
       if (rawAmount > held) { showToast(t("insufficientSellAmount")); return; }
       if (!connected) { showToast(t("connectWalletSell")); return; }
       // Продажа на кривой — это перевод жетонов на её кошелёк: кривая
