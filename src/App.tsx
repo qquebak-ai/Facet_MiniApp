@@ -863,7 +863,7 @@ function seededRand(seed) {
    Telegram WebView): россыпь белых четырёхлучевых звёздочек и тонкая
    сетка. Всё под pointer-events:none и на zIndex 0 — контент приложения
    лежит выше на zIndex 1. */
-function CyberGrid({ forceDark }) {
+function CyberGrid({ forceDark, showStars = true }) {
   const dark = forceDark || T.bg === DARK_THEME.bg;
   const gridLine = dark ? "rgba(255,255,255,0.05)" : "rgba(20,21,26,0.06)";
   const starColor = dark ? "#FFFFFF" : "#14151A";
@@ -896,8 +896,9 @@ function CyberGrid({ forceDark }) {
         }}
       />
 
-      {/* звёзды-искры */}
-      {stars.map((s, i) => <FxStar key={i} star={s} color={starColor} />)}
+      {/* звёзды-искры. В профиле их гасим: там своя карточка-подложка,
+          и две россыпи звёзд друг на друге читаются как шум. */}
+      {showStars && stars.map((s, i) => <FxStar key={i} star={s} color={starColor} />)}
     </div>
   );
 }
@@ -6198,7 +6199,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   return (
     <div style={{ background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden" }}>
       <GlobalStyle />
-      <CyberGrid />
+      <CyberGrid showStars={view !== "profile"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast toast={toast} insetTop={insetTop} />
 
