@@ -861,9 +861,10 @@ function GlobalStyle() {
       .cta-launch:active { transform: scale(0.98); transition: transform ${PRESS}; }
       .tf-btn { transition: background ${EASE}, color ${EASE}, transform ${SPRING}; will-change: transform; }
       .tf-btn:active { transform: scale(0.92); transition: background ${EASE}, color ${EASE}, transform ${PRESS}; }
-      /* overscroll-behavior: contain не даёт докрутке внутреннего списка
-         утечь наружу и потянуть за собой всё окно. */
-      .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; overscroll-behavior: contain; }
+      /* none, а не contain: contain лишь запрещает утянуть за собой окно,
+         но сам список всё равно отскакивает на резинке — и над контентом
+         засвечивается фон. none убирает и отскок тоже. */
+      .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; overscroll-behavior: none; }
       .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
     `}</style>
   );
@@ -5162,7 +5163,7 @@ function ProfileView({
           {/* bleed выводит подложку за горизонтальные отступы экрана и
               поднимает её выше шапки — так у карточки не остаётся видимых
               обрезанных краёв. */}
-          <ProfileCardBg cardId={cosmetics.card} height={320} radius={0} bleed={16} top={-(insetTop + 66)} />
+          <ProfileCardBg cardId={cosmetics.card} height={320} radius={0} bleed={16} top={-(insetTop + 226)} />
           {accountCreated && (
             <button onClick={logOut} className="fx-tap flex items-center gap-1.5" style={{ position: "absolute", top: 0, right: 0, zIndex: 2, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 12, color: T.rose }}>
               <LogOut size={13} /> {t("logOutShort")}
