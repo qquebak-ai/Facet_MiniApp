@@ -199,12 +199,22 @@ describe("BondingCurve", () => {
     expect(res.transactions).toHaveTransaction({ to: curve.address, success: false });
   });
 
-  it("отвергает продажу большего, чем было куплено", async () => {
+  it("не платит за жетоны сверх проданного — это приход запаса, а не продажа", async () => {
     await bindWallet();
     const bought = jettonTransferFrom(await buy("5"))!.amount;
+    const before = await curve.getData();
+
+    // Больше, чем когда-либо продано, может прийти только как торговый
+    // запас при запуске. Платить за это нельзя: иначе кто угодно
+    // «продал» бы кривой её же токены и выкачал резерв.
     const res = await curve.send(jettonWallet.getSender(), { value: toNano("0.2") },
       sellNotification(bought + 1n, buyer.address));
-    expect(res.transactions).toHaveTransaction({ to: curve.address, success: false });
+    expect(res.transactions).toHaveTransaction({ to: curve.address, success: true });
+    expect(res.transactions).not.toHaveTransaction({ from: curve.address, to: buyer.address });
+
+    const after = await curve.getData();
+    expect(after.realTon).toBe(before.realTon);
+    expect(after.tokensSold).toBe(before.tokensSold);
   });
 
   it("уважает minTonOut при продаже", async () => {

@@ -332,7 +332,16 @@ contract BondingCurve with Deployable {
         require(sender() == wallet, "unknown jetton wallet");
         require(!self.graduated, "curve graduated");
         require(msg.amount > 0, "empty transfer");
-        require(msg.amount <= self.tokensSold, "more tokens than sold");
+
+        // Приход торгового запаса — не продажа. Он больше всего, что
+        // когда-либо продано, и приходит один раз при запуске. В этот
+        // момент довыдаём покупки, которые не смогли исполниться раньше:
+        // при запуске покупка может обогнать запас, и без этого её исход
+        // зависел бы от порядка доставки сообщений.
+        if (msg.amount > self.tokensSold) {
+            self.flushPending();
+            return;
+        }
 
         let minTonOut: Int = self.parseMinTonOut(msg.forwardPayload);
 
@@ -389,6 +398,29 @@ contract BondingCurve with Deployable {
             return 0;
         }
         return s.loadCoins();
+    }
+
+    // Повторная выдача по всем незакрытым покупкам. Записи не удаляем:
+    // их закроет excesses после удачного перевода, а если снова не
+    // выйдет — сработает возврат и деньги вернутся покупателю.
+    fun flushPending() {
+        let wallet: Address = self.requireWallet();
+        foreach (id, buy in self.pending) {
+            send(SendParameters{
+                to: wallet,
+                value: self.GasJettonTransfer,
+                bounce: true,
+                body: JettonTransfer{
+                    queryId: id,
+                    amount: buy.tokens,
+                    destination: buy.buyer,
+                    responseDestination: myAddress(),
+                    customPayload: null,
+                    forwardTonAmount: 1,
+                    forwardPayload: emptySlice(),
+                }.toCell(),
+            });
+        }
     }
 
     // Жетоны дошли — запись о покупке больше не нужна.
