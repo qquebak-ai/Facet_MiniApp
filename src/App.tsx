@@ -2958,9 +2958,13 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
       <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: 10, position: "relative", zIndex: 0 }}>
         <ProfileCardBg cardId={card} height={320} radius={0} bleed={16} top={-(insetTop + 66)} />
 
-        <button onClick={onBack} className="fx-tap flex items-center gap-1" style={{ position: "absolute", top: 0, left: 0, zIndex: 2, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 12, color: T.ice }}>
-          <ChevronLeft size={14} /> {tr("back")}
-        </button>
+        {/* Кнопка занимает свою строку над аватаркой: раньше она висела
+            абсолютом в углу и налезала на рамку. */}
+        <div className="flex" style={{ position: "relative", zIndex: 2, width: "100%", justifyContent: "flex-start", marginBottom: 6 }}>
+          <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}>
+            <ChevronLeft size={16} /> {tr("back")}
+          </button>
+        </div>
 
         <div style={{ position: "relative", zIndex: 1, lineHeight: 0 }}>
           <AvatarFrame frameId={frame} size={128}>
@@ -6126,10 +6130,24 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setProfile({ nickname: prof.nickname, email: prof.email, bio: prof.bio || "", avatarUrl: prof.avatar_url, emoji: prof.emoji });
     setAccountCreated(true);
     // Косметика хранится в профиле, а не только на устройстве — иначе её
-    // не увидят другие. То, что пришло с сервера, главнее локального.
-    setCosmetics({
-      frame: FRAME_BY_ID[prof.frame_id] ? prof.frame_id : "none",
-      card: CARD_BY_ID[prof.card_id] ? prof.card_id : "none",
+    // не увидят другие. Но если на сервере пусто, а локально что-то
+    // надето (выбор сделан до переезда в базу), локальное не затираем, а
+    // наоборот — поднимаем на сервер.
+    setCosmetics((local) => {
+      const serverFrame = FRAME_BY_ID[prof.frame_id] ? prof.frame_id : "none";
+      const serverCard = CARD_BY_ID[prof.card_id] ? prof.card_id : "none";
+      const frame = serverFrame === "none" && local.frame !== "none" ? local.frame : serverFrame;
+      const card = serverCard === "none" && local.card !== "none" ? local.card : serverCard;
+
+      const patch = {};
+      if (frame !== serverFrame) patch.frame_id = frame;
+      if (card !== serverCard) patch.card_id = card;
+      if (Object.keys(patch).length) {
+        supabase.from("profiles").update(patch).eq("id", user.id).then(({ error }) => {
+          if (error) console.warn("[mintly] failed to migrate cosmetics:", error.message);
+        });
+      }
+      return { frame, card };
     });
     loadMyTokens(user.id);
   }
@@ -6518,11 +6536,15 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // the real public URL everywhere from here on — success screen,
       // Supabase `tokens` row, and everyone else's feed all get the same
       // persistent image.
-      let persistentLogoUrl = req.logoUrl || null;
+      let persistentLogoUrl = null;
       if (req.logoFile && userId) {
         try {
           const ext = (req.logoFile.name || "logo.png").split(".").pop();
-          const path = `tokens/${userId}/${Date.now()}.${ext}`;
+          // Путь обязан начинаться с id пользователя: политика хранилища
+          // сверяет первую папку с auth.uid(). Раньше здесь был префикс
+          // `tokens/`, из-за него загрузка отклонялась, и в базу уезжала
+          // мёртвая blob-ссылка — логотипы не открывались ни у кого.
+          const path = `${userId}/token-${Date.now()}.${ext}`;
           const { error: logoUploadError } = await supabase.storage
             .from("avatars")
             .upload(path, req.logoFile, { upsert: true });
@@ -6530,9 +6552,15 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
             if (pub && pub.publicUrl) persistentLogoUrl = pub.publicUrl;
           } else {
-            console.error("[mintly] token logo upload failed, falling back to local blob URL:", logoUploadError);
+            console.error("[mintly] token logo upload failed:", logoUploadError);
           }
         } catch (e) { console.error("[mintly] token logo upload threw:", e); }
+      }
+      // Если загрузка не прошла — сохраняем пустоту, а не blob-ссылку:
+      // она живёт только в этой вкладке, у всех остальных это битая
+      // картинка. Пустое поле хотя бы честно покажет эмодзи.
+      if (!persistentLogoUrl && req.logoUrl && !String(req.logoUrl).startsWith("blob:")) {
+        persistentLogoUrl = req.logoUrl;
       }
       setLaunchProgress({
         stepIndex: LAUNCH_STEPS.length,
