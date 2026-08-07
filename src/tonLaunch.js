@@ -812,7 +812,10 @@ export async function launchRealToken({
         to: curveAddress,
         value: toNano(buyTon.toFixed(9)) + CURVE_GAS_BUY_OVERHEAD,
         body: buildBuyBody({ queryId: 0n, minTokensOut: 0n }),
-        bounce: false,
+        // Именно bounce: true. Если кривая отвергнет покупку (не хватило
+        // на газ, порог уже взят), с bounce: false деньги остались бы у
+        // неё, а токенов бы не было. С возвратом они придут обратно.
+        bounce: true,
       });
       log(`стартовая покупка на ${buyTon} TON поставлена в очередь`);
     }
