@@ -775,12 +775,7 @@ function GlobalStyle() {
       @keyframes scaleIn { from{opacity:0; transform:scale(0.92);} to{opacity:1; transform:scale(1);} }
       @keyframes gridDrift { from{background-position:0 0,0 0;} to{background-position:140px 140px,140px 140px;} }
       @keyframes starTwinkle { 0%,100%{opacity:.2;} 50%{opacity:1;} }
-      @keyframes auroraDrift {
-        0%   { transform: translate3d(0,0,0) scale(1); }
-        33%  { transform: translate3d(8%,-6%,0) scale(1.12); }
-        66%  { transform: translate3d(-6%,7%,0) scale(0.94); }
-        100% { transform: translate3d(0,0,0) scale(1); }
-      }
+      @keyframes starPulse { 0%,100%{opacity:calc(var(--o) * 0.3);} 50%{opacity:var(--o);} }
       @media (prefers-reduced-motion: reduce) {
         [data-bg-fx] * { animation: none !important; }
       }
@@ -846,83 +841,64 @@ function seededRand(seed) {
 }
 
 /* CyberGrid — живой фон вместо плоской чёрной заливки.
-   Три слоя, все на CSS (без rAF и канваса, чтобы не жечь батарею в
-   Telegram WebView): медленно дрейфующие ember-пятна, тонкая
-   перспективная сетка и редкие мерцающие искры. Всё под pointer-events:none
-   и на zIndex 0 — контент приложения лежит выше на zIndex 1. */
+   Два слоя, оба на CSS/SVG (без rAF и канваса, чтобы не жечь батарею в
+   Telegram WebView): россыпь белых четырёхлучевых звёздочек и тонкая
+   сетка. Всё под pointer-events:none и на zIndex 0 — контент приложения
+   лежит выше на zIndex 1. */
 function CyberGrid({ forceDark }) {
   const dark = forceDark || T.bg === DARK_THEME.bg;
-  const accent = T.electric;
-  const gridLine = dark ? "rgba(255,107,53,0.07)" : "rgba(20,21,26,0.06)";
-  const sparkColor = dark ? "rgba(255,255,255,0.55)" : "rgba(20,21,26,0.35)";
+  const gridLine = dark ? "rgba(255,255,255,0.05)" : "rgba(20,21,26,0.06)";
+  const starColor = dark ? "#FFFFFF" : "#14151A";
 
-  // Детерминированные позиции — искры не перескакивают при каждом ре-рендере.
-  const sparks = useMemo(() => {
+  // Детерминированные позиции — звёзды не перескакивают при каждом ре-рендере.
+  const stars = useMemo(() => {
     const rnd = seededRand(20240607);
-    return Array.from({ length: 18 }, () => ({
+    return Array.from({ length: 90 }, () => ({
       left: rnd() * 100,
       top: rnd() * 100,
-      size: 1 + rnd() * 1.6,
-      delay: rnd() * 6,
-      dur: 3.5 + rnd() * 4,
+      size: 5 + rnd() * 5,
+      opacity: 0.3 + rnd() * 0.55,
+      delay: -rnd() * 8,
+      dur: 4 + rnd() * 5,
     }));
   }, []);
 
-  const orbs = [
-    { size: 420, left: "-25%", top: "-10%", color: accent, opacity: dark ? 0.2 : 0.1, dur: 26, delay: 0 },
-    { size: 340, left: "60%", top: "25%", color: dark ? "#2E6BFF" : accent, opacity: dark ? 0.14 : 0.07, dur: 34, delay: -8 },
-    { size: 380, left: "5%", top: "65%", color: accent, opacity: dark ? 0.16 : 0.08, dur: 30, delay: -16 },
-  ];
-
   return (
     <div aria-hidden data-bg-fx style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
-      {/* мягкие цветные пятна */}
-      {orbs.map((o, i) => (
-        <div
-          key={i}
-          style={{
-            position: "absolute",
-            left: o.left,
-            top: o.top,
-            width: o.size,
-            height: o.size,
-            borderRadius: "50%",
-            background: `radial-gradient(circle, ${hexA(o.color, o.opacity)} 0%, ${hexA(o.color, 0)} 70%)`,
-            filter: "blur(28px)",
-            animation: `auroraDrift ${o.dur}s ease-in-out ${o.delay}s infinite`,
-            willChange: "transform",
-          }}
-        />
-      ))}
-
-      {/* сетка, уходящая вниз и растворяющаяся к краям */}
+      {/* сетка, растворяющаяся к краям */}
       <div
         style={{
           position: "absolute",
           inset: 0,
           backgroundImage: `linear-gradient(${gridLine} 1px, transparent 1px), linear-gradient(90deg, ${gridLine} 1px, transparent 1px)`,
           backgroundSize: "70px 70px, 70px 70px",
-          animation: "gridDrift 24s linear infinite",
-          WebkitMaskImage: "radial-gradient(ellipse at 50% 35%, #000 0%, transparent 78%)",
-          maskImage: "radial-gradient(ellipse at 50% 35%, #000 0%, transparent 78%)",
+          animation: "gridDrift 30s linear infinite",
+          WebkitMaskImage: "radial-gradient(ellipse at 50% 35%, #000 0%, transparent 80%)",
+          maskImage: "radial-gradient(ellipse at 50% 35%, #000 0%, transparent 80%)",
         }}
       />
 
-      {/* редкие искры */}
-      {sparks.map((s, i) => (
-        <div
+      {/* звёзды-искры */}
+      {stars.map((s, i) => (
+        <svg
           key={i}
+          width={s.size}
+          height={s.size}
+          viewBox="0 0 10 10"
           style={{
             position: "absolute",
             left: `${s.left}%`,
             top: `${s.top}%`,
-            width: s.size,
-            height: s.size,
-            borderRadius: "50%",
-            background: sparkColor,
-            animation: `starTwinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
+            ["--o" as any]: s.opacity,
+            opacity: s.opacity,
+            animation: `starPulse ${s.dur}s ease-in-out ${s.delay}s infinite`,
           }}
-        />
+        >
+          <path
+            d="M5 0 C5.4 3.2 6.8 4.6 10 5 C6.8 5.4 5.4 6.8 5 10 C4.6 6.8 3.2 5.4 0 5 C3.2 4.6 4.6 3.2 5 0 Z"
+            fill={starColor}
+          />
+        </svg>
       ))}
     </div>
   );
