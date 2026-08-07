@@ -12,6 +12,8 @@ import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, beginCell, toNano } from "@ton/core";
 import { supabase } from "./supabaseClient";
 import {
+  CURVE_PARAMS,
+  tokensOutFor,
   curvePriceTon,
   buildBuyBody,
   buildSellPayload,
@@ -4494,9 +4496,17 @@ const TOKEN_FIXED_SUPPLY_LABEL = TOKEN_FIXED_SUPPLY.toLocaleString("ru-RU");
    so 1 TON ≈ 0.1% of supply. Purely cosmetic (see note on TokenLaunchOverlay
    above): nothing here reflects a real price feed or on-chain curve. */
 const TOKENS_PER_TON = TOKEN_FIXED_SUPPLY / 1000;
+// Сколько токенов даст стартовая покупка. Считается ровно той же
+// формулой, что и в контракте, по свежей кривой: до этого здесь стояла
+// линейная прикидка «столько-то токенов за TON», и она обещала втрое
+// больше, чем кривая выдаёт на самом деле.
 function tokensForTon(tonAmount) {
   const n = Math.max(0, tonAmount || 0);
-  const tokens = Math.min(TOKEN_FIXED_SUPPLY, Math.round(n * TOKENS_PER_TON));
+  if (n <= 0) return { tokens: 0, pct: 0 };
+  // Контракт удерживает газ из присланного и берёт комиссию с остатка.
+  const netTon = toNano(n.toFixed(9)) * (10000n - CURVE_PARAMS.feeBps) / 10000n;
+  const raw = tokensOutFor({ realTon: 0n, tokensSold: 0n }, netTon);
+  const tokens = Number(raw / 1000000000n);
   const pct = Math.min(100, (tokens / TOKEN_FIXED_SUPPLY) * 100);
   return { tokens, pct };
 }
