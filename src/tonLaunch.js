@@ -116,7 +116,7 @@
 import { Address, beginCell, toNano, storeStateInit } from "@ton/core";
 import { TonClient4 } from "@ton/ton";
 import { getHttpV4Endpoint } from "@orbs-network/ton-access";
-import { AssetsSDK, JettonParams, JettonMinter, createApi } from "@ton-community/assets-sdk";
+import { AssetsSDK, JettonParams, JettonMinter, JettonWallet, createApi } from "@ton-community/assets-sdk";
 import {
   curveContract,
   buildBuyBody,
@@ -730,18 +730,14 @@ export async function launchRealToken({
     );
   }
 
-  // ---- Стартовая покупка создателя ---------------------------------
-  //
-  // Раньше здесь создатель получал долю выпуском на свой кошелёк, а
-  // отдельными сообщениями платил казначейству и комиссию. То есть
-  // рынка не было: токены появлялись из воздуха, а деньги уходили мимо
-  // какого-либо пула. Теперь стартовая покупка — обычная покупка на
-  // кривой, просто первая. Она уходит второй транзакцией: пока запас не
-  // доехал до кошелька кривой, покупать нечего.
-  const buyTon = Math.max(0, Number(buyAmountTon) || 0);
-  if (buyTon <= 0) {
-    fail("Сумма стартовой покупки должна быть больше 0", new Error("buyAmountTon <= 0"));
-  }
+  // Стартовой покупки внутри запуска больше нет. Раньше создатель
+  // получал долю выпуском себе на кошелёк, а деньги отдельными
+  // переводами уходили казначейству — рынка не было вовсе. Класть
+  // покупку в ту же транзакцию тоже нельзя: сообщение до кривой доходит
+  // за один шаг, а выпуск запаса до её кошелька — за два, поэтому
+  // покупка успела бы прийти раньше токенов, и деньги списались бы
+  // впустую. Поэтому запуск — одна транзакция, а покупка делается
+  // обычной кнопкой на странице токена, когда запас уже на месте.
 
   // ---- Рынок токена: бондинг-кривая -------------------------------
   //
@@ -755,6 +751,7 @@ export async function launchRealToken({
   // что весь запас можно отправить на её будущий кошелёк ещё до того,
   // как она развёрнута — в этой же транзакции.
   let curveAddress = null;
+  let curveJettonWallet = null;
   try {
     const curve = await curveContract({
       admin: Address.parse(walletAddress),
@@ -780,17 +777,24 @@ export async function launchRealToken({
     await minter.sendMint(batchSender, curveAddress, CURVE_PARAMS.tokensForSale);
     log(`выпуск запаса на кривую поставлен в очередь: ${CURVE_PARAMS.tokensForSale.toString()} базовых единиц`);
 
-    // Развёртывание кривой. Тело сообщения пустое — стартовые параметры
-    // уже лежат в stateInit, а адрес её кошелька жетона будет привязан
-    // отдельным сообщением: он зависит от адреса самой кривой, поэтому
-    // до её появления посчитать его нечем.
+    // Адрес кошелька жетона у кривой выводится из пары «владелец +
+    // мастер жетона», поэтому считается офлайн — сеть спрашивать не о
+    // чем. Благодаря этому привязка едет тем же сообщением, что и
+    // развёртывание: одно сообщение несёт и stateInit, и тело.
+    curveJettonWallet = JettonWallet.createFromConfig({
+      ownerAddress: curveAddress,
+      jettonMasterAddress: jettonMasterAddress,
+    }).address;
+    log(`кошелёк жетона у кривой (детерминированный): ${curveJettonWallet.toString()}`);
+
     await batchSender.send({
       to: curveAddress,
       value: toNano("0.1"),
       init: curve.init,
+      body: buildSetJettonWalletBody(curveJettonWallet),
       bounce: false,
     });
-    log("развёртывание кривой поставлено в очередь");
+    log("развёртывание кривой с привязкой кошелька поставлено в очередь");
   } catch (e) {
     fail("Не удалось подготовить развёртывание кривой", e);
   }
@@ -852,66 +856,19 @@ export async function launchRealToken({
     }
   }
 
-  // ---- Этап 2b: ждём, пока запас доедет до кошелька кривой. Пока его
-  // там нет, покупать нечего: кривая не сможет отдать жетоны, а деньги
-  // покупателя уже спишутся. ----
-  let curveJettonWallet = null;
+  // ---- Этап 2b: ждём, пока торговый запас доедет до кошелька кривой.
+  // Пока его там нет, покупать нечего: кривая не сможет отдать жетоны, а
+  // деньги покупателя уже спишутся. ----
+  let mintedTokens = 0;
   try {
-    const minterForWallet = client.open(JettonMinter.createFromConfig({
-      admin: Address.parse(walletAddress),
-      content: beginCell().storeUint(0x01, 8).storeStringTail(metadataUrl).endCell(),
-    }));
-    curveJettonWallet = await minterForWallet.getWalletAddress(curveAddress);
-    log(`кошелёк жетона у кривой: ${curveJettonWallet.toString()}`);
     await waitForJettonBalance(curveAddress, jettonMasterAddress, network, { log, warn, timeoutMs: 120000 });
+    log("торговый запас на кривой подтверждён — токен торгуется");
   } catch (e) {
     const explorerHost = network === "testnet" ? "testnet.tonviewer.com" : "tonviewer.com";
     fail(
       `Жетон развёрнут, но торговый запас так и не появился на кривой — похоже, сообщение выпуска было отклонено сетью. Проверьте адрес в эксплорере (https://${explorerHost}/${jettonMasterAddress.toString()}) и остаток TON на кошельке`,
       e
     );
-  }
-
-  // ---- Этап 3: привязка кошелька жетона к кривой и стартовая покупка.
-  // Адрес кошелька зависит от адреса самой кривой, поэтому посчитать его
-  // заранее было нечем — отсюда вторая транзакция. Стартовая покупка
-  // едет тем же сообщением, чтобы подтверждение было одно. ----
-  let mintedTokens = 0;
-  try {
-    const buyValue = toNano(buyTon.toFixed(9)) + CURVE_GAS_BUY_OVERHEAD;
-    await tonConnectUI.sendTransaction({
-      validUntil: Math.floor(Date.now() / 1000) + 300,
-      network: network === "testnet" ? "-3" : "-239",
-      messages: [
-        {
-          address: curveAddress.toString(),
-          amount: toNano("0.05").toString(),
-          payload: buildSetJettonWalletBody(curveJettonWallet).toBoc().toString("base64"),
-        },
-        {
-          address: curveAddress.toString(),
-          amount: buyValue.toString(),
-          // minTokensOut оставляем нулевым: на пустой кривой цена ещё
-          // никем не сдвинута, а жёсткая граница здесь только мешала бы
-          // запуску сорваться из-за округления.
-          payload: buildBuyBody({ queryId: 0n, minTokensOut: 0n }).toBoc().toString("base64"),
-        },
-      ],
-    });
-    log("вторая транзакция отправлена: привязка кошелька жетона + стартовая покупка");
-  } catch (e) {
-    warn(`Кривая развёрнута, но стартовая покупка не прошла: ${describeError(e)}. Токен уже торгуется — покупку можно повторить с его страницы.`);
-  }
-
-  try {
-    const boughtRaw = await waitForJettonBalance(Address.parse(walletAddress), jettonMasterAddress, network, {
-      log,
-      warn,
-      timeoutMs: 90000,
-    });
-    mintedTokens = Number(boughtRaw / (10n ** decimals));
-  } catch (e) {
-    warn("Стартовая покупка ещё не подтвердилась — баланс появится, когда сеть обработает транзакцию");
   }
 
   onStage?.(3);

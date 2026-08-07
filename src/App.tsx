@@ -1364,16 +1364,35 @@ const TONAPI_MAINNET_BASE = "https://tonapi.io";
 // кривой, а свой адрес заранее неизвестен и выводится мастером жетона.
 // testnet приходит параметром: константа сети объявлена внутри
 // компонента и на верхнем уровне модуля не видна.
+// Реальный баланс жетона на кошельке. Локальный счётчик holdings —
+// выдумка приложения: он не знает ни о покупках с другого устройства, ни
+// о переводах мимо интерфейса. Из-за него кнопка «Продать» была
+// заблокирована даже когда токены на кошельке лежали.
+async function fetchJettonBalance(jettonMaster, ownerAddress, testnet) {
+  const info = await fetchJettonAccount(jettonMaster, ownerAddress, testnet);
+  return info ? info.balance : null;
+}
+
 async function fetchJettonWalletAddress(jettonMaster, ownerAddress, testnet) {
+  const info = await fetchJettonAccount(jettonMaster, ownerAddress, testnet);
+  return info ? info.wallet : null;
+}
+
+async function fetchJettonAccount(jettonMaster, ownerAddress, testnet) {
   if (!jettonMaster || !ownerAddress) return null;
   const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
   try {
     const res = await fetch(`${host}/v2/accounts/${ownerAddress}/jettons/${jettonMaster}`);
     if (!res.ok) throw new Error(`tonapi ${res.status}`);
     const json = await res.json();
-    return json?.wallet_address?.address || null;
+    const raw = json?.balance;
+    const decimals = Number(json?.jetton?.decimals ?? 9);
+    return {
+      wallet: json?.wallet_address?.address || null,
+      balance: raw == null ? 0 : Number(BigInt(raw) / 10n ** BigInt(decimals)),
+    };
   } catch (err) {
-    console.error("[mintly] не удалось получить адрес кошелька жетона:", err);
+    console.error("[mintly] не удалось получить данные жетона:", err);
     return null;
   }
 }
@@ -6240,6 +6259,18 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // из-за 429). Инкрементируем этот счётчик из confirmTrade, чтобы
   // эффект ниже перезапустился и подтянул баланс заново.
   const [balanceRefreshTick, setBalanceRefreshTick] = useState(0);
+  // Настоящий баланс открытого токена спрашиваем у сети — при открытии
+  // окна сделки и после каждой сделки. Локальный счётчик остаётся только
+  // как запасной вариант, пока ответ не пришёл.
+  useEffect(() => {
+    const jetton = token?.tokenAddress;
+    if (!tradeModal || !jetton || !walletAddress) { setChainHolding(null); return; }
+    let cancelled = false;
+    fetchJettonBalance(jetton, walletAddress, TON_TESTNET).then((balance) => {
+      if (!cancelled && balance != null) setChainHolding(balance);
+    });
+    return () => { cancelled = true; };
+  }, [tradeModal, token?.tokenAddress, walletAddress, balanceRefreshTick]);
   useEffect(() => {
     if (!walletAddress) { setTonBalance(0); return; }
     // wallet.account.chain — это то, в какой сети реально сидит
@@ -6443,6 +6474,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [settingsItem, setSettingsItem] = useState(null);
   const [manageToken_, setManageToken_] = useState(null);
   const [tradeModal, setTradeModal] = useState(null); // { mode: 'buy' | 'sell' }
+  // Настоящий баланс открытого токена на кошельке. Пока он не пришёл —
+  // null, и окно сделки временно опирается на локальный счётчик.
+  const [chainHolding, setChainHolding] = useState(null);
   const [appSettings, setAppSettings] = useState(() => {
     const base = { pushNotif: true, emailNotif: false, twoFA: false, language: "RU", theme: "Dark", pinEnabled: false };
     try {
@@ -7065,7 +7099,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         showToast={showToast}
       />
       <TokenManageSheet token={manageToken_} onClose={() => setManageToken_(null)} showToast={showToast} onDelete={deleteMyToken} />
-      <TradeModal t={token} tradeModal={tradeModal} onClose={() => setTradeModal(null)} onConfirm={confirmTrade} walletTonBalance={tonBalance} tonPriceUsd={tonPriceUsd} heldAmount={holdings[token?.id] || 0} />
+      <TradeModal t={token} tradeModal={tradeModal} onClose={() => setTradeModal(null)} onConfirm={confirmTrade} walletTonBalance={tonBalance} tonPriceUsd={tonPriceUsd} heldAmount={chainHolding != null ? chainHolding : (holdings[token?.id] || 0)} />
       <TokenLaunchOverlay
         open={!!launchRequest}
         form={launchRequest ? launchRequest.form : EMPTY_LAUNCH_FORM}
