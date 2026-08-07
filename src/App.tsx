@@ -6259,18 +6259,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // из-за 429). Инкрементируем этот счётчик из confirmTrade, чтобы
   // эффект ниже перезапустился и подтянул баланс заново.
   const [balanceRefreshTick, setBalanceRefreshTick] = useState(0);
-  // Настоящий баланс открытого токена спрашиваем у сети — при открытии
-  // окна сделки и после каждой сделки. Локальный счётчик остаётся только
-  // как запасной вариант, пока ответ не пришёл.
-  useEffect(() => {
-    const jetton = token?.tokenAddress;
-    if (!tradeModal || !jetton || !walletAddress) { setChainHolding(null); return; }
-    let cancelled = false;
-    fetchJettonBalance(jetton, walletAddress, TON_TESTNET).then((balance) => {
-      if (!cancelled && balance != null) setChainHolding(balance);
-    });
-    return () => { cancelled = true; };
-  }, [tradeModal, token?.tokenAddress, walletAddress, balanceRefreshTick]);
   useEffect(() => {
     if (!walletAddress) { setTonBalance(0); return; }
     // wallet.account.chain — это то, в какой сети реально сидит
@@ -6477,6 +6465,18 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // Настоящий баланс открытого токена на кошельке. Пока он не пришёл —
   // null, и окно сделки временно опирается на локальный счётчик.
   const [chainHolding, setChainHolding] = useState(null);
+  // Настоящий баланс открытого токена спрашиваем у сети — при открытии
+  // окна сделки и после каждой сделки. Локальный счётчик остаётся только
+  // как запасной вариант, пока ответ не пришёл.
+  useEffect(() => {
+    const jetton = token?.tokenAddress;
+    if (!tradeModal || !jetton || !walletAddress) { setChainHolding(null); return; }
+    let cancelled = false;
+    fetchJettonBalance(jetton, walletAddress, TON_TESTNET).then((balance) => {
+      if (!cancelled && balance != null) setChainHolding(balance);
+    });
+    return () => { cancelled = true; };
+  }, [tradeModal, token?.tokenAddress, walletAddress, balanceRefreshTick]);
   const [appSettings, setAppSettings] = useState(() => {
     const base = { pushNotif: true, emailNotif: false, twoFA: false, language: "RU", theme: "Dark", pinEnabled: false };
     try {
