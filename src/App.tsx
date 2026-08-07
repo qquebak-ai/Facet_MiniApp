@@ -6866,25 +6866,39 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setLaunchProgress({ stepIndex: 0, done: false, error: null, result: null });
     if (result) handleTokenCreated(result);
     if (req && req.onFinish) req.onFinish(result);
+    // Закрыли экран успеха крестиком — покупку всё равно предлагаем:
+    // иначе токен остаётся без первой сделки, а создатель без токенов.
+    if (result) openLaunchBuy(result);
   }
+  // Создатель покупает первым: кроме него о токене ещё никто не знает,
+  // а размер этой покупки и задаёт стартовую цену — кривая сдвигается
+  // ровно на внесённую сумму. Открываем окно покупки само, чтобы шаг не
+  // выглядел необязательным.
+  function openLaunchBuy(result) {
+    if (!result || !result.address) return;
+    const amount = parseFloat(String(result.buyAmount || "").replace(",", "."));
+    const feedToken = localTokenToFeedShape({
+      id: result.address,
+      address: result.address,
+      name: result.name,
+      ticker: result.ticker,
+      emoji: "🚀",
+      logoUrl: result.logoUrl || null,
+      mcapNum: 0,
+      liq: "0",
+      vol: "$0",
+      verified: false,
+      curveAddress: result.curveAddress || null,
+      curveJettonWallet: result.curveJettonWallet || null,
+      createdAt: result.createdAt || Date.now(),
+    });
+    openToken(feedToken);
+    setTradeModal({ mode: "buy", prefill: Number.isFinite(amount) && amount > 0 ? amount : undefined });
+  }
+
   function viewLaunchedToken(result) {
+    // closeLaunchOverlay сам открывает покупку — здесь только закрываем.
     closeLaunchOverlay(result);
-    if (!result) return;
-    // Стартовая покупка больше не входит в транзакцию запуска: сообщение
-    // до кривой доходит за один шаг, а выпуск запаса до её кошелька — за
-    // два, поэтому покупка успела бы прийти раньше токенов и деньги
-    // списались бы впустую. Вместо этого открываем страницу токена с
-    // готовым окном покупки на введённую сумму — одно нажатие.
-    const launched = communityTokens.find((tok) => tok.address === result.address);
-    if (launched) {
-      openToken(localTokenToFeedShape(launched));
-      const amount = parseFloat(String(result.buyAmount || "").replace(",", "."));
-      if (Number.isFinite(amount) && amount > 0) {
-        setTradeModal({ mode: "buy", prefill: amount });
-      }
-    } else {
-      goTab("profile");
-    }
   }
   function requestChangePin() { setPinModal({ mode: "change" }); }
   function completePinSetup(code) {
