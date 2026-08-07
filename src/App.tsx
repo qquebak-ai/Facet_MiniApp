@@ -102,6 +102,10 @@ const STR = {
   RU: {
     navHome: "Главная", navMempad: "Мемпад", navCreate: "Создать", navProfile: "Профиль", navShop: "Магазин",
     shopTitle: "Магазин", shopComingSoon: "Магазин скоро откроется. Загляни позже — здесь появится что-то интересное.",
+    shopIntro: "Рамки для аватарки и карточки профиля. Нажми, чтобы примерить — применится сразу.",
+    shopTabFrames: "Рамки", shopTabCards: "Карточки",
+    shopEquip: "Надеть", shopEquipped: "Надето",
+    cosmeticApplied: "Применено", cosmeticRemoved: "Снято",
     connect: "Подключить", connected: "Подключён",
     settingsSaved: "Настройки сохранены",
     langTitle: "Язык", themeTitle: "Оформление",
@@ -348,6 +352,10 @@ const STR = {
   EN: {
     navHome: "Home", navMempad: "Mempad", navCreate: "Create", navProfile: "Profile", navShop: "Shop",
     shopTitle: "Shop", shopComingSoon: "The shop is coming soon. Check back later — something interesting will show up here.",
+    shopIntro: "Avatar frames and profile cards. Tap one to try it — it applies right away.",
+    shopTabFrames: "Frames", shopTabCards: "Cards",
+    shopEquip: "Equip", shopEquipped: "Equipped",
+    cosmeticApplied: "Applied", cosmeticRemoved: "Removed",
     connect: "Connect", connected: "Connected",
     settingsSaved: "Settings saved",
     langTitle: "Language", themeTitle: "Appearance",
@@ -2556,16 +2564,312 @@ function localTokenToFeedShape(entry) {
   };
 }
 
-/* ShopView — placeholder tab. Empty for now: just a title and an
-   empty-state card, same visual language as the other empty states
-   in the app (see e.g. the Mempad empty-filter card below). */
-function ShopView() {
+/* ---------------------------------------------------------
+   КОСМЕТИКА: рамки для аватарки и карточки-подложки профиля.
+   Каталоги — обычные данные, чтобы добавить новый предмет можно было
+   одной строкой, без правок в рендере. Всё рисуется CSS-градиентами и
+   трансформами: никаких картинок, значит ничего не грузится по сети и
+   тема (Dark/White) не ломает предметы.
+--------------------------------------------------------- */
+
+// Подписи предметов лежат прямо в каталоге, а не в общем словаре —
+// их много и они нужны только здесь.
+function pickLabel(obj) {
+  if (!obj) return "";
+  return obj[lang] || obj.RU || "";
+}
+
+const AVATAR_FRAMES = [
+  { id: "none", label: { RU: "Без рамки", EN: "No frame" } },
+  {
+    id: "ember", label: { RU: "Уголёк", EN: "Ember" },
+    colors: ["#FF6B35", "#FFC46B", "#FF3D00", "#FF6B35"], spin: 7, glow: "#FF6B35",
+  },
+  {
+    id: "aurora", label: { RU: "Полярное сияние", EN: "Aurora" },
+    colors: ["#38D39F", "#2E6BFF", "#B14CFF", "#38D39F"], spin: 11, glow: "#2E6BFF",
+  },
+  {
+    id: "gold", label: { RU: "Золото", EN: "Gold" },
+    colors: ["#7A5B15", "#FFE9A8", "#C9A227", "#FFF6D5", "#7A5B15"], spin: 13, glow: "#FFD86B",
+  },
+  {
+    id: "ice", label: { RU: "Лёд", EN: "Ice" },
+    colors: ["rgba(255,255,255,0.12)", "#FFFFFF", "rgba(255,255,255,0.12)", "#9FD8FF", "rgba(255,255,255,0.12)"],
+    spin: 16, glow: "#9FD8FF",
+  },
+  {
+    id: "orbit", label: { RU: "Орбита", EN: "Orbit" },
+    colors: ["rgba(255,255,255,0.06)", "rgba(255,255,255,0.28)", "rgba(255,255,255,0.06)"],
+    spin: 20, glow: "#FFFFFF", orbiters: 3, orbitColor: "#FF6B35",
+  },
+  {
+    id: "spark", label: { RU: "Искры", EN: "Sparks" },
+    colors: ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.4)", "rgba(255,255,255,0.1)"],
+    spin: 24, glow: "#FFFFFF", sparks: 6,
+  },
+  {
+    id: "toxic", label: { RU: "Токсик", EN: "Toxic" },
+    colors: ["#0F3D2A", "#5BFF9F", "#0F3D2A", "#B6FF3D", "#0F3D2A"], spin: 6, glow: "#5BFF9F",
+  },
+];
+
+const PROFILE_CARDS = [
+  { id: "none", label: { RU: "Без карточки", EN: "No card" } },
+  {
+    id: "grid", label: { RU: "Сетка", EN: "Grid" },
+    base: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0))",
+    grid: "rgba(255,255,255,0.10)", floor: true,
+  },
+  {
+    id: "night", label: { RU: "Ночь", EN: "Night" },
+    base: "linear-gradient(180deg, #101A3A 0%, #0A0A14 70%, rgba(0,0,0,0) 100%)",
+    stars: 26,
+  },
+  {
+    id: "emberCard", label: { RU: "Жар", EN: "Heat" },
+    base: "linear-gradient(180deg, rgba(255,107,53,0.30) 0%, rgba(255,61,0,0.08) 55%, rgba(0,0,0,0) 100%)",
+    blobs: [["#FF6B35", 0.35], ["#FFB35C", 0.22]],
+  },
+  {
+    id: "auroraCard", label: { RU: "Сияние", EN: "Aurora" },
+    base: "linear-gradient(180deg, rgba(46,107,255,0.22) 0%, rgba(177,76,255,0.12) 50%, rgba(0,0,0,0) 100%)",
+    blobs: [["#2E6BFF", 0.4], ["#B14CFF", 0.3], ["#38D39F", 0.22]],
+  },
+  {
+    id: "mint", label: { RU: "Мята", EN: "Mint" },
+    base: "linear-gradient(180deg, rgba(56,211,159,0.26) 0%, rgba(56,211,159,0.05) 60%, rgba(0,0,0,0) 100%)",
+    grid: "rgba(56,211,159,0.16)",
+  },
+  {
+    id: "sunset", label: { RU: "Закат", EN: "Sunset" },
+    base: "linear-gradient(180deg, #FF6B35 0%, #B14CFF 45%, rgba(0,0,0,0) 100%)",
+    floor: true, grid: "rgba(255,255,255,0.16)",
+  },
+];
+
+const FRAME_BY_ID = Object.fromEntries(AVATAR_FRAMES.map(f => [f.id, f]));
+const CARD_BY_ID = Object.fromEntries(PROFILE_CARDS.map(c => [c.id, c]));
+
+/* AvatarFrame — круглая рамка вокруг аватарки. Толщина считается от
+   размера, чтобы предмет одинаково смотрелся и на 120px в профиле, и на
+   64px в превью магазина. */
+function AvatarFrame({ frameId, size = 120, children }) {
+  const f = FRAME_BY_ID[frameId] || FRAME_BY_ID.none;
+  const ring = Math.max(2, Math.round(size * 0.035));
+  const inner = (
+    <div style={{ position: "absolute", inset: ring, borderRadius: "50%", overflow: "hidden", background: T.bg }}>
+      {children}
+    </div>
+  );
+
+  if (f.id === "none") {
+    return <div style={{ position: "relative", width: size, height: size }}>{inner}</div>;
+  }
+
+  const orbitR = size / 2 + ring * 1.5;
+
+  return (
+    <div style={{ position: "relative", width: size, height: size }}>
+      {/* дышащее свечение под рамкой */}
+      <div style={{
+        position: "absolute", inset: -ring, borderRadius: "50%",
+        boxShadow: `0 0 ${size * 0.18}px ${ring}px ${hexA(f.glow, 0.35)}`,
+        animation: "glowPulse 3.2s ease-in-out infinite",
+      }} />
+      {/* само кольцо — вращающийся конический градиент */}
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: "50%",
+        background: `conic-gradient(from 0deg, ${f.colors.join(", ")})`,
+        animation: `spin360 ${f.spin}s linear infinite`,
+        willChange: "transform",
+      }} />
+      {inner}
+      {/* точки, вращающиеся по орбите вокруг рамки */}
+      {Array.from({ length: f.orbiters || 0 }).map((_, i) => (
+        <span key={`o${i}`} style={{
+          position: "absolute", left: "50%", top: "50%",
+          width: ring * 1.6, height: ring * 1.6, marginLeft: -ring * 0.8, marginTop: -ring * 0.8,
+          borderRadius: "50%", background: f.orbitColor,
+          boxShadow: `0 0 ${ring * 3}px ${ring * 0.6}px ${hexA(f.orbitColor, 0.6)}`,
+          ["--orbit-r"]: `${orbitR}px`,
+          animation: `spotlightOrbit ${9 + i * 2}s linear ${-i * 3}s infinite`,
+        }} />
+      ))}
+      {/* мерцающие звёздочки по краю */}
+      {Array.from({ length: f.sparks || 0 }).map((_, i) => {
+        const a = (360 / (f.sparks || 1)) * i;
+        const px = Math.cos((a * Math.PI) / 180) * orbitR;
+        const py = Math.sin((a * Math.PI) / 180) * orbitR;
+        const s = ring * 2.6;
+        return (
+          <svg key={`s${i}`} width={s} height={s} viewBox="0 0 10 10" style={{
+            position: "absolute", left: "50%", top: "50%",
+            transform: `translate(${px - s / 2}px, ${py - s / 2}px)`,
+            ["--o"]: 0.9,
+            opacity: 0,
+            animation: `starPulse ${2.6 + i * 0.3}s ease-in-out ${-i * 0.4}s infinite`,
+          }}>
+            <path d="M5 0 C5.4 3.2 6.8 4.6 10 5 C6.8 5.4 5.4 6.8 5 10 C4.6 6.8 3.2 5.4 0 5 C3.2 4.6 4.6 3.2 5 0 Z" fill="#FFFFFF" />
+          </svg>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ProfileCardBg — подложка, которая рисуется за аватаркой и шапкой
+   профиля. Абсолютная, ничего не ловит по клику и обрезается по своему
+   контейнеру. */
+function ProfileCardBg({ cardId, height = 260, radius = 24 }) {
+  const c = CARD_BY_ID[cardId] || CARD_BY_ID.none;
+  const blobs = useMemo(() => {
+    const rnd = seededRand(hashSeed(cardId || "none"));
+    return (c.blobs || []).map(([color, opacity], i) => ({
+      color, opacity,
+      size: 180 + rnd() * 140,
+      left: `${5 + rnd() * 70}%`,
+      top: `${rnd() * 55}%`,
+      dur: 18 + rnd() * 14,
+      delay: -i * 6,
+    }));
+  }, [cardId]);
+  const stars = useMemo(() => {
+    const rnd = seededRand(hashSeed(`${cardId}-stars`));
+    return Array.from({ length: c.stars || 0 }, () => ({
+      left: rnd() * 100, top: rnd() * 100, size: 4 + rnd() * 4,
+      opacity: 0.35 + rnd() * 0.5, dur: 3 + rnd() * 4, delay: -rnd() * 6,
+    }));
+  }, [cardId]);
+
+  if (c.id === "none") return null;
+  const gridImg = c.grid
+    ? `linear-gradient(${c.grid} 1px, transparent 1px), linear-gradient(90deg, ${c.grid} 1px, transparent 1px)`
+    : null;
+
+  return (
+    <div aria-hidden style={{
+      position: "absolute", left: 0, right: 0, top: 0, height,
+      borderRadius: radius, overflow: "hidden", pointerEvents: "none", zIndex: 0,
+      contain: "layout paint style",
+    }}>
+      <div style={{ position: "absolute", inset: 0, background: c.base }} />
+
+      {blobs.map((b, i) => (
+        <div key={i} style={{
+          position: "absolute", left: b.left, top: b.top, width: b.size, height: b.size,
+          borderRadius: "50%", filter: "blur(34px)",
+          background: `radial-gradient(circle, ${hexA(b.color, b.opacity)} 0%, ${hexA(b.color, 0)} 70%)`,
+          animation: `spotlightPulse ${b.dur}s ease-in-out ${b.delay}s infinite`,
+          willChange: "transform",
+        }} />
+      ))}
+
+      {gridImg && !c.floor && (
+        <div style={{
+          position: "absolute", inset: 0, backgroundImage: gridImg, backgroundSize: "38px 38px",
+          animation: "gridDrift 26s linear infinite",
+          WebkitMaskImage: "linear-gradient(to bottom, #000 0%, transparent 90%)",
+          maskImage: "linear-gradient(to bottom, #000 0%, transparent 90%)",
+        }} />
+      )}
+
+      {c.floor && (
+        <div style={{ position: "absolute", inset: 0, perspective: 220, perspectiveOrigin: "50% 0%" }}>
+          <div style={{
+            position: "absolute", left: "-50%", right: "-50%", top: "45%", height: "160%",
+            backgroundImage: gridImg || `linear-gradient(rgba(255,255,255,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.12) 1px, transparent 1px)`,
+            backgroundSize: "38px 38px",
+            transform: "rotateX(76deg)", transformOrigin: "50% 0%",
+            animation: "gridRunToward 6s linear infinite",
+            WebkitMaskImage: "linear-gradient(to bottom, #000 0%, transparent 60%)",
+            maskImage: "linear-gradient(to bottom, #000 0%, transparent 60%)",
+          }} />
+        </div>
+      )}
+
+      {stars.map((s, i) => (
+        <svg key={i} width={s.size} height={s.size} viewBox="0 0 10 10" style={{
+          position: "absolute", left: `${s.left}%`, top: `${s.top}%`,
+          ["--o"]: s.opacity, opacity: 0,
+          animation: `starPulse ${s.dur}s ease-in-out ${s.delay}s infinite`,
+        }}>
+          <path d="M5 0 C5.4 3.2 6.8 4.6 10 5 C6.8 5.4 5.4 6.8 5 10 C4.6 6.8 3.2 5.4 0 5 C3.2 4.6 4.6 3.2 5 0 Z" fill="#FFFFFF" />
+        </svg>
+      ))}
+
+      {/* низ подложки растворяется в фоне приложения */}
+      <div style={{
+        position: "absolute", left: 0, right: 0, bottom: 0, height: "45%",
+        background: `linear-gradient(to bottom, ${hexA(T.bg, 0)}, ${T.bg})`,
+      }} />
+    </div>
+  );
+}
+
+/* ShopView — витрина косметики: рамки для аватарки и карточки профиля.
+   Предметы применяются мгновенно и запоминаются на устройстве, поэтому
+   «купить» здесь — это «надеть»: отдельного баланса у магазина нет. */
+function ShopView({ cosmetics, onEquip, profile }) {
+  const [tab, setTab] = useState("frames");
+  const items = tab === "frames" ? AVATAR_FRAMES : PROFILE_CARDS;
+  const equippedId = tab === "frames" ? cosmetics.frame : cosmetics.card;
+
   return (
     <div className="flex flex-col gap-4 pt-2">
       <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("shopTitle")}</span>
-      <div className="fx-view rounded-[22px] p-6 flex flex-col items-center text-center gap-2" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
-        <MintlyFrame size={48} glow={`${T.electric}33`}><ShoppingBag size={20} color={T.electric} /></MintlyFrame>
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, maxWidth: 260 }}>{t("shopComingSoon")}</p>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("shopIntro")}</p>
+
+      <div className="flex items-center gap-2">
+        {[["frames", t("shopTabFrames")], ["cards", t("shopTabCards")]].map(([id, label]) => {
+          const active = tab === id;
+          return (
+            <button key={id} onClick={() => setTab(id)} className="fx-tap fx-chip rounded-full px-3.5 py-1.5"
+              style={{
+                fontFamily: bodyFont, fontSize: 12.5, fontWeight: 600,
+                background: active ? T.ice : "transparent", color: active ? T.bg : T.muted,
+                border: `1px solid ${active ? T.ice : T.line}`,
+              }}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5" key={tab}>
+        {items.map((item) => {
+          const equipped = equippedId === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onEquip(tab === "frames" ? "frame" : "card", item.id)}
+              className="fx-card flex flex-col items-center gap-2.5 rounded-[22px] p-3"
+              style={{ background: T.surface, border: `1px solid ${equipped ? T.electric : T.line}`, position: "relative", overflow: "hidden" }}
+            >
+              <div style={{ position: "relative", width: "100%", height: 96, borderRadius: 16, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {tab === "cards" && <ProfileCardBg cardId={item.id} height={96} radius={16} />}
+                <div style={{ position: "relative", zIndex: 1 }}>
+                  <AvatarFrame frameId={tab === "frames" ? item.id : "none"} size={62}>
+                    <div style={{
+                      width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                      background: profile?.avatarUrl ? `center/cover no-repeat url(${profile.avatarUrl})` : T.surfaceHi,
+                      fontSize: 24,
+                    }}>
+                      {!profile?.avatarUrl && (profile?.emoji || <User size={20} color={T.muted} />)}
+                    </div>
+                  </AvatarFrame>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 12.5, fontWeight: 700 }}>{pickLabel(item.label)}</span>
+                {equipped && <CheckCircle2 size={13} color={T.electric} />}
+              </div>
+              <span style={{ fontFamily: bodyFont, fontSize: 11, color: equipped ? T.electric : T.muted }}>
+                {equipped ? t("shopEquipped") : t("shopEquip")}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -4716,6 +5020,7 @@ function ProfileView({
   connected, walletAddress, tonBalance, tonPriceUsd, onConnect, onDisconnect, onOpenConnectModal, showToast,
   accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut,
   onOpenSetting, onManageToken, onGoCreate, onOpenToken, myTokens = [], onClearAllTokens,
+  cosmetics = { frame: "none", card: "none" }, onGoShop,
 }) {
   const [loading, setLoading] = useState(true);
   const [verifyStatus, setVerifyStatus] = useState("none");
@@ -4757,17 +5062,25 @@ function ProfileView({
   return (
     <div className="fx-view" style={{ position: "relative" }}>
       <div className="flex flex-col gap-0 pb-4">
-        <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: 10, position: "relative" }}>
+        <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: 10, position: "relative", zIndex: 0 }}>
+          <ProfileCardBg cardId={cosmetics.card} height={300} radius={26} />
           {accountCreated && (
-            <button onClick={logOut} className="fx-tap flex items-center gap-1.5" style={{ position: "absolute", top: 0, right: 0, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 12, color: T.rose }}>
+            <button onClick={logOut} className="fx-tap flex items-center gap-1.5" style={{ position: "absolute", top: 0, right: 0, zIndex: 2, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 12, color: T.rose }}>
               <LogOut size={13} /> {t("logOutShort")}
             </button>
           )}
-          <div style={{ position: "relative" }}>
-            <div style={{ width: 120, height: 120, borderRadius: "50%", background: profile.avatarUrl ? `center/cover no-repeat url(${profile.avatarUrl})` : T.surfaceHi, border: profile.avatarUrl ? `2px solid ${T.lineHi}` : `2px dashed ${T.lineHi}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: accountCreated ? 52 : 40 }}>
-              {!profile.avatarUrl && (accountCreated && profile.emoji ? profile.emoji : <User size={40} color={T.muted} />)}
-            </div>
-          </div>
+          <button
+            onClick={onGoShop}
+            className="fx-tap"
+            style={{ position: "relative", zIndex: 1, background: "transparent", border: "none", padding: 0, lineHeight: 0 }}
+          >
+            <AvatarFrame frameId={cosmetics.frame} size={128}>
+              <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: profile.avatarUrl ? `center/cover no-repeat url(${profile.avatarUrl})` : T.surfaceHi, border: cosmetics.frame === "none" ? (profile.avatarUrl ? `2px solid ${T.lineHi}` : `2px dashed ${T.lineHi}`) : "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: accountCreated ? 52 : 40 }}>
+                {!profile.avatarUrl && (accountCreated && profile.emoji ? profile.emoji : <User size={40} color={T.muted} />)}
+              </div>
+            </AvatarFrame>
+          </button>
+          <div className="flex flex-col items-center text-center gap-2" style={{ position: "relative", zIndex: 1, width: "100%" }}>
           {accountCreated ? (
             <>
               <div className="flex items-center gap-1.5 mt-1">
@@ -4797,6 +5110,7 @@ function ProfileView({
               </div>
             </>
           )}
+          </div>
         </div>
 
         <div className="mt-5"><WalletCard connected={connected} walletAddress={walletAddress} tonBalance={tonBalance} tonPriceUsd={tonPriceUsd} onConnect={connectWallet} onDisconnect={disconnectWallet} onCopy={copyAddress} onExplore={exploreWallet} /></div>
@@ -5322,6 +5636,31 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     showToast(key === "theme" ? (value === "White" ? t("themeChangedWhite") : t("themeChangedDark")) : t("settingsSaved"));
   }
 
+  // Косметика из магазина — рамка аватарки и карточка профиля. Это чисто
+  // оформление устройства, серверу о нём знать нечего, поэтому храним в
+  // localStorage рядом с темой и языком.
+  const [cosmetics, setCosmetics] = useState(() => {
+    const base = { frame: "none", card: "none" };
+    try {
+      if (typeof window !== "undefined") {
+        const f = window.localStorage.getItem("mintly_frame");
+        const c = window.localStorage.getItem("mintly_card");
+        if (f && FRAME_BY_ID[f]) base.frame = f;
+        if (c && CARD_BY_ID[c]) base.card = c;
+      }
+    } catch (e) { /* localStorage unavailable */ }
+    return base;
+  });
+  function equipCosmetic(kind, id) {
+    setCosmetics((c) => ({ ...c, [kind]: id }));
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(kind === "frame" ? "mintly_frame" : "mintly_card", id);
+      }
+    } catch (e) { /* localStorage unavailable */ }
+    showToast(id === "none" ? t("cosmeticRemoved") : t("cosmeticApplied"));
+  }
+
   // PIN-код при входе — код хранится только на устройстве (localStorage),
   // это локальная блокировка приложения, а не серверная авторизация.
   // При включённом PIN экран блокировки перекрывает весь интерфейс,
@@ -5829,7 +6168,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: insetTop + 56, paddingBottom: 116 + insetBottom }} key={view}>
           {view === "home" && <HomeView onGoTab={goTab} />}
           {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={() => goTab("create")} />}
-          {view === "shop" && <ShopView />}
+          {view === "shop" && <ShopView cosmetics={cosmetics} onEquip={equipCosmetic} profile={profile} />}
           {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} />}
           {view === "create" && (
             <CreateView
@@ -5864,6 +6203,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onOpenToken={openToken}
               myTokens={myTokens}
               onClearAllTokens={clearAllMyTokens}
+              cosmetics={cosmetics}
+              onGoShop={() => goTab("shop")}
             />
           )}
         </div>
