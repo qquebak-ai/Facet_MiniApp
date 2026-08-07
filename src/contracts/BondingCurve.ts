@@ -1051,6 +1051,110 @@ export function dictValueParserGraduate(): DictionaryValue<Graduate> {
     }
 }
 
+export type JettonExcesses = {
+    $$type: 'JettonExcesses';
+    queryId: bigint;
+}
+
+export function storeJettonExcesses(src: JettonExcesses) {
+    return (builder: Builder) => {
+        const b_0 = builder;
+        b_0.storeUint(3576854235, 32);
+        b_0.storeUint(src.queryId, 64);
+    };
+}
+
+export function loadJettonExcesses(slice: Slice) {
+    const sc_0 = slice;
+    if (sc_0.loadUint(32) !== 3576854235) { throw Error('Invalid prefix'); }
+    const _queryId = sc_0.loadUintBig(64);
+    return { $$type: 'JettonExcesses' as const, queryId: _queryId };
+}
+
+export function loadTupleJettonExcesses(source: TupleReader) {
+    const _queryId = source.readBigNumber();
+    return { $$type: 'JettonExcesses' as const, queryId: _queryId };
+}
+
+export function loadGetterTupleJettonExcesses(source: TupleReader) {
+    const _queryId = source.readBigNumber();
+    return { $$type: 'JettonExcesses' as const, queryId: _queryId };
+}
+
+export function storeTupleJettonExcesses(source: JettonExcesses) {
+    const builder = new TupleBuilder();
+    builder.writeNumber(source.queryId);
+    return builder.build();
+}
+
+export function dictValueParserJettonExcesses(): DictionaryValue<JettonExcesses> {
+    return {
+        serialize: (src, builder) => {
+            builder.storeRef(beginCell().store(storeJettonExcesses(src)).endCell());
+        },
+        parse: (src) => {
+            return loadJettonExcesses(src.loadRef().beginParse());
+        }
+    }
+}
+
+export type PendingBuy = {
+    $$type: 'PendingBuy';
+    buyer: Address;
+    ton: bigint;
+    tokens: bigint;
+}
+
+export function storePendingBuy(src: PendingBuy) {
+    return (builder: Builder) => {
+        const b_0 = builder;
+        b_0.storeAddress(src.buyer);
+        b_0.storeCoins(src.ton);
+        b_0.storeCoins(src.tokens);
+    };
+}
+
+export function loadPendingBuy(slice: Slice) {
+    const sc_0 = slice;
+    const _buyer = sc_0.loadAddress();
+    const _ton = sc_0.loadCoins();
+    const _tokens = sc_0.loadCoins();
+    return { $$type: 'PendingBuy' as const, buyer: _buyer, ton: _ton, tokens: _tokens };
+}
+
+export function loadTuplePendingBuy(source: TupleReader) {
+    const _buyer = source.readAddress();
+    const _ton = source.readBigNumber();
+    const _tokens = source.readBigNumber();
+    return { $$type: 'PendingBuy' as const, buyer: _buyer, ton: _ton, tokens: _tokens };
+}
+
+export function loadGetterTuplePendingBuy(source: TupleReader) {
+    const _buyer = source.readAddress();
+    const _ton = source.readBigNumber();
+    const _tokens = source.readBigNumber();
+    return { $$type: 'PendingBuy' as const, buyer: _buyer, ton: _ton, tokens: _tokens };
+}
+
+export function storeTuplePendingBuy(source: PendingBuy) {
+    const builder = new TupleBuilder();
+    builder.writeAddress(source.buyer);
+    builder.writeNumber(source.ton);
+    builder.writeNumber(source.tokens);
+    return builder.build();
+}
+
+export function dictValueParserPendingBuy(): DictionaryValue<PendingBuy> {
+    return {
+        serialize: (src, builder) => {
+            builder.storeRef(beginCell().store(storePendingBuy(src)).endCell());
+        },
+        parse: (src) => {
+            return loadPendingBuy(src.loadRef().beginParse());
+        }
+    }
+}
+
 export type CurveData = {
     $$type: 'CurveData';
     virtualTon: bigint;
@@ -1165,6 +1269,8 @@ export type BondingCurve$Data = {
     realTon: bigint;
     tokensSold: bigint;
     graduated: boolean;
+    pending: Dictionary<bigint, PendingBuy>;
+    nextQueryId: bigint;
 }
 
 export function storeBondingCurve$Data(src: BondingCurve$Data) {
@@ -1185,6 +1291,8 @@ export function storeBondingCurve$Data(src: BondingCurve$Data) {
         b_2.storeCoins(src.realTon);
         b_2.storeCoins(src.tokensSold);
         b_2.storeBit(src.graduated);
+        b_2.storeDict(src.pending, Dictionary.Keys.BigUint(64), dictValueParserPendingBuy());
+        b_2.storeUint(src.nextQueryId, 64);
         b_1.storeRef(b_2.endCell());
         b_0.storeRef(b_1.endCell());
     };
@@ -1207,7 +1315,9 @@ export function loadBondingCurve$Data(slice: Slice) {
     const _realTon = sc_2.loadCoins();
     const _tokensSold = sc_2.loadCoins();
     const _graduated = sc_2.loadBit();
-    return { $$type: 'BondingCurve$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, graduationDestination: _graduationDestination, virtualTon: _virtualTon, virtualTokens: _virtualTokens, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, jettonWallet: _jettonWallet, realTon: _realTon, tokensSold: _tokensSold, graduated: _graduated };
+    const _pending = Dictionary.load(Dictionary.Keys.BigUint(64), dictValueParserPendingBuy(), sc_2);
+    const _nextQueryId = sc_2.loadUintBig(64);
+    return { $$type: 'BondingCurve$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, graduationDestination: _graduationDestination, virtualTon: _virtualTon, virtualTokens: _virtualTokens, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, jettonWallet: _jettonWallet, realTon: _realTon, tokensSold: _tokensSold, graduated: _graduated, pending: _pending, nextQueryId: _nextQueryId };
 }
 
 export function loadTupleBondingCurve$Data(source: TupleReader) {
@@ -1224,7 +1334,9 @@ export function loadTupleBondingCurve$Data(source: TupleReader) {
     const _realTon = source.readBigNumber();
     const _tokensSold = source.readBigNumber();
     const _graduated = source.readBoolean();
-    return { $$type: 'BondingCurve$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, graduationDestination: _graduationDestination, virtualTon: _virtualTon, virtualTokens: _virtualTokens, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, jettonWallet: _jettonWallet, realTon: _realTon, tokensSold: _tokensSold, graduated: _graduated };
+    const _pending = Dictionary.loadDirect(Dictionary.Keys.BigUint(64), dictValueParserPendingBuy(), source.readCellOpt());
+    const _nextQueryId = source.readBigNumber();
+    return { $$type: 'BondingCurve$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, graduationDestination: _graduationDestination, virtualTon: _virtualTon, virtualTokens: _virtualTokens, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, jettonWallet: _jettonWallet, realTon: _realTon, tokensSold: _tokensSold, graduated: _graduated, pending: _pending, nextQueryId: _nextQueryId };
 }
 
 export function loadGetterTupleBondingCurve$Data(source: TupleReader) {
@@ -1241,7 +1353,9 @@ export function loadGetterTupleBondingCurve$Data(source: TupleReader) {
     const _realTon = source.readBigNumber();
     const _tokensSold = source.readBigNumber();
     const _graduated = source.readBoolean();
-    return { $$type: 'BondingCurve$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, graduationDestination: _graduationDestination, virtualTon: _virtualTon, virtualTokens: _virtualTokens, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, jettonWallet: _jettonWallet, realTon: _realTon, tokensSold: _tokensSold, graduated: _graduated };
+    const _pending = Dictionary.loadDirect(Dictionary.Keys.BigUint(64), dictValueParserPendingBuy(), source.readCellOpt());
+    const _nextQueryId = source.readBigNumber();
+    return { $$type: 'BondingCurve$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, graduationDestination: _graduationDestination, virtualTon: _virtualTon, virtualTokens: _virtualTokens, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, jettonWallet: _jettonWallet, realTon: _realTon, tokensSold: _tokensSold, graduated: _graduated, pending: _pending, nextQueryId: _nextQueryId };
 }
 
 export function storeTupleBondingCurve$Data(source: BondingCurve$Data) {
@@ -1259,6 +1373,8 @@ export function storeTupleBondingCurve$Data(source: BondingCurve$Data) {
     builder.writeNumber(source.realTon);
     builder.writeNumber(source.tokensSold);
     builder.writeBoolean(source.graduated);
+    builder.writeCell(source.pending.size > 0 ? beginCell().storeDictDirect(source.pending, Dictionary.Keys.BigUint(64), dictValueParserPendingBuy()).endCell() : null);
+    builder.writeNumber(source.nextQueryId);
     return builder.build();
 }
 
@@ -1306,7 +1422,7 @@ function initBondingCurve_init_args(src: BondingCurve_init_args) {
 }
 
 async function BondingCurve_init(admin: Address, jettonMaster: Address, feeWallet: Address, graduationDestination: Address, virtualTon: bigint, virtualTokens: bigint, tokensForSale: bigint, graduationTon: bigint, feeBps: bigint) {
-    const __code = Cell.fromHex('b5ee9c7241022501000a6900025aff008e88f4a413f4bcf2c80bed53208e983001d072d721d200d200fa4021103450666f04f86102f862e1ed43d9010d0202710207020120030402efb9156ed44d0d200018e32fa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d2003010ad10ac10ab6c1d8eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e2550cdb3c6cd180e14020275050602eaa811ed44d0d200018e32fa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d2003010ad10ac10ab6c1d8eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e2db3c6cd10e2102eeab42ed44d0d200018e32fa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d2003010ad10ac10ab6c1d8eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e2550cdb3c6cd10e1e020120080c020120090b02efb4ec5da89a1a400031c65f481f481f481a803a1f481f401f401f401f401a61fa861a1ae580322db27f48003c403f401f401a40060215a21582156d83b1d65f481f481f481a803a1f481020203ae01020203ae01a861a1020203ae01020203ae01020203ae006020d220d020ce13a2aa0fc5b678d932d89300e0a0012547872547498547a6902ebb52adda89a1a400031c65f481f481f481a803a1f481f401f401f401f401a61fa861a1ae580322db27f48003c403f401f401a40060215a21582156d83b1d65f481f481f481a803a1f481020203ae01020203ae01a861a1020203ae01020203ae01020203ae006020d220d020ce13a2aa0fc5b678d9a300e2002ebb9dcded44d0d200018e32fa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d2003010ad10ac10ab6c1d8eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e2db3c6cd180e1f03fced44d0d200018e32fa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d2003010ad10ac10ab6c1d8eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e20e925f0ee0702dd74920c21fe300210e0f1000a46d7020708164c529c200f2f481589228c200f2f48200d68527c200f2f48135c15378b9f2f4812b6326c200f2f481715325c2ff95258103e8bb9170e2f2f45387a85387a1a9048200d8ee511aa15270bbf2f4000a310dd31f0e03fe82105745544aba8e5a5b0cfa403081557df8422dc705f2f481122f036e13f2f410ac5519c87f01ca0055c050cdce1ace18ce06c8ce5005fa025003fa0201fa0201fa02cb0fc85003206e9430cf84809201cee25003fa025003fa0213ca00cdcdc9ed54e021821042555921bae3022182107362d09cbae3022182104752414411121601bc5b0cd33ffa003010ce10bd10ac109b108a107910681057104610351024db3cc87f01ca0055c050cdce1ace18ce06c8ce5005fa025003fa0201fa0201fa02cb0fc85003206e9430cf84809201cee25003fa025003fa0213ca00cdcdc9ed541c04fc5b0cd33f31fa00fa4010cd10bd10ad109d108d107d106d105d104d103d4defdb3c8152b8f84258c705f2f481606321b3f2f48200d7aa2ec200f2f48125a153e2bbf2f4550c0fdb3c55c02fdb3c5305a8812710a9045ca1814c9021c200f2f420815be01112be01111101f2f481400d5325bbf2f45044a1111012a122c2001d131415006620d749c101923070e0d20001923070e020d749c120923070e0d31f01821053454c4cbd923070e020d749c104923070e0fa0030037a20c101923070e055c0db3c500ea00ddb3c2ea0a5500ea9040ddb3c500ea120c1009430550b70e010cd10bc10ab109a1089107810671056104510344130211f2001fc8e3b52a37270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb009132e250dc7070036d6d50436d5033c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb0055291a04fcba8ff25b0cd33f308120762ef2f410bc10ab109a108910781067105610451034413ddb3c5372a120c200925b3de30d7022c2008e3b52937270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb009132e2550be0218210946a98b6ba1d171a1901fe3327821007270e0072706d718b0804111504103956110356124133c8556082100f8a7ea55008cb1f16cb3f5004fa0212ce01206e9430cf84809201cee2f40001fa02cec91314021111021510246d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c918000801fb000c02b88eca5b0cd33f30c8018210aff90f5758cb1fcb3fc910bd10ac109b108a107910681057104610354430f84270705003804201503304c8cf8580ca00cf8440ce01fa02806acf40f400c901fb00e03ec0000dc1211db0e3025f0df2c0821a1b007ec87f01ca0055c050cdce1ace18ce06c8ce5005fa025003fa0201fa0201fa02cb0fc85003206e9430cf84809201cee25003fa025003fa0213ca00cdcdc9ed5401b2702010ce10bd10ac109b108a107910681057104610351024db3cc87f01ca0055c050cdce1ace18ce06c8ce5005fa025003fa0201fa0201fa02cb0fc85003206e9430cf84809201cee25003fa025003fa0213ca00cdcdc9ed541c03f681606323b3f2f410ce5e3a109d108e107d106e105d104e103d4ededb3cf8416f24135f038200c07d2182100ee6b280bcf2f482100ee6b280a15306a8812710a90466a1814c9021c200f2f410cf10be10ad109f108e107d106f105e104d103f4edf2fdb3c814c9021c200f2f48200ea395331a029bbf2f420815be01d1e22001853336eb3f2e444206ef2d080037420c101923070e055c0db3c500ea00ddb3c500ea9040ddb3c500ea120c1009430550b70e010cd10bc10ab109a1089107810671056104510344130201f21023cdb3c55c0db3c1ea810cd10bc10ab109a1089107810671056104510344130202100065382a000065371a101d61114be01111301f2f4502fa0015610a02cc2008e3b529d7270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb00913ce2821007270e0070f842f8426d718b080611150605111605c82301e6556082100f8a7ea55008cb1f16cb3f5004fa0212ce01206e9430cf84809201cee2f40001fa02cec9103d102f011110017050346d036d5520c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb00107c106b105a554413db3c24001a20b3935325be9170e292307fde516090c8');
+    const __code = Cell.fromHex('b5ee9c7241022c01000d7200025aff008e88f4a413f4bcf2c80bed53208e983001d072d721d200d200fa4021103450666f04f86102f862e1ed43d9010d0202710207020120030402f7b9156ed44d0d200018e36fa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d200f404d33f3010cf10ce10cd6c1f8eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e2550edb3c6cf180e18020275050602f2a811ed44d0d200018e36fa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d200f404d33f3010cf10ce10cd6c1f8eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e2db3c6cf10e2602f6ab42ed44d0d200018e36fa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d200f404d33f3010cf10ce10cd6c1f8eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e2550edb3c6cf10e23020120080c020120090b02f7b4ec5da89a1a400031c6df481f481f481a803a1f481f401f401f401f401a61fa861a1ae580322db27f48003c403f401f401a401e809a67e60219e219c219ad83f1d65f481f481f481a803a1f481020203ae01020203ae01a861a1020203ae01020203ae01020203ae006020d220d020ce13a2aa0fc5b678d932d8d300e0a0012547a945476ba547c8b02f3b52adda89a1a400031c6df481f481f481a803a1f481f401f401f401f401a61fa861a1ae580322db27f48003c403f401f401a401e809a67e60219e219c219ad83f1d65f481f481f481a803a1f481020203ae01020203ae01a861a1020203ae01020203ae01020203ae006020d220d020ce13a2aa0fc5b678d9e300e2502f3b9dcded44d0d200018e36fa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d200f404d33f3010cf10ce10cd6c1f8eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e2db3c6cf180e2403fced44d0d200018e36fa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d200f404d33f3010cf10ce10cd6c1f8eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e21110e302702fd74920c21f0e0f1300a86d7020706d718164c52bc200f2f48158922ac200f2f48200d68529c200f2f48135c1539ab9f2f4812b6328c200f2f481715327c2ff95278103e8bb9170e2f2f453a9a853a9a1a9048200d8ee511ca15290bbf2f402e40e8020d72120d749c1608e493010ce551bc87f01ca0055e050efce1cce1ace08c8ce5007fa025005fa025003fa0201fa02cb0fc858206e9430cf84809201cee258fa025003fa0213ca0013f40013cb3fcdcdc9ed54e0d31f0182100f8a7ea5bde302d33f302e80402259f40f6fa192306ddf101100923010ce551bc87f01ca0055e050efce1cce1ace08c8ce5007fa025005fa025003fa0201fa02cb0fc858206e9430cf84809201cee258fa025003fa0213ca0013f40013cb3fcdcdc9ed5401f8206e92306d9dd0fa40fa00fa0055206c136f03e2206e8e495b10ce551bc87f01ca0055e050efce1cce1ace08c8ce5007fa025005fa025003fa0201fa02cb0fc858206e9430cf84809201cee258fa025003fa0213ca0013f40013cb3fcdcdc9ed54e0206ef2d0806f231111138040f45b305152a1111014a15033727012019a136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb0010ce10bd10ac109b108a1079106810571046400305041f02fa96310fd31f1110de2182105745544aba8e5f5b0efa403081557df8422fc705f2f481122f056e15f2f410ce551bc87f01ca0055e050efce1cce1ace08c8ce5007fa025005fa025003fa0201fa02cb0fc858206e9430cf84809201cee258fa025003fa0213ca0013f40013cb3fcdcdc9ed54e021821042555921bae30221141501d25b0ed33ffa00300e11100e10df10ce10bd10ac109b108a107910681057104610351024db3cc87f01ca0055e050efce1cce1ace08c8ce5007fa025005fa025003fa0201fa02cb0fc858206e9430cf84809201cee258fa025003fa0213ca0013f40013cb3fcdcdc9ed542102f882107362d09cbae302218210d53276dbba8e675b0ed33f30500e8040f45b3010ce10bd10ac109b108a10791068105710461035440302c87f01ca0055e050efce1cce1ace08c8ce5007fa025005fa025003fa0201fa02cb0fc858206e9430cf84809201cee258fa025003fa0213ca0013f40013cb3fcdcdc9ed54e021161b04fe5b0ed33f31fa00fa4010ef10df10cf10bf10af109f108f107f106f105f104f103f102f011110011111db3c8152b8f84258c705f2f481606323b3f2f48200d7aa5610c200f2f48125a1561025bbf2f4550e1111db3c55e05611db3c5307a8812710a9045ca1814c9021c200f2f420815be01114be01111301f2f481400d532722171819006620d749c101923070e0d20001923070e020d749c120923070e0d31f01821053454c4cbd923070e020d749c104923070e0fa0030038a20c101923070e055e0db3c011110a00fdb3c5610a0a5011110a9040fdb3c011110a120c1009430550d70e010ef10de10cd10bc10ab109a108910781067105610451034413026242502fcbbf2f45066a1111214a124c2008e3b52c57270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb009134e250fe7070036d6d50436d5033c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf818ae2f400c901fb0010be291a00b010ad109c108b107a106910581047103610254430c87f01ca0055e050efce1cce1ace08c8ce5007fa025005fa025003fa0201fa02cb0fc858206e9430cf84809201cee258fa025003fa0213ca0013f40013cb3fcdcdc9ed5404fe821047524144ba8ff65b0ed33f3081207622f2f410de10cd10bc10ab109a108910781067105610451034413fdb3c5394a120c200925b3fe30d7024c2008e3b52b57270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb009134e2550d221c1f1e01fe3529821007270e0072706d718b0804111704103b56130356144133c8556082100f8a7ea55008cb1f16cb3f5004fa0212ce01206e9430cf84809201cee2f40001fa02cec91314021113021710246d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c91d000a01fb00102e02d4e0218210946a98b6ba8ece5b0ed33f30c8018210aff90f5758cb1fcb3fc910df10ce10bd10ac109b108a107910681057104610354430f84270705003804201503304c8cf8580ca00cf8440ce01fa02806acf40f400c901fb00e05710c0000fc1211fb0e3025f0ff2c0821f200088c87f01ca0055e050efce1cce1ace08c8ce5007fa025005fa025003fa0201fa02cb0fc858206e9430cf84809201cee258fa025003fa0213ca0013f40013cb3fcdcdc9ed5401c870200e11100e10df10ce10bd10ac109b108a107910681057104610351024db3cc87f01ca0055e050efce1cce1ace08c8ce5007fa025005fa025003fa0201fa02cb0fc858206e9430cf84809201cee258fa025003fa0213ca0013f40013cb3fcdcdc9ed542103f43181606324b3f2f455e0db3cf8416f24135f038200c07d2182100ee6b280bcf2f482100ee6b280a15308a8812710a90466a1814c9021c200f2f40e11110e0d11100d10cf0b11110b0a11100a109f0811110807111007106f0511110504111004103f021111020111100151ffdb3c814c9021c200f2f48200ea39222327001853556eb3f2e444206ef2d080038220c101923070e055e0db3c011110a00fdb3c011110a9040fdb3c011110a120c1009430550d70e010ef10de10cd10bc10ab109a1089107810671056104510344130252426024adb3c55e0db3c01111001a810ef10de10cd10bc10ab109a10891078106710561045103441302526000653a4a000065393a101fc5351a02bbbf2f420815be01115be01111401f2f4514fa0035612a05610c2008e3d52c011117270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb00925710e223a48040f8420111115614c855205023ce01fa0201fa02c9011110012802fe5250206e953059f45b30944133f417e2821007270e007ff842f8286d718b08106a05111805c8556082100f8a7ea55008cb1f16cb3f5004fa0212ce01206e9430cf84809201cee2f40001fa02cec9031111031024011112017050346d036d5520c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf818ae2f400292a001a58cf8680cf8480f400f400cf810136c901fb0010ae109d108c107b106a1059104810374066050403db3c2b001a22b3935347be9170e2927f33de85014b10');
     const builder = beginCell();
     builder.storeUint(0, 1);
     initBondingCurve_init_args({ $$type: 'BondingCurve_init_args', admin, jettonMaster, feeWallet, graduationDestination, virtualTon, virtualTokens, tokensForSale, graduationTon, feeBps })(builder);
@@ -1451,8 +1567,10 @@ const BondingCurve_types: ABIType[] = [
     {"name":"Buy","header":1112889633,"fields":[{"name":"queryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}},{"name":"minTokensOut","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}}]},
     {"name":"SetJettonWallet","header":1464161354,"fields":[{"name":"wallet","type":{"kind":"simple","type":"address","optional":false}}]},
     {"name":"Graduate","header":1196572996,"fields":[{"name":"queryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}}]},
+    {"name":"JettonExcesses","header":3576854235,"fields":[{"name":"queryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}}]},
+    {"name":"PendingBuy","header":null,"fields":[{"name":"buyer","type":{"kind":"simple","type":"address","optional":false}},{"name":"ton","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tokens","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}}]},
     {"name":"CurveData","header":null,"fields":[{"name":"virtualTon","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"virtualTokens","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"realTon","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"tokensSold","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"tokensForSale","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"graduationTon","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"feeBps","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"graduated","type":{"kind":"simple","type":"bool","optional":false}},{"name":"jettonWallet","type":{"kind":"simple","type":"address","optional":true}}]},
-    {"name":"BondingCurve$Data","header":null,"fields":[{"name":"admin","type":{"kind":"simple","type":"address","optional":false}},{"name":"jettonMaster","type":{"kind":"simple","type":"address","optional":false}},{"name":"feeWallet","type":{"kind":"simple","type":"address","optional":false}},{"name":"graduationDestination","type":{"kind":"simple","type":"address","optional":false}},{"name":"virtualTon","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"virtualTokens","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tokensForSale","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"graduationTon","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"feeBps","type":{"kind":"simple","type":"uint","optional":false,"format":16}},{"name":"jettonWallet","type":{"kind":"simple","type":"address","optional":true}},{"name":"realTon","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tokensSold","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"graduated","type":{"kind":"simple","type":"bool","optional":false}}]},
+    {"name":"BondingCurve$Data","header":null,"fields":[{"name":"admin","type":{"kind":"simple","type":"address","optional":false}},{"name":"jettonMaster","type":{"kind":"simple","type":"address","optional":false}},{"name":"feeWallet","type":{"kind":"simple","type":"address","optional":false}},{"name":"graduationDestination","type":{"kind":"simple","type":"address","optional":false}},{"name":"virtualTon","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"virtualTokens","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tokensForSale","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"graduationTon","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"feeBps","type":{"kind":"simple","type":"uint","optional":false,"format":16}},{"name":"jettonWallet","type":{"kind":"simple","type":"address","optional":true}},{"name":"realTon","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tokensSold","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"graduated","type":{"kind":"simple","type":"bool","optional":false}},{"name":"pending","type":{"kind":"dict","key":"uint","keyFormat":64,"value":"PendingBuy","valueFormat":"ref"}},{"name":"nextQueryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}}]},
 ]
 
 const BondingCurve_opcodes = {
@@ -1464,6 +1582,7 @@ const BondingCurve_opcodes = {
     "Buy": 1112889633,
     "SetJettonWallet": 1464161354,
     "Graduate": 1196572996,
+    "JettonExcesses": 3576854235,
 }
 
 const BondingCurve_getters: ABIGetter[] = [
@@ -1489,6 +1608,7 @@ const BondingCurve_receivers: ABIReceiver[] = [
     {"receiver":"internal","message":{"kind":"typed","type":"Buy"}},
     {"receiver":"internal","message":{"kind":"empty"}},
     {"receiver":"internal","message":{"kind":"typed","type":"JettonTransferNotification"}},
+    {"receiver":"internal","message":{"kind":"typed","type":"JettonExcesses"}},
     {"receiver":"internal","message":{"kind":"typed","type":"Graduate"}},
     {"receiver":"internal","message":{"kind":"typed","type":"Deploy"}},
 ]
@@ -1531,7 +1651,7 @@ export class BondingCurve implements Contract {
         this.init = init;
     }
     
-    async send(provider: ContractProvider, via: Sender, args: { value: bigint, bounce?: boolean| null | undefined }, message: SetJettonWallet | Buy | null | JettonTransferNotification | Graduate | Deploy) {
+    async send(provider: ContractProvider, via: Sender, args: { value: bigint, bounce?: boolean| null | undefined }, message: SetJettonWallet | Buy | null | JettonTransferNotification | JettonExcesses | Graduate | Deploy) {
         
         let body: Cell | null = null;
         if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'SetJettonWallet') {
@@ -1545,6 +1665,9 @@ export class BondingCurve implements Contract {
         }
         if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'JettonTransferNotification') {
             body = beginCell().store(storeJettonTransferNotification(message)).endCell();
+        }
+        if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'JettonExcesses') {
+            body = beginCell().store(storeJettonExcesses(message)).endCell();
         }
         if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'Graduate') {
             body = beginCell().store(storeGraduate(message)).endCell();

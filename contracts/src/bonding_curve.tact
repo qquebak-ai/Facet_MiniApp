@@ -69,6 +69,20 @@ message(0x47524144) Graduate {
     queryId: Int as uint64;
 }
 
+// Уведомление об остатке газа от кошелька жетона. Приходит после
+// удачного перевода — по нему видно, что жетоны у покупателя.
+message(0xd53276db) JettonExcesses {
+    queryId: Int as uint64;
+}
+
+// Незакрытая покупка: жетоны отправлены, но подтверждения ещё нет.
+// Нужна, чтобы при возврате сообщения знать, кому и сколько вернуть.
+struct PendingBuy {
+    buyer: Address;
+    ton: Int as coins;
+    tokens: Int as coins;
+}
+
 struct CurveData {
     virtualTon: Int;
     virtualTokens: Int;
@@ -100,6 +114,11 @@ contract BondingCurve with Deployable {
     realTon: Int as coins = 0;
     tokensSold: Int as coins = 0;
     graduated: Bool = false;
+    // Покупки, по которым жетоны отправлены, но исход ещё неизвестен.
+    // Ключ — свой сквозной номер: на него ссылаются и подтверждение, и
+    // возврат, а внешние queryId могли бы совпасть между покупателями.
+    pending: map<Int as uint64, PendingBuy>;
+    nextQueryId: Int as uint64 = 1;
 
     // Сколько TON удерживается из входящего сообщения на газ: перевод
     // жетона покупателю, отправка комиссии и хранение самого контракта.
@@ -273,15 +292,25 @@ contract BondingCurve with Deployable {
         // не сохранится, а деньги вернутся покупателю. С IgnoreErrors
         // всё было наоборот — контракт считал сделку состоявшейся, а
         // токены до человека не доходили.
+        // Покупку записываем как незакрытую и отправляем перевод с
+        // возвратом остатка на себя: удачная выдача пришлёт excesses и
+        // закроет запись, неудачная вернёт сообщение — и тогда деньги
+        // уйдут обратно покупателю. Благодаря этому покупка может прийти
+        // раньше, чем на кривую доедет торговый запас: в худшем случае
+        // человек просто получит свои TON назад.
+        let id: Int = self.nextQueryId;
+        self.nextQueryId = id + 1;
+        self.pending.set(id, PendingBuy{ buyer: sender(), ton: net, tokens: tokensOut });
+
         send(SendParameters{
             to: wallet,
             value: self.GasJettonTransfer,
-            bounce: false,
+            bounce: true,
             body: JettonTransfer{
-                queryId: queryId,
+                queryId: id,
                 amount: tokensOut,
                 destination: sender(),
-                responseDestination: sender(),
+                responseDestination: myAddress(),
                 customPayload: null,
                 forwardTonAmount: 1,
                 forwardPayload: emptySlice(),
@@ -360,6 +389,40 @@ contract BondingCurve with Deployable {
             return 0;
         }
         return s.loadCoins();
+    }
+
+    // Жетоны дошли — запись о покупке больше не нужна.
+    receive(msg: JettonExcesses) {
+        self.pending.del(msg.queryId);
+    }
+
+    // Сообщение вернулось: выдать жетоны не вышло (обычно их ещё нет на
+    // кошельке кривой). Откатываем сделку и возвращаем деньги.
+    bounced(src: Slice) {
+        if (src.bits() < 32 + 64) {
+            return;
+        }
+        let op: Int = src.loadUint(32);
+        if (op != 0xf8a7ea5) {
+            return;
+        }
+        let id: Int = src.loadUint(64);
+        let entry: PendingBuy? = self.pending.get(id);
+        if (entry == null) {
+            return;
+        }
+        let buy: PendingBuy = entry!!;
+        self.pending.del(id);
+
+        self.realTon = self.realTon - buy.ton;
+        self.tokensSold = self.tokensSold - buy.tokens;
+
+        send(SendParameters{
+            to: buy.buyer,
+            value: buy.ton,
+            mode: SendIgnoreErrors,
+            bounce: false,
+        });
     }
 
     // -----------------------------------------------------------------

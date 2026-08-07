@@ -799,6 +799,23 @@ export async function launchRealToken({
       bounce: false,
     });
     log("развёртывание кривой с привязкой кошелька поставлено в очередь");
+
+    // Стартовая покупка создателя — четвёртым сообщением той же
+    // транзакции. Раньше это было опасно: покупка доходит до кривой за
+    // один шаг, а выпуск запаса до её кошелька — за два, поэтому деньги
+    // списывались раньше, чем появлялись токены. Теперь контракт держит
+    // такие покупки незакрытыми и при возврате сообщения откатывает
+    // сделку и возвращает TON, так что порядок доставки больше не важен.
+    const buyTon = Math.max(0, Number(buyAmountTon) || 0);
+    if (buyTon > 0) {
+      await batchSender.send({
+        to: curveAddress,
+        value: toNano(buyTon.toFixed(9)) + CURVE_GAS_BUY_OVERHEAD,
+        body: buildBuyBody({ queryId: 0n, minTokensOut: 0n }),
+        bounce: false,
+      });
+      log(`стартовая покупка на ${buyTon} TON поставлена в очередь`);
+    }
   } catch (e) {
     fail("Не удалось подготовить развёртывание кривой", e);
   }
@@ -809,7 +826,7 @@ export async function launchRealToken({
   try {
     if (!batch.length) fail("Нечего отправлять — ни одно сообщение не было подготовлено", new Error("empty batch"));
     const messages = batch.map(buildTonConnectMessage);
-    log(`запрашиваем одно подтверждение кошелька на ${messages.length} сообщени(я): жетон + запас на кривую + кривая`);
+    log(`запрашиваем одно подтверждение кошелька на ${messages.length} сообщени(я): жетон + запас на кривую + кривая + стартовая покупка`);
     await tonConnectUI.sendTransaction({
       validUntil: Math.floor(Date.now() / 1000) + 300,
       network: network === "testnet" ? "-3" : "-239",
@@ -883,6 +900,24 @@ export async function launchRealToken({
       );
     }
     log("привязанный кошелёк жетона совпал с адресом от мастера — токен торгуется");
+
+    // Стартовая покупка ехала в той же транзакции: ждём, пока жетоны
+    // дойдут до создателя. Если не дошли — контракт вернул деньги, и об
+    // этом надо сказать, а не молчать.
+    const buyTon2 = Math.max(0, Number(buyAmountTon) || 0);
+    if (buyTon2 > 0) {
+      try {
+        const boughtRaw = await waitForJettonBalance(Address.parse(walletAddress), jettonMasterAddress, network, {
+          log,
+          warn,
+          timeoutMs: 90000,
+        });
+        mintedTokens = Number(boughtRaw / (10n ** decimals));
+        log(`стартовая покупка подтверждена: ${mintedTokens} токенов на кошельке`);
+      } catch (e) {
+        warn("Стартовая покупка не дошла — если жетоны выдать не удалось, кривая вернула TON обратно на кошелёк. Купить можно с страницы токена.");
+      }
+    }
   } catch (e) {
     const explorerHost = network === "testnet" ? "testnet.tonviewer.com" : "tonviewer.com";
     fail(

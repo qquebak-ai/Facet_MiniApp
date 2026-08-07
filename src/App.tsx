@@ -211,7 +211,7 @@ const STR = {
     nameTickerRequired: "Укажи название и тикер токена",
     descRequiredWarning: "Опиши токен — после запуска описание изменить будет нельзя",
     buyAmountRequired: "Укажи сумму для запуска — на неё будут выкуплены первые токены",
-    initialBuyHint: "Списывается не при запуске, а следующим шагом: сразу после создания откроется покупка на эту сумму.",
+    initialBuyHint: "На эту сумму ты выкупишь первые токены в той же транзакции — размер покупки и задаёт стартовую цену.",
     buyAmountTooLow: "Минимальная сумма запуска — ${min} (≈{tons} TON)",
     deleteToken: "Удалить токен из списка",
     confirmDelete: "Точно удалить?",
@@ -480,7 +480,7 @@ const STR = {
     nameTickerRequired: "Enter a token name and ticker",
     descRequiredWarning: "Describe the token — the description can't be changed after launch",
     buyAmountRequired: "Enter an amount for the launch — it buys the first tokens",
-    initialBuyHint: "Charged after the launch, not during it: the buy sheet opens with this amount as soon as the token is created.",
+    initialBuyHint: "Buys the first tokens in the same transaction — the size of this buy sets the starting price.",
     buyAmountTooLow: "Minimum launch amount is ${min} (≈{tons} TON)",
     deleteToken: "Delete token from list",
     confirmDelete: "Delete for sure?",
@@ -6866,15 +6866,16 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setLaunchProgress({ stepIndex: 0, done: false, error: null, result: null });
     if (result) handleTokenCreated(result);
     if (req && req.onFinish) req.onFinish(result);
-    // Закрыли экран успеха крестиком — покупку всё равно предлагаем:
-    // иначе токен остаётся без первой сделки, а создатель без токенов.
-    if (result) openLaunchBuy(result);
+    // Стартовая покупка едет внутри транзакции запуска, поэтому окно
+    // покупки здесь больше не открывается — иначе создатель купил бы
+    // дважды. На страницу токена он попадёт кнопкой с экрана успеха.
+    if (result) openLaunchBuy(result, { openTradeSheet: false });
   }
   // Создатель покупает первым: кроме него о токене ещё никто не знает,
   // а размер этой покупки и задаёт стартовую цену — кривая сдвигается
   // ровно на внесённую сумму. Открываем окно покупки само, чтобы шаг не
   // выглядел необязательным.
-  function openLaunchBuy(result) {
+  function openLaunchBuy(result, { openTradeSheet = true } = {}) {
     if (!result || !result.address) return;
     const amount = parseFloat(String(result.buyAmount || "").replace(",", "."));
     const feedToken = localTokenToFeedShape({
@@ -6893,7 +6894,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       createdAt: result.createdAt || Date.now(),
     });
     openToken(feedToken);
-    setTradeModal({ mode: "buy", prefill: Number.isFinite(amount) && amount > 0 ? amount : undefined });
+    if (openTradeSheet) {
+      setTradeModal({ mode: "buy", prefill: Number.isFinite(amount) && amount > 0 ? amount : undefined });
+    }
   }
 
   function viewLaunchedToken(result) {

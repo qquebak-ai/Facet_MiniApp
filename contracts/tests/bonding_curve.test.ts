@@ -1,4 +1,4 @@
-import { Blockchain, SandboxContract, TreasuryContract } from "@ton/sandbox";
+import { Blockchain, SandboxContract, TreasuryContract, internal } from "@ton/sandbox";
 import { Address, beginCell, Cell, toNano } from "@ton/core";
 import "@ton/test-utils";
 import { BondingCurve, JettonTransfer, storeJettonTransfer } from "../build/bonding_curve_BondingCurve";
@@ -242,6 +242,41 @@ describe("BondingCurve", () => {
     const done = await curve.getData();
     expect(done.realTon).toBe(0n);
     expect(done.tokensSold).toBe(TOKENS_FOR_SALE);
+  });
+
+  it("возвращает деньги, если жетоны выдать не удалось", async () => {
+    await bindWallet();
+    const before = await curve.getData();
+
+    const res = await buy("10");
+    const transfer = jettonTransferFrom(res)!;
+    expect(transfer).not.toBeNull();
+
+    const afterBuy = await curve.getData();
+    expect(afterBuy.realTon).toBeGreaterThan(before.realTon);
+
+    // Кошелёк жетона не смог выполнить перевод и вернул сообщение —
+    // ровно то, что произойдёт, если покупка обгонит приход запаса.
+    const bounced = await blockchain.sendMessage(
+      internal({
+        from: jettonWallet.address,
+        to: curve.address,
+        value: toNano("0.05"),
+        bounced: true,
+        body: beginCell()
+          .storeUint(0xffffffff, 32)
+          .storeUint(0xf8a7ea5, 32)
+          .storeUint(transfer.queryId, 64)
+          .storeCoins(transfer.amount)
+          .endCell(),
+      }),
+    );
+
+    // Деньги ушли обратно покупателю, продажа отменена.
+    expect(bounced.transactions).toHaveTransaction({ from: curve.address, to: buyer.address, success: true });
+    const afterBounce = await curve.getData();
+    expect(afterBounce.realTon).toBe(before.realTon);
+    expect(afterBounce.tokensSold).toBe(before.tokensSold);
   });
 
   it("не отдаёт ликвидность до достижения порога", async () => {
