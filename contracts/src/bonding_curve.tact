@@ -338,10 +338,17 @@ contract BondingCurve with Deployable {
         // момент довыдаём покупки, которые не смогли исполниться раньше:
         // при запуске покупка может обогнать запас, и без этого её исход
         // зависел бы от порядка доставки сообщений.
-        if (msg.amount > self.tokensSold) {
+        // Поступлением считается только приход всего торгового запаса —
+        // ровно tokensForSale, и приходит он один раз при запуске.
+        // Раньше условием было «больше, чем продано», и под него попадала
+        // обычная продажа завышенного количества: контракт молча забирал
+        // жетоны и ничего не платил. Теперь такая продажа отвергается, и
+        // жетоны возвращаются продавцу.
+        if (msg.amount >= self.tokensForSale) {
             self.flushPending();
             return;
         }
+        require(msg.amount <= self.tokensSold, "more tokens than sold");
 
         let minTonOut: Int = self.parseMinTonOut(msg.forwardPayload);
 
