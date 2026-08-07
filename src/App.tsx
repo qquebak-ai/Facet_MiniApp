@@ -183,6 +183,7 @@ const STR = {
     tokenNoAddress: "Адрес недоступен",
     txUnavailable: "Список транзакций пока недоступен для этого пула",
     txEmpty: "По этому пулу пока нет сделок",
+    balanceLoading: "Баланс ещё загружается — секунду",
     infoEmpty: "У этого токена пока нет описания и ссылок",
     launchBuyCta: "Купить свой токен",
     creatorLabel: "Создатель", creatorYou: "Это ты",
@@ -452,6 +453,7 @@ const STR = {
     tokenNoAddress: "Address unavailable",
     txUnavailable: "Transaction list isn't available for this pool yet",
     txEmpty: "No trades on this pool yet",
+    balanceLoading: "Still loading your balance — one moment",
     infoEmpty: "This token has no description or links yet",
     launchBuyCta: "Buy your token",
     creatorLabel: "Creator", creatorYou: "That's you",
@@ -4127,7 +4129,7 @@ function parseAmount(str) {
 /* TradeModal — the buy/sell sheet: pick an amount (with quick %/preset
    chips), see the live conversion, pick slippage tolerance, and confirm.
    Shared between the Buy and Sell CTAs so switching tabs mid-flow works. */
-function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance = 0, tonPriceUsd = 0, heldAmount = 0 }) {
+function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance = 0, tonPriceUsd = 0, heldAmount = null }) {
   const [mode, setMode] = useState(tradeModal ? tradeModal.mode : "buy");
   // Сумму можно подставить снаружи — так после запуска токена открывается
   // готовая покупка ровно на то, что человек ввёл в форме создания.
@@ -4144,7 +4146,12 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
 
   if (!tradeModal) return null;
 
-  const holdingTokens = heldAmount;
+  // null означает «баланс ещё не пришёл из сети». Подставлять сюда
+  // локальный счётчик нельзя: он копит оценки по каждой сделке и
+  // расходится с настоящим балансом — из-за этого в окне продажи
+  // показывалось вдвое больше, чем есть, и продажа уходила в никуда.
+  const balanceKnown = heldAmount != null;
+  const holdingTokens = balanceKnown ? heldAmount : 0;
   // Leave one network fee's worth of TON unspent so the buy transaction
   // itself doesn't fail for insufficient gas, and don't let anyone "buy"
   // before the real wallet balance/price have actually loaded.
@@ -4167,7 +4174,7 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
     ? (priceUsd > 0 ? (amount * tonPriceUsd) / priceUsd : 0)
     : amount * priceUsd;
   const feeUsd = NETWORK_FEE_TON * tonPriceUsd;
-  const canConfirm = amount > 0 && !overMax && (!isBuy || tonPriceUsd > 0);
+  const canConfirm = amount > 0 && !overMax && (isBuy ? tonPriceUsd > 0 : balanceKnown);
 
   function setPct(pct) {
     const v = maxAmount * pct;
@@ -4215,7 +4222,9 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
         <div className="flex items-center justify-between" style={{ marginTop: 16 }}>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{isBuy ? t("youPay") : t("youSell")}</span>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>
-            {t("available")}: {isBuy ? `${spendableTon.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON` : `${holdingTokens.toLocaleString("ru-RU")} ${token.ticker}`}
+            {t("available")}: {isBuy
+              ? `${spendableTon.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON`
+              : balanceKnown ? `${holdingTokens.toLocaleString("ru-RU")} ${token.ticker}` : "…"}
           </span>
         </div>
         <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3 mt-1.5" style={{ background: T.bg, border: `1px solid ${overMax ? T.rose : T.line}` }}>
@@ -7096,7 +7105,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // Баланс берём тот же, что показан в окне, — из сети. Локальный
       // счётчик знает только о сделках через это приложение, поэтому у
       // него ноль, и продажа молча обрывалась здесь же.
-      const held = chainHolding != null ? chainHolding : (holdings[token.id] || 0);
+      const held = chainHolding;
+      if (held == null) { showToast(t("balanceLoading")); return; }
       if (rawAmount > held) { showToast(t("insufficientSellAmount")); return; }
       if (!connected) { showToast(t("connectWalletSell")); return; }
       // Продажа на кривой — это перевод жетонов на её кошелёк: кривая
@@ -7225,7 +7235,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         showToast={showToast}
       />
       <TokenManageSheet token={manageToken_} onClose={() => setManageToken_(null)} showToast={showToast} onDelete={deleteMyToken} />
-      <TradeModal t={token} tradeModal={tradeModal} onClose={() => setTradeModal(null)} onConfirm={confirmTrade} walletTonBalance={tonBalance} tonPriceUsd={tonPriceUsd} heldAmount={chainHolding != null ? chainHolding : (holdings[token?.id] || 0)} />
+      <TradeModal t={token} tradeModal={tradeModal} onClose={() => setTradeModal(null)} onConfirm={confirmTrade} walletTonBalance={tonBalance} tonPriceUsd={tonPriceUsd} heldAmount={chainHolding} />
       <TokenLaunchOverlay
         open={!!launchRequest}
         form={launchRequest ? launchRequest.form : EMPTY_LAUNCH_FORM}
