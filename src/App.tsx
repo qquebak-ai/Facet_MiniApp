@@ -2523,6 +2523,10 @@ function TokenCardSkeleton({ index }) {
 // меняются настолько быстро, чтобы это того стоило.
 const TOKEN_REFRESH_MS = 15000;
 
+// Сколько токенов крутится в «центре внимания» и как часто меняется.
+const SPOTLIGHT_COUNT = 5;
+const SPOTLIGHT_ROTATE_MS = 8000;
+
 /* RocketIconFX — the "Создать токен" icon in the corner: same rocket
    glyph, gently bobbing in place, with a small flickering flame
    underneath it (no glow behind the rocket itself). */
@@ -3391,21 +3395,33 @@ function ShopView({ cosmetics, onEquip, profile }) {
 function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   const [filter, setFilter] = useState("new");
 
-  // «В центре внимания» — токен, по которому прошло больше всего сделок
-  // за последний час. Час берём как основное окно: он показывает, где
-  // движение прямо сейчас, а не кто крупнее по капитализации. Если за
-  // час везде тихо (ночь, выходные), окно расширяется до 6 часов, потом
-  // до суток — так карточка никогда не остаётся пустой.
-  const spotlight = useMemo(() => {
-    if (!tokens.length) return null;
-    const best = (win) => {
-      const ranked = [...tokens]
+  // «В центре внимания» — пятёрка токенов, по которым прошло больше всего
+  // сделок за последний час, и она прокручивается по кругу. Час берём как
+  // основное окно: он показывает, где движение прямо сейчас, а не кто
+  // крупнее по капитализации. Если за час везде тихо (ночь, выходные),
+  // окно расширяется до 6 часов, потом до суток — так карточка никогда не
+  // остаётся пустой.
+  const spotlightTop = useMemo(() => {
+    if (!tokens.length) return [];
+    const ranked = (win) =>
+      [...tokens]
         .filter((tok) => (tok[win] || 0) > 0)
         .sort((a, b) => (b[win] || 0) - (a[win] || 0));
-      return ranked[0] || null;
-    };
-    return best("tx1h") || best("tx6h") || best("tx24h") || [...tokens].sort((a, b) => b.mcapNum - a.mcapNum)[0];
+    const byActivity = ["tx1h", "tx6h", "tx24h"].map(ranked).find((list) => list.length);
+    const list = byActivity || [...tokens].sort((a, b) => b.mcapNum - a.mcapNum);
+    return list.slice(0, SPOTLIGHT_COUNT);
   }, [tokens]);
+
+  const [spotIdx, setSpotIdx] = useState(0);
+  useEffect(() => {
+    if (spotlightTop.length < 2) return;
+    const iv = setInterval(() => setSpotIdx((i) => i + 1), SPOTLIGHT_ROTATE_MS);
+    return () => clearInterval(iv);
+  }, [spotlightTop.length]);
+
+  // Индекс намеренно растёт без ограничения, а по кругу гоняем здесь:
+  // так смена ленты не сбрасывает позицию на первый токен.
+  const spotlight = spotlightTop.length ? spotlightTop[spotIdx % spotlightTop.length] : null;
 
   const localTokens = useMemo(() => (myTokens || []).map(localTokenToFeedShape), [myTokens]);
 
@@ -3413,14 +3429,15 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
     // "New" now means what it literally says: tokens launched through
     // this app, not the newest items in the external real-market feed.
     if (filter === "new") return localTokens;
-    let arr = tokens.filter(tok => !spotlight || tok.id !== spotlight.id);
+    const featured = new Set(spotlightTop.map((tok) => tok.id));
+    let arr = tokens.filter((tok) => !featured.has(tok.id));
     switch (filter) {
       case "hot": arr = [...arr].sort((a, b) => b.change - a.change); break;
       case "dex": arr = arr.filter(tok => tok.verified); break;
       default: break;
     }
     return arr;
-  }, [tokens, filter, spotlight, localTokens]);
+  }, [tokens, filter, spotlightTop, localTokens]);
 
   return (
     <div className="flex flex-col gap-5" style={{ paddingBottom: 12 }}>
@@ -3443,7 +3460,9 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
       ) : spotlight && (
         <div>
           <SectionTitle>{t("mempadSpotlight")}</SectionTitle>
-          <button onClick={() => onOpen(spotlight)} className="fx-card w-full flex flex-col items-center text-center gap-2.5 rounded-[22px] p-6" style={{ border: `1px solid ${T.line}`, position: "relative", overflow: "hidden" }}>
+          {/* key по токену — карточка переигрывает своё появление на каждой
+              смене, поэтому подмена не выглядит как рывок. */}
+          <button key={spotlight.id} onClick={() => onOpen(spotlight)} className="fx-card w-full flex flex-col items-center text-center gap-2.5 rounded-[22px] p-6" style={{ border: `1px solid ${T.line}`, position: "relative", overflow: "hidden" }}>
             <SpotlightGrid up={spotlight.change >= 0} seedKey={spotlight.seed} />
             <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <TokenAvatar size={92} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl}>{spotlight.emoji}</TokenAvatar>
@@ -3458,6 +3477,30 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
               )}
             </div>
           </button>
+
+          {/* Точки показывают, что токен здесь не один: их столько же,
+              сколько в подборке, и по ним можно переключиться руками. */}
+          {spotlightTop.length > 1 && (
+            <div className="flex items-center justify-center gap-1.5" style={{ marginTop: 10 }}>
+              {spotlightTop.map((tok, i) => {
+                const active = i === spotIdx % spotlightTop.length;
+                return (
+                  <button
+                    key={tok.id}
+                    onClick={() => setSpotIdx(i)}
+                    aria-label={tok.ticker}
+                    className="fx-tap"
+                    style={{
+                      width: active ? 18 : 6, height: 6, borderRadius: 999,
+                      background: active ? T.electric : T.lineHi,
+                      border: "none", padding: 0,
+                      transition: `width ${EASE}, background ${EASE}`,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
