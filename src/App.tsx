@@ -175,6 +175,10 @@ const STR = {
     tokenNoAddress: "Адрес недоступен",
     txUnavailable: "Список транзакций пока недоступен для этого пула",
     txEmpty: "По этому пулу пока нет сделок",
+    creatorLabel: "Создатель", creatorYou: "Это ты",
+    followCta: "Подписаться", unfollowCta: "Вы подписаны",
+    followedToast: "Подписка оформлена", unfollowedToast: "Подписка отменена",
+    followFailed: "Не получилось — попробуй ещё раз",
     txLoadFailed: "Не удалось загрузить сделки — обновим через несколько секунд",
     aboutToken: "О токене",
     youPay: "Вы платите", youSell: "Вы продаёте", youReceive: "Вы получите",
@@ -435,6 +439,10 @@ const STR = {
     tokenNoAddress: "Address unavailable",
     txUnavailable: "Transaction list isn't available for this pool yet",
     txEmpty: "No trades on this pool yet",
+    creatorLabel: "Creator", creatorYou: "That's you",
+    followCta: "Follow", unfollowCta: "Following",
+    followedToast: "Followed", unfollowedToast: "Unfollowed",
+    followFailed: "Didn't work — try again",
     txLoadFailed: "Couldn't load trades — retrying in a few seconds",
     aboutToken: "About the token",
     youPay: "You pay", youSell: "You sell", youReceive: "You receive",
@@ -2685,8 +2693,174 @@ function localTokenToFeedShape(entry) {
     verified: entry.verified,
     live: false,
     dexName: null,
+    ownerId: entry.ownerId || null,
     createdAt: entry.createdAt ? new Date(entry.createdAt).toISOString() : null,
   };
+}
+
+/* ---------------------------------------------------------
+   СОЗДАТЕЛЬ ТОКЕНА И ПОДПИСКИ
+   У токенов, запущенных внутри приложения, известен owner_id, значит на
+   карточке можно показать, кто его сделал, и дать подписаться. Токены из
+   внешней ленты (GeckoTerminal) владельца не имеют — там блок просто не
+   рисуется.
+--------------------------------------------------------- */
+
+// «1 подписчик», «2 подписчика», «5 подписчиков» — в русском без
+// склонения по числу выглядит неряшливо.
+function followersWord(n) {
+  if (lang === "EN") return n === 1 ? "follower" : "followers";
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "подписчик";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "подписчика";
+  return "подписчиков";
+}
+
+// Профиль по id пользователя. Кэшируем: одна и та же карточка
+// открывается по многу раз, а профиль меняется редко.
+const creatorCache = new Map(); // userId -> profile | null
+async function fetchCreatorProfile(userId) {
+  if (!userId) return null;
+  if (creatorCache.has(userId)) return creatorCache.get(userId);
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, nickname, bio, avatar_url, emoji")
+    .eq("id", userId)
+    .maybeSingle();
+  const profile = error ? null : data;
+  creatorCache.set(userId, profile);
+  return profile;
+}
+
+/* TokenCreatorCard — блок «создатель» на экране токена: аватарка, ник,
+   описание, число подписчиков и кнопка подписки. Подписка живёт в
+   таблице follows (см. supabase_follows.sql) и требует входа. */
+function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast }) {
+  const [creator, setCreator] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [followers, setFollowers] = useState(0);
+  const [following, setFollowing] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const isSelf = !!currentUserId && currentUserId === ownerId;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!ownerId) { setLoading(false); return; }
+    setLoading(true);
+
+    async function load() {
+      try {
+        const profile = await fetchCreatorProfile(ownerId);
+        if (cancelled) return;
+        setCreator(profile);
+
+        // Сколько всего подписчиков — считаем на стороне базы, строки
+        // сюда тянуть незачем.
+        const { count } = await supabase
+          .from("follows")
+          .select("follower_id", { count: "exact", head: true })
+          .eq("following_id", ownerId);
+        if (cancelled) return;
+        setFollowers(count || 0);
+
+        if (currentUserId && currentUserId !== ownerId) {
+          const { data: mine } = await supabase
+            .from("follows")
+            .select("follower_id")
+            .eq("following_id", ownerId)
+            .eq("follower_id", currentUserId)
+            .maybeSingle();
+          if (!cancelled) setFollowing(!!mine);
+        } else if (!cancelled) {
+          setFollowing(false);
+        }
+      } catch (err) {
+        // Пока таблица follows не создана, запрос падает — карточку
+        // создателя это ронять не должно, она и без счётчика полезна.
+        console.warn("[mintly] follows unavailable:", err && err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [ownerId, currentUserId]);
+
+  async function toggleFollow() {
+    if (!currentUserId) { onNeedAuth && onNeedAuth(); return; }
+    if (isSelf || busy) return;
+    setBusy(true);
+
+    // Счётчик двигаем сразу, а при ошибке возвращаем назад: сеть тут
+    // медленнее, чем ожидание от нажатия.
+    const next = !following;
+    setFollowing(next);
+    setFollowers((n) => Math.max(0, n + (next ? 1 : -1)));
+
+    const query = next
+      ? supabase.from("follows").insert({ follower_id: currentUserId, following_id: ownerId })
+      : supabase.from("follows").delete().eq("follower_id", currentUserId).eq("following_id", ownerId);
+    const { error } = await query;
+
+    if (error) {
+      setFollowing(!next);
+      setFollowers((n) => Math.max(0, n + (next ? -1 : 1)));
+      showToast && showToast(tr("followFailed"));
+    } else {
+      showToast && showToast(next ? tr("followedToast") : tr("unfollowedToast"));
+    }
+    setBusy(false);
+  }
+
+  if (!ownerId) return null;
+  if (loading && !creator) {
+    return (
+      <div className="rounded-[22px] p-4 flex items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+        <div className="fx-skeleton" style={{ width: 44, height: 44, borderRadius: "50%" }} />
+        <div className="flex-1 flex flex-col gap-2">
+          <div className="fx-skeleton" style={{ width: "45%", height: 12, borderRadius: 4 }} />
+          <div className="fx-skeleton" style={{ width: "70%", height: 10, borderRadius: 4 }} />
+        </div>
+      </div>
+    );
+  }
+  if (!creator) return null;
+
+  return (
+    <div className="rounded-[22px] p-4 flex items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+      <TokenAvatar size={44} src={creator.avatar_url}>{creator.emoji || "🚀"}</TokenAvatar>
+
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{tr("creatorLabel")}</span>
+        <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>{creator.nickname}</span>
+        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>
+          {followers} {followersWord(followers)}
+        </span>
+      </div>
+
+      {isSelf ? (
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{tr("creatorYou")}</span>
+      ) : (
+        <button
+          onClick={toggleFollow}
+          disabled={busy}
+          className="fx-tap rounded-full px-4 py-2 flex-shrink-0"
+          style={{
+            background: following ? "transparent" : PRISM,
+            color: following ? T.muted : PRISM_TEXT,
+            border: following ? `1px solid ${T.lineHi}` : "none",
+            fontFamily: displayFont, fontWeight: 700, fontSize: 12,
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          {following ? tr("unfollowCta") : tr("followCta")}
+        </button>
+      )}
+    </div>
+  );
 }
 
 /* ---------------------------------------------------------
@@ -3181,7 +3355,7 @@ function HomeView({ onGoTab }) {
 
 const CHART_TOTAL = 140;
 
-function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey }) {
+function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey, currentUserId = null, onNeedAuth }) {
   const [tab, setTab] = useState("chart"); // chart | info | tx
   const [chartMode] = useState("mcap"); // always market cap — price toggle removed
   const [tf, setTf] = useState(() => {
@@ -3472,6 +3646,15 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
               <span style={{ fontFamily: monoFont, fontSize: 12, color: T.ice }}>{rugCount}</span>
             </button>
           </div>
+
+          {/* Кто запустил токен. Есть только у токенов из приложения —
+              у внешних пулов владельца нет, блок сам себя не рисует. */}
+          <TokenCreatorCard
+            ownerId={token.ownerId}
+            currentUserId={currentUserId}
+            onNeedAuth={onNeedAuth}
+            showToast={showToast}
+          />
 
           {connected ? (
             <div className="flex gap-2">
@@ -5244,13 +5427,35 @@ function ProfileView({
   connected, walletAddress, tonBalance, tonPriceUsd, onConnect, onDisconnect, onOpenConnectModal, showToast,
   accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut,
   onOpenSetting, onManageToken, onGoCreate, onOpenToken, myTokens = [], onClearAllTokens,
-  cosmetics = { frame: "none", card: "none" }, onGoShop, insetTop = 0,
+  cosmetics = { frame: "none", card: "none" }, onGoShop, insetTop = 0, userId = null,
 }) {
   const [loading, setLoading] = useState(true);
   const [verifyStatus, setVerifyStatus] = useState("none");
   const [confirmingClearAll, setConfirmingClearAll] = useState(false);
+  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
 
   useEffect(() => { const t = setTimeout(() => setLoading(false), 650); return () => clearTimeout(t); }, []);
+
+  // Подписчики и подписки. Считаем на стороне базы (head + exact count),
+  // сами строки на этом экране не нужны.
+  useEffect(() => {
+    if (!userId) { setFollowCounts({ followers: 0, following: 0 }); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [followers, following] = await Promise.all([
+          supabase.from("follows").select("follower_id", { count: "exact", head: true }).eq("following_id", userId),
+          supabase.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", userId),
+        ]);
+        if (cancelled) return;
+        setFollowCounts({ followers: followers.count || 0, following: following.count || 0 });
+      } catch (err) {
+        // Таблицы ещё нет — показываем нули, а не ломаем весь профиль.
+        console.warn("[mintly] follow counts unavailable:", err && err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userId]);
 
   const unlocked = accountCreated && connected;
   function requireUnlock(missingMsg) {
@@ -5345,8 +5550,8 @@ function ProfileView({
             <StatBlock label={t("statCreatedTokens")} value={myTokens.length} />
             <StatBlock label={t("statTokensOwned")} value={0} />
             <StatBlock label={t("statTotalTrades")} value={0} />
-            <StatBlock label={t("statFollowers")} value={0} />
-            <StatBlock label={t("statFollowing")} value={0} />
+            <StatBlock label={t("statFollowers")} value={followCounts.followers} />
+            <StatBlock label={t("statFollowing")} value={followCounts.following} />
           </div>
         </div>
 
@@ -5788,6 +5993,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       buyAmount: row.buy_amount,
       logoUrl: row.logo_url,
       network: row.network || "mainnet",
+      ownerId: row.owner_id || null,
       createdAt: new Date(row.created_at).getTime(),
     };
   }
@@ -6437,7 +6643,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           {view === "home" && <HomeView onGoTab={goTab} />}
           {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={() => goTab("create")} />}
           {view === "shop" && <ShopView cosmetics={cosmetics} onEquip={equipCosmetic} profile={profile} />}
-          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} />}
+          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} />}
           {view === "create" && (
             <CreateView
               showToast={showToast}
@@ -6474,6 +6680,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               cosmetics={cosmetics}
               onGoShop={() => goTab("shop")}
               insetTop={insetTop}
+              userId={userId}
             />
           )}
         </div>
