@@ -5880,7 +5880,7 @@ function ProfileView({
 // поднимается выше, ближе к шапке Telegram, чем предписывает safe-area.
 // Ниже нуля итог не опускаем: отрицательный padding браузер просто
 // проигнорирует, и вёрстка поедет молча.
-const CONTENT_TOP_GAP = -24;
+const CONTENT_TOP_GAP = -8;
 const contentTopPad = (insetTop) => Math.max(0, insetTop + CONTENT_TOP_GAP);
 
 // Насколько подложка профиля заходит выше начала контента. Верхние
