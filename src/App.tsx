@@ -2956,7 +2956,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
           ширину и рамка вокруг аватарки. Ради этого предметы из магазина
           и покупаются — их должно быть видно со стороны. */}
       <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: 10, position: "relative", zIndex: 0 }}>
-        <ProfileCardBg cardId={card} height={320} radius={0} bleed={16} top={-(insetTop + 66)} />
+        <ProfileCardBg cardId={card} height={320} radius={0} bleed={16} top={PROFILE_CARD_TOP(insetTop)} />
 
         {/* Кнопка занимает свою строку над аватаркой: раньше она висела
             абсолютом в углу и налезала на рамку. */}
@@ -5656,7 +5656,7 @@ function ProfileView({
           {/* bleed выводит подложку за горизонтальные отступы экрана и
               поднимает её выше шапки — так у карточки не остаётся видимых
               обрезанных краёв. */}
-          <ProfileCardBg cardId={cosmetics.card} height={320} radius={0} bleed={16} top={-(insetTop + 226)} />
+          <ProfileCardBg cardId={cosmetics.card} height={320} radius={0} bleed={16} top={PROFILE_CARD_TOP(insetTop)} />
           {accountCreated && (
             <button onClick={logOut} className="fx-tap flex items-center gap-1.5" style={{ position: "absolute", top: 0, right: 0, zIndex: 2, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 12, color: T.rose }}>
               <LogOut size={13} /> {t("logOutShort")}
@@ -5876,6 +5876,17 @@ function ProfileView({
    actually eliminates that leftover space.
 --------------------------------------------------------- */
 
+// Небольшой воздух между шапкой Telegram и контентом. Раньше здесь были
+// зашитые 56 пикселей — они дублировали высоту шапки, которая и так
+// приходит в contentSafeAreaInset, из-за чего весь экран уезжал вниз.
+const CONTENT_TOP_GAP = 12;
+
+// Насколько подложка профиля заходит выше начала контента. Верхние
+// insetTop + CONTENT_TOP_GAP + 10 доводят её ровно до верха окна, а
+// оставшийся запас нужен на случай, если клиент всё-таки позволит
+// оттянуть список — тогда под пальцем окажется карточка, а не пустой фон.
+const PROFILE_CARD_TOP = (insetTop) => -(insetTop + CONTENT_TOP_GAP + 10 + 160);
+
 function useTelegramViewport() {
   const [height, setHeight] = useState(
     typeof window !== "undefined" ? window.innerHeight : 720
@@ -5900,12 +5911,15 @@ function useTelegramViewport() {
       const update = () => {
         const h = tg.viewportStableHeight || tg.viewportHeight || window.innerHeight;
         setHeight(h);
-        const safe = tg.contentSafeAreaInset || tg.safeAreaInset;
-        setInsetBottom(safe && safe.bottom ? safe.bottom : 0);
-        // In fullscreen mode Telegram draws the app under the phone's status
-        // bar / camera cutout, so top content needs its own safe-area push —
-        // without this, headers/first rows sit underneath the system clock.
-        setInsetTop(safe && safe.top ? safe.top : 0);
+        // Два разных отступа, и их надо складывать, а не выбирать один:
+        // safeAreaInset — это железо телефона (чёлка, статус-бар),
+        // contentSafeAreaInset — собственная шапка Telegram над окном
+        // приложения. В полноэкранном режиме важен первый, в обычном —
+        // второй, и оба могут быть ненулевыми одновременно.
+        const device = tg.safeAreaInset || {};
+        const content = tg.contentSafeAreaInset || {};
+        setInsetTop((device.top || 0) + (content.top || 0));
+        setInsetBottom((device.bottom || 0) + (content.bottom || 0));
         setReady(true);
       };
       update();
@@ -6846,7 +6860,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             behind the bar instead of just a flat tinted strip. paddingBottom
             below reserves the nav's own height so the last row of content
             can still scroll clear of it. */}
-        <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: insetTop + 56, paddingBottom: 116 + insetBottom }} key={view}>
+        <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: insetTop + CONTENT_TOP_GAP, paddingBottom: 116 + insetBottom }} key={view}>
           {view === "home" && <HomeView onGoTab={goTab} />}
           {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={() => goTab("create")} />}
           {view === "shop" && <ShopView cosmetics={cosmetics} onEquip={equipCosmetic} profile={profile} />}
