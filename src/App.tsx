@@ -175,6 +175,7 @@ const STR = {
     tokenNoAddress: "Адрес недоступен",
     txUnavailable: "Список транзакций пока недоступен для этого пула",
     txEmpty: "По этому пулу пока нет сделок",
+    infoEmpty: "У этого токена пока нет описания и ссылок",
     creatorLabel: "Создатель", creatorYou: "Это ты",
     creatorTokens: "Его токены", creatorNoTokens: "Пока не запускал токены",
     profileNotFound: "Профиль не найден",
@@ -441,6 +442,7 @@ const STR = {
     tokenNoAddress: "Address unavailable",
     txUnavailable: "Transaction list isn't available for this pool yet",
     txEmpty: "No trades on this pool yet",
+    infoEmpty: "This token has no description or links yet",
     creatorLabel: "Creator", creatorYou: "That's you",
     creatorTokens: "Their tokens", creatorNoTokens: "No tokens launched yet",
     profileNotFound: "Profile not found",
@@ -2128,6 +2130,9 @@ function fmtSince(iso) {
 function RecentBuysTicker({ tokens }) {
   const [buys, setBuys] = useState([]);
   const [idx, setIdx] = useState(0);
+  // Пока не пришёл первый ответ, на месте ленты стоит скелет той же
+  // высоты: пустого прыгающего места на экране быть не должно.
+  const [loaded, setLoaded] = useState(false);
 
   // Опрашиваем три пула — у бесплатного API жёсткий лимит запросов, а
   // лента всё равно показывает по одной сделке. Берём самые активные за
@@ -2175,6 +2180,7 @@ function RecentBuysTicker({ tokens }) {
           setBuys(collected);
         })
       );
+      if (!cancelled) setLoaded(true);
     }
 
     load();
@@ -2188,7 +2194,22 @@ function RecentBuysTicker({ tokens }) {
     return () => clearInterval(swap);
   }, [buys]);
 
-  if (!buys.length) return null;
+  if (!buys.length) {
+    // Запросы ещё идут — держим место под ленту, а не схлопываем его.
+    if (!loaded) {
+      return (
+        <div
+          className="flex items-center gap-2 rounded-[16px] px-3 py-2 overflow-hidden"
+          style={{ background: hexA(T.up, 0.05), border: `1px solid ${hexA(T.up, 0.14)}` }}
+        >
+          <div className="fx-skeleton" style={{ width: 20, height: 20, borderRadius: "50%" }} />
+          <div className="fx-skeleton" style={{ width: "38%", height: 10, borderRadius: 4 }} />
+          <div className="fx-skeleton" style={{ width: "22%", height: 10, borderRadius: 4 }} />
+        </div>
+      );
+    }
+    return null;
+  }
   // Список дополняется по мере ответов и может стать короче при
   // обновлении — заворачиваем индекс здесь, чтобы не читать пустоту.
   const b = buys[idx % buys.length];
@@ -2495,7 +2516,10 @@ const HoldersBadge = React.memo(function HoldersBadge({ tokenAddress, icon: Icon
 
   return (
     <span ref={elRef} className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 10.5, color: T.muted }}>
-      <Icon size={11} color={T.muted} /> {count == null ? "—" : count.toLocaleString("ru-RU")}
+      <Icon size={11} color={T.muted} />
+      {count == null
+        ? <span className="fx-skeleton" style={{ width: 26, height: 9, borderRadius: 3, display: "inline-block" }} />
+        : count.toLocaleString("ru-RU")}
     </span>
   );
 });
@@ -3716,8 +3740,13 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   useEffect(() => {
     let cancelled = false;
     setInfo(null);
+    setInfoLoading(!!token.tokenAddress);
     if (token.tokenAddress) {
-      fetchTokenInfo(token.tokenAddress).then((res) => { if (!cancelled) setInfo(res); });
+      fetchTokenInfo(token.tokenAddress).then((res) => {
+        if (cancelled) return;
+        setInfo(res);
+        setInfoLoading(false);
+      });
     }
     return () => { cancelled = true; };
   }, [token.tokenAddress]);
@@ -3725,6 +3754,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   // Real recent trades for the Transactions tab — only fetched once that
   // tab is actually opened (no point spending API calls on tabs nobody
   // looked at), refreshed while it stays open.
+  const [infoLoading, setInfoLoading] = useState(false);
   const [trades, setTrades] = useState(() => cachedPoolTrades(token.poolAddress));
   const [tradesLoading, setTradesLoading] = useState(false);
   useEffect(() => {
@@ -3912,10 +3942,16 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           <div className="grid grid-cols-2 gap-2">
             <StatChip icon={TrendingUp} label={tr("statPrice")} value={fmtPrice(token.price)} />
             <StatChip icon={Wallet} label={tr("statLiquidity")} value={`$${token.liq}`} />
-            <StatChip icon={User} label={tr("statHolders")} value={holdersCount == null ? "—" : holdersCount.toLocaleString("ru-RU")} />
+            <StatChip icon={User} label={tr("statHolders")} value={holdersCount == null ? "…" : holdersCount.toLocaleString("ru-RU")} />
             <StatChip icon={Flame} label={tr("statVolume24h")} value={`$${token.vol}`} />
           </div>
-          {(info?.description || info?.telegram || info?.twitter || info?.website) ? (
+          {infoLoading && !info ? (
+            <div className="rounded-[22px] p-4 flex flex-col gap-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+              <div className="fx-skeleton" style={{ width: "35%", height: 11, borderRadius: 4 }} />
+              <div className="fx-skeleton" style={{ width: "100%", height: 10, borderRadius: 4 }} />
+              <div className="fx-skeleton" style={{ width: "80%", height: 10, borderRadius: 4 }} />
+            </div>
+          ) : (info?.description || info?.telegram || info?.twitter || info?.website) ? (
             <div className="rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
               <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{tr("aboutToken")}</div>
               {info.description && (
@@ -3931,7 +3967,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             </div>
           ) : (
             <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("txUnavailable")}</span>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("infoEmpty")}</span>
             </div>
           )}
         </div>
