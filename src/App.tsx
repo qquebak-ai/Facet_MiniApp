@@ -7012,6 +7012,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
 
   function openToken(t) { setToken(t); setView("token"); }
   function goTab(name) { setTab(name); setView(name); }
+  // Создание — отдельная страница, а не вкладка: пункт из нижнего меню
+  // убран, поэтому tab не трогаем — подсветка остаётся на том разделе,
+  // откуда пришли, и «назад» возвращает туда же.
+  function openCreate() { setView("create"); }
   function backFromToken() { setView(tab); }
   // Профиль создателя открывается поверх карточки токена, поэтому «назад»
   // возвращает именно на неё, а не на вкладку.
@@ -7271,7 +7275,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             can still scroll clear of it. */}
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), paddingBottom: 116 + insetBottom }} key={view}>
           {view === "home" && <HomeView onGoTab={goTab} />}
-          {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={() => goTab("create")} />}
+          {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />}
           {view === "shop" && <ShopView cosmetics={cosmetics} onEquip={equipCosmetic} />}
           {view === "user" && (
             <PublicProfileView
@@ -7314,7 +7318,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onLogOut={logOutProfile}
               onOpenSetting={(item) => setSettingsItem(item)}
               onManageToken={(tok) => setManageToken_(tok)}
-              onGoCreate={() => goTab("create")}
+              onGoCreate={openCreate}
               onOpenToken={openToken}
               myTokens={myTokens}
               onClearAllTokens={clearAllMyTokens}
@@ -7341,7 +7345,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           {[
             { id: "home", label: t("navHome"), icon: HomeIcon },
             { id: "mempad", label: t("navMempad"), icon: Rocket },
-            { id: "create", label: t("navCreate"), icon: PlusCircle, locked: !(accountCreated && connected) },
             { id: "shop", label: t("navShop"), icon: ShoppingBag },
             { id: "profile", label: t("navProfile"), icon: User },
           ].map(({ id, label, icon: Icon, locked }) => {
