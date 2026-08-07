@@ -183,6 +183,7 @@ const STR = {
     txUnavailable: "Список транзакций пока недоступен для этого пула",
     txEmpty: "По этому пулу пока нет сделок",
     infoEmpty: "У этого токена пока нет описания и ссылок",
+    launchBuyCta: "Купить свой токен",
     creatorLabel: "Создатель", creatorYou: "Это ты",
     creatorTokens: "Его токены", creatorNoTokens: "Пока не запускал токены",
     profileNotFound: "Профиль не найден",
@@ -450,6 +451,7 @@ const STR = {
     txUnavailable: "Transaction list isn't available for this pool yet",
     txEmpty: "No trades on this pool yet",
     infoEmpty: "This token has no description or links yet",
+    launchBuyCta: "Buy your token",
     creatorLabel: "Creator", creatorYou: "That's you",
     creatorTokens: "Their tokens", creatorNoTokens: "No tokens launched yet",
     profileNotFound: "Profile not found",
@@ -4097,7 +4099,9 @@ function parseAmount(str) {
    Shared between the Buy and Sell CTAs so switching tabs mid-flow works. */
 function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance = 0, tonPriceUsd = 0, heldAmount = 0 }) {
   const [mode, setMode] = useState(tradeModal ? tradeModal.mode : "buy");
-  const [amountStr, setAmountStr] = useState("");
+  // Сумму можно подставить снаружи — так после запуска токена открывается
+  // готовая покупка ровно на то, что человек ввёл в форме создания.
+  const [amountStr, setAmountStr] = useState(tradeModal?.prefill ? String(tradeModal.prefill) : "");
   const [slippage, setSlippage] = useState(1);
 
   useEffect(() => {
@@ -4589,7 +4593,7 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
               className="fx-tap w-full rounded-[20px] py-3"
               style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}
             >
-              {t("viewToken")}
+              {t("launchBuyCta")}
             </button>
             <button onClick={() => onClose && onClose(result)} className="fx-tap w-full rounded-[20px] py-3" style={{ background: "transparent", border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.muted }}>
               {t("doneClose")}
@@ -6851,7 +6855,22 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   }
   function viewLaunchedToken(result) {
     closeLaunchOverlay(result);
-    if (result) goTab("profile");
+    if (!result) return;
+    // Стартовая покупка больше не входит в транзакцию запуска: сообщение
+    // до кривой доходит за один шаг, а выпуск запаса до её кошелька — за
+    // два, поэтому покупка успела бы прийти раньше токенов и деньги
+    // списались бы впустую. Вместо этого открываем страницу токена с
+    // готовым окном покупки на введённую сумму — одно нажатие.
+    const launched = communityTokens.find((tok) => tok.address === result.address);
+    if (launched) {
+      openToken(localTokenToFeedShape(launched));
+      const amount = parseFloat(String(result.buyAmount || "").replace(",", "."));
+      if (Number.isFinite(amount) && amount > 0) {
+        setTradeModal({ mode: "buy", prefill: amount });
+      }
+    } else {
+      goTab("profile");
+    }
   }
   function requestChangePin() { setPinModal({ mode: "change" }); }
   function completePinSetup(code) {
