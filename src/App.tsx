@@ -2725,7 +2725,7 @@ function AvatarFrame({ frameId, size = 120, children }) {
 /* ProfileCardBg — подложка, которая рисуется за аватаркой и шапкой
    профиля. Абсолютная, ничего не ловит по клику и обрезается по своему
    контейнеру. */
-function ProfileCardBg({ cardId, height = 260, radius = 24, bleed = 0 }) {
+function ProfileCardBg({ cardId, height = 260, radius = 24, bleed = 0, top = 0 }) {
   const c = CARD_BY_ID[cardId] || CARD_BY_ID.none;
   const blobs = useMemo(() => {
     const rnd = seededRand(hashSeed(cardId || "none"));
@@ -2753,8 +2753,8 @@ function ProfileCardBg({ cardId, height = 260, radius = 24, bleed = 0 }) {
 
   return (
     <div aria-hidden style={{
-      position: "absolute", left: -bleed, right: -bleed, top: bleed ? -bleed * 4 : 0,
-      height: height + (bleed ? bleed * 4 : 0),
+      position: "absolute", left: -bleed, right: -bleed, top,
+      height: height - Math.min(0, top),
       borderRadius: radius, overflow: "hidden", pointerEvents: "none", zIndex: 0,
       contain: "layout paint style",
     }}>
@@ -5083,7 +5083,7 @@ function ProfileView({
   connected, walletAddress, tonBalance, tonPriceUsd, onConnect, onDisconnect, onOpenConnectModal, showToast,
   accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut,
   onOpenSetting, onManageToken, onGoCreate, onOpenToken, myTokens = [], onClearAllTokens,
-  cosmetics = { frame: "none", card: "none" }, onGoShop,
+  cosmetics = { frame: "none", card: "none" }, onGoShop, insetTop = 0,
 }) {
   const [loading, setLoading] = useState(true);
   const [verifyStatus, setVerifyStatus] = useState("none");
@@ -5129,7 +5129,7 @@ function ProfileView({
           {/* bleed выводит подложку за горизонтальные отступы экрана и
               поднимает её выше шапки — так у карточки не остаётся видимых
               обрезанных краёв. */}
-          <ProfileCardBg cardId={cosmetics.card} height={320} radius={0} bleed={16} />
+          <ProfileCardBg cardId={cosmetics.card} height={320} radius={0} bleed={16} top={-(insetTop + 66)} />
           {accountCreated && (
             <button onClick={logOut} className="fx-tap flex items-center gap-1.5" style={{ position: "absolute", top: 0, right: 0, zIndex: 2, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 12, color: T.rose }}>
               <LogOut size={13} /> {t("logOutShort")}
@@ -6303,6 +6303,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onClearAllTokens={clearAllMyTokens}
               cosmetics={cosmetics}
               onGoShop={() => goTab("shop")}
+              insetTop={insetTop}
             />
           )}
         </div>
