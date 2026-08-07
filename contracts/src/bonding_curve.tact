@@ -81,6 +81,10 @@ struct PendingBuy {
     buyer: Address;
     ton: Int as coins;
     tokens: Int as coins;
+    // Покупка сделана до прихода торгового запаса, то есть могла не
+    // исполниться из-за отсутствия жетонов. Только такие имеет смысл
+    // повторять: повтор уже удавшейся выдаёт жетоны второй раз.
+    beforeSupply: Bool;
 }
 
 struct CurveData {
@@ -119,6 +123,7 @@ contract BondingCurve with Deployable {
     // возврат, а внешние queryId могли бы совпасть между покупателями.
     pending: map<Int as uint64, PendingBuy>;
     nextQueryId: Int as uint64 = 1;
+    supplyReady: Bool = false;
 
     // Сколько TON удерживается из входящего сообщения на газ: перевод
     // жетона покупателю, отправка комиссии и хранение самого контракта.
@@ -300,7 +305,7 @@ contract BondingCurve with Deployable {
         // человек просто получит свои TON назад.
         let id: Int = self.nextQueryId;
         self.nextQueryId = id + 1;
-        self.pending.set(id, PendingBuy{ buyer: sender(), ton: net, tokens: tokensOut });
+        self.pending.set(id, PendingBuy{ buyer: sender(), ton: net, tokens: tokensOut, beforeSupply: !self.supplyReady });
 
         send(SendParameters{
             to: wallet,
@@ -345,6 +350,7 @@ contract BondingCurve with Deployable {
         // жетоны и ничего не платил. Теперь такая продажа отвергается, и
         // жетоны возвращаются продавцу.
         if (msg.amount >= self.tokensForSale) {
+            self.supplyReady = true;
             self.flushPending();
             return;
         }
@@ -419,6 +425,9 @@ contract BondingCurve with Deployable {
         // и токены, и деньги обратно.
         let fresh: map<Int as uint64, PendingBuy> = emptyMap();
         foreach (id, buy in self.pending) {
+            if (!buy.beforeSupply) {
+                fresh.set(id, buy);
+            } else {
             let attempt: Int = self.nextQueryId;
             self.nextQueryId = attempt + 1;
             fresh.set(attempt, buy);
@@ -436,6 +445,7 @@ contract BondingCurve with Deployable {
                     forwardPayload: beginCell().storeBool(false).asSlice(),
                 }.toCell(),
             });
+            }
         }
         self.pending = fresh;
     }
