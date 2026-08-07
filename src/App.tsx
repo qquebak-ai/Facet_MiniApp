@@ -5876,16 +5876,18 @@ function ProfileView({
    actually eliminates that leftover space.
 --------------------------------------------------------- */
 
-// Небольшой воздух между шапкой Telegram и контентом. Раньше здесь были
-// зашитые 56 пикселей — они дублировали высоту шапки, которая и так
-// приходит в contentSafeAreaInset, из-за чего весь экран уезжал вниз.
-const CONTENT_TOP_GAP = 0;
+// Поправка к системному отступу сверху. Отрицательная — контент
+// поднимается выше, ближе к шапке Telegram, чем предписывает safe-area.
+// Ниже нуля итог не опускаем: отрицательный padding браузер просто
+// проигнорирует, и вёрстка поедет молча.
+const CONTENT_TOP_GAP = -24;
+const contentTopPad = (insetTop) => Math.max(0, insetTop + CONTENT_TOP_GAP);
 
 // Насколько подложка профиля заходит выше начала контента. Верхние
 // insetTop + CONTENT_TOP_GAP + 10 доводят её ровно до верха окна, а
 // оставшийся запас нужен на случай, если клиент всё-таки позволит
 // оттянуть список — тогда под пальцем окажется карточка, а не пустой фон.
-const PROFILE_CARD_TOP = (insetTop) => -(insetTop + CONTENT_TOP_GAP + 10 + 160);
+const PROFILE_CARD_TOP = (insetTop) => -(contentTopPad(insetTop) + 10 + 160);
 
 function useTelegramViewport() {
   const [height, setHeight] = useState(
@@ -6860,7 +6862,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             behind the bar instead of just a flat tinted strip. paddingBottom
             below reserves the nav's own height so the last row of content
             can still scroll clear of it. */}
-        <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: insetTop + CONTENT_TOP_GAP, paddingBottom: 116 + insetBottom }} key={view}>
+        <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), paddingBottom: 116 + insetBottom }} key={view}>
           {view === "home" && <HomeView onGoTab={goTab} />}
           {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={() => goTab("create")} />}
           {view === "shop" && <ShopView cosmetics={cosmetics} onEquip={equipCosmetic} profile={profile} />}
