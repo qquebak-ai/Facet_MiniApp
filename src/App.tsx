@@ -103,6 +103,8 @@ const STR = {
     navHome: "Главная", navMempad: "Мемпад", navCreate: "Создать", navProfile: "Профиль", navShop: "Магазин",
     shopTitle: "Магазин", shopComingSoon: "Магазин скоро откроется. Загляни позже — здесь появится что-то интересное.",
     shopIntro: "Рамки для аватарки и карточки профиля. Нажми, чтобы примерить — применится сразу.",
+    bootStepAuth: "Вход в аккаунт", bootStepFeed: "Лента покупок",
+    bootStepTokens: "Токены сообщества", bootStepRate: "Курс TON",
     shopTabFrames: "Рамки", shopTabCards: "Карточки",
     shopEquip: "Надеть", shopEquipped: "Надето",
     cosmeticApplied: "Применено", cosmeticRemoved: "Снято",
@@ -353,6 +355,8 @@ const STR = {
     navHome: "Home", navMempad: "Mempad", navCreate: "Create", navProfile: "Profile", navShop: "Shop",
     shopTitle: "Shop", shopComingSoon: "The shop is coming soon. Check back later — something interesting will show up here.",
     shopIntro: "Avatar frames and profile cards. Tap one to try it — it applies right away.",
+    bootStepAuth: "Signing in", bootStepFeed: "Buy feed",
+    bootStepTokens: "Community tokens", bootStepRate: "TON rate",
     shopTabFrames: "Frames", shopTabCards: "Cards",
     shopEquip: "Equip", shopEquipped: "Equipped",
     cosmeticApplied: "Applied", cosmeticRemoved: "Removed",
@@ -2721,7 +2725,7 @@ function AvatarFrame({ frameId, size = 120, children }) {
 /* ProfileCardBg — подложка, которая рисуется за аватаркой и шапкой
    профиля. Абсолютная, ничего не ловит по клику и обрезается по своему
    контейнеру. */
-function ProfileCardBg({ cardId, height = 260, radius = 24 }) {
+function ProfileCardBg({ cardId, height = 260, radius = 24, bleed = 0 }) {
   const c = CARD_BY_ID[cardId] || CARD_BY_ID.none;
   const blobs = useMemo(() => {
     const rnd = seededRand(hashSeed(cardId || "none"));
@@ -2749,7 +2753,8 @@ function ProfileCardBg({ cardId, height = 260, radius = 24 }) {
 
   return (
     <div aria-hidden style={{
-      position: "absolute", left: 0, right: 0, top: 0, height,
+      position: "absolute", left: -bleed, right: -bleed, top: bleed ? -bleed * 4 : 0,
+      height: height + (bleed ? bleed * 4 : 0),
       borderRadius: radius, overflow: "hidden", pointerEvents: "none", zIndex: 0,
       contain: "layout paint style",
     }}>
@@ -2798,11 +2803,69 @@ function ProfileCardBg({ cardId, height = 260, radius = 24 }) {
         </svg>
       ))}
 
-      {/* низ подложки растворяется в фоне приложения */}
+      {/* края подложки растворяются в фоне приложения, чтобы она читалась
+          как фон экрана, а не как обрезанный прямоугольник */}
       <div style={{
-        position: "absolute", left: 0, right: 0, bottom: 0, height: "45%",
-        background: `linear-gradient(to bottom, ${hexA(T.bg, 0)}, ${T.bg})`,
+        position: "absolute", left: 0, right: 0, bottom: 0, height: "62%",
+        background: `linear-gradient(to bottom, ${hexA(T.bg, 0)} 0%, ${hexA(T.bg, 0.55)} 45%, ${T.bg} 100%)`,
       }} />
+      {bleed > 0 && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: `linear-gradient(to right, ${T.bg} 0%, ${hexA(T.bg, 0)} 12%, ${hexA(T.bg, 0)} 88%, ${T.bg} 100%)`,
+        }} />
+      )}
+    </div>
+  );
+}
+
+/* BootSplash — стартовая заставка. Перекрывает весь интерфейс, пока идут
+   первые запросы, и показывает, что именно ещё грузится: так пустые
+   экраны не мелькают до прихода данных. */
+function BootSplash({ steps, done, insetTop = 0 }) {
+  const readyCount = steps.filter((s) => s.done).length;
+  const progress = steps.length ? readyCount / steps.length : 1;
+
+  return (
+    <div
+      style={{
+        position: "absolute", inset: 0, zIndex: 900,
+        background: T.bg,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        gap: 22, paddingTop: insetTop,
+        opacity: done ? 0 : 1,
+        transition: "opacity 420ms ease-out",
+      }}
+    >
+      <CyberGrid />
+
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 22, width: "100%", padding: "0 32px" }}>
+        {/* логотип в фирменной вращающейся рамке */}
+        <AvatarFrame frameId="ember" size={112}>
+          <div style={{ width: "100%", height: "100%", background: `center/cover no-repeat url(/icon.PNG)` }} />
+        </AvatarFrame>
+
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em" }}>Mintly</span>
+
+        {/* полоса прогресса — заполняется по мере готовности шагов */}
+        <div style={{ width: "100%", maxWidth: 240, height: 4, borderRadius: 999, background: T.surfaceHi, overflow: "hidden" }}>
+          <div style={{
+            width: `${Math.round(progress * 100)}%`, height: "100%", borderRadius: 999,
+            background: T.electric, transition: "width 420ms cubic-bezier(0.16,1,0.3,1)",
+          }} />
+        </div>
+
+        <div className="flex flex-col gap-1.5" style={{ minWidth: 200 }}>
+          {steps.map((s) => (
+            <div key={s.key} className="flex items-center gap-2">
+              {s.done
+                ? <CheckCircle2 size={14} color={T.up} />
+                : <RefreshCw size={14} color={T.muted} style={{ animation: "spin360 1.1s linear infinite" }} />}
+              <span style={{ fontFamily: bodyFont, fontSize: 12.5, color: s.done ? T.paper : T.muted }}>{t(s.key)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -5063,7 +5126,10 @@ function ProfileView({
     <div className="fx-view" style={{ position: "relative" }}>
       <div className="flex flex-col gap-0 pb-4">
         <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: 10, position: "relative", zIndex: 0 }}>
-          <ProfileCardBg cardId={cosmetics.card} height={300} radius={26} />
+          {/* bleed выводит подложку за горизонтальные отступы экрана и
+              поднимает её выше шапки — так у карточки не остаётся видимых
+              обрезанных краёв. */}
+          <ProfileCardBg cardId={cosmetics.card} height={320} radius={0} bleed={16} />
           {accountCreated && (
             <button onClick={logOut} className="fx-tap flex items-center gap-1.5" style={{ position: "absolute", top: 0, right: 0, zIndex: 2, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 12, color: T.rose }}>
               <LogOut size={13} /> {t("logOutShort")}
@@ -5493,11 +5559,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     fetchBalance();
     return () => { cancelled = true; };
   }, [walletAddress, balanceRefreshTick]);
+  const [tonPriceChecked, setTonPriceChecked] = useState(false);
   useEffect(() => {
     fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd")
       .then((r) => r.json())
       .then((d) => setTonPriceUsd((d && d["the-open-network"] && d["the-open-network"].usd) || 0))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setTonPriceChecked(true));
   }, []);
 
   // Global toast — rendered once at the root (not nested inside any
@@ -5581,14 +5649,16 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // owner_id above). RLS on `tokens` allows public select, so this works
   // even for signed-out visitors.
   const [communityTokens, setCommunityTokens] = useState([]);
+  const [communityLoaded, setCommunityLoaded] = useState(false);
   async function loadCommunityTokens() {
     const { data, error } = await supabase
       .from("tokens")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(200);
-    if (error) { console.error("[mintly] failed to load community tokens from Supabase:", error); return; }
+    if (error) { console.error("[mintly] failed to load community tokens from Supabase:", error); setCommunityLoaded(true); return; }
     setCommunityTokens((data || []).map(mapTokenRow));
+    setCommunityLoaded(true);
   }
 
   useEffect(() => {
@@ -6098,10 +6168,38 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       }
     }
   }
+  // Экран загрузки на старте: держим его, пока не отработали все
+  // стартовые запросы — восстановление сессии, лента пулов (из неё же
+  // берутся покупки для тикера), токены сообщества и курс TON. Каждый
+  // шаг «готов» и по успеху, и по ошибке: если API недоступен, в
+  // приложение всё равно надо пустить.
+  const bootSteps = [
+    { key: "bootStepAuth", done: authChecked },
+    { key: "bootStepFeed", done: !tokensLoading },
+    { key: "bootStepTokens", done: communityLoaded },
+    { key: "bootStepRate", done: tonPriceChecked },
+  ];
+  const bootDone = bootSteps.every((s) => s.done);
+  const [bootHidden, setBootHidden] = useState(false);
+  // Страховка: даже если какой-то запрос завис, дольше 9 секунд держать
+  // человека на заставке нельзя.
+  useEffect(() => {
+    const to = setTimeout(() => setBootHidden(true), 9000);
+    return () => clearTimeout(to);
+  }, []);
+  // Небольшая задержка после готовности — чтобы заставка успела доиграть
+  // затухание, а не моргнула.
+  useEffect(() => {
+    if (!bootDone) return;
+    const to = setTimeout(() => setBootHidden(true), 520);
+    return () => clearTimeout(to);
+  }, [bootDone]);
+
   return (
     <div style={{ background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden" }}>
       <GlobalStyle />
       <CyberGrid />
+      {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast toast={toast} insetTop={insetTop} />
 
       {pinLocked && appSettings.pinEnabled && pinCode && (
