@@ -793,7 +793,7 @@ export async function launchRealToken({
 
     await batchSender.send({
       to: curveAddress,
-      value: toNano("0.1"),
+      value: toNano("0.05"),
       init: curve.init,
       body: buildSetJettonWalletBody(curveJettonWallet),
       bounce: false,

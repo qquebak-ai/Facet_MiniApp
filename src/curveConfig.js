@@ -39,7 +39,7 @@ export const CURVE_PARAMS = {
 // Контракт удерживает это из каждой покупки на газ: перевод жетонов
 // покупателю, отправку комиссии и собственное хранение. Значение обязано
 // совпадать с GasBuyOverhead в bonding_curve.tact.
-export const CURVE_GAS_BUY_OVERHEAD = toNano("0.35");
+export const CURVE_GAS_BUY_OVERHEAD = toNano("0.22");
 
 // Сколько прикладывать к переводу жетонов при продаже, чтобы кошелёк
 // кривой успел прислать ей уведомление. Без forwardTonAmount уведомление
