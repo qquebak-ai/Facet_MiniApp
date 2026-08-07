@@ -1405,6 +1405,14 @@ async function gtFetch(url, { retryOn429 = true } = {}) {
   return res;
 }
 
+// Последний удачный ответ по каждому пулу. Нужен, чтобы при повторном
+// открытии экрана или возврате на вкладку список рисовался сразу, а сеть
+// догоняла в фоне — вместо пустого «загружаем».
+const tradesCache = new Map(); // poolAddress -> trades[]
+function cachedPoolTrades(poolAddress) {
+  return (poolAddress && tradesCache.get(poolAddress)) || null;
+}
+
 async function fetchPoolTrades(poolAddress, limit = 25) {
   if (!poolAddress) return null;
   try {
@@ -1412,7 +1420,7 @@ async function fetchPoolTrades(poolAddress, limit = 25) {
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const rows = json?.data || [];
-    return rows.slice(0, limit).map(row => {
+    const trades = rows.slice(0, limit).map(row => {
       const a = row.attributes || {};
       return {
         id: row.id,
@@ -1424,6 +1432,8 @@ async function fetchPoolTrades(poolAddress, limit = 25) {
         at: a.block_timestamp || null,
       };
     });
+    tradesCache.set(poolAddress, trades);
+    return trades;
   } catch (err) {
     return null;
   }
@@ -2119,13 +2129,15 @@ function RecentBuysTicker({ tokens }) {
   const [buys, setBuys] = useState([]);
   const [idx, setIdx] = useState(0);
 
-  // Опрашиваем только три самых крупных пула: у бесплатного API жёсткий
-  // лимит запросов, а лента всё равно показывает по одной сделке.
+  // Опрашиваем три пула — у бесплатного API жёсткий лимит запросов, а
+  // лента всё равно показывает по одной сделке. Берём самые активные за
+  // час, а не самые крупные: у крупного, но спящего пула свежих покупок
+  // может не быть вовсе, и лента тогда стоит пустой.
   const pools = useMemo(
     () =>
       [...(tokens || [])]
         .filter(tok => tok.poolAddress)
-        .sort((a, b) => b.mcapNum - a.mcapNum)
+        .sort((a, b) => (b.tx1h || b.tx24h || 0) - (a.tx1h || a.tx24h || 0))
         .slice(0, 3),
     [tokens]
   );
@@ -2134,19 +2146,35 @@ function RecentBuysTicker({ tokens }) {
     if (!pools.length) { setBuys([]); return; }
     let cancelled = false;
 
-    async function load() {
-      const batches = await Promise.all(pools.map(p => fetchPoolTrades(p.poolAddress, 12)));
-      if (cancelled) return;
-      const merged = [];
-      batches.forEach((rows, i) => {
-        (rows || []).forEach(r => {
-          if (r.kind !== "buy" || !r.at) return;
-          merged.push({ ...r, token: pools[i] });
-        });
+    function mergeIn(rows, token, into) {
+      (rows || []).forEach((r) => {
+        if (r.kind !== "buy" || !r.at) return;
+        if (into.some((x) => x.id === r.id)) return;
+        into.push({ ...r, token });
       });
-      merged.sort((a, b) => new Date(b.at) - new Date(a.at));
-      setBuys(merged.slice(0, 20));
-      setIdx(0);
+      into.sort((a, b) => new Date(b.at) - new Date(a.at));
+      return into.slice(0, 20);
+    }
+
+    async function load() {
+      // Кэш прошлого захода — рисуем сразу, не дожидаясь сети.
+      let collected = [];
+      pools.forEach((p) => {
+        collected = mergeIn(cachedPoolTrades(p.poolAddress), p, collected);
+      });
+      if (collected.length && !cancelled) setBuys(collected);
+
+      // Дальше каждый ответ подмешиваем по мере готовности, а не ждём,
+      // пока приедут все три: первая покупка появляется на экране сразу
+      // после первого ответа.
+      await Promise.all(
+        pools.map(async (p) => {
+          const rows = await fetchPoolTrades(p.poolAddress, 12);
+          if (cancelled || !rows) return;
+          collected = mergeIn(rows, p, collected);
+          setBuys(collected);
+        })
+      );
     }
 
     load();
@@ -2161,7 +2189,9 @@ function RecentBuysTicker({ tokens }) {
   }, [buys]);
 
   if (!buys.length) return null;
-  const b = buys[idx];
+  // Список дополняется по мере ответов и может стать короче при
+  // обновлении — заворачиваем индекс здесь, чтобы не читать пустоту.
+  const b = buys[idx % buys.length];
 
   return (
     <div
@@ -3695,12 +3725,16 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   // Real recent trades for the Transactions tab — only fetched once that
   // tab is actually opened (no point spending API calls on tabs nobody
   // looked at), refreshed while it stays open.
-  const [trades, setTrades] = useState(null);
+  const [trades, setTrades] = useState(() => cachedPoolTrades(token.poolAddress));
   const [tradesLoading, setTradesLoading] = useState(false);
   useEffect(() => {
     if (tab !== "tx" || !token.poolAddress) return;
     let cancelled = false;
-    setTradesLoading(true);
+    // Есть что показать из прошлого захода — рисуем немедленно и не
+    // включаем «загружаем»: обновление приедет через секунду поверх.
+    const cached = cachedPoolTrades(token.poolAddress);
+    if (cached) setTrades(cached);
+    setTradesLoading(!cached);
     async function load() {
       const res = await fetchPoolTrades(token.poolAddress);
       if (cancelled) return;
