@@ -313,7 +313,7 @@ contract BondingCurve with Deployable {
                 responseDestination: myAddress(),
                 customPayload: null,
                 forwardTonAmount: 0,
-                forwardPayload: emptySlice(),
+                forwardPayload: beginCell().storeBool(false).asSlice(),
             }.toCell(),
         });
 
@@ -426,7 +426,7 @@ contract BondingCurve with Deployable {
                     responseDestination: myAddress(),
                     customPayload: null,
                     forwardTonAmount: 0,
-                    forwardPayload: emptySlice(),
+                    forwardPayload: beginCell().storeBool(false).asSlice(),
                 }.toCell(),
             });
         }
@@ -498,7 +498,7 @@ contract BondingCurve with Deployable {
                     responseDestination: self.graduationDestination,
                     customPayload: null,
                     forwardTonAmount: 0,
-                    forwardPayload: emptySlice(),
+                    forwardPayload: beginCell().storeBool(false).asSlice(),
                 }.toCell(),
             });
         }
