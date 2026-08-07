@@ -4107,7 +4107,7 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
   useEffect(() => {
     if (tradeModal) {
       setMode(tradeModal.mode);
-      setAmountStr("");
+      setAmountStr(tradeModal.prefill ? String(tradeModal.prefill) : "");
       setSlippage(1);
     }
   }, [tradeModal]);
@@ -4129,7 +4129,13 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
   // Курс токена (token.price) хранится в USD, поэтому для оценки
   // количества токенов TON всё ещё конвертируется через tonPriceUsd —
   // но это только для отображения "вы получите", сама сделка идёт в TON.
-  const estimate = isBuy ? (amount * tonPriceUsd) / token.price : amount * token.price;
+  // У токенов на кривой цена в ленте ещё нулевая, а делить на ноль
+  // нельзя: раньше отсюда приходила Infinity, она уезжала в локальный
+  // счётчик, и в окне продажи значилось «Доступно: ∞».
+  const priceUsd = token.price > 0 ? token.price : 0;
+  const estimate = isBuy
+    ? (priceUsd > 0 ? (amount * tonPriceUsd) / priceUsd : 0)
+    : amount * priceUsd;
   const feeUsd = NETWORK_FEE_TON * tonPriceUsd;
   const canConfirm = amount > 0 && !overMax && (!isBuy || tonPriceUsd > 0);
 

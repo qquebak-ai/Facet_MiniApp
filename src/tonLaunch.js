@@ -781,9 +781,13 @@ export async function launchRealToken({
     // мастер жетона», поэтому считается офлайн — сеть спрашивать не о
     // чем. Благодаря этому привязка едет тем же сообщением, что и
     // развёртывание: одно сообщение несёт и stateInit, и тело.
+    // Имена полей обязаны быть ровно owner/jettonMaster: конфиг читается
+    // по ним, а при опечатке в адреса молча уходит undefined и получается
+    // посторонний адрес — кривая отправляла жетоны в пустоту, покупатель
+    // платил и не получал ничего.
     curveJettonWallet = JettonWallet.createFromConfig({
-      ownerAddress: curveAddress,
-      jettonMasterAddress: jettonMasterAddress,
+      owner: curveAddress,
+      jettonMaster: jettonMasterAddress,
     }).address;
     log(`кошелёк жетона у кривой (детерминированный): ${curveJettonWallet.toString()}`);
 
@@ -862,7 +866,23 @@ export async function launchRealToken({
   let mintedTokens = 0;
   try {
     await waitForJettonBalance(curveAddress, jettonMasterAddress, network, { log, warn, timeoutMs: 120000 });
-    log("торговый запас на кривой подтверждён — токен торгуется");
+    log("торговый запас на кривой подтверждён");
+
+    // Адрес кошелька считался офлайн, поэтому сверяем его с тем, что
+    // выдаёт сам мастер жетона. Если разошлись — кривая будет слать
+    // жетоны в пустоту, и покупателям туда лучше не заходить.
+    const minterCheck = client.open(JettonMinter.createFromConfig({
+      admin: Address.parse(walletAddress),
+      content: beginCell().storeUint(0x01, 8).storeStringTail(metadataUrl).endCell(),
+    }));
+    const realWallet = await minterCheck.getWalletAddress(curveAddress);
+    if (!realWallet.equals(curveJettonWallet)) {
+      fail(
+        `Кошелёк жетона у кривой определён неверно: привязан ${curveJettonWallet.toString()}, а мастер выдаёт ${realWallet.toString()}. Торговать таким токеном нельзя — запустите его заново`,
+        new Error("jetton wallet mismatch"),
+      );
+    }
+    log("привязанный кошелёк жетона совпал с адресом от мастера — токен торгуется");
   } catch (e) {
     const explorerHost = network === "testnet" ? "testnet.tonviewer.com" : "tonviewer.com";
     fail(
