@@ -12,6 +12,7 @@ import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, beginCell, toNano } from "@ton/core";
 import { supabase } from "./supabaseClient";
 import {
+  curvePriceTon,
   buildBuyBody,
   buildSellPayload,
   CURVE_GAS_BUY_OVERHEAD,
@@ -1368,6 +1369,29 @@ const TONAPI_MAINNET_BASE = "https://tonapi.io";
 // кривой, а свой адрес заранее неизвестен и выводится мастером жетона.
 // testnet приходит параметром: константа сети объявлена внутри
 // компонента и на верхнем уровне модуля не видна.
+// Состояние кривой прямо из контракта: сколько TON в ней реально лежит
+// и сколько токенов продано. Всё остальное — цена, капитализация — это
+// производные от этих двух чисел. Считать их из введённой при запуске
+// суммы нельзя: если покупка не прошла и деньги вернулись, в ленте
+// нарисовалась бы капитализация, которой не существует.
+async function fetchCurveState(curveAddress, testnet) {
+  if (!curveAddress) return null;
+  const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
+  try {
+    const res = await fetch(`${host}/v2/blockchain/accounts/${curveAddress}/methods/data`, { method: "POST" });
+    if (!res.ok) throw new Error(`tonapi ${res.status}`);
+    const json = await res.json();
+    const stack = json?.stack || [];
+    if (stack.length < 4) return null;
+    const num = (i) => BigInt(stack[i].num);
+    // Порядок полей задан структурой CurveData в контракте.
+    return { realTon: num(2), tokensSold: num(3) };
+  } catch (err) {
+    console.error("[mintly] не удалось прочитать состояние кривой:", err);
+    return null;
+  }
+}
+
 // Реальный баланс жетона на кошельке. Локальный счётчик holdings —
 // выдумка приложения: он не знает ни о покупках с другого устройства, ни
 // о переводах мимо интерфейса. Из-за него кнопка «Продать» была
@@ -2813,7 +2837,11 @@ function MempadRowSkeleton({ index }) {
 // actually indexed somewhere, so TokenDetail's chart falls back to its
 // existing synthetic view rather than pretending there's real OHLCV.
 function localTokenToFeedShape(entry) {
-  const price = entry.mcapNum ? entry.mcapNum / 1_000_000_000 : 0;
+  // priceTon приходит из состояния кривой, если оно уже прочитано;
+  // иначе честнее показать ноль, чем выдуманное число.
+  const price = entry.priceTon != null
+    ? entry.priceTon * TON_USD
+    : (entry.mcapNum ? entry.mcapNum / 1_000_000_000 : 0);
   return {
     id: entry.id,
     tokenAddress: entry.address,
@@ -6445,8 +6473,37 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) { console.error("[mintly] failed to load community tokens from Supabase:", error); setCommunityLoaded(true); return; }
-    setCommunityTokens((data || []).map(mapTokenRow));
+    const rows = (data || []).map(mapTokenRow);
+    setCommunityTokens(rows);
     setCommunityLoaded(true);
+
+    // Цену и капитализацию берём у самих кривых. Ограничиваем число
+    // запросов: лента может быть длинной, а обновление всё равно
+    // приезжает при открытии токена.
+    const withCurve = rows.filter((tok) => tok.curveAddress).slice(0, 12);
+    if (!withCurve.length) return;
+    const states = await Promise.all(
+      withCurve.map((tok) => fetchCurveState(tok.curveAddress, TON_TESTNET)),
+    );
+    const priced = new Map();
+    withCurve.forEach((tok, i) => {
+      const state = states[i];
+      if (!state) return;
+      const priceTon = curvePriceTon(state);
+      priced.set(tok.id, {
+        priceTon,
+        // Капитализация — цена за весь выпуск, а не за проданное:
+        // так её считают на всех подобных площадках.
+        mcapNum: priceTon * TON_USD * 1_000_000_000,
+      });
+    });
+    if (!priced.size) return;
+    setCommunityTokens((prev) =>
+      prev.map((tok) => {
+        const p = priced.get(tok.id);
+        return p ? { ...tok, priceTon: p.priceTon, mcapNum: p.mcapNum } : tok;
+      }),
+    );
   }
 
   useEffect(() => {
