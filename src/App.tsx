@@ -6540,15 +6540,22 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // Настоящий баланс открытого токена на кошельке. Пока он не пришёл —
   // null, и окно сделки временно опирается на локальный счётчик.
   const [chainHolding, setChainHolding] = useState(null);
+  // Адрес своего кошелька жетона узнаём заранее, при открытии окна
+  // сделки. Спрашивать его в момент нажатия нельзя: ожидание ответа
+  // разрывает цепочку от жеста пользователя, и Telegram сворачивает окно
+  // кошелька раньше, чем по нему успевают нажать.
+  const [chainJettonWallet, setChainJettonWallet] = useState(null);
   // Настоящий баланс открытого токена спрашиваем у сети — при открытии
   // окна сделки и после каждой сделки. Локальный счётчик остаётся только
   // как запасной вариант, пока ответ не пришёл.
   useEffect(() => {
     const jetton = token?.tokenAddress;
-    if (!tradeModal || !jetton || !walletAddress) { setChainHolding(null); return; }
+    if (!tradeModal || !jetton || !walletAddress) { setChainHolding(null); setChainJettonWallet(null); return; }
     let cancelled = false;
-    fetchJettonBalance(jetton, walletAddress, TON_TESTNET).then((balance) => {
-      if (!cancelled && balance != null) setChainHolding(balance);
+    fetchJettonAccount(jetton, walletAddress, TON_TESTNET).then((info) => {
+      if (cancelled || !info) return;
+      if (info.balance != null) setChainHolding(info.balance);
+      if (info.wallet) setChainJettonWallet(info.wallet);
     });
     return () => { cancelled = true; };
   }, [tradeModal, token?.tokenAddress, walletAddress, balanceRefreshTick]);
@@ -7097,9 +7104,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // жетона продавца, поэтому адрес спрашиваем у мастера жетона.
       try {
         let messages;
-        if (token.curveAddress && token.curveJettonWallet && token.tokenAddress) {
-          const sellerWallet = await fetchJettonWalletAddress(token.tokenAddress, walletAddress, TON_TESTNET);
-          if (!sellerWallet) { showToast(t("txCancelled")); return; }
+        if (token.curveAddress && token.tokenAddress && chainJettonWallet) {
+          // Адрес уже известен — между нажатием и открытием кошелька не
+          // должно быть ни одного await, иначе окно кошелька закроется.
+          const sellerWallet = chainJettonWallet;
           const body = beginCell()
             .storeUint(0xf8a7ea5, 32)
             .storeUint(0, 64)
