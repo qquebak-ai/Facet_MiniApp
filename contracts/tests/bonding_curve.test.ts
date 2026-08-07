@@ -16,7 +16,7 @@ const FEE_BPS = 100n; // 1%
 // Должно совпадать с GasBuyOverhead в bonding_curve.tact и с
 // CURVE_GAS_BUY_OVERHEAD в src/curveConfig.js: контракт удерживает
 // столько из каждой покупки на газ.
-const GAS_BUY_OVERHEAD = toNano("0.22");
+const GAS_BUY_OVERHEAD = toNano("0.12");
 
 describe("BondingCurve", () => {
   let blockchain: Blockchain;
