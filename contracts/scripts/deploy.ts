@@ -20,10 +20,10 @@ import { BondingCurve } from "../build/bonding_curve_BondingCurve";
 // выпуска был достижим: при полностью распроданном tokensForSale кривая
 // собирает больше, чем graduationTon (контракт проверяет это сам и не
 // развернётся, если условие нарушено).
-const VIRTUAL_TON = toNano(process.env.VIRTUAL_TON ?? "30");
+const VIRTUAL_TON = toNano(process.env.VIRTUAL_TON ?? "291.217");
 const VIRTUAL_TOKENS = toNano(process.env.VIRTUAL_TOKENS ?? "1073000000");
 const TOKENS_FOR_SALE = toNano(process.env.TOKENS_FOR_SALE ?? "900000000");
-const GRADUATION_TON = toNano(process.env.GRADUATION_TON ?? "100");
+const GRADUATION_TON = toNano(process.env.GRADUATION_TON ?? "1500");
 const FEE_BPS = BigInt(process.env.FEE_BPS ?? "100"); // 1%
 
 function requireEnv(name: string): string {

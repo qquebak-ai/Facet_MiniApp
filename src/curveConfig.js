@@ -17,11 +17,17 @@ import { BondingCurve, storeBuy, storeSetJettonWallet } from "./contracts/Bondin
 // Одни и те же числа должны стоять и в деплое, и в предпросчёте цены в
 // интерфейсе, иначе показанное «вы получите» разойдётся с тем, что
 // реально вернёт контракт.
+// Числа подобраны так, чтобы полная распродажа доступного выпуска
+// собрала около 1515 TON — столько нужно на заведение пары на DEX.
+// Потолок сбора считается как virtualTon × tokensForSale ÷
+// (virtualTokens − tokensForSale): при этих значениях выходит ровно
+// 1515. Порог выпуска чуть ниже потолка, иначе он был бы недостижим —
+// контракт такое сочетание отвергает при создании.
 export const CURVE_PARAMS = {
-  virtualTon: toNano("30"),
+  virtualTon: toNano("291.217"),
   virtualTokens: toNano("1073000000"),
   tokensForSale: toNano("900000000"),
-  graduationTon: toNano("100"),
+  graduationTon: toNano("1500"),
   feeBps: 100n, // 1%
 };
 

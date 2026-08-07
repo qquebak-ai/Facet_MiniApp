@@ -14,10 +14,10 @@ import { BondingCurve } from "../build/bonding_curve_BondingCurve";
 // assets-sdk, тот же, что использует приложение, и проверяется, что
 // жетоны действительно доходят до покупателя, а TON — до продавца.
 
-const VIRTUAL_TON = toNano("30");
+const VIRTUAL_TON = toNano("291.217");
 const VIRTUAL_TOKENS = toNano("1073000000");
 const TOKENS_FOR_SALE = toNano("900000000");
-const GRADUATION_TON = toNano("100");
+const GRADUATION_TON = toNano("1500");
 const FEE_BPS = 100n;
 
 describe("BondingCurve с настоящим жетоном", () => {

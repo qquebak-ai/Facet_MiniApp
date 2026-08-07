@@ -8,10 +8,10 @@ import { BondingCurve, JettonTransfer, storeJettonTransfer } from "../build/bond
 // проверить обе стороны можно без развёртывания настоящего жетона.
 const JETTON_MASTER = new Address(0, Buffer.alloc(32, 7));
 
-const VIRTUAL_TON = toNano("30");
+const VIRTUAL_TON = toNano("291.217");
 const VIRTUAL_TOKENS = toNano("1073000000");
 const TOKENS_FOR_SALE = toNano("900000000");
-const GRADUATION_TON = toNano("100");
+const GRADUATION_TON = toNano("1500");
 const FEE_BPS = 100n; // 1%
 // Должно совпадать с GasBuyOverhead в bonding_curve.tact и с
 // CURVE_GAS_BUY_OVERHEAD в src/curveConfig.js: контракт удерживает
@@ -230,10 +230,14 @@ describe("BondingCurve", () => {
   it("закрывает торговлю и отдаёт ликвидность только на заданный адрес", async () => {
     await bindWallet();
 
-    // Добираем порог несколькими покупками.
-    for (let i = 0; i < 12; i++) {
-      await buy("10");
+    // Добираем порог покупками. Порог теперь 1500 TON — столько нужно на
+    // заведение пары на DEX, — поэтому и покупки крупные.
+    // Порог 1500 TON, потолок сбора — около 1515, поэтому последнюю
+    // покупку берём поменьше: крупная уже не влезла бы в остаток запаса.
+    for (let i = 0; i < 15; i++) {
+      await buy("100");
     }
+    await buy("25");
     const data = await curve.getData();
     expect(data.graduated).toBe(true);
 
