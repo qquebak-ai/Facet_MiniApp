@@ -3409,7 +3409,7 @@ function BootSplash({ steps, done, insetTop = 0 }) {
 /* ShopView — витрина косметики: рамки для аватарки и карточки профиля.
    Предметы применяются мгновенно и запоминаются на устройстве, поэтому
    «купить» здесь — это «надеть»: отдельного баланса у магазина нет. */
-function ShopView({ cosmetics, onEquip, profile }) {
+function ShopView({ cosmetics, onEquip }) {
   const [tab, setTab] = useState("frames");
   const items = tab === "frames" ? AVATAR_FRAMES : PROFILE_CARDS;
   const equippedId = tab === "frames" ? cosmetics.frame : cosmetics.card;
@@ -3448,14 +3448,10 @@ function ShopView({ cosmetics, onEquip, profile }) {
               <div style={{ position: "relative", width: "100%", height: 96, borderRadius: 16, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {tab === "cards" && <ProfileCardBg cardId={item.id} height={96} radius={16} />}
                 <div style={{ position: "relative", zIndex: 1 }}>
+                  {/* Внутри рамки — просто чёрный кружок: витрина про сам
+                      предмет, а своя аватарка тут только отвлекает. */}
                   <AvatarFrame frameId={tab === "frames" ? item.id : "none"} size={62}>
-                    <div style={{
-                      width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center",
-                      background: profile?.avatarUrl ? `center/cover no-repeat url(${profile.avatarUrl})` : T.surfaceHi,
-                      fontSize: 24,
-                    }}>
-                      {!profile?.avatarUrl && (profile?.emoji || <User size={20} color={T.muted} />)}
-                    </div>
+                    <div style={{ width: "100%", height: "100%", background: T.bg }} />
                   </AvatarFrame>
                 </div>
               </div>
@@ -7030,7 +7026,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), paddingBottom: 116 + insetBottom }} key={view}>
           {view === "home" && <HomeView onGoTab={goTab} />}
           {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={() => goTab("create")} />}
-          {view === "shop" && <ShopView cosmetics={cosmetics} onEquip={equipCosmetic} profile={profile} />}
+          {view === "shop" && <ShopView cosmetics={cosmetics} onEquip={equipCosmetic} />}
           {view === "user" && (
             <PublicProfileView
               userId={viewedUserId}
