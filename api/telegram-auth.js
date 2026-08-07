@@ -30,13 +30,15 @@ const MAX_AUTH_AGE_SEC = 24 * 60 * 60;
 /* Проверка подписи по документации Telegram: собираем строку из всех
    полей кроме hash (отсортированных по имени), считаем HMAC-SHA256 с
    ключом, который сам получен как HMAC от токена бота, и сверяем с
-   присланным hash. Возвращает объект пользователя или null. */
+   присланным hash. Возвращает { user } либо { reason } — по причине
+   видно, что именно не сошлось: не тот токен бота, протухшая строка или
+   мусор вместо initData. Сам токен наружу, разумеется, не уходит. */
 function verifyInitData(initData) {
-  if (typeof initData !== "string" || !initData) return null;
+  if (typeof initData !== "string" || !initData) return { reason: "empty_init_data" };
 
   const params = new URLSearchParams(initData);
   const hash = params.get("hash");
-  if (!hash) return null;
+  if (!hash) return { reason: "no_hash" };
   params.delete("hash");
 
   const dataCheckString = [...params.keys()]
@@ -49,16 +51,24 @@ function verifyInitData(initData) {
 
   const a = Buffer.from(computed, "utf8");
   const b = Buffer.from(hash, "utf8");
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    // Подпись не сошлась — почти всегда это чужой или испорченный
+    // TELEGRAM_BOT_TOKEN. Показываем длину токена, чтобы отличить
+    // «переменная не та» от «токен обрезан при вставке».
+    return { reason: `bad_signature (bot token len ${String(BOT_TOKEN || "").length})` };
+  }
 
   const authDate = Number(params.get("auth_date") || 0);
-  if (!authDate || Math.floor(Date.now() / 1000) - authDate > MAX_AUTH_AGE_SEC) return null;
+  const ageSec = authDate ? Math.floor(Date.now() / 1000) - authDate : null;
+  if (!authDate) return { reason: "no_auth_date" };
+  if (ageSec > MAX_AUTH_AGE_SEC) return { reason: `stale_init_data (${ageSec}s)` };
 
   try {
     const user = JSON.parse(params.get("user") || "null");
-    return user && user.id ? user : null;
+    if (!user || !user.id) return { reason: "no_user" };
+    return { user };
   } catch (err) {
-    return null;
+    return { reason: "bad_user_json" };
   }
 }
 
@@ -89,8 +99,12 @@ export default async function handler(req, res) {
   }
 
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-  const tgUser = verifyInitData(body.initData);
-  if (!tgUser) return res.status(401).json({ error: "invalid_init_data" });
+  const checked = verifyInitData(body.initData);
+  if (!checked.user) {
+    console.error("[telegram-auth] initData rejected:", checked.reason);
+    return res.status(401).json({ error: "invalid_init_data", detail: checked.reason });
+  }
+  const tgUser = checked.user;
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
