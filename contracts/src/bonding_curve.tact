@@ -103,10 +103,12 @@ contract BondingCurve with Deployable {
 
     // Сколько TON удерживается из входящего сообщения на газ: перевод
     // жетона покупателю, отправка комиссии и хранение самого контракта.
-    const GasBuyOverhead: Int = ton("0.12");
-    // Столько прикладывается к переводу жетонов, чтобы у получателя
-    // хватило на развёртывание своего кошелька жетона.
-    const GasJettonTransfer: Int = ton("0.05");
+    const GasBuyOverhead: Int = ton("0.25");
+    // Столько прикладывается к переводу жетонов. Прежние 0.05 TON не
+    // покрывали развёртывание кошелька получателя — у первого
+    // покупателя его ещё нет, — поэтому перевод не проходил, и человек
+    // платил, не получая токенов.
+    const GasJettonTransfer: Int = ton("0.12");
     // Неснижаемый остаток на контракте — на хранение.
     const MinContractBalance: Int = ton("0.05");
 
@@ -266,10 +268,14 @@ contract BondingCurve with Deployable {
             });
         }
 
+        // Намеренно без SendIgnoreErrors. Если выдать жетоны не вышло,
+        // фаза действий обязана упасть целиком: тогда запись о продаже
+        // не сохранится, а деньги вернутся покупателю. С IgnoreErrors
+        // всё было наоборот — контракт считал сделку состоявшейся, а
+        // токены до человека не доходили.
         send(SendParameters{
             to: wallet,
             value: self.GasJettonTransfer,
-            mode: SendIgnoreErrors,
             bounce: false,
             body: JettonTransfer{
                 queryId: queryId,
@@ -320,10 +326,11 @@ contract BondingCurve with Deployable {
             });
         }
 
+        // Тоже без IgnoreErrors: не смогли выплатить — вся операция
+        // откатывается, и жетоны остаются у продавца, а не пропадают.
         send(SendParameters{
             to: msg.sender,
             value: payout,
-            mode: SendIgnoreErrors,
             bounce: false,
         });
     }

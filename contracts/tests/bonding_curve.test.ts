@@ -13,6 +13,10 @@ const VIRTUAL_TOKENS = toNano("1073000000");
 const TOKENS_FOR_SALE = toNano("900000000");
 const GRADUATION_TON = toNano("100");
 const FEE_BPS = 100n; // 1%
+// Должно совпадать с GasBuyOverhead в bonding_curve.tact и с
+// CURVE_GAS_BUY_OVERHEAD в src/curveConfig.js: контракт удерживает
+// столько из каждой покупки на газ.
+const GAS_BUY_OVERHEAD = toNano("0.25");
 
 describe("BondingCurve", () => {
   let blockchain: Blockchain;
@@ -128,7 +132,8 @@ describe("BondingCurve", () => {
     await bindWallet();
 
     const before = await curve.getData();
-    const expected = await curve.getTokensOutFor(toNano("1") - toNano("0.12") - (toNano("1") - toNano("0.12")) / 100n);
+    const net = toNano("1") - GAS_BUY_OVERHEAD;
+    const expected = await curve.getTokensOutFor(net - net / 100n);
 
     const res = await buy("1");
     expect(res.transactions).toHaveTransaction({ to: curve.address, success: true });
