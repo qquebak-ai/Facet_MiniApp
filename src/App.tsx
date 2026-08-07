@@ -811,6 +811,8 @@ function GlobalStyle() {
       @keyframes starTwinkle { 0%,100%{opacity:.2;} 50%{opacity:1;} }
       @keyframes starPulse { 0%,100%{opacity:0;} 50%{opacity:var(--o);} }
       @keyframes gridRunToward { from{ background-position: 0 0, 0 0; } to{ background-position: 0 44px, 0 0; } }
+      @keyframes spotlightSweep { 0%{ transform: translateX(-120%); } 55%,100%{ transform: translateX(320%); } }
+      @keyframes candleBreathe { 0%,100%{ transform: scaleY(0.72); } 50%{ transform: scaleY(1); } }
       @keyframes tickerSwap { 0%{opacity:0; transform:translateY(6px);} 12%,88%{opacity:1; transform:translateY(0);} 100%{opacity:0; transform:translateY(-6px);} }
       @media (prefers-reduced-motion: reduce) {
         [data-bg-fx] * { animation: none !important; }
@@ -1234,6 +1236,14 @@ async function fetchTonMemePools(limit = 18) {
       const change = parseFloat(a.price_change_percentage?.h24) || 0;
       const volNum = parseFloat(a.volume_usd?.h24) || 0;
       const liqNum = parseFloat(a.reserve_in_usd) || 0;
+      // Сколько сделок прошло по пулу за час и за сутки — по этому
+      // считается «в центре внимания»: там должен быть не самый крупный
+      // токен, а самый торгуемый прямо сейчас.
+      const txns = a.transactions || {};
+      const txCount = (win) => {
+        const w = txns[win] || {};
+        return (Number(w.buys) || 0) + (Number(w.sells) || 0);
+      };
       return {
         id: row.id,
         poolAddress: a.address,
@@ -1247,6 +1257,9 @@ async function fetchTonMemePools(limit = 18) {
         mcapNum,
         liq: fmtCompact(liqNum),
         vol: fmtCompact(volNum),
+        tx1h: txCount("h1"),
+        tx6h: txCount("h6"),
+        tx24h: txCount("h24"),
         cat: "Мемы",
         seed: hashSeed(row.id),
         verified: liqNum > 50_000,
@@ -2125,13 +2138,28 @@ function RecentBuysTicker({ tokens }) {
   );
 }
 
-/* SpotlightGrid — фон самого виджета «В центре внимания»: серая сетка,
-   уходящая в перспективу (пол уползает вниз, потолок вверх) плюс ровная
-   сетка по центру. Только CSS-трансформы, поэтому анимация идёт на GPU. */
-function SpotlightGrid() {
+/* SpotlightGrid — фон виджета «В центре внимания». Серая сетка в
+   перспективе, поверх неё — цветовая подсветка по направлению цены,
+   медленный световой луч и силуэт свечей у нижнего края. Всё на CSS
+   трансформах и градиентах, поэтому крутится на GPU и не считает
+   ничего в JS. */
+function SpotlightGrid({ up = true, seedKey = 1 }) {
   const line = "rgba(255,255,255,0.09)";
   const cell = "44px 44px";
   const grid = `linear-gradient(${line} 1px, transparent 1px), linear-gradient(90deg, ${line} 1px, transparent 1px)`;
+  const tone = up ? T.up : T.down;
+
+  // Свечи детерминированы по токену: у одного и того же токена силуэт не
+  // перетасовывается на каждый ре-рендер ленты.
+  const candles = useMemo(() => {
+    const rnd = seededRand(Math.floor(Math.abs(seedKey) * 97) + 11);
+    return Array.from({ length: 22 }, () => ({
+      h: 14 + rnd() * 76,
+      up: rnd() > 0.42,
+      dur: 3 + rnd() * 3.5,
+      delay: -rnd() * 5,
+    }));
+  }, [seedKey]);
 
   return (
     <div
@@ -2172,10 +2200,46 @@ function SpotlightGrid() {
         maskImage: "linear-gradient(to top, #000 0%, transparent 55%)",
       }} />
 
-      {/* лёгкое затемнение к краям, чтобы сетка не спорила с контентом */}
+      {/* силуэт свечей вдоль нижнего края — читается как «здесь торгуют» */}
+      <div style={{
+        position: "absolute", left: 0, right: 0, bottom: 0, height: 66,
+        display: "flex", alignItems: "flex-end", gap: 4, padding: "0 10px", opacity: 0.34,
+        WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, #000 70%)",
+        maskImage: "linear-gradient(to bottom, transparent 0%, #000 70%)",
+      }}>
+        {candles.map((c, i) => (
+          <div key={i} style={{
+            flex: 1,
+            height: `${c.h}%`,
+            borderRadius: 2,
+            background: c.up ? hexA(T.up, 0.5) : hexA(T.down, 0.45),
+            transformOrigin: "bottom",
+            animation: `candleBreathe ${c.dur}s ease-in-out ${c.delay}s infinite`,
+          }} />
+        ))}
+      </div>
+
+      {/* цветовая подсветка по направлению цены: зелёная на росте,
+          красная на падении — виджет читается ещё до цифр */}
+      <div style={{
+        position: "absolute", left: "50%", top: "42%", width: 300, height: 300,
+        marginLeft: -150, marginTop: -150, borderRadius: "50%", filter: "blur(46px)",
+        background: `radial-gradient(circle, ${hexA(tone, 0.3)} 0%, ${hexA(tone, 0)} 70%)`,
+        animation: "spotlightPulse 6s ease-in-out infinite",
+      }} />
+
+      {/* медленный луч, проходящий по карточке слева направо */}
+      <div style={{
+        position: "absolute", top: 0, bottom: 0, width: "45%", left: 0,
+        background: `linear-gradient(100deg, ${hexA(T.ice, 0)} 0%, ${hexA(T.ice, 0.07)} 50%, ${hexA(T.ice, 0)} 100%)`,
+        animation: "spotlightSweep 7s ease-in-out infinite",
+        willChange: "transform",
+      }} />
+
+      {/* лёгкое затемнение к краям, чтобы фон не спорил с контентом */}
       <div style={{
         position: "absolute", inset: 0,
-        background: `radial-gradient(ellipse at 50% 45%, ${hexA(T.bg, 0.82)} 0%, ${hexA(T.bg, 0.35)} 55%, ${hexA(T.bg, 0)} 100%)`,
+        background: `radial-gradient(ellipse at 50% 45%, ${hexA(T.bg, 0.78)} 0%, ${hexA(T.bg, 0.3)} 58%, ${hexA(T.bg, 0)} 100%)`,
       }} />
     </div>
   );
@@ -2958,9 +3022,20 @@ function ShopView({ cosmetics, onEquip, profile }) {
 function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   const [filter, setFilter] = useState("new");
 
+  // «В центре внимания» — токен, по которому прошло больше всего сделок
+  // за последний час. Час берём как основное окно: он показывает, где
+  // движение прямо сейчас, а не кто крупнее по капитализации. Если за
+  // час везде тихо (ночь, выходные), окно расширяется до 6 часов, потом
+  // до суток — так карточка никогда не остаётся пустой.
   const spotlight = useMemo(() => {
     if (!tokens.length) return null;
-    return [...tokens].sort((a, b) => b.mcapNum - a.mcapNum)[0];
+    const best = (win) => {
+      const ranked = [...tokens]
+        .filter((tok) => (tok[win] || 0) > 0)
+        .sort((a, b) => (b[win] || 0) - (a[win] || 0));
+      return ranked[0] || null;
+    };
+    return best("tx1h") || best("tx6h") || best("tx24h") || [...tokens].sort((a, b) => b.mcapNum - a.mcapNum)[0];
   }, [tokens]);
 
   const localTokens = useMemo(() => (myTokens || []).map(localTokenToFeedShape), [myTokens]);
@@ -3000,7 +3075,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         <div>
           <SectionTitle>{t("mempadSpotlight")}</SectionTitle>
           <button onClick={() => onOpen(spotlight)} className="fx-card w-full flex flex-col items-center text-center gap-2.5 rounded-[22px] p-6" style={{ border: `1px solid ${T.line}`, position: "relative", overflow: "hidden" }}>
-            <SpotlightGrid />
+            <SpotlightGrid up={spotlight.change >= 0} seedKey={spotlight.seed} />
             <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <TokenAvatar size={92} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl}>{spotlight.emoji}</TokenAvatar>
               <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 20, fontWeight: 800 }}>{spotlight.ticker}</span>
