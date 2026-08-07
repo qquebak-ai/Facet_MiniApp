@@ -4813,10 +4813,11 @@ async function signInWithTelegram() {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    // detail пишем в консоль, а код ошибки поднимаем наверх — по нему
-    // сразу видно, на каком шаге всё встало.
-    if (json.detail) console.error("[mintly] telegram auth detail:", json.detail);
-    throw new Error(json.error || `auth_failed_${res.status}`);
+    // Консоли внутри Telegram нет, поэтому текст ошибки сервера едет
+    // вместе с кодом — иначе непонятно, на каком шаге всё встало.
+    const err = new Error(json.error || `auth_failed_${res.status}`);
+    err.detail = json.detail || "";
+    throw err;
   }
 
   const { error } = await supabase.auth.verifyOtp({ token_hash: json.token_hash, type: "magiclink" });
@@ -4883,9 +4884,10 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
         onClose();
       } catch (err) {
         const code = (err && err.message) || "";
+        const detail = (err && err.detail) ? ` — ${String(err.detail).slice(0, 220)}` : "";
         setTgError(code === "no_telegram" ? t("tgAuthOutside")
           : code === "server_not_configured" ? t("tgAuthNotConfigured")
-          : `${t("tgAuthFailed")} (${code || "?"})`);
+          : `${t("tgAuthFailed")} (${code || "?"})${detail}`);
       } finally {
         setTgBusy(false);
       }
