@@ -775,6 +775,15 @@ function GlobalStyle() {
       @keyframes scaleIn { from{opacity:0; transform:scale(0.92);} to{opacity:1; transform:scale(1);} }
       @keyframes gridDrift { from{background-position:0 0,0 0;} to{background-position:140px 140px,140px 140px;} }
       @keyframes starTwinkle { 0%,100%{opacity:.2;} 50%{opacity:1;} }
+      @keyframes auroraDrift {
+        0%   { transform: translate3d(0,0,0) scale(1); }
+        33%  { transform: translate3d(8%,-6%,0) scale(1.12); }
+        66%  { transform: translate3d(-6%,7%,0) scale(0.94); }
+        100% { transform: translate3d(0,0,0) scale(1); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        [data-bg-fx] * { animation: none !important; }
+      }
       @keyframes starDriftRight { from{ transform: translateX(-24px); } to{ transform: translateX(560px); } }
       @keyframes starDriftLeft { from{ transform: translateX(560px); } to{ transform: translateX(-24px); } }
       @keyframes glowPulse { 0%,100%{opacity:.35;} 50%{opacity:.75;} }
@@ -836,11 +845,87 @@ function seededRand(seed) {
   };
 }
 
-/* CyberGrid — kept as a component (rather than deleted at call sites) so
-   nothing else in the tree needs to change. Renders nothing: a flat, quiet
-   background is what the app wants right now, no decorative texture. */
+/* CyberGrid — живой фон вместо плоской чёрной заливки.
+   Три слоя, все на CSS (без rAF и канваса, чтобы не жечь батарею в
+   Telegram WebView): медленно дрейфующие ember-пятна, тонкая
+   перспективная сетка и редкие мерцающие искры. Всё под pointer-events:none
+   и на zIndex 0 — контент приложения лежит выше на zIndex 1. */
 function CyberGrid({ forceDark }) {
-  return null;
+  const dark = forceDark || T.bg === DARK_THEME.bg;
+  const accent = T.electric;
+  const gridLine = dark ? "rgba(255,107,53,0.07)" : "rgba(20,21,26,0.06)";
+  const sparkColor = dark ? "rgba(255,255,255,0.55)" : "rgba(20,21,26,0.35)";
+
+  // Детерминированные позиции — искры не перескакивают при каждом ре-рендере.
+  const sparks = useMemo(() => {
+    const rnd = seededRand(20240607);
+    return Array.from({ length: 18 }, () => ({
+      left: rnd() * 100,
+      top: rnd() * 100,
+      size: 1 + rnd() * 1.6,
+      delay: rnd() * 6,
+      dur: 3.5 + rnd() * 4,
+    }));
+  }, []);
+
+  const orbs = [
+    { size: 420, left: "-25%", top: "-10%", color: accent, opacity: dark ? 0.2 : 0.1, dur: 26, delay: 0 },
+    { size: 340, left: "60%", top: "25%", color: dark ? "#2E6BFF" : accent, opacity: dark ? 0.14 : 0.07, dur: 34, delay: -8 },
+    { size: 380, left: "5%", top: "65%", color: accent, opacity: dark ? 0.16 : 0.08, dur: 30, delay: -16 },
+  ];
+
+  return (
+    <div aria-hidden data-bg-fx style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
+      {/* мягкие цветные пятна */}
+      {orbs.map((o, i) => (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            left: o.left,
+            top: o.top,
+            width: o.size,
+            height: o.size,
+            borderRadius: "50%",
+            background: `radial-gradient(circle, ${hexA(o.color, o.opacity)} 0%, ${hexA(o.color, 0)} 70%)`,
+            filter: "blur(28px)",
+            animation: `auroraDrift ${o.dur}s ease-in-out ${o.delay}s infinite`,
+            willChange: "transform",
+          }}
+        />
+      ))}
+
+      {/* сетка, уходящая вниз и растворяющаяся к краям */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `linear-gradient(${gridLine} 1px, transparent 1px), linear-gradient(90deg, ${gridLine} 1px, transparent 1px)`,
+          backgroundSize: "70px 70px, 70px 70px",
+          animation: "gridDrift 24s linear infinite",
+          WebkitMaskImage: "radial-gradient(ellipse at 50% 35%, #000 0%, transparent 78%)",
+          maskImage: "radial-gradient(ellipse at 50% 35%, #000 0%, transparent 78%)",
+        }}
+      />
+
+      {/* редкие искры */}
+      {sparks.map((s, i) => (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            left: `${s.left}%`,
+            top: `${s.top}%`,
+            width: s.size,
+            height: s.size,
+            borderRadius: "50%",
+            background: sparkColor,
+            animation: `starTwinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 /* animated 0 -> value counter, no external deps */
