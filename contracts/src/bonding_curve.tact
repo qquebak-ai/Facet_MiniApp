@@ -405,13 +405,22 @@ contract BondingCurve with Deployable {
     // выйдет — сработает возврат и деньги вернутся покупателю.
     fun flushPending() {
         let wallet: Address = self.requireWallet();
+        // Каждой попытке — новый номер, старый удаляется. Возврат от
+        // предыдущей, неудачной попытки придёт уже после этой отправки и
+        // по старому номеру ничего не найдёт, значит не отменит сделку,
+        // которая на самом деле состоялась. Иначе покупатель получил бы
+        // и токены, и деньги обратно.
+        let fresh: map<Int as uint64, PendingBuy> = emptyMap();
         foreach (id, buy in self.pending) {
+            let attempt: Int = self.nextQueryId;
+            self.nextQueryId = attempt + 1;
+            fresh.set(attempt, buy);
             send(SendParameters{
                 to: wallet,
                 value: self.GasJettonTransfer,
                 bounce: true,
                 body: JettonTransfer{
-                    queryId: id,
+                    queryId: attempt,
                     amount: buy.tokens,
                     destination: buy.buyer,
                     responseDestination: myAddress(),
@@ -421,6 +430,7 @@ contract BondingCurve with Deployable {
                 }.toCell(),
             });
         }
+        self.pending = fresh;
     }
 
     // Жетоны дошли — запись о покупке больше не нужна.

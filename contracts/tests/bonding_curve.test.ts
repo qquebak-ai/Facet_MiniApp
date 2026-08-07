@@ -289,6 +289,43 @@ describe("BondingCurve", () => {
     expect(afterBounce.tokensSold).toBe(before.tokensSold);
   });
 
+  it("не отменяет выданную покупку возвратом от прошлой попытки", async () => {
+    await bindWallet();
+    const first = jettonTransferFrom(await buy("10"))!;
+    const before = await curve.getData();
+
+    // Приход торгового запаса — кривая повторяет выдачу под новым
+    // номером.
+    const flush = await curve.send(jettonWallet.getSender(), { value: toNano("0.2") },
+      sellNotification(TOKENS_FOR_SALE, buyer.address));
+    const retry = jettonTransferFrom(flush)!;
+    expect(retry).not.toBeNull();
+    expect(retry.amount).toBe(first.amount);
+    expect(retry.queryId).not.toBe(first.queryId);
+
+    // Возврат от первой попытки приходит с опозданием. Он относится к
+    // номеру, которого уже нет, поэтому сделку трогать не должен.
+    const late = await blockchain.sendMessage(
+      internal({
+        from: jettonWallet.address,
+        to: curve.address,
+        value: toNano("0.05"),
+        bounced: true,
+        body: beginCell()
+          .storeUint(0xffffffff, 32)
+          .storeUint(0xf8a7ea5, 32)
+          .storeUint(first.queryId, 64)
+          .storeCoins(first.amount)
+          .endCell(),
+      }),
+    );
+    expect(late.transactions).not.toHaveTransaction({ from: curve.address, to: buyer.address });
+
+    const after = await curve.getData();
+    expect(after.realTon).toBe(before.realTon);
+    expect(after.tokensSold).toBe(before.tokensSold);
+  });
+
   it("не отдаёт ликвидность до достижения порога", async () => {
     await bindWallet();
     await buy("5");
