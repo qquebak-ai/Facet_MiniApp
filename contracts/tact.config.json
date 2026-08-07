@@ -1,0 +1,13 @@
+{
+  "projects": [
+    {
+      "name": "bonding_curve",
+      "path": "./src/bonding_curve.tact",
+      "output": "./build",
+      "options": {
+        "debug": false,
+        "external": false
+      }
+    }
+  ]
+}
