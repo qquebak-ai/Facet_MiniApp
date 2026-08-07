@@ -20,6 +20,11 @@ const tg = (window as any).Telegram?.WebApp;
 if (tg) {
   tg.ready();
   tg.expand();
+  // Свайп вниз по мини-приложению по умолчанию тянет всё окно (жест
+  // закрытия). Из-за него из-под интерфейса видно чёрный фон Telegram,
+  // поэтому вертикальные свайпы выключаем — метод появился в Bot API
+  // 7.7, в старых клиентах его просто нет.
+  tg.disableVerticalSwipes?.();
 }
 
 const manifestUrl = `${window.location.origin}/tonconnect-manifest.json`;

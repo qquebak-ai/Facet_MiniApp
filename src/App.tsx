@@ -790,6 +790,12 @@ function GlobalStyle() {
          the closest common system fonts) rather than fetching a Google
          Fonts family that's no longer used anywhere in the app. */
       html, body, #root { height: 100%; margin: 0; padding: 0; background: ${T.bg}; -webkit-tap-highlight-color: transparent; }
+      /* Страница зафиксирована: сам документ не прокручивается и не
+         оттягивается резинкой, иначе в Telegram из-под приложения
+         вылезают чёрные поля сверху и снизу. Прокрутка живёт только
+         внутри контентных контейнеров ниже. */
+      html { overflow: hidden; overscroll-behavior: none; }
+      body { position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; overscroll-behavior: none; }
       * { -webkit-tap-highlight-color: transparent; }
       /* iOS Safari (incl. Telegram's in-app WebView) auto-zooms the whole
          viewport when a focused input/textarea/select has a computed
@@ -855,7 +861,9 @@ function GlobalStyle() {
       .cta-launch:active { transform: scale(0.98); transition: transform ${PRESS}; }
       .tf-btn { transition: background ${EASE}, color ${EASE}, transform ${SPRING}; will-change: transform; }
       .tf-btn:active { transform: scale(0.92); transition: background ${EASE}, color ${EASE}, transform ${PRESS}; }
-      .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+      /* overscroll-behavior: contain не даёт докрутке внутреннего списка
+         утечь наружу и потянуть за собой всё окно. */
+      .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; overscroll-behavior: contain; }
       .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
     `}</style>
   );
