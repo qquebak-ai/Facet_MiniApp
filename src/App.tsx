@@ -174,6 +174,8 @@ const STR = {
     chartModeMcap: "МКап", chartModePrice: "Цена",
     tokenNoAddress: "Адрес недоступен",
     txUnavailable: "Список транзакций пока недоступен для этого пула",
+    txEmpty: "По этому пулу пока нет сделок",
+    txLoadFailed: "Не удалось загрузить сделки — обновим через несколько секунд",
     aboutToken: "О токене",
     youPay: "Вы платите", youSell: "Вы продаёте", youReceive: "Вы получите",
     available: "Доступно",
@@ -432,6 +434,8 @@ const STR = {
     chartModeMcap: "MCap", chartModePrice: "Price",
     tokenNoAddress: "Address unavailable",
     txUnavailable: "Transaction list isn't available for this pool yet",
+    txEmpty: "No trades on this pool yet",
+    txLoadFailed: "Couldn't load trades — retrying in a few seconds",
     aboutToken: "About the token",
     youPay: "You pay", youSell: "You sell", youReceive: "You receive",
     available: "Available",
@@ -1216,7 +1220,7 @@ async function fetchTonMemePools(limit = 18) {
     // include=base_token,dex pulls the actual token record (real name,
     // symbol, on-chain address, logo image_url) and the DEX the pool
     // trades on, for every pool in one request.
-    const res = await fetch(`${GT_BASE}/networks/${GT_NETWORK}/trending_pools?page=1&include=base_token,dex`);
+    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/trending_pools?page=1&include=base_token,dex`);
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const rows = (json?.data || []).slice(0, limit);
@@ -1283,7 +1287,7 @@ async function fetchTokenInfo(tokenAddress) {
   if (!tokenAddress) return null;
   if (tokenInfoCache.has(tokenAddress)) return tokenInfoCache.get(tokenAddress);
   try {
-    const res = await fetch(`${GT_BASE}/networks/${GT_NETWORK}/tokens/${tokenAddress}/info`);
+    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/tokens/${tokenAddress}/info`);
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const a = json?.data?.attributes || {};
@@ -1362,10 +1366,37 @@ function useJettonHolders(tokenAddress) {
 // Real recent trades for a pool (GeckoTerminal's /trades endpoint) — used
 // by the Transactions tab on the token screen. Not cached: this is
 // explicitly opened by the person to see what's happening right now.
+// У бесплатного GeckoTerminal жёсткий лимит (около 30 запросов в минуту
+// на адрес): при превышении он отвечает 429, и вызывающий код видит это
+// как «данных нет». Раньше именно так пропадал список транзакций.
+// gtFetch держит минимальный промежуток между запросами и один раз
+// повторяет попытку после 429, дождавшись Retry-After.
+let gtLastRequestAt = 0;
+const GT_MIN_GAP_MS = 260;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function gtFetch(url, { retryOn429 = true } = {}) {
+  const wait = gtLastRequestAt + GT_MIN_GAP_MS - Date.now();
+  if (wait > 0) await sleep(wait);
+  gtLastRequestAt = Date.now();
+
+  const res = await fetch(url);
+  if (res.status === 429 && retryOn429) {
+    const retryAfter = Number(res.headers.get("Retry-After")) || 0;
+    await sleep(Math.min(8000, retryAfter ? retryAfter * 1000 : 2500));
+    gtLastRequestAt = Date.now();
+    return fetch(url);
+  }
+  return res;
+}
+
 async function fetchPoolTrades(poolAddress, limit = 25) {
   if (!poolAddress) return null;
   try {
-    const res = await fetch(`${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/trades`);
+    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/trades`);
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const rows = json?.data || [];
@@ -1391,7 +1422,7 @@ async function fetchPoolOHLCV(poolAddress, tf) {
   const fetchLimit = Math.min(1000, 200 * (cfg.resample || 1));
   const url = `${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/ohlcv/${cfg.timeframe}?aggregate=${cfg.aggregate}&limit=${fetchLimit}&currency=usd&token=base`;
   try {
-    const res = await fetch(url);
+    const res = await gtFetch(url);
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const list = json?.data?.attributes?.ohlcv_list || [];
@@ -2474,7 +2505,11 @@ function TokenCardSkeleton({ index }) {
 
 // Real tokens only — no bundled/demo list. The feed starts empty and
 // fills in as soon as the first live GeckoTerminal fetch resolves.
-const TOKEN_REFRESH_MS = 2500;
+// 2.5 секунды на опрос ленты сжигали почти весь лимит бесплатного
+// GeckoTerminal (24 запроса в минуту из ~30), и всем остальным — графику,
+// транзакциям, ленте покупок — доставались 429. Цены на мемкоинах не
+// меняются настолько быстро, чтобы это того стоило.
+const TOKEN_REFRESH_MS = 15000;
 
 /* RocketIconFX — the "Создать токен" icon in the corner: same rocket
    glyph, gently bobbing in place, with a small flickering flame
@@ -3291,10 +3326,16 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     setTradesLoading(true);
     async function load() {
       const res = await fetchPoolTrades(token.poolAddress);
-      if (!cancelled) { setTrades(res); setTradesLoading(false); }
+      if (cancelled) return;
+      // null = запрос не прошёл. Уже показанный список в этом случае
+      // оставляем на месте: мигать пустым экраном из-за одного 429 хуже,
+      // чем показать данные пятнадцатисекундной давности.
+      if (res) setTrades(res);
+      else setTrades((prev) => (prev && prev.length ? prev : null));
+      setTradesLoading(false);
     }
     load();
-    const iv = setInterval(load, 10000);
+    const iv = setInterval(load, 15000);
     return () => { cancelled = true; clearInterval(iv); };
   }, [tab, token.poolAddress]);
 
@@ -3477,12 +3518,23 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
 
       {tab === "tx" && (
         <div className="flex flex-col gap-1.5">
-          {!token.poolAddress || (!tradesLoading && trades && trades.length === 0) || (!tradesLoading && !trades) ? (
+          {/* Пустой список и неудавшийся запрос — разные вещи, и раньше
+              оба показывали «недоступно». Теперь видно, где сделок правда
+              нет, а где просто не достучались до API. */}
+          {!token.poolAddress ? (
             <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
               <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("txUnavailable")}</span>
             </div>
           ) : tradesLoading && !trades ? (
             <div className="flex items-center justify-center" style={{ height: 120, fontFamily: monoFont, fontSize: 11, color: T.muted }}>{tr("chartLoading")}</div>
+          ) : !trades ? (
+            <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("txLoadFailed")}</span>
+            </div>
+          ) : trades.length === 0 ? (
+            <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("txEmpty")}</span>
+            </div>
           ) : (
             trades.map(tx => (
               <div key={tx.id} className="fx-chip flex items-center justify-between rounded-[20px] px-3 py-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
