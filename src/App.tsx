@@ -14,6 +14,7 @@ import { supabase } from "./supabaseClient";
 import {
   CURVE_PARAMS,
   tokensOutFor,
+  tonOutFor,
   curvePriceTon,
   buildBuyBody,
   buildSellPayload,
@@ -4131,7 +4132,7 @@ function parseAmount(str) {
 /* TradeModal — the buy/sell sheet: pick an amount (with quick %/preset
    chips), see the live conversion, pick slippage tolerance, and confirm.
    Shared between the Buy and Sell CTAs so switching tabs mid-flow works. */
-function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance = 0, tonPriceUsd = 0, heldAmount = null }) {
+function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance = 0, tonPriceUsd = 0, heldAmount = null, curveState = null }) {
   const [mode, setMode] = useState(tradeModal ? tradeModal.mode : "buy");
   // Сумму можно подставить снаружи — так после запуска токена открывается
   // готовая покупка ровно на то, что человек ввёл в форме создания.
@@ -4172,9 +4173,24 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
   // нельзя: раньше отсюда приходила Infinity, она уезжала в локальный
   // счётчик, и в окне продажи значилось «Доступно: ∞».
   const priceUsd = token.price > 0 ? token.price : 0;
-  const estimate = isBuy
-    ? (priceUsd > 0 ? (amount * tonPriceUsd) / priceUsd : 0)
-    : amount * priceUsd;
+  // У токенов на кривой сумма считается её же формулой — той самой, что
+  // применит контракт. По цене из ленты считать нельзя: она обновляется
+  // редко, а для свежего токена её просто нет.
+  let estimate;
+  if (curveState) {
+    if (isBuy) {
+      const netTon = toNano(amount.toFixed(9)) * (10000n - CURVE_PARAMS.feeBps) / 10000n;
+      estimate = Number(tokensOutFor(curveState, netTon) / 1000000000n);
+    } else {
+      const gross = tonOutFor(curveState, toNano(amount.toFixed(9)));
+      const net = gross * (10000n - CURVE_PARAMS.feeBps) / 10000n;
+      estimate = (Number(net) / 1e9) * tonPriceUsd;
+    }
+  } else {
+    estimate = isBuy
+      ? (priceUsd > 0 ? (amount * tonPriceUsd) / priceUsd : 0)
+      : amount * priceUsd;
+  }
   const feeUsd = NETWORK_FEE_TON * tonPriceUsd;
   const canConfirm = amount > 0 && !overMax && (isBuy ? tonPriceUsd > 0 : balanceKnown);
 
@@ -6564,12 +6580,21 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // разрывает цепочку от жеста пользователя, и Telegram сворачивает окно
   // кошелька раньше, чем по нему успевают нажать.
   const [chainJettonWallet, setChainJettonWallet] = useState(null);
+  // Состояние кривой для предпросчёта суммы сделки. Без него окно
+  // считало по цене из ленты, а у токенов на кривой её нет — отсюда
+  // «вы получите 0».
+  const [tradeCurveState, setTradeCurveState] = useState(null);
   // Настоящий баланс открытого токена спрашиваем у сети — при открытии
   // окна сделки и после каждой сделки. Локальный счётчик остаётся только
   // как запасной вариант, пока ответ не пришёл.
   useEffect(() => {
     const jetton = token?.tokenAddress;
-    if (!tradeModal || !jetton || !walletAddress) { setChainHolding(null); setChainJettonWallet(null); return; }
+    if (!tradeModal || !jetton || !walletAddress) { setChainHolding(null); setChainJettonWallet(null); setTradeCurveState(null); return; }
+    if (token?.curveAddress) {
+      fetchCurveState(token.curveAddress, TON_TESTNET).then((state) => {
+        if (!cancelled && state) setTradeCurveState(state);
+      });
+    }
     let cancelled = false;
     fetchJettonAccount(jetton, walletAddress, TON_TESTNET).then((info) => {
       if (cancelled || !info) return;
@@ -7249,7 +7274,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         showToast={showToast}
       />
       <TokenManageSheet token={manageToken_} onClose={() => setManageToken_(null)} showToast={showToast} onDelete={deleteMyToken} />
-      <TradeModal t={token} tradeModal={tradeModal} onClose={() => setTradeModal(null)} onConfirm={confirmTrade} walletTonBalance={tonBalance} tonPriceUsd={tonPriceUsd} heldAmount={chainHolding} />
+      <TradeModal t={token} tradeModal={tradeModal} onClose={() => setTradeModal(null)} onConfirm={confirmTrade} walletTonBalance={tonBalance} tonPriceUsd={tonPriceUsd} heldAmount={chainHolding} curveState={tradeCurveState} />
       <TokenLaunchOverlay
         open={!!launchRequest}
         form={launchRequest ? launchRequest.form : EMPTY_LAUNCH_FORM}
