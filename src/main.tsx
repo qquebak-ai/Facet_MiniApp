@@ -32,7 +32,17 @@ const manifestUrl = `${window.location.origin}/tonconnect-manifest.json`;
 try {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <TonConnectUIProvider manifestUrl={manifestUrl}>
+      <TonConnectUIProvider
+        manifestUrl={manifestUrl}
+        actionsConfiguration={{
+          // Внутри Telegram окно кошелька закрывалось раньше, чем по нему
+          // успевали нажать. Без указанной стратегии возврата TonConnect
+          // не знает, куда возвращать человека после подписи, и сворачивает
+          // своё окно само.
+          returnStrategy: "back",
+          skipRedirectToWallet: "never",
+        }}
+      >
         <TonLaunchApp />
       </TonConnectUIProvider>
     </React.StrictMode>
