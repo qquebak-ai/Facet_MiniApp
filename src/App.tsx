@@ -5178,7 +5178,6 @@ function ProfileView({
                 <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{profile.nickname}</span>
                 {verifyStatus === "verified" && <ShieldCheck size={16} color={T.electric} />}
               </div>
-              <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>{profile.email}</span>
               <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
                 {profile.bio || t("bioEmptyPlaceholder")}
               </p>
