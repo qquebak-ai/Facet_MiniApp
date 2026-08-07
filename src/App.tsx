@@ -140,6 +140,8 @@ const STR = {
     mempadComingSoon: "Здесь скоро появится что-то ещё.",
     mempadSpotlight: "В центре внимания",
     mempadLaunchToken: "Запустить токен",
+    tickerBought: "купил",
+    sinceSec: "с", sinceMin: "м", sinceHour: "ч",
     mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX",
     homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionWallet: "Кошелёк",
     homeTopGainer: "Лидер роста",
@@ -384,6 +386,8 @@ const STR = {
     mempadComingSoon: "Something else is coming here soon.",
     mempadSpotlight: "Spotlight",
     mempadLaunchToken: "Launch token",
+    tickerBought: "bought",
+    sinceSec: "s", sinceMin: "m", sinceHour: "h",
     mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX",
     homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionWallet: "Wallet",
     homeTopGainer: "Top gainer",
@@ -776,6 +780,8 @@ function GlobalStyle() {
       @keyframes gridDrift { from{background-position:0 0,0 0;} to{background-position:140px 140px,140px 140px;} }
       @keyframes starTwinkle { 0%,100%{opacity:.2;} 50%{opacity:1;} }
       @keyframes starPulse { 0%,100%{opacity:calc(var(--o) * 0.3);} 50%{opacity:var(--o);} }
+      @keyframes gridRunToward { from{ background-position: 0 0, 0 0; } to{ background-position: 0 44px, 0 0; } }
+      @keyframes tickerSwap { 0%{opacity:0; transform:translateY(6px);} 12%,88%{opacity:1; transform:translateY(0);} 100%{opacity:0; transform:translateY(-6px);} }
       @media (prefers-reduced-motion: reduce) {
         [data-bg-fx] * { animation: none !important; }
       }
@@ -853,7 +859,7 @@ function CyberGrid({ forceDark }) {
   // Детерминированные позиции — звёзды не перескакивают при каждом ре-рендере.
   const stars = useMemo(() => {
     const rnd = seededRand(20240607);
-    return Array.from({ length: 90 }, () => ({
+    return Array.from({ length: 45 }, () => ({
       left: rnd() * 100,
       top: rnd() * 100,
       size: 5 + rnd() * 5,
@@ -1314,6 +1320,7 @@ async function fetchPoolTrades(poolAddress, limit = 25) {
         volUsd: parseFloat(a.volume_in_usd) || 0,
         priceUsd: parseFloat(a.price_from_in_usd || a.price_to_in_usd) || 0,
         txHash: a.tx_hash || null,
+        from: a.tx_from_address || null,
         at: a.block_timestamp || null,
       };
     });
@@ -1993,6 +2000,143 @@ function SpotlightFX({ up, seedKey = 1 }) {
   );
 }
 
+// "12с" / "4м" / "2ч" — насколько давно прошла сделка.
+function fmtSince(iso) {
+  const at = new Date(iso).getTime();
+  if (!Number.isFinite(at)) return "";
+  const sec = Math.max(0, Math.floor((Date.now() - at) / 1000));
+  if (sec < 60) return `${sec}${t("sinceSec")}`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}${t("sinceMin")}`;
+  return `${Math.floor(sec / 3600)}${t("sinceHour")}`;
+}
+
+/* RecentBuysTicker — живая лента последних реальных покупок по самым
+   активным пулам ленты. Данные берутся из того же GeckoTerminal /trades,
+   что и вкладка транзакций у токена; показываем по одной сделке за раз и
+   раз в несколько секунд переключаем — так строка остаётся узкой и не
+   отвлекает от виджета под ней. */
+function RecentBuysTicker({ tokens }) {
+  const [buys, setBuys] = useState([]);
+  const [idx, setIdx] = useState(0);
+
+  // Опрашиваем только три самых крупных пула: у бесплатного API жёсткий
+  // лимит запросов, а лента всё равно показывает по одной сделке.
+  const pools = useMemo(
+    () =>
+      [...(tokens || [])]
+        .filter(tok => tok.poolAddress)
+        .sort((a, b) => b.mcapNum - a.mcapNum)
+        .slice(0, 3),
+    [tokens]
+  );
+
+  useEffect(() => {
+    if (!pools.length) { setBuys([]); return; }
+    let cancelled = false;
+
+    async function load() {
+      const batches = await Promise.all(pools.map(p => fetchPoolTrades(p.poolAddress, 12)));
+      if (cancelled) return;
+      const merged = [];
+      batches.forEach((rows, i) => {
+        (rows || []).forEach(r => {
+          if (r.kind !== "buy" || !r.at) return;
+          merged.push({ ...r, token: pools[i] });
+        });
+      });
+      merged.sort((a, b) => new Date(b.at) - new Date(a.at));
+      setBuys(merged.slice(0, 20));
+      setIdx(0);
+    }
+
+    load();
+    const poll = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(poll); };
+  }, [pools]);
+
+  useEffect(() => {
+    if (buys.length < 2) return;
+    const swap = setInterval(() => setIdx(i => (i + 1) % buys.length), 4000);
+    return () => clearInterval(swap);
+  }, [buys]);
+
+  if (!buys.length) return null;
+  const b = buys[idx];
+
+  return (
+    <div
+      className="flex items-center gap-2 rounded-[16px] px-3 py-2 overflow-hidden"
+      style={{ background: hexA(T.up, 0.07), border: `1px solid ${hexA(T.up, 0.22)}` }}
+    >
+      <div key={idx} className="flex items-center gap-2 min-w-0" style={{ flex: 1, animation: "tickerSwap 4s ease-in-out both" }}>
+        <TokenAvatar size={20} tone="up" src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
+        <span className="truncate" style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>{shortAddr(b.from) || "—"}</span>
+        <span style={{ fontFamily: bodyFont, color: T.up, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
+          {t("tickerBought")} ${fmtCompact(b.volUsd)}
+        </span>
+        <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 12, fontWeight: 700 }}>{b.token.ticker}</span>
+      </div>
+      <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 10.5, whiteSpace: "nowrap" }}>{fmtSince(b.at)}</span>
+    </div>
+  );
+}
+
+/* SpotlightGrid — фон самого виджета «В центре внимания»: серая сетка,
+   уходящая в перспективу (пол уползает вниз, потолок вверх) плюс ровная
+   сетка по центру. Только CSS-трансформы, поэтому анимация идёт на GPU. */
+function SpotlightGrid() {
+  const line = "rgba(255,255,255,0.09)";
+  const cell = "44px 44px";
+  const grid = `linear-gradient(${line} 1px, transparent 1px), linear-gradient(90deg, ${line} 1px, transparent 1px)`;
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none",
+        borderRadius: "inherit", perspective: 260, perspectiveOrigin: "50% 50%",
+        contain: "layout paint style",
+      }}
+    >
+      {/* плоская сетка по всей карточке — задаёт «стены» */}
+      <div style={{
+        position: "absolute", inset: 0,
+        backgroundImage: grid, backgroundSize: cell,
+        opacity: 0.55,
+        animation: "gridDrift 34s linear infinite",
+        WebkitMaskImage: "radial-gradient(ellipse at 50% 50%, #000 20%, transparent 85%)",
+        maskImage: "radial-gradient(ellipse at 50% 50%, #000 20%, transparent 85%)",
+      }} />
+
+      {/* пол: сетка, убегающая к горизонту */}
+      <div style={{
+        position: "absolute", left: "-50%", right: "-50%", top: "50%", height: "150%",
+        backgroundImage: grid, backgroundSize: cell,
+        transform: "rotateX(74deg)", transformOrigin: "50% 0%",
+        animation: "gridRunToward 5.5s linear infinite",
+        WebkitMaskImage: "linear-gradient(to bottom, #000 0%, transparent 55%)",
+        maskImage: "linear-gradient(to bottom, #000 0%, transparent 55%)",
+      }} />
+
+      {/* потолок — зеркальная копия пола */}
+      <div style={{
+        position: "absolute", left: "-50%", right: "-50%", bottom: "50%", height: "150%",
+        backgroundImage: grid, backgroundSize: cell,
+        transform: "rotateX(-74deg)", transformOrigin: "50% 100%",
+        animation: "gridRunToward 5.5s linear infinite",
+        WebkitMaskImage: "linear-gradient(to top, #000 0%, transparent 55%)",
+        maskImage: "linear-gradient(to top, #000 0%, transparent 55%)",
+      }} />
+
+      {/* лёгкое затемнение к краям, чтобы сетка не спорила с контентом */}
+      <div style={{
+        position: "absolute", inset: 0,
+        background: `radial-gradient(ellipse at 50% 45%, ${hexA(T.bg, 0.82)} 0%, ${hexA(T.bg, 0.35)} 55%, ${hexA(T.bg, 0)} 100%)`,
+      }} />
+    </div>
+  );
+}
+
 function MintlyFrame({ children, size = 52, glow }) {
   return (
     <div style={{
@@ -2450,6 +2594,8 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         </button>
       </div>
 
+      <RecentBuysTicker tokens={tokens} />
+
       {loading && !spotlight ? (
         <div className="fx-card rounded-[22px] p-6 flex flex-col items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
           <div className="fx-skeleton" style={{ width: 92, height: 92, borderRadius: "50%" }} />
@@ -2460,6 +2606,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         <div>
           <SectionTitle>{t("mempadSpotlight")}</SectionTitle>
           <button onClick={() => onOpen(spotlight)} className="fx-card w-full flex flex-col items-center text-center gap-2.5 rounded-[22px] p-6" style={{ border: `1px solid ${T.line}`, position: "relative", overflow: "hidden" }}>
+            <SpotlightGrid />
             <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <TokenAvatar size={92} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl}>{spotlight.emoji}</TokenAvatar>
               <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 20, fontWeight: 800 }}>{spotlight.ticker}</span>
