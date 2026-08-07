@@ -109,12 +109,15 @@ export default async function handler(req, res) {
       user_metadata: {
         telegram_id: tgUser.id,
         nickname: nicknameFromTelegram(tgUser),
+        bio: "",
         avatar_url: tgUser.photo_url || null,
+        emoji: tgUser.photo_url ? null : "🚀",
+        wallet_address: null,
       },
     });
     if (createErr && !/already|exists|registered/i.test(createErr.message || "")) {
       console.error("[telegram-auth] createUser failed:", createErr);
-      return res.status(500).json({ error: "create_user_failed" });
+      return res.status(500).json({ error: "create_user_failed", detail: createErr.message });
     }
 
     // generateLink и создаёт одноразовый токен входа, и возвращает самого
@@ -122,7 +125,7 @@ export default async function handler(req, res) {
     const { data: link, error: linkErr } = await admin.auth.admin.generateLink({ type: "magiclink", email });
     if (linkErr || !link?.properties?.hashed_token || !link?.user?.id) {
       console.error("[telegram-auth] generateLink failed:", linkErr);
-      return res.status(500).json({ error: "link_failed" });
+      return res.status(500).json({ error: "link_failed", detail: linkErr && linkErr.message });
     }
 
     const userId = link.user.id;
@@ -132,7 +135,7 @@ export default async function handler(req, res) {
     const { data: profile } = await admin.from("profiles").select("id, telegram_id").eq("id", userId).maybeSingle();
     if (!profile) {
       const nickname = await freeNickname(admin, nicknameFromTelegram(tgUser));
-      const { error: insertErr } = await admin.from("profiles").insert({
+      const { error: insertErr } = await admin.from("profiles").upsert({
         id: userId,
         telegram_id: tgUser.id,
         nickname,
@@ -140,10 +143,10 @@ export default async function handler(req, res) {
         bio: "",
         avatar_url: tgUser.photo_url || null,
         emoji: tgUser.photo_url ? null : "🚀",
-      });
+      }, { onConflict: "id" });
       if (insertErr) {
-        console.error("[telegram-auth] profile insert failed:", insertErr);
-        return res.status(500).json({ error: "profile_failed" });
+        console.error("[telegram-auth] profile upsert failed:", insertErr);
+        return res.status(500).json({ error: "profile_failed", detail: insertErr.message });
       }
     } else if (!profile.telegram_id) {
       // Профиль остался с прошлой (почтовой) схемы — доклеиваем привязку.
@@ -153,6 +156,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ token_hash: link.properties.hashed_token });
   } catch (err) {
     console.error("[telegram-auth] unexpected error:", err);
-    return res.status(500).json({ error: "unexpected" });
+    return res.status(500).json({ error: "unexpected", detail: err && err.message });
   }
 }

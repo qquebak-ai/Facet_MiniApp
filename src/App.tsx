@@ -4812,7 +4812,12 @@ async function signInWithTelegram() {
     body: JSON.stringify({ initData }),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || "auth_failed");
+  if (!res.ok) {
+    // detail пишем в консоль, а код ошибки поднимаем наверх — по нему
+    // сразу видно, на каком шаге всё встало.
+    if (json.detail) console.error("[mintly] telegram auth detail:", json.detail);
+    throw new Error(json.error || `auth_failed_${res.status}`);
+  }
 
   const { error } = await supabase.auth.verifyOtp({ token_hash: json.token_hash, type: "magiclink" });
   if (error) throw error;
@@ -4880,7 +4885,7 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
         const code = (err && err.message) || "";
         setTgError(code === "no_telegram" ? t("tgAuthOutside")
           : code === "server_not_configured" ? t("tgAuthNotConfigured")
-          : t("tgAuthFailed"));
+          : `${t("tgAuthFailed")} (${code || "?"})`);
       } finally {
         setTgBusy(false);
       }
