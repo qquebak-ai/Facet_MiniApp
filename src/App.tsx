@@ -2804,18 +2804,13 @@ function ProfileCardBg({ cardId, height = 260, radius = 24, bleed = 0, top = 0 }
         </svg>
       ))}
 
-      {/* края подложки растворяются в фоне приложения, чтобы она читалась
-          как фон экрана, а не как обрезанный прямоугольник */}
+      {/* низ подложки растворяется в фоне приложения, чтобы она читалась
+          как фон экрана, а не как обрезанный прямоугольник; по бокам
+          карточка идёт до самых краёв */}
       <div style={{
         position: "absolute", left: 0, right: 0, bottom: 0, height: "62%",
         background: `linear-gradient(to bottom, ${hexA(T.bg, 0)} 0%, ${hexA(T.bg, 0.55)} 45%, ${T.bg} 100%)`,
       }} />
-      {bleed > 0 && (
-        <div style={{
-          position: "absolute", inset: 0,
-          background: `linear-gradient(to right, ${T.bg} 0%, ${hexA(T.bg, 0)} 12%, ${hexA(T.bg, 0)} 88%, ${T.bg} 100%)`,
-        }} />
-      )}
     </div>
   );
 }
