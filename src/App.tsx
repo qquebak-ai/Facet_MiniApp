@@ -7107,7 +7107,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         if (token.curveAddress && token.tokenAddress && chainJettonWallet) {
           // Адрес уже известен — между нажатием и открытием кошелька не
           // должно быть ни одного await, иначе окно кошелька закроется.
-          const sellerWallet = chainJettonWallet;
+          // tonapi отдаёт адрес в сыром виде (0:abc…), а кошельки ждут
+          // привычный EQ…-формат: на сыром часть из них молча отклоняет
+          // запрос, и окно подтверждения закрывается само.
+          const sellerWallet = Address.parse(chainJettonWallet).toString();
           const body = beginCell()
             .storeUint(0xf8a7ea5, 32)
             .storeUint(0, 64)
