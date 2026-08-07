@@ -117,7 +117,13 @@ import { Address, beginCell, toNano, storeStateInit } from "@ton/core";
 import { TonClient4 } from "@ton/ton";
 import { getHttpV4Endpoint } from "@orbs-network/ton-access";
 import { AssetsSDK, JettonParams, JettonMinter, createApi } from "@ton-community/assets-sdk";
-import { DEX, pTON } from "@ston-fi/sdk";
+import {
+  curveContract,
+  buildBuyBody,
+  buildSetJettonWalletBody,
+  CURVE_PARAMS,
+  CURVE_GAS_BUY_OVERHEAD,
+} from "./curveConfig";
 import { supabase } from "./supabaseClient";
 
 /* ---------------------------------------------------------
@@ -724,172 +730,78 @@ export async function launchRealToken({
     );
   }
 
-  // ---- premint the BUYER'S SHARE to the admin, also just queued —
-  // deploy alone doesn't mint anything, this is a distinct message to
-  // the same (not-yet-active, but about to be, in the same combined tx)
-  // jetton minter address.
+  // ---- Стартовая покупка создателя ---------------------------------
   //
-  // BUG FIX: this used to always mint `totalSupply` (the full fixed
-  // 1,000,000,000) here regardless of buyAmountTon — so every launch
-  // handed the creator 100% of supply no matter what buy amount they
-  // typed. The amount actually minted now mirrors the exact formula
-  // App.jsx's tokensForTon() uses for the "Стартовая покупка" preview
-  // (1 TON ≈ 0.1% of supply, capped at 100%), so the on-chain mint
-  // matches what the UI promised instead of silently ignoring it. ----
-  const TOKENS_PER_TON = Number(totalSupply) / 1000; // keep in sync with TOKENS_PER_TON in App.jsx
-  const buyTokensNum = Math.min(
-    Number(totalSupply),
-    Math.max(0, Math.round((buyAmountTon || 0) * TOKENS_PER_TON))
-  );
-  if (buyTokensNum <= 0) {
-    fail("Сумма стартовой покупки должна быть больше 0 — иначе нечего выпускать", new Error("buyAmountTon <= 0"));
+  // Раньше здесь создатель получал долю выпуском на свой кошелёк, а
+  // отдельными сообщениями платил казначейству и комиссию. То есть
+  // рынка не было: токены появлялись из воздуха, а деньги уходили мимо
+  // какого-либо пула. Теперь стартовая покупка — обычная покупка на
+  // кривой, просто первая. Она уходит второй транзакцией: пока запас не
+  // доехал до кошелька кривой, покупать нечего.
+  const buyTon = Math.max(0, Number(buyAmountTon) || 0);
+  if (buyTon <= 0) {
+    fail("Сумма стартовой покупки должна быть больше 0", new Error("buyAmountTon <= 0"));
   }
-  const premintTokens = BigInt(buyTokensNum);
+
+  // ---- Рынок токена: бондинг-кривая -------------------------------
+  //
+  // Раньше здесь готовилось создание пула на STON.fi, но ликвидность в
+  // него никогда не отправлялась — вычислялся только будущий адрес, и
+  // токен оставался без рынка. Обычному пулу нужна пара TON/токен от
+  // кого-то извне, у свежего мемкоина её нет.
+  //
+  // Кривая сама выступает второй стороной сделки, поэтому торговать
+  // можно сразу. Её адрес считается детерминированно из параметров, так
+  // что весь запас можно отправить на её будущий кошелёк ещё до того,
+  // как она развёрнута — в этой же транзакции.
+  let curveAddress = null;
   try {
+    const curve = await curveContract({
+      admin: Address.parse(walletAddress),
+      jettonMaster: jettonMasterAddress,
+      feeWallet: Address.parse(feeAddress),
+      // Куда уйдут деньги после набора порога. Пока это казначейство —
+      // оттуда заводится пара на настоящем DEX. Адрес зашивается в
+      // контракт навсегда: сменить его потом нельзя, и это единственный
+      // способ вынуть средства.
+      graduationDestination: Address.parse(treasuryAddress),
+    });
+    curveAddress = curve.address;
+    log(`адрес кривой (детерминированный, без запроса в сеть): ${curveAddress.toString()}`);
+
+    // Весь торговый запас минтится сразу на кривую: владельцем кошелька
+    // жетона становится она, а не создатель. Из-за этого создатель
+    // больше не получает долю бесплатно — он покупает через кривую на
+    // общих основаниях, как и все остальные.
     const minter = client.open(JettonMinter.createFromConfig({
       admin: Address.parse(walletAddress),
       content: beginCell().storeUint(0x01, 8).storeStringTail(metadataUrl).endCell(),
     }));
-    await minter.sendMint(batchSender, Address.parse(walletAddress), premintTokens * 10n ** decimals);
-    log(`premint message queued: ${(premintTokens * 10n ** decimals).toString()} base units (${buyTokensNum.toLocaleString("ru-RU")} ${symbol}, matching the ${buyAmountTon} TON buy) to ${walletAddress}`);
+    await minter.sendMint(batchSender, curveAddress, CURVE_PARAMS.tokensForSale);
+    log(`выпуск запаса на кривую поставлен в очередь: ${CURVE_PARAMS.tokensForSale.toString()} базовых единиц`);
+
+    // Развёртывание кривой. Тело сообщения пустое — стартовые параметры
+    // уже лежат в stateInit, а адрес её кошелька жетона будет привязан
+    // отдельным сообщением: он зависит от адреса самой кривой, поэтому
+    // до её появления посчитать его нечем.
+    await batchSender.send({
+      to: curveAddress,
+      value: toNano("0.1"),
+      init: curve.init,
+      bounce: false,
+    });
+    log("развёртывание кривой поставлено в очередь");
   } catch (e) {
-    fail("Не удалось подготовить выпуск токена (premint)", e);
+    fail("Не удалось подготовить развёртывание кривой", e);
   }
 
-  // ---- charge the creator for their own "стартовая покупка" ----
-  // Premint above only mints the tokens on-chain — it never actually
-  // took the buyAmountTon TON the creator saw in the "Вы получите"
-  // preview. Without this, launching a token was a way to mint an
-  // arbitrary share of supply to yourself for free (only the ~0.05 TON
-  // deploy gas was ever spent). Charge the same amount a regular buy of
-  // buyAmountTon would cost — split into the treasury leg and the
-  // platform commission leg — using the exact mainTon/feeTon formula
-  // App.jsx's confirmTrade() uses for a normal buy, so a launch's first
-  // buy costs exactly what buying that many tokens after launch would.
-  // Queued into the same batch, so it's covered by the single combined
-  // wallet approval below (deploy + premint + payment = 3 of the 4
-  // messages TonConnect allows per transaction).
-  if (!treasuryAddress || !feeAddress) {
-    fail("Не задан адрес казначейства/комиссии для оплаты стартовой покупки", new Error("missing treasuryAddress/feeAddress"));
-  }
-  try {
-    const feeTon = buyAmountTon * feePercent;
-    const mainTon = buyAmountTon - feeTon;
-    // bounce:false explicitly — these are plain wallet-to-wallet TON
-    // transfers (no body, no contract call), same as the working regular
-    // buy flow in App.jsx's confirmTrade(), which sends to these same
-    // addresses as-is. Without this, buildTonConnectMessage's default
-    // (bounceable=true whenever there's no `init`) was the cause of both
-    // payment messages failing/bouncing back in the wallet's own
-    // simulation — seen in testing as two "Отправка ... Ошибка" entries
-    // that fully refund as "Сдача", i.e. the treasury/fee cut never
-    // actually left the wallet.
-    await batchSender.send({ to: Address.parse(treasuryAddress), value: toNano(mainTon.toFixed(9)), bounce: false });
-    await batchSender.send({ to: Address.parse(feeAddress), value: toNano(feeTon.toFixed(9)), bounce: false });
-    log(`payment for starting buy queued: ${mainTon.toFixed(4)} TON to treasury + ${feeTon.toFixed(4)} TON commission (${(feePercent * 100).toFixed(0)}%)`);
-  } catch (e) {
-    fail("Не удалось подготовить оплату стартовой покупки", e);
-  }
-
-  // ---- seed STON.fi liquidity pool: build the message too (queued, not
-  // sent yet) so it can ride along in the same combined transaction. A
-  // failure here is non-fatal — deploy + premint above still go out in
-  // the combined send even without a pool message. ----
-  // @ston-fi/sdk: routers are addressed through the versioned DEX.v1 /
-  // DEX.v2_1 namespaces. The DEX.v1 router contract this used to point at
-  // on testnet ("EQBsGx9Ar...") is the OLD v1 deployment and is no longer
-  // what STON.fi's own docs list for testnet — a wallet trying to
-  // emulate a transaction against a router that isn't actually live
-  // there fails with exactly the generic "couldn't simulate this
-  // transaction" warning Tonkeeper shows, with no further detail.
-  // STON.fi's current docs list the v2.1 CPI (Constant Product,
-  // Concentrated liquidity Interface) Router + matching pTON proxy for
-  // testnet — switching to those. (Verify against
-  // https://docs.ston.fi before shipping to mainnet — mainnet keeps
-  // using the existing DEX.v1 / pTON.v1 addresses below unchanged.)
-  const ROUTER_ADDRESS =
-    network === "testnet"
-      ? "kQALh-JBBIKK7gr0o4AVf9JZnEsFndqO0qTCyT-D-yBsWk0v" // CPI Router v2.1.0 (testnet)
-      : DEX.v1.Router.address; // EQB3ncyBUTjZUA5EnFKR5_EnOMI9V1tTEAAPaiU71gc4TiUt
-  const PROXY_TON_ADDRESS =
-    network === "testnet"
-      ? "kQACS30DNoUQ7NfApPvzh7eBmSZ9L4ygJ-lkNWtba8TQT-Px" // pTON v2.1.0 (testnet)
-      : pTON.v1.address; // EQCM3B12QK1e4yZSf8GtBRT0aLMNyEsBc_DhVfRRtOEffLez
-
-  let poolAddress = null;
-  try {
-    const router =
-      network === "testnet"
-        ? client.open(DEX.v2_1.Router.CPI.create(ROUTER_ADDRESS))
-        : client.open(new DEX.v1.Router(ROUTER_ADDRESS));
-    const proxyTon =
-      network === "testnet"
-        ? pTON.v2_1.create(PROXY_TON_ADDRESS)
-        : new pTON.v1(PROXY_TON_ADDRESS);
-
-    // BUG FIX: this used to queue router.getProvideLiquidityTonTxParams()
-    // as a real message — sending buyAmountTon TON into the STON.fi
-    // router paired against `jettonMasterAddress` — but no matching
-    // JETTON-side transfer was ever built anywhere in this file. STON.fi
-    // liquidity provision needs BOTH sides of the pair sent to the
-    // router; sending only the TON leg meant this call had nothing to
-    // pair against and, when it didn't just error/bounce outright, would
-    // silently drain the buyer's own TON without ever producing a
-    // working, tradable pool. Now that premint above only mints the
-    // buyer's own share (see BUG FIX comment there), there also isn't a
-    // separate "spare" jetton balance left over to pair with anyway.
-    // Until a real dual-sided (jetton transfer + TON) liquidity message
-    // is implemented and verified on testnet, we only compute the
-    // deterministic pool address for display — we do NOT queue a
-    // liquidity message or spend any TON on it. The pool can be created
-    // properly later, manually, via STON.fi's own UI once you decide how
-    // much of the supply and TON you actually want to seed it with.
-
-    // v1's getPoolAddress() returns the address directly. v2.1's getPool()
-    // instead opens/returns the pool *contract* — the address lives at
-    // pool.address. Branching so both API shapes resolve to just the
-    // address string this function returns. Both are deterministic
-    // derivations (router + token pair), so this can be computed now,
-    // before the combined transaction is even sent.
-    if (network === "testnet") {
-      const pool = await router.getPool({
-        token0: jettonMasterAddress,
-        token1: proxyTon.address,
-      });
-      poolAddress = pool.address;
-    } else {
-      poolAddress = await router.getPoolAddress({
-        token0: jettonMasterAddress,
-        token1: proxyTon.address,
-      });
-    }
-    log(`pool address: ${poolAddress.toString()}`);
-  } catch (e) {
-    // Non-fatal: deploy + premint messages are already queued above and
-    // still go out in the combined send below regardless of this
-    // failing, so a broken STON.fi call — wrong SDK/contract version,
-    // cell underflow, etc. — shouldn't throw the whole launch away.
-    // Log it, mark the pool as not-yet-created (App.tsx already renders
-    // that state — see `poolAddress: null` in its NEW_TOKEN_TEMPLATE),
-    // and continue with whatever's already in the batch. The pool can
-    // be created manually or retried separately later.
-    const detail = describeError(e);
-    console.error("[launch-debug]", "liquidity pool message preparation failed (non-fatal)", e);
-    trail.push(
-      `⚠ Не удалось подготовить сообщение для пула ликвидности на STON.fi: ${detail}. Токен всё равно будет отправлен без него — пул можно будет создать позже.`
-    );
-    warn(`pool message preparation failed, continuing without it: ${detail}`);
-    poolAddress = null;
-  }
-
-  // ---- Send everything queued above (deploy + premint, and the pool
-  // message if it was built successfully) as ONE TonConnect transaction
-  // — a single wallet approval covers all of it, instead of the user
-  // being asked to sign three separate transactions in a row. ----
+  // ---- Первая транзакция: развёртывание жетона, выпуск запаса на
+  // кривую и развёртывание самой кривой — три сообщения под одним
+  // подтверждением кошелька. ----
   try {
     if (!batch.length) fail("Нечего отправлять — ни одно сообщение не было подготовлено", new Error("empty batch"));
     const messages = batch.map(buildTonConnectMessage);
-    log(`requesting a single wallet approval for ${messages.length} combined message(s) (deploy + premint + payment for starting buy${batch.length > 4 ? " + liquidity pool" : ""})`);
+    log(`запрашиваем одно подтверждение кошелька на ${messages.length} сообщени(я): жетон + запас на кривую + кривая`);
     await tonConnectUI.sendTransaction({
       validUntil: Math.floor(Date.now() / 1000) + 300,
       network: network === "testnet" ? "-3" : "-239",
@@ -897,7 +809,7 @@ export async function launchRealToken({
     });
     log("wallet approved the combined transaction — all queued messages submitted together");
   } catch (e) {
-    fail("Кошелёк не подтвердил объединённую транзакцию (деплой + выпуск токена + пул)", e);
+    fail("Кошелёк не подтвердил транзакцию запуска (жетон + кривая)", e);
   }
 
   // ---- Stage 2: wait for jetton minter to go active ----
@@ -940,36 +852,76 @@ export async function launchRealToken({
     }
   }
 
-  // ---- Stage 2b: verify the premint actually landed in the creator's
-  // wallet. See the big comment on waitForJettonBalance above — this is
-  // what turns a bounced mint message into a visible, honest error
-  // instead of a false "Токен создан успешно" with an empty balance. ----
-  let mintedRaw = 0n;
+  // ---- Этап 2b: ждём, пока запас доедет до кошелька кривой. Пока его
+  // там нет, покупать нечего: кривая не сможет отдать жетоны, а деньги
+  // покупателя уже спишутся. ----
+  let curveJettonWallet = null;
   try {
-    mintedRaw = await waitForJettonBalance(Address.parse(walletAddress), jettonMasterAddress, network, { log, warn });
+    const minterForWallet = client.open(JettonMinter.createFromConfig({
+      admin: Address.parse(walletAddress),
+      content: beginCell().storeUint(0x01, 8).storeStringTail(metadataUrl).endCell(),
+    }));
+    curveJettonWallet = await minterForWallet.getWalletAddress(curveAddress);
+    log(`кошелёк жетона у кривой: ${curveJettonWallet.toString()}`);
+    await waitForJettonBalance(curveAddress, jettonMasterAddress, network, { log, warn, timeoutMs: 120000 });
   } catch (e) {
     const explorerHost = network === "testnet" ? "testnet.tonviewer.com" : "tonviewer.com";
     fail(
-      `Jetton-контракт задеплоен и активен, но токены на вашем кошельке так и не появились — похоже, сообщение выпуска (premint) было отклонено сетью (bounced). Проверьте адрес в эксплорере (https://${explorerHost}/${jettonMasterAddress.toString()}) и баланс TON на кошельке — на объединённую транзакцию (деплой + выпуск + пул) нужно с запасом сверх 0.05 TON за сам деплой`,
+      `Жетон развёрнут, но торговый запас так и не появился на кривой — похоже, сообщение выпуска было отклонено сетью. Проверьте адрес в эксплорере (https://${explorerHost}/${jettonMasterAddress.toString()}) и остаток TON на кошельке`,
       e
     );
   }
-  const mintedTokens = Number(mintedRaw / (10n ** decimals));
 
-  // ---- Stage 3: previously waited here for the STON.fi pool to go
-  // active. Since no liquidity message is queued anymore (see the BUG
-  // FIX comment above), `poolAddress` is only ever a computed-but-never-
-  // funded deterministic address — it will never go active, so polling
-  // it would just be a guaranteed timeout. Report it as not-yet-created
-  // instead. ----
-  onStage?.(3);
-  if (poolAddress) {
-    trail.push(`ℹ Пул на STON.fi ещё не создан — адрес ${poolAddress.toString()} зарезервирован, но ликвидность в него пока не отправлялась. Создайте пул вручную на ston.fi, когда решите, сколько токенов и TON туда добавить.`);
-    poolAddress = null;
+  // ---- Этап 3: привязка кошелька жетона к кривой и стартовая покупка.
+  // Адрес кошелька зависит от адреса самой кривой, поэтому посчитать его
+  // заранее было нечем — отсюда вторая транзакция. Стартовая покупка
+  // едет тем же сообщением, чтобы подтверждение было одно. ----
+  let mintedTokens = 0;
+  try {
+    const buyValue = toNano(buyTon.toFixed(9)) + CURVE_GAS_BUY_OVERHEAD;
+    await tonConnectUI.sendTransaction({
+      validUntil: Math.floor(Date.now() / 1000) + 300,
+      network: network === "testnet" ? "-3" : "-239",
+      messages: [
+        {
+          address: curveAddress.toString(),
+          amount: toNano("0.05").toString(),
+          payload: buildSetJettonWalletBody(curveJettonWallet).toBoc().toString("base64"),
+        },
+        {
+          address: curveAddress.toString(),
+          amount: buyValue.toString(),
+          // minTokensOut оставляем нулевым: на пустой кривой цена ещё
+          // никем не сдвинута, а жёсткая граница здесь только мешала бы
+          // запуску сорваться из-за округления.
+          payload: buildBuyBody({ queryId: 0n, minTokensOut: 0n }).toBoc().toString("base64"),
+        },
+      ],
+    });
+    log("вторая транзакция отправлена: привязка кошелька жетона + стартовая покупка");
+  } catch (e) {
+    warn(`Кривая развёрнута, но стартовая покупка не прошла: ${describeError(e)}. Токен уже торгуется — покупку можно повторить с его страницы.`);
   }
+
+  try {
+    const boughtRaw = await waitForJettonBalance(Address.parse(walletAddress), jettonMasterAddress, network, {
+      log,
+      warn,
+      timeoutMs: 90000,
+    });
+    mintedTokens = Number(boughtRaw / (10n ** decimals));
+  } catch (e) {
+    warn("Стартовая покупка ещё не подтвердилась — баланс появится, когда сеть обработает транзакцию");
+  }
+
+  onStage?.(3);
   return {
     jettonMasterAddress: jettonMasterAddress.toString(),
-    poolAddress: poolAddress ? poolAddress.toString() : null,
+    curveAddress: curveAddress ? curveAddress.toString() : null,
+    curveJettonWallet: curveJettonWallet ? curveJettonWallet.toString() : null,
+    // Пула на внешнем DEX у токена нет и не должно быть: пока он на
+    // кривой, торговля идёт через неё. Пул появится после набора порога.
+    poolAddress: null,
     explorerUrl: `https://tonscan.org/address/${jettonMasterAddress.toString()}`,
     // Real, on-chain-confirmed balance (see waitForJettonBalance above) —
     // use this instead of the pre-launch estimate wherever the app

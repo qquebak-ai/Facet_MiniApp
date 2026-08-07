@@ -9,8 +9,15 @@ import {
   Eye, EyeOff, LogIn, Mail, KeyRound, ShoppingBag, Trash2
 } from "lucide-react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
-import { Address, toNano} from "@ton/core";
+import { Address, beginCell, toNano } from "@ton/core";
 import { supabase } from "./supabaseClient";
+import {
+  buildBuyBody,
+  buildSellPayload,
+  CURVE_GAS_BUY_OVERHEAD,
+  CURVE_SELL_FORWARD_TON,
+  CURVE_SELL_VALUE,
+} from "./curveConfig";
 import { launchRealToken } from "./tonLaunch";
 /* ---------------------------------------------------------
    DESIGN TOKENS — shared by every screen (Home, Token, Create, Profile)
@@ -1351,6 +1358,25 @@ async function fetchTokenInfo(tokenAddress) {
 // from GeckoTerminal's mainnet trending pools regardless of which
 // network the connected wallet happens to be on for launching/trading.
 const TONAPI_MAINNET_BASE = "https://tonapi.io";
+
+// Адрес кошелька жетона у конкретного владельца. Нужен для продажи:
+// продать — значит перевести жетоны со своего кошелька на кошелёк
+// кривой, а свой адрес заранее неизвестен и выводится мастером жетона.
+// testnet приходит параметром: константа сети объявлена внутри
+// компонента и на верхнем уровне модуля не видна.
+async function fetchJettonWalletAddress(jettonMaster, ownerAddress, testnet) {
+  if (!jettonMaster || !ownerAddress) return null;
+  const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
+  try {
+    const res = await fetch(`${host}/v2/accounts/${ownerAddress}/jettons/${jettonMaster}`);
+    if (!res.ok) throw new Error(`tonapi ${res.status}`);
+    const json = await res.json();
+    return json?.wallet_address?.address || null;
+  } catch (err) {
+    console.error("[mintly] не удалось получить адрес кошелька жетона:", err);
+    return null;
+  }
+}
 const HOLDERS_TTL_MS = 60_000;
 const holdersCache = new Map(); // tokenAddress -> { count, ts }
 const holdersInflight = new Map(); // tokenAddress -> Promise, de-dupes concurrent callers
@@ -2784,6 +2810,8 @@ function localTokenToFeedShape(entry) {
     live: false,
     dexName: null,
     ownerId: entry.ownerId || null,
+    curveAddress: entry.curveAddress || null,
+    curveJettonWallet: entry.curveJettonWallet || null,
     createdAt: entry.createdAt ? new Date(entry.createdAt).toISOString() : null,
   };
 }
@@ -6346,6 +6374,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       vol: "$0",
       address: row.address,
       poolAddress: row.pool_address,
+      curveAddress: row.curve_address || null,
+      curveJettonWallet: row.curve_jetton_wallet || null,
       explorerUrl: row.explorer_url,
       supply: row.supply,
       buyAmount: row.buy_amount,
@@ -6593,6 +6623,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         buy_tokens: result.buyTokens || 0,
         address: result.address,
         pool_address: result.poolAddress || null,
+        curve_address: result.curveAddress || null,
+        curve_jetton_wallet: result.curveJettonWallet || null,
         explorer_url: result.explorerUrl || null,
         category: result.category || null,
         network: result.network || (TON_TESTNET ? "testnet" : "mainnet"),
@@ -6617,6 +6649,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       vol: "$0",
       address: row.address,
       poolAddress: row.pool_address,
+      curveAddress: row.curve_address || null,
+      curveJettonWallet: row.curve_jetton_wallet || null,
       explorerUrl: row.explorer_url,
       supply: row.supply,
       buyAmount: row.buy_amount,
@@ -6756,6 +6790,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           buyPct: pct,
           category: req.category || null,
           logoUrl: persistentLogoUrl,
+          curveAddress: chainResult.curveAddress,
+          curveJettonWallet: chainResult.curveJettonWallet,
           network: TON_TESTNET ? "testnet" : "mainnet",
           address: chainResult.jettonMasterAddress,
           poolAddress: chainResult.poolAddress,
@@ -6874,19 +6910,28 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       const mainTon = totalTon - feeTon;
 
       try {
+        // У токенов, запущенных в приложении, есть своя бондинг-кривая —
+        // покупка идёт сообщением на неё, и жетоны реально приходят на
+        // кошелёк. У токенов из внешней ленты кривой нет: там остаётся
+        // прежний перевод, потому что торговать на чужом пуле отсюда
+        // пока нечем.
+        const messages = token.curveAddress
+          ? [{
+              address: token.curveAddress,
+              // Контракт удерживает фиксированную сумму на газ, поэтому
+              // отправляем её сверх суммы покупки — иначе на кривую
+              // попадёт меньше, чем человек ввёл.
+              amount: (toNano(totalTon.toFixed(9)) + CURVE_GAS_BUY_OVERHEAD).toString(),
+              payload: buildBuyBody({ queryId: 0n, minTokensOut: 0n }).toBoc().toString("base64"),
+            }]
+          : [
+              { address: TREASURY_ADDRESS, amount: toNano(mainTon.toFixed(9)).toString() },
+              { address: FEE_ADDRESS, amount: toNano(feeTon.toFixed(9)).toString() },
+            ];
         await tonConnectUI.sendTransaction({
           validUntil: Math.floor(Date.now() / 1000) + 300,
           network: TON_TESTNET ? "-3" : "-239",
-          messages: [
-            {
-              address: TREASURY_ADDRESS,
-              amount: toNano(mainTon.toFixed(9)).toString(),
-            },
-            {
-              address: FEE_ADDRESS,
-              amount: toNano(feeTon.toFixed(9)).toString(),
-            },
-          ],
+          messages,
         });
         adjustHolding(token.id, rawEstimate);
         setTradeModal(null);
@@ -6903,21 +6948,42 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       const held = holdings[token.id] || 0;
       if (rawAmount > held) { showToast(t("insufficientSellAmount")); return; }
       if (!connected) { showToast(t("connectWalletSell")); return; }
-      // No live on-chain pool contract is wired up for this demo token, so
-      // a real jetton transfer isn't possible — but the sale still has to
-      // go through TonConnect like a real trade would: the wallet signs
-      // and sends a real, on-chain network-fee transaction to confirm it,
-      // instead of just showing a toast with nothing sent anywhere.
+      // Продажа на кривой — это перевод жетонов на её кошелёк: кривая
+      // получает уведомление и присылает TON обратно. Нужен свой кошелёк
+      // жетона продавца, поэтому адрес спрашиваем у мастера жетона.
       try {
+        let messages;
+        if (token.curveAddress && token.curveJettonWallet && token.tokenAddress) {
+          const sellerWallet = await fetchJettonWalletAddress(token.tokenAddress, walletAddress, TON_TESTNET);
+          if (!sellerWallet) { showToast(t("txCancelled")); return; }
+          const body = beginCell()
+            .storeUint(0xf8a7ea5, 32)
+            .storeUint(0, 64)
+            .storeCoins(toNano(rawAmount.toFixed(9)))
+            .storeAddress(Address.parse(token.curveAddress))
+            .storeAddress(Address.parse(walletAddress))
+            .storeBit(false)
+            .storeCoins(CURVE_SELL_FORWARD_TON)
+            .storeBit(true)
+            .storeRef(buildSellPayload(0n))
+            .endCell();
+          messages = [{
+            address: sellerWallet,
+            amount: CURVE_SELL_VALUE.toString(),
+            payload: body.toBoc().toString("base64"),
+          }];
+        } else {
+          // У токенов из внешней ленты кривой нет — оставляем прежнее
+          // поведение, чтобы ничего не сломать.
+          messages = [{
+            address: FEE_ADDRESS,
+            amount: toNano(NETWORK_FEE_TON.toFixed(9)).toString(),
+          }];
+        }
         await tonConnectUI.sendTransaction({
           validUntil: Math.floor(Date.now() / 1000) + 300,
           network: TON_TESTNET ? "-3" : "-239",
-          messages: [
-            {
-              address: FEE_ADDRESS,
-              amount: toNano(NETWORK_FEE_TON.toFixed(9)).toString(),
-            },
-          ],
+          messages,
         });
         adjustHolding(token.id, -rawAmount);
         setTradeModal(null);
