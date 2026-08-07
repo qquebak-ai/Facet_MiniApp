@@ -103,6 +103,12 @@ const STR = {
     navHome: "Главная", navMempad: "Мемпад", navCreate: "Создать", navProfile: "Профиль", navShop: "Магазин",
     shopTitle: "Магазин", shopComingSoon: "Магазин скоро откроется. Загляни позже — здесь появится что-то интересное.",
     shopIntro: "Рамки для аватарки и карточки профиля. Нажми, чтобы примерить — применится сразу.",
+    tgAuthTitle: "Вход через Telegram",
+    tgAuthCta: "Войти через Telegram",
+    tgAuthHint: "Аккаунт создастся из твоего профиля Telegram — почта и пароль не нужны.",
+    tgAuthOutside: "Открой приложение внутри Telegram, чтобы войти.",
+    tgAuthFailed: "Не удалось войти через Telegram. Попробуй ещё раз.",
+    tgAuthNotConfigured: "Вход через Telegram пока не настроен на сервере.",
     bootStepAuth: "Вход в аккаунт", bootStepFeed: "Лента покупок",
     bootStepTokens: "Токены сообщества", bootStepRate: "Курс TON",
     shopTabFrames: "Рамки", shopTabCards: "Карточки",
@@ -355,6 +361,12 @@ const STR = {
     navHome: "Home", navMempad: "Mempad", navCreate: "Create", navProfile: "Profile", navShop: "Shop",
     shopTitle: "Shop", shopComingSoon: "The shop is coming soon. Check back later — something interesting will show up here.",
     shopIntro: "Avatar frames and profile cards. Tap one to try it — it applies right away.",
+    tgAuthTitle: "Sign in with Telegram",
+    tgAuthCta: "Sign in with Telegram",
+    tgAuthHint: "Your account is created from your Telegram profile — no email, no password.",
+    tgAuthOutside: "Open the app inside Telegram to sign in.",
+    tgAuthFailed: "Telegram sign-in failed. Try again.",
+    tgAuthNotConfigured: "Telegram sign-in is not configured on the server yet.",
     bootStepAuth: "Signing in", bootStepFeed: "Buy feed",
     bootStepTokens: "Community tokens", bootStepRate: "TON rate",
     shopTabFrames: "Frames", shopTabCards: "Cards",
@@ -4768,6 +4780,44 @@ function randomProfileEmoji() { return PROFILE_EMOJI_POOL[Math.floor(Math.random
    chars, must start with a letter — keeps profile URLs / mentions safe. */
 const NICKNAME_RE = /^[A-Za-z][A-Za-z0-9_.]{1,19}$/;
 
+/* ---------------------------------------------------------
+   ВХОД ЧЕРЕЗ TELEGRAM
+   Мини-приложение получает от Telegram строку initData, подписанную
+   ключом бота. Проверить подпись можно только зная токен бота, поэтому
+   она уходит на сервер (api/telegram-auth.js), а оттуда возвращается
+   одноразовый токен, которым открывается обычная сессия Supabase.
+   Ни почта, ни пароль у человека не спрашиваются.
+--------------------------------------------------------- */
+
+function telegramInitData() {
+  if (typeof window === "undefined") return null;
+  const data = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData;
+  return data && data.length ? data : null;
+}
+
+function telegramUser() {
+  if (typeof window === "undefined") return null;
+  const wa = window.Telegram && window.Telegram.WebApp;
+  return (wa && wa.initDataUnsafe && wa.initDataUnsafe.user) || null;
+}
+
+// Бросает ошибку с понятным кодом — вызывающая сторона показывает текст.
+async function signInWithTelegram() {
+  const initData = telegramInitData();
+  if (!initData) throw new Error("no_telegram");
+
+  const res = await fetch("/api/telegram-auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ initData }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || "auth_failed");
+
+  const { error } = await supabase.auth.verifyOtp({ token_hash: json.token_hash, type: "magiclink" });
+  if (error) throw error;
+}
+
 /* AuthModal — replaces the old single-button flow. Handles three modes:
    "login"  — email + password, signs in against real Supabase auth
    "create" — nickname + email + password (+ optional avatar/bio), signs up
@@ -4776,6 +4826,8 @@ const NICKNAME_RE = /^[A-Za-z][A-Za-z0-9_.]{1,19}$/;
    login/create without closing the sheet — that's the "красивое меню". */
 function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAddress }) {
   const isEdit = mode === "edit";
+  const [tgBusy, setTgBusy] = useState(false);
+  const [tgError, setTgError] = useState("");
   const [authTab, setAuthTab] = useState(isEdit ? "create" : mode); // "login" | "create"
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -4804,16 +4856,94 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
       setPreviewEmoji(initial && initial.emoji ? initial.emoji : randomProfileEmoji());
       setTouched(false);
       setServerError("");
+      setTgError("");
+      setTgBusy(false);
     }
   }, [open, mode]);
 
   if (!open) return null;
 
+  // Регистрация и вход больше не спрашивают почту с паролем — вместо них
+  // одна кнопка «Войти через Telegram». Режим редактирования профиля
+  // остаётся прежней формой (ник, описание, аватарка).
+  if (!isEdit) {
+    const tgUser = telegramUser();
+    const insideTelegram = !!telegramInitData();
+
+    async function handleTelegramLogin() {
+      setTgError("");
+      setTgBusy(true);
+      try {
+        await signInWithTelegram();
+        onClose();
+      } catch (err) {
+        const code = (err && err.message) || "";
+        setTgError(code === "no_telegram" ? t("tgAuthOutside")
+          : code === "server_not_configured" ? t("tgAuthNotConfigured")
+          : t("tgAuthFailed"));
+      } finally {
+        setTgBusy(false);
+      }
+    }
+
+    return (
+      <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }} onClick={onClose}>
+        <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: "22px 22px 0 0", padding: 22, maxHeight: "88%", overflowY: "auto" }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
+            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{t("tgAuthTitle")}</span>
+            <button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button>
+          </div>
+
+          <div className="flex flex-col items-center text-center gap-3" style={{ paddingBottom: 6 }}>
+            <AvatarFrame frameId="ember" size={96}>
+              <div style={{
+                width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                background: tgUser && tgUser.photo_url ? `center/cover no-repeat url(${tgUser.photo_url})` : T.surfaceHi,
+                fontSize: 34,
+              }}>
+                {!(tgUser && tgUser.photo_url) && <Send size={28} color={T.electric} />}
+              </div>
+            </AvatarFrame>
+
+            {tgUser && (
+              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>
+                {tgUser.username ? `@${tgUser.username}` : [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ")}
+              </span>
+            )}
+
+            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, maxWidth: 280 }}>
+              {insideTelegram ? t("tgAuthHint") : t("tgAuthOutside")}
+            </p>
+
+            {tgError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12 }}>{tgError}</span>}
+
+            <button
+              onClick={handleTelegramLogin}
+              disabled={tgBusy || !insideTelegram}
+              className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3.5 mt-1"
+              style={{
+                background: insideTelegram ? PRISM : T.surfaceHi,
+                color: insideTelegram ? PRISM_TEXT : T.muted,
+                fontFamily: displayFont, fontWeight: 700, fontSize: 14,
+                boxShadow: insideTelegram ? `0 0 22px ${glow(0.28)}` : "none",
+                opacity: tgBusy ? 0.6 : 1,
+              }}
+            >
+              {tgBusy
+                ? <><RefreshCw size={15} style={{ animation: "spin360 1.1s linear infinite" }} /> {t("submittingText")}</>
+                : <><Send size={15} /> {t("tgAuthCta")}</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const nicknameTrimmed = nickname.trim();
-  const nicknameValid = isLogin || NICKNAME_RE.test(nicknameTrimmed);
-  const emailValid = email.trim() !== "" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const passwordValid = isEdit || password.length >= 6;
-  const canSubmit = nicknameValid && emailValid && passwordValid;
+  // Почта и пароль в профиле больше не редактируются: аккаунт заводится
+  // Telegram-ом, адрес технический. Остаётся только ник.
+  const nicknameValid = NICKNAME_RE.test(nicknameTrimmed);
+  const canSubmit = nicknameValid;
 
   function onPickAvatar(e) {
   const file = e.target.files && e.target.files[0];
@@ -4858,37 +4988,6 @@ async function uploadAvatarIfNeeded(userId) {
     if (!canSubmit) return;
     setSubmitting(true);
 
-    // ---------- LOGIN ----------
-    if (isLogin) {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-      if (error) {
-        setSubmitting(false);
-        setServerError(friendlyAuthError(error.message));
-        return;
-      }
-      const { data: prof, error: profErr } = await supabase
-        .from("profiles")
-        .select("nickname, email, bio, avatar_url, emoji")
-        .eq("id", data.user.id)
-        .single();
-      setSubmitting(false);
-      if (profErr || !prof) {
-        setServerError(t("authErrProfileLoad"));
-        return;
-      }
-      onSubmit({
-        nickname: prof.nickname,
-        email: prof.email,
-        bio: prof.bio || "",
-        avatarUrl: prof.avatar_url,
-        emoji: prof.emoji,
-      });
-      return;
-    }
-
 // ---------- EDIT (no auth call — just updates the row) ----------
     if (isEdit) {
       const { data: sessionData } = await supabase.auth.getUser();
@@ -4927,75 +5026,6 @@ async function uploadAvatarIfNeeded(userId) {
       return;
     }
 
-// ---------- CREATE (real signUp; a DB trigger auto-creates the
-    // profiles row from the metadata below — see SQL setup) ----------
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("nickname")
-      .ilike("nickname", nicknameTrimmed)
-      .maybeSingle();
-    if (existing) {
-      setSubmitting(false);
-      setServerError(tf("authErrNicknameTaken", { name: nicknameTrimmed }));
-      return;
-    }
-
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        data: {
-          nickname: nicknameTrimmed,
-          bio: bio.trim(),
-          avatar_url: null, // ещё не загружен — загрузим ПОСЛЕ signUp, когда будет userId
-          emoji: previewEmoji,
-          wallet_address: walletAddress || null,
-        },
-      },
-    });
-    if (error) {
-      setSubmitting(false);
-      setServerError(friendlyAuthError(error.message));
-      return;
-    }
-
-    if (!data.session) {
-      // Email confirmation is turned on in the Supabase project — there's
-      // no session yet, so we can't unlock the app. Ask the user to verify.
-      setSubmitting(false);
-      setServerError(t("authConfirmEmailSent"));
-      return;
-    }
-
-    // Триггер уже создал строку в profiles с avatar_url: null.
-    // Теперь, когда есть data.user.id, загружаем файл (если он был выбран)
-    // и обновляем эту же строку реальным публичным URL.
-    let uploadedUrl = null;
-    if (avatarFile) {
-      uploadedUrl = await uploadAvatarIfNeeded(data.user.id);
-      if (!uploadedUrl) {
-        setSubmitting(false);
-        return; // ошибка загрузки уже показана внутри uploadAvatarIfNeeded
-      }
-      const { error: avatarUpdateError } = await supabase
-        .from("profiles")
-        .update({ avatar_url: uploadedUrl, emoji: null })
-        .eq("id", data.user.id);
-      if (avatarUpdateError) {
-        setSubmitting(false);
-        setServerError(friendlyAuthError(avatarUpdateError.message));
-        return;
-      }
-    }
-
-    setSubmitting(false);
-    onSubmit({
-      nickname: nicknameTrimmed,
-      email: email.trim(),
-      bio: bio.trim(),
-      avatarUrl: uploadedUrl,
-      emoji: uploadedUrl ? null : previewEmoji,
-    });
   }
 
   return (
@@ -5052,14 +5082,6 @@ async function uploadAvatarIfNeeded(userId) {
             <>
               <Field label={t("nicknameLabel")} placeholder="leo_builds" value={nickname} onChange={(e) => setNickname(e.target.value)} />
               {touched && !nicknameValid && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 11, marginTop: -10 }}>{t("nicknameError")}</span>}
-            </>
-          )}
-          <Field label={t("emailLabel")} placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} icon={Mail} autoComplete="email" type="email" />
-          {touched && !emailValid && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 11, marginTop: -10 }}>{email.trim() === "" ? t("emailRequired") : t("emailInvalid")}</span>}
-          {!isEdit && (
-            <>
-              <Field label={t("passwordLabel")} placeholder={t("passwordPlaceholder")} value={password} onChange={(e) => setPassword(e.target.value)} icon={KeyRound} type="password" autoComplete={isLogin ? "current-password" : "new-password"} />
-              {touched && !passwordValid && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 11, marginTop: -10 }}>{t("passwordError")}</span>}
             </>
           )}
           {!isLogin && <Field label={t("bioLabel")} placeholder={t("bioPlaceholder")} area value={bio} onChange={(e) => setBio(e.target.value)} />}
@@ -5163,11 +5185,8 @@ function ProfileView({
               <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 700, marginTop: 4 }}>{t("accountNotCreated")}</div>
               <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>{t("accountNotCreatedBody")}</p>
               <div className="flex items-center gap-2 mt-2" style={{ width: "100%", maxWidth: 300 }}>
-                <button onClick={onOpenLogin} className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-[20px] px-4 py-2.5" style={{ background: T.surface, border: `1px solid ${T.lineHi}`, fontFamily: displayFont, fontWeight: 700, fontSize: 12.5, color: T.ice }}>
-                  <LogIn size={14} /> {t("loginCta")}
-                </button>
-                <button onClick={onOpenCreateProfile} className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-[20px] px-4 py-2.5" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 12.5 }}>
-                  <Sparkles size={14} /> {t("createCta")}
+                <button onClick={onOpenLogin} className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-[20px] px-4 py-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 12.5 }}>
+                  <Send size={14} /> {t("tgAuthCta")}
                 </button>
               </div>
             </>
@@ -5659,10 +5678,23 @@ const FEE_PERCENT = 0.01; // 1% комиссии
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    (async () => {
+      let { data: { session } } = await supabase.auth.getSession();
+      // Внутри Telegram вход происходит сам: подпись initData уже есть,
+      // спрашивать человека не о чем. Если не вышло — просто открываем
+      // приложение без аккаунта, кнопка входа остаётся в профиле.
+      if (!session && telegramInitData()) {
+        try {
+          await signInWithTelegram();
+          session = (await supabase.auth.getSession()).data.session;
+        } catch (err) {
+          console.warn("[mintly] telegram auto sign-in failed:", err && err.message);
+        }
+      }
       if (!active) return;
-      loadProfileForUser(session?.user || null).finally(() => setAuthChecked(true));
-    });
+      await loadProfileForUser(session?.user || null);
+      setAuthChecked(true);
+    })();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       loadProfileForUser(session?.user || null);
     });
