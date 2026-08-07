@@ -176,6 +176,8 @@ const STR = {
     txUnavailable: "Список транзакций пока недоступен для этого пула",
     txEmpty: "По этому пулу пока нет сделок",
     creatorLabel: "Создатель", creatorYou: "Это ты",
+    creatorTokens: "Его токены", creatorNoTokens: "Пока не запускал токены",
+    profileNotFound: "Профиль не найден",
     followCta: "Подписаться", unfollowCta: "Вы подписаны",
     followedToast: "Подписка оформлена", unfollowedToast: "Подписка отменена",
     followFailed: "Не получилось — попробуй ещё раз",
@@ -440,6 +442,8 @@ const STR = {
     txUnavailable: "Transaction list isn't available for this pool yet",
     txEmpty: "No trades on this pool yet",
     creatorLabel: "Creator", creatorYou: "That's you",
+    creatorTokens: "Their tokens", creatorNoTokens: "No tokens launched yet",
+    profileNotFound: "Profile not found",
     followCta: "Follow", unfollowCta: "Following",
     followedToast: "Followed", unfollowedToast: "Unfollowed",
     followFailed: "Didn't work — try again",
@@ -2736,28 +2740,80 @@ async function fetchCreatorProfile(userId) {
 /* TokenCreatorCard — блок «создатель» на экране токена: аватарка, ник,
    описание, число подписчиков и кнопка подписки. Подписка живёт в
    таблице follows (см. supabase_follows.sql) и требует входа. */
-function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast }) {
+function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast, onOpenProfile }) {
   const [creator, setCreator] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [followers, setFollowers] = useState(0);
-  const [following, setFollowing] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  const isSelf = !!currentUserId && currentUserId === ownerId;
+  const follow = useFollow(ownerId, currentUserId, showToast);
 
   useEffect(() => {
     let cancelled = false;
     if (!ownerId) { setLoading(false); return; }
     setLoading(true);
+    fetchCreatorProfile(ownerId).then((profile) => {
+      if (cancelled) return;
+      setCreator(profile);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [ownerId]);
 
-    async function load() {
+  if (!ownerId) return null;
+  if (loading && !creator) {
+    return (
+      <div className="rounded-[22px] p-4 flex items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+        <div className="fx-skeleton" style={{ width: 44, height: 44, borderRadius: "50%" }} />
+        <div className="flex-1 flex flex-col gap-2">
+          <div className="fx-skeleton" style={{ width: "45%", height: 12, borderRadius: 4 }} />
+          <div className="fx-skeleton" style={{ width: "70%", height: 10, borderRadius: 4 }} />
+        </div>
+      </div>
+    );
+  }
+  if (!creator) return null;
+
+  return (
+    <div className="rounded-[22px] p-4 flex items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+      {/* Аватарка с ником — переход на профиль создателя. Кнопка подписки
+          рядом отдельная, чтобы не приходилось открывать профиль ради
+          одного нажатия. */}
+      <button
+        onClick={() => onOpenProfile && onOpenProfile(ownerId)}
+        className="fx-tap flex items-center gap-3 flex-1 min-w-0"
+        style={{ background: "transparent", border: "none", padding: 0, textAlign: "left" }}
+      >
+        <TokenAvatar size={44} src={creator.avatar_url}>{creator.emoji || "🚀"}</TokenAvatar>
+        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{tr("creatorLabel")}</span>
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>{creator.nickname}</span>
+            <ChevronRight size={14} color={T.muted} />
+          </div>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>
+            {follow.followers} {followersWord(follow.followers)}
+          </span>
+        </div>
+      </button>
+
+      <FollowButton follow={follow} onNeedAuth={onNeedAuth} />
+    </div>
+  );
+}
+
+/* useFollow — подписка на одного человека: сколько у него подписчиков,
+   подписан ли текущий пользователь, и переключатель. Логика одинаковая
+   и в блоке создателя на карточке токена, и на его публичном профиле,
+   поэтому живёт в одном месте. */
+function useFollow(ownerId, currentUserId, showToast) {
+  const [followers, setFollowers] = useState(0);
+  const [following, setFollowing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const isSelf = !!currentUserId && currentUserId === ownerId;
+
+  useEffect(() => {
+    if (!ownerId) return;
+    let cancelled = false;
+    (async () => {
       try {
-        const profile = await fetchCreatorProfile(ownerId);
-        if (cancelled) return;
-        setCreator(profile);
-
-        // Сколько всего подписчиков — считаем на стороне базы, строки
-        // сюда тянуть незачем.
         const { count } = await supabase
           .from("follows")
           .select("follower_id", { count: "exact", head: true })
@@ -2777,19 +2833,14 @@ function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast }) {
           setFollowing(false);
         }
       } catch (err) {
-        // Пока таблица follows не создана, запрос падает — карточку
-        // создателя это ронять не должно, она и без счётчика полезна.
+        // Таблицы follows может ещё не быть — это не повод ломать экран.
         console.warn("[mintly] follows unavailable:", err && err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
       }
-    }
-
-    load();
+    })();
     return () => { cancelled = true; };
   }, [ownerId, currentUserId]);
 
-  async function toggleFollow() {
+  async function toggle(onNeedAuth) {
     if (!currentUserId) { onNeedAuth && onNeedAuth(); return; }
     if (isSelf || busy) return;
     setBusy(true);
@@ -2815,49 +2866,129 @@ function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast }) {
     setBusy(false);
   }
 
-  if (!ownerId) return null;
-  if (loading && !creator) {
-    return (
-      <div className="rounded-[22px] p-4 flex items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-        <div className="fx-skeleton" style={{ width: 44, height: 44, borderRadius: "50%" }} />
-        <div className="flex-1 flex flex-col gap-2">
-          <div className="fx-skeleton" style={{ width: "45%", height: 12, borderRadius: 4 }} />
-          <div className="fx-skeleton" style={{ width: "70%", height: 10, borderRadius: 4 }} />
-        </div>
-      </div>
-    );
+  return { followers, following, busy, isSelf, toggle };
+}
+
+/* FollowButton — одна кнопка на оба экрана. */
+function FollowButton({ follow, onNeedAuth, size = "sm" }) {
+  const pad = size === "lg" ? "12px 26px" : "8px 16px";
+  const font = size === "lg" ? 13.5 : 12;
+  if (follow.isSelf) {
+    return <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{tr("creatorYou")}</span>;
   }
-  if (!creator) return null;
+  return (
+    <button
+      onClick={() => follow.toggle(onNeedAuth)}
+      disabled={follow.busy}
+      className="fx-tap rounded-full flex-shrink-0"
+      style={{
+        padding: pad,
+        background: follow.following ? "transparent" : PRISM,
+        color: follow.following ? T.muted : PRISM_TEXT,
+        border: follow.following ? `1px solid ${T.lineHi}` : "none",
+        fontFamily: displayFont, fontWeight: 700, fontSize: font,
+        opacity: follow.busy ? 0.6 : 1,
+      }}
+    >
+      {follow.following ? tr("unfollowCta") : tr("followCta")}
+    </button>
+  );
+}
+
+/* PublicProfileView — профиль чужого пользователя: кто он, сколько у
+   него подписчиков и какие токены он запускал. Открывается по нажатию
+   на создателя на карточке токена. */
+function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken, onNeedAuth, showToast }) {
+  const [profile, setProfile] = useState(null);
+  const [tokens, setTokens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const follow = useFollow(ownerId, currentUserId, showToast);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const prof = await fetchCreatorProfile(ownerId);
+      if (cancelled) return;
+      setProfile(prof);
+
+      const { data } = await supabase
+        .from("tokens")
+        .select("*")
+        .eq("owner_id", ownerId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (cancelled) return;
+      setTokens(data || []);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [ownerId]);
 
   return (
-    <div className="rounded-[22px] p-4 flex items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-      <TokenAvatar size={44} src={creator.avatar_url}>{creator.emoji || "🚀"}</TokenAvatar>
-
-      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{tr("creatorLabel")}</span>
-        <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>{creator.nickname}</span>
-        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>
-          {followers} {followersWord(followers)}
-        </span>
+    <div className="fx-view flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 13, background: T.surface, border: `1px solid ${T.line}` }}>
+          <ChevronLeft size={16} /> {tr("back")}
+        </button>
       </div>
 
-      {isSelf ? (
-        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{tr("creatorYou")}</span>
+      {loading && !profile ? (
+        <div className="flex flex-col items-center gap-3" style={{ marginTop: 12 }}>
+          <div className="fx-skeleton" style={{ width: 96, height: 96, borderRadius: "50%" }} />
+          <div className="fx-skeleton" style={{ width: 120, height: 14, borderRadius: 4 }} />
+        </div>
+      ) : !profile ? (
+        <div className="rounded-[22px] p-6 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("profileNotFound")}</span>
+        </div>
       ) : (
-        <button
-          onClick={toggleFollow}
-          disabled={busy}
-          className="fx-tap rounded-full px-4 py-2 flex-shrink-0"
-          style={{
-            background: following ? "transparent" : PRISM,
-            color: following ? T.muted : PRISM_TEXT,
-            border: following ? `1px solid ${T.lineHi}` : "none",
-            fontFamily: displayFont, fontWeight: 700, fontSize: 12,
-            opacity: busy ? 0.6 : 1,
-          }}
-        >
-          {following ? tr("unfollowCta") : tr("followCta")}
-        </button>
+        <>
+          <div className="flex flex-col items-center text-center gap-2.5">
+            <TokenAvatar size={96} src={profile.avatar_url}>{profile.emoji || "🚀"}</TokenAvatar>
+            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{profile.nickname}</span>
+            {profile.bio ? (
+              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 280, lineHeight: 1.5 }}>{profile.bio}</p>
+            ) : null}
+            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>
+              {follow.followers} {followersWord(follow.followers)}
+            </span>
+            <div style={{ marginTop: 4 }}>
+              <FollowButton follow={follow} onNeedAuth={onNeedAuth} size="lg" />
+            </div>
+          </div>
+
+          <div>
+            <SectionTitle>{tr("creatorTokens")}</SectionTitle>
+            {loading ? (
+              <div className="flex flex-col gap-2">
+                {[0, 1].map((i) => <MempadRowSkeleton key={i} index={i} />)}
+              </div>
+            ) : tokens.length === 0 ? (
+              <div className="rounded-[22px] p-5 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
+                <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("creatorNoTokens")}</span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {tokens.map((row) => (
+                  <button
+                    key={row.id}
+                    onClick={() => onOpenToken(row)}
+                    className="fx-card flex items-center gap-3 rounded-[22px] w-full"
+                    style={{ background: T.surface, border: `1px solid ${T.line}`, padding: "12px 14px" }}
+                  >
+                    <TokenAvatar size={40} src={row.logo_url}>🚀</TokenAvatar>
+                    <div className="flex-1 min-w-0 flex flex-col items-start">
+                      <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{row.ticker}</span>
+                      <span className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{row.name}</span>
+                    </div>
+                    <ChevronRight size={16} color={T.muted} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -3355,7 +3486,7 @@ function HomeView({ onGoTab }) {
 
 const CHART_TOTAL = 140;
 
-function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey, currentUserId = null, onNeedAuth }) {
+function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey, currentUserId = null, onNeedAuth, onOpenProfile }) {
   const [tab, setTab] = useState("chart"); // chart | info | tx
   const [chartMode] = useState("mcap"); // always market cap — price toggle removed
   const [tf, setTf] = useState(() => {
@@ -3654,6 +3785,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             currentUserId={currentUserId}
             onNeedAuth={onNeedAuth}
             showToast={showToast}
+            onOpenProfile={onOpenProfile}
           />
 
           {connected ? (
@@ -6431,6 +6563,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   function openToken(t) { setToken(t); setView("token"); }
   function goTab(name) { setTab(name); setView(name); }
   function backFromToken() { setView(tab); }
+  // Профиль создателя открывается поверх карточки токена, поэтому «назад»
+  // возвращает именно на неё, а не на вкладку.
+  const [viewedUserId, setViewedUserId] = useState(null);
+  function openUserProfile(id) { if (!id) return; setViewedUserId(id); setView("user"); }
+  function backFromUserProfile() { setView(token ? "token" : tab); }
 
   function handleHeaderWalletClick() {
     if (connected) { goTab("profile"); }
@@ -6643,7 +6780,17 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           {view === "home" && <HomeView onGoTab={goTab} />}
           {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={() => goTab("create")} />}
           {view === "shop" && <ShopView cosmetics={cosmetics} onEquip={equipCosmetic} profile={profile} />}
-          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} />}
+          {view === "user" && (
+            <PublicProfileView
+              userId={viewedUserId}
+              currentUserId={userId}
+              onBack={backFromUserProfile}
+              onOpenToken={(row) => openToken(localTokenToFeedShape(mapTokenRow(row)))}
+              onNeedAuth={openCreateProfile}
+              showToast={showToast}
+            />
+          )}
+          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} onOpenProfile={openUserProfile} />}
           {view === "create" && (
             <CreateView
               showToast={showToast}
