@@ -1423,6 +1423,11 @@ async function fetchJettonAccount(jettonMaster, ownerAddress, testnet) {
     return {
       wallet: json?.wallet_address?.address || null,
       balance: raw == null ? 0 : Number(BigInt(raw) / 10n ** BigInt(decimals)),
+      // Точное значение в минимальных единицах. Округлённое число токенов
+      // годится для показа, но не для продажи: обратное умножение даёт
+      // величину, которая может оказаться больше настоящей, и контракт
+      // отвергает такой перевод.
+      raw: raw == null ? 0n : BigInt(raw),
     };
   } catch (err) {
     console.error("[mintly] не удалось получить данные жетона:", err);
@@ -6584,6 +6589,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // считало по цене из ленты, а у токенов на кривой её нет — отсюда
   // «вы получите 0».
   const [tradeCurveState, setTradeCurveState] = useState(null);
+  const [chainHoldingRaw, setChainHoldingRaw] = useState(null);
   // Настоящий баланс открытого токена спрашиваем у сети — при открытии
   // окна сделки и после каждой сделки. Локальный счётчик остаётся только
   // как запасной вариант, пока ответ не пришёл.
@@ -6599,6 +6605,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     fetchJettonAccount(jetton, walletAddress, TON_TESTNET).then((info) => {
       if (cancelled || !info) return;
       if (info.balance != null) setChainHolding(info.balance);
+      if (info.raw != null) setChainHoldingRaw(info.raw);
       if (info.wallet) setChainJettonWallet(info.wallet);
     });
     return () => { cancelled = true; };
@@ -7160,10 +7167,15 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           // привычный EQ…-формат: на сыром часть из них молча отклоняет
           // запрос, и окно подтверждения закрывается само.
           const sellerWallet = Address.parse(chainJettonWallet).toString();
+          const wanted = toNano(rawAmount.toFixed(9));
+          const sellRaw = chainHoldingRaw != null && wanted > chainHoldingRaw ? chainHoldingRaw : wanted;
           const body = beginCell()
             .storeUint(0xf8a7ea5, 32)
             .storeUint(0, 64)
-            .storeCoins(toNano(rawAmount.toFixed(9)))
+            // Продаём не больше того, что реально на кошельке: при продаже
+            // всего берём точное значение из сети, а не пересчитанное из
+            // округлённого числа токенов.
+            .storeCoins(sellRaw)
             .storeAddress(Address.parse(token.curveAddress))
             .storeAddress(Address.parse(walletAddress))
             .storeBit(false)
