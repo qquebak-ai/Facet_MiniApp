@@ -952,7 +952,7 @@ function seededRand(seed) {
    Telegram WebView): падающие мятные листья и тонкая сетка. Всё под
    pointer-events:none и на zIndex 0 — контент приложения лежит выше на
    zIndex 1. */
-const LEAF_COUNT = 22;
+const LEAF_COUNT = 33;
 
 function CyberGrid({ forceDark, showStars = true }) {
   const dark = forceDark || T.bg === DARK_THEME.bg;
@@ -1007,8 +1007,16 @@ function CyberGrid({ forceDark, showStars = true }) {
       />
 
       {/* листья. В профиле их гасим: там своя карточка-подложка, и два
-          слоя фона друг на друге читаются как шум. */}
-      {showStars && leaves.map((l, i) => (
+          слоя фона друг на друге читаются как шум.
+
+          Все листья лежат в одном слое: обёртка вынесена на композицию
+          (translateZ) и изолирована, а у самих листьев больше нет
+          will-change. С отдельным постоянным слоем на каждый лист
+          браузер пересобирал картинку кусками, и на границах элементов
+          поверх фона проступали тонкие светлые линии. */}
+      {showStars && (
+        <div style={{ position: "absolute", inset: 0, transform: "translateZ(0)", isolation: "isolate", contain: "paint" }}>
+      {leaves.map((l, i) => (
         <svg
           key={`leaf${i}`}
           width={l.size}
@@ -1024,12 +1032,14 @@ function CyberGrid({ forceDark, showStars = true }) {
             ["--dx"]: `${l.dx}px`,
             opacity: 0,
             animation: `leafFall ${l.dur}s linear ${l.delay}s infinite`,
-            willChange: "transform, opacity",
+            backfaceVisibility: "hidden",
           }}
         >
           <path d="M0 0 C -8 -7 -8 -19 0 -26 C 8 -19 8 -7 0 0 Z" fill={T.electric} />
         </svg>
       ))}
+        </div>
+      )}
     </div>
   );
 }
