@@ -13,6 +13,7 @@ import { Address, beginCell, toNano } from "@ton/core";
 import { supabase } from "./supabaseClient";
 import {
   CURVE_PARAMS,
+  CURVE_TOTAL_SUPPLY,
   curveParamsOf,
   tokensOutFor,
   tonOutFor,
@@ -1150,19 +1151,20 @@ function ChangeBadge({ value, size = "sm" }) {
 // in a scrolling list, that overhead was a real contributor to the scroll
 // stutter. This is a plain SVG path — same look, a fraction of the cost —
 // matching the approach already used for the main candlestick chart.
-const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, positive, id, width = 78, height = 36, length = 22 }) {
+const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, curveAddress, positive, id, width = 78, height = 36, length = 22 }) {
   const tick = useLiveTick();
   const [closes, setCloses] = useState(null);
-  // Demo tokens (no on-chain pool) have nothing to fetch, so they're
-  // "visible" immediately and just run the synthetic series below.
-  const [visible, setVisible] = useState(!poolAddress);
+  // Источник настоящей истории: пул на DEX или своя кривая. Если нет ни
+  // того ни другого (демо-токен) — рисуется синтетика ниже.
+  const source = poolAddress || curveAddress || null;
+  const [visible, setVisible] = useState(!source);
   const elRef = useRef(null);
 
   // Only fetch real candle history once the card actually scrolls into
   // view. With 18+ cards in a feed, kicking off every request up front
   // would mean 18 simultaneous calls on what might be a mobile connection.
   useEffect(() => {
-    if (!poolAddress || visible) return;
+    if (!source || visible) return;
     const el = elRef.current;
     if (!el || typeof IntersectionObserver === "undefined") { setVisible(true); return; }
     const io = new IntersectionObserver((entries) => {
@@ -1170,13 +1172,16 @@ const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, posit
     }, { rootMargin: "200px" });
     io.observe(el);
     return () => io.disconnect();
-  }, [poolAddress, visible]);
+  }, [source, visible]);
 
   useEffect(() => {
-    if (!poolAddress || !visible) return;
+    if (!source || !visible) return;
     let cancelled = false;
     function load() {
-      fetchSparkCloses(poolAddress, length).then((res) => {
+      const p = poolAddress
+        ? fetchSparkCloses(poolAddress, length)
+        : fetchCurveSparkCloses(curveAddress, length);
+      p.then((res) => {
         if (!cancelled && res) setCloses(res);
       });
     }
@@ -1186,7 +1191,7 @@ const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, posit
     // this doesn't add extra network load beyond what the cache allows).
     const iv = setInterval(load, SPARK_TTL_MS);
     return () => { cancelled = true; clearInterval(iv); };
-  }, [poolAddress, visible, length]);
+  }, [source, poolAddress, curveAddress, visible, length]);
 
   // Real pools: the fetched OHLCV shape is the true recent history, but it
   // only actually refreshes every SPARK_TTL_MS — without this, the line
@@ -1568,44 +1573,65 @@ async function fetchJettonAccount(jettonMaster, ownerAddress, testnet) {
   }
 }
 const HOLDERS_TTL_MS = 60_000;
-const holdersCache = new Map(); // tokenAddress -> { count, ts }
+const holdersCache = new Map(); // сеть+адрес -> { meta, ts }
 const holdersInflight = new Map(); // tokenAddress -> Promise, de-dupes concurrent callers
-async function fetchJettonHolders(tokenAddress) {
+// Метаданные жетона: держатели и выпущенное количество. Обе цифры из
+// одного ответа, поэтому запрос один.
+//
+// Сеть приходит параметром: токены из общей ленты живут в mainnet, а
+// запущенные в приложении — там, где работает приложение. Раньше адрес
+// всегда спрашивали у mainnet, и для своих токенов ответом был «нет
+// такого жетона», то есть прочерк вместо реального числа держателей.
+async function fetchJettonMeta(tokenAddress, testnet = false) {
   if (!tokenAddress) return null;
-  const cached = holdersCache.get(tokenAddress);
-  if (cached && Date.now() - cached.ts < HOLDERS_TTL_MS) return cached.count;
-  if (holdersInflight.has(tokenAddress)) return holdersInflight.get(tokenAddress);
+  const key = `${testnet ? "t" : "m"}:${tokenAddress}`;
+  const cached = holdersCache.get(key);
+  if (cached && Date.now() - cached.ts < HOLDERS_TTL_MS) return cached.meta;
+  if (holdersInflight.has(key)) return holdersInflight.get(key);
+  const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
   const p = (async () => {
     try {
-      const res = await fetch(`${TONAPI_MAINNET_BASE}/v2/jettons/${tokenAddress}`);
+      const res = await fetch(`${host}/v2/jettons/${tokenAddress}`);
       if (!res.ok) throw new Error(`tonapi ${res.status}`);
       const json = await res.json();
-      const count = typeof json?.holders_count === "number" ? json.holders_count : null;
-      holdersCache.set(tokenAddress, { count, ts: Date.now() });
-      holdersInflight.delete(tokenAddress);
-      return count;
+      const decimals = Number(json?.metadata?.decimals ?? 9) || 9;
+      const rawSupply = json?.total_supply != null ? String(json.total_supply) : null;
+      const meta = {
+        holders: typeof json?.holders_count === "number" ? json.holders_count : null,
+        // Выпуск читаем с цепочки, а не берём из настроек: у токенов,
+        // созданных до смены параметров, он другой.
+        supply: rawSupply != null ? Number(rawSupply) / 10 ** decimals : null,
+      };
+      holdersCache.set(key, { meta, ts: Date.now() });
+      holdersInflight.delete(key);
+      return meta;
     } catch (err) {
-      holdersInflight.delete(tokenAddress);
-      return cached ? cached.count : null;
+      holdersInflight.delete(key);
+      return cached ? cached.meta : null;
     }
   })();
-  holdersInflight.set(tokenAddress, p);
+  holdersInflight.set(key, p);
   return p;
+}
+
+async function fetchJettonHolders(tokenAddress, testnet = false) {
+  const meta = await fetchJettonMeta(tokenAddress, testnet);
+  return meta ? meta.holders : null;
 }
 
 // Plain hook form of fetchJettonHolders, for spots (token detail header,
 // info tab) that lay the number out themselves rather than using the
 // icon+value HoldersBadge component. undefined = still loading, null =
 // TonAPI has nothing for this address.
-function useJettonHolders(tokenAddress) {
+function useJettonHolders(tokenAddress, testnet = false) {
   const [count, setCount] = useState(undefined);
   useEffect(() => {
     setCount(undefined);
     if (!tokenAddress) return;
     let cancelled = false;
-    fetchJettonHolders(tokenAddress).then((c) => { if (!cancelled) setCount(c); });
+    fetchJettonHolders(tokenAddress, testnet).then((c) => { if (!cancelled) setCount(c); });
     return () => { cancelled = true; };
-  }, [tokenAddress]);
+  }, [tokenAddress, testnet]);
   return count;
 }
 
@@ -1788,19 +1814,19 @@ async function fetchCurveTrades(curveAddress, testnet, feeBps = 0n) {
 function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL) {
   const params = curveParamsOf(state);
   const step = TF_SECONDS[timeframe] || 3600;
-  const startPrice = curvePriceFromReserve(0n, params) * TON_USD;
+  const startPrice = curvePriceFromReserve(0n, params) * tonUsd();
   const now = Math.floor(Date.now() / 1000);
   const bucketOf = (t) => Math.floor(t / step) * step;
 
   const points = (trades || []).map((tr) => ({
     time: tr.time,
-    price: curvePriceFromReserve(tr.realTon, params) * TON_USD,
-    volume: Number(tr.ton) / 1e9 * TON_USD,
+    price: curvePriceFromReserve(tr.realTon, params) * tonUsd(),
+    volume: Number(tr.ton) / 1e9 * tonUsd(),
   }));
   // Последняя точка — состояние прямо из контракта, если оно прочитано:
   // так конец графика совпадает с ценой, по которой идёт сделка.
   const lastPrice = state?.realTon != null
-    ? curvePriceFromReserve(state.realTon, params) * TON_USD
+    ? curvePriceFromReserve(state.realTon, params) * tonUsd()
     : (points.length ? points[points.length - 1].price : startPrice);
 
   const firstTime = points.length ? points[0].time : now;
@@ -1844,6 +1870,84 @@ function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL)
   }
   if (!candles.length) return null;
   return { candles: candles.slice(-limit), volume: volume.slice(-limit) };
+}
+
+// Рыночные показатели токена на кривой — все из цепочки, ничего
+// придуманного. Цена и капитализация считаются по резервам, объём и
+// изменение — по списку сделок самой кривой, выпуск и держатели — по
+// мастеру жетона. Раньше здесь стояли ноль или заглушка, потому что
+// внешние агрегаторы про такой токен ничего не знают: пары на DEX у него
+// ещё нет.
+async function fetchCurveMarket(curveAddress, jettonMaster, testnet) {
+  if (!curveAddress) return null;
+  const state = await fetchCurveState(curveAddress, testnet);
+  if (!state) return null;
+  const params = curveParamsOf(state);
+  const [trades, meta] = await Promise.all([
+    fetchCurveTrades(curveAddress, testnet, params.feeBps),
+    fetchJettonMeta(jettonMaster, testnet),
+  ]);
+  const rate = tonUsd();
+  const priceTon = curvePriceFromReserve(state.realTon, params);
+  const supply = meta && meta.supply ? meta.supply : Number(CURVE_TOTAL_SUPPLY) / 1e9;
+
+  const list = trades || [];
+  const dayAgo = Math.floor(Date.now() / 1000) - 86400;
+  const recent = list.filter((tr) => tr.time >= dayAgo);
+  const volTon = recent.reduce((sum, tr) => sum + Number(tr.ton) / 1e9, 0);
+
+  // Цена сутки назад — состояние кривой после последней сделки до окна.
+  // Если сделок до окна не было, кривая стояла на стартовой цене.
+  const before = list.filter((tr) => tr.time < dayAgo);
+  const prevReal = before.length ? before[before.length - 1].realTon : 0n;
+  const prevPrice = curvePriceFromReserve(prevReal, params);
+
+  return {
+    state,
+    trades: list,
+    priceTon,
+    priceUsd: priceTon * rate,
+    supply,
+    mcapUsd: priceTon * rate * supply,
+    // Ликвидность — то, что реально лежит в кривой: именно эти TON
+    // выплачиваются продающим.
+    liqUsd: (Number(state.realTon) / 1e9) * rate,
+    vol24Usd: volTon * rate,
+    tx24: recent.length,
+    holders: meta ? meta.holders : null,
+    change24: prevPrice > 0 ? ((priceTon - prevPrice) / prevPrice) * 100 : 0,
+  };
+}
+
+// Сделки кривой в том же виде, в каком приходят сделки с DEX, — чтобы
+// вкладка «Транзакции» рисовала и те и другие одним кодом.
+function curveTradesToFeed(trades, params, limit = 30) {
+  const rate = tonUsd();
+  return (trades || [])
+    .slice(-limit)
+    .reverse()
+    .map((tr, i) => ({
+      id: `curve-${tr.time}-${i}`,
+      kind: tr.kind,
+      volUsd: (Number(tr.ton) / 1e9) * rate,
+      priceUsd: curvePriceFromReserve(tr.realTon, params) * rate,
+      txHash: null,
+      from: null,
+      at: new Date(tr.time * 1000).toISOString(),
+    }));
+}
+
+// Короткая история цены для мини-графика на карточке токена: те же
+// свечи кривой, только пятнадцатиминутные и за небольшое окно.
+const curveSparkCache = new Map(); // адрес -> { closes, ts }
+async function fetchCurveSparkCloses(curveAddress, n = 24) {
+  if (!curveAddress) return null;
+  const cached = curveSparkCache.get(curveAddress);
+  if (cached && Date.now() - cached.ts < SPARK_TTL_MS) return cached.closes;
+  const res = await fetchCurveOHLCV(curveAddress, "M15", TON_TESTNET_NETWORK);
+  const closes = res?.candles?.length ? res.candles.slice(-n).map((c) => c.close) : null;
+  if (closes && closes.length > 1) curveSparkCache.set(curveAddress, { closes, ts: Date.now() });
+  return closes || (cached ? cached.closes : null);
 }
 
 async function fetchCurveOHLCV(curveAddress, timeframe, testnet) {
@@ -2908,7 +3012,7 @@ function CardStat({ icon: Icon, children }) {
 // feed doesn't fire 18+ TonAPI requests up front. Shows a dash while
 // loading and stays a dash if TonAPI has nothing for this address —
 // never falls back to a fabricated number.
-const HoldersBadge = React.memo(function HoldersBadge({ tokenAddress, icon: Icon = User }) {
+const HoldersBadge = React.memo(function HoldersBadge({ tokenAddress, testnet = false, icon: Icon = User }) {
   const [count, setCount] = useState(undefined);
   const [visible, setVisible] = useState(!tokenAddress);
   const elRef = useRef(null);
@@ -2927,9 +3031,9 @@ const HoldersBadge = React.memo(function HoldersBadge({ tokenAddress, icon: Icon
   useEffect(() => {
     if (!tokenAddress || !visible) return;
     let cancelled = false;
-    fetchJettonHolders(tokenAddress).then((c) => { if (!cancelled) setCount(c); });
+    fetchJettonHolders(tokenAddress, testnet).then((c) => { if (!cancelled) setCount(c); });
     return () => { cancelled = true; };
-  }, [tokenAddress, visible]);
+  }, [tokenAddress, visible, testnet]);
 
   return (
     <span ref={elRef} className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 10.5, color: T.muted }}>
@@ -2958,10 +3062,10 @@ function TokenCard({ t, onOpen, index }) {
             <ChangeBadge value={t.change} />
           </div>
         </div>
-        <MiniChart base={t.mcapNum} seed={t.seed} poolAddress={t.poolAddress} positive={up} id={t.id} width={62} height={30} />
+        <MiniChart base={t.mcapNum} seed={t.seed} poolAddress={t.poolAddress} curveAddress={t.curveAddress} positive={up} id={t.id} width={62} height={30} />
       </div>
       <div className="flex items-center gap-3 mt-2" style={{ paddingLeft: 52 }}>
-        <HoldersBadge tokenAddress={t.tokenAddress} />
+        <HoldersBadge tokenAddress={t.tokenAddress} testnet={!!t.curveAddress && TON_TESTNET_NETWORK} />
         <CardStat icon={Flame}>${t.vol}</CardStat>
       </div>
     </button>
@@ -3126,7 +3230,7 @@ function MempadRow({ t: tok, onOpen, index }) {
       <div className="flex-1 min-w-0">
         <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tok.ticker}</div>
         <div className="flex items-center gap-2.5">
-          <HoldersBadge tokenAddress={tok.tokenAddress} />
+          <HoldersBadge tokenAddress={tok.tokenAddress} testnet={!!tok.curveAddress && TON_TESTNET_NETWORK} />
           <CardStat icon={Flame}>${tok.vol}</CardStat>
         </div>
       </div>
@@ -3153,19 +3257,20 @@ function MempadRowSkeleton({ index }) {
   );
 }
 
-// Adapts a locally-launched token (from myTokens — see handleTokenCreated
-// at the root) into the same shape the real GeckoTerminal feed produces,
-// so MempadRow/TokenDetail can render either without a special case.
-// price is derived from mcap/fixed-supply since these tokens don't have
-// a price field of their own yet; change is 0 — there's no history for a
-// token that was just launched. poolAddress stays null until the pool is
-// actually indexed somewhere, so TokenDetail's chart falls back to its
-// existing synthetic view rather than pretending there's real OHLCV.
+// Приводит токен, запущенный в приложении, к тому же виду, в котором
+// приходит внешняя лента, — чтобы карточка и экран токена рисовали и то
+// и другое одним кодом.
+//
+// Цена, капитализация, объём и изменение приезжают из состояния кривой
+// (см. fetchCurveMarket) и подставляются сюда как есть. Пока их нет —
+// нули и прочерки: выдуманное число на экране торговли хуже пустого
+// места. poolAddress остаётся пустым, пары на DEX у такого токена ещё
+// нет; график при этом рисуется по истории самой кривой.
 function localTokenToFeedShape(entry) {
   // priceTon приходит из состояния кривой, если оно уже прочитано;
   // иначе честнее показать ноль, чем выдуманное число.
   const price = entry.priceTon != null
-    ? entry.priceTon * TON_USD
+    ? entry.priceTon * tonUsd()
     : (entry.mcapNum ? entry.mcapNum / 1_000_000_000 : 0);
   return {
     id: entry.id,
@@ -3176,10 +3281,11 @@ function localTokenToFeedShape(entry) {
     logoUrl: entry.logoUrl,
     emoji: entry.emoji,
     price,
-    change: 0,
+    change: entry.change || 0,
     mcapNum: entry.mcapNum,
     liq: entry.liq,
     vol: entry.vol,
+    tx24h: entry.tx24h || 0,
     cat: "Мемы",
     seed: hashSeed(entry.id),
     verified: entry.verified,
@@ -3986,7 +4092,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
               <TokenAvatar size={92} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl}>{spotlight.emoji}</TokenAvatar>
               <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 20, fontWeight: 800 }}>{spotlight.ticker}</span>
               <div className="flex items-center gap-3">
-                <HoldersBadge tokenAddress={spotlight.tokenAddress} />
+                <HoldersBadge tokenAddress={spotlight.tokenAddress} testnet={!!spotlight.curveAddress && TON_TESTNET_NETWORK} />
                 <CardStat icon={Flame}>${spotlight.vol}</CardStat>
               </div>
               <span style={{ fontFamily: displayFont, color: T.up, fontSize: 27, fontWeight: 800, lineHeight: 1 }}>{fmtUSD(spotlight.mcapNum)}</span>
@@ -4097,7 +4203,8 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   const [chartLoading, setChartLoading] = useState(true);
   const [hovered, setHovered] = useState(null);
   const up = token.change >= 0;
-  const holdersCount = useJettonHolders(token.tokenAddress);
+  // У токена на кривой жетон живёт в той же сети, что и приложение.
+  const holdersCount = useJettonHolders(token.tokenAddress, !!token.curveAddress && TON_TESTNET_NETWORK);
 
   // Real OHLCV (via GeckoTerminal's data API — no iframe, no branding) when
   // the token is backed by a live on-chain pool; a synthetic random-walk
@@ -4233,6 +4340,24 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   const [infoLoading, setInfoLoading] = useState(false);
   const [trades, setTrades] = useState(() => cachedPoolTrades(token.poolAddress));
   const [tradesLoading, setTradesLoading] = useState(false);
+  // У токена на кривой сделок в агрегаторах нет: список собирается из
+  // транзакций самого контракта.
+  useEffect(() => {
+    if (tab !== "tx" || token.poolAddress || !token.curveAddress) return;
+    let cancelled = false;
+    setTradesLoading(true);
+    async function load() {
+      const m = await fetchCurveMarket(token.curveAddress, token.tokenAddress, TON_TESTNET_NETWORK);
+      if (cancelled) return;
+      if (m) setTrades(curveTradesToFeed(m.trades, curveParamsOf(m.state)));
+      else setTrades((prev) => (prev && prev.length ? prev : null));
+      setTradesLoading(false);
+    }
+    load();
+    const iv = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [tab, token.curveAddress, token.tokenAddress, token.poolAddress]);
+
   useEffect(() => {
     if (tab !== "tx" || !token.poolAddress) return;
     let cancelled = false;
@@ -4487,7 +4612,15 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
 
 /* Mock account context the trade sheet needs — a real app would read
    this from the connected wallet / portfolio instead of hardcoding it. */
+// Запасной курс TON. Настоящий приезжает с биржи через пару секунд после
+// запуска; до этого момента лучше показать близкое число, чем ноль.
 const TON_USD = 7.1;
+// Живой курс. Хранится вне React намеренно: его читают и функции вне
+// компонентов (график, пересчёт ленты), которым пропсы недоступны.
+let tonUsdLive = 0;
+function tonUsd() {
+  return tonUsdLive > 0 ? tonUsdLive : TON_USD;
+}
 const MIN_LAUNCH_USD = 5; // minimum initial-buy commitment required to launch a token
 const NETWORK_FEE_TON = 0.05;
 const SLIPPAGE_OPTIONS = [0.5, 1, 3];
@@ -5103,8 +5236,8 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
       showToast(t("buyAmountRequired"));
       return;
     }
-    const minBuyTon = MIN_LAUNCH_USD / TON_USD;
-    if (buyNum * TON_USD < MIN_LAUNCH_USD) {
+    const minBuyTon = MIN_LAUNCH_USD / tonUsd();
+    if (buyNum * tonUsd() < MIN_LAUNCH_USD) {
       showToast(trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(2) }));
       return;
     }
@@ -5190,7 +5323,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
 
       <div className="flex flex-col gap-1.5">
         <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("launchAmountLabel")}</span>
-        <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surface, border: `1px solid ${touched && !(parseFloat(form.buyAmount.replace(",", ".")) * TON_USD >= MIN_LAUNCH_USD) ? T.down : T.line}` }}>
+        <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surface, border: `1px solid ${touched && !(parseFloat(form.buyAmount.replace(",", ".")) * tonUsd() >= MIN_LAUNCH_USD) ? T.down : T.line}` }}>
           <input
             value={form.buyAmount}
             onChange={setBuyAmount}
@@ -5205,7 +5338,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
         </p>
         {(() => {
           const buyNum = parseFloat(form.buyAmount.replace(",", "."));
-          const minBuyTon = MIN_LAUNCH_USD / TON_USD;
+          const minBuyTon = MIN_LAUNCH_USD / tonUsd();
           if (!Number.isFinite(buyNum) || buyNum <= 0) {
             return (
               <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.5 }}>
@@ -5213,7 +5346,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
               </p>
             );
           }
-          if (buyNum * TON_USD < MIN_LAUNCH_USD) {
+          if (buyNum * tonUsd() < MIN_LAUNCH_USD) {
             return (
               <p style={{ fontFamily: bodyFont, color: T.down, fontSize: 11, lineHeight: 1.5 }}>
                 {trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(2) })}
@@ -5330,7 +5463,7 @@ function PortfolioTokenCard({ t, onOpen }) {
         </div>
         <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, marginTop: 2 }}>{t.balance} {t.ticker} · MCAP {fmtUSD(t.mcapNum)}</div>
       </div>
-      <div style={{ position: "relative", zIndex: 1 }}><MiniChart base={t.mcapNum} seed={t.seed} poolAddress={t.poolAddress} positive={up} id={`pf-${t.id}`} length={18} /></div>
+      <div style={{ position: "relative", zIndex: 1 }}><MiniChart base={t.mcapNum} seed={t.seed} poolAddress={t.poolAddress} curveAddress={t.curveAddress} positive={up} id={`pf-${t.id}`} length={18} /></div>
     </button>
   );
 }
@@ -6692,6 +6825,33 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokens]);
 
+  // Токен на кривой во внешней ленте не появляется — пары на DEX у него
+  // нет, — поэтому его показатели обновляем сами, пока экран открыт.
+  // Всё считается по цепочке: цена и капитализация по резервам, объём и
+  // изменение по сделкам самой кривой.
+  useEffect(() => {
+    if (!token?.curveAddress) return;
+    const curve = token.curveAddress;
+    const jetton = token.tokenAddress;
+    let cancelled = false;
+    async function load() {
+      const m = await fetchCurveMarket(curve, jetton, TON_TESTNET);
+      if (cancelled || !m) return;
+      setToken((prev) => (prev && prev.curveAddress === curve ? {
+        ...prev,
+        price: m.priceUsd,
+        mcapNum: m.mcapUsd,
+        vol: fmtCompact(m.vol24Usd),
+        liq: fmtCompact(m.liqUsd),
+        change: m.change24,
+        tx24h: m.tx24,
+      } : prev));
+    }
+    load();
+    const iv = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [token?.curveAddress, token?.tokenAddress]);
+
 
   // Настоящее подключение кошелька через TonConnect. `wallet` — null,
   // пока пользователь не подключил кошелёк; после подключения содержит
@@ -6767,7 +6927,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   useEffect(() => {
     fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd")
       .then((r) => r.json())
-      .then((d) => setTonPriceUsd((d && d["the-open-network"] && d["the-open-network"].usd) || 0))
+      .then((d) => {
+        const usd = (d && d["the-open-network"] && d["the-open-network"].usd) || 0;
+        setTonPriceUsd(usd);
+        if (usd > 0) tonUsdLive = usd;
+      })
       .catch(() => {})
       .finally(() => setTonPriceChecked(true));
   }, []);
@@ -6865,7 +7029,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       verified: false,
       mcapNum: 0,
       liq: "0",
-      vol: "$0",
+      vol: "0",
+      change: 0,
+      tx24h: 0,
       address: row.address,
       poolAddress: row.pool_address,
       curveAddress: row.curve_address || null,
@@ -6906,31 +7072,35 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setCommunityTokens(rows);
     setCommunityLoaded(true);
 
-    // Цену и капитализацию берём у самих кривых. Ограничиваем число
-    // запросов: лента может быть длинной, а обновление всё равно
-    // приезжает при открытии токена.
+    // Все рыночные числа берём у самих кривых: цену, капитализацию,
+    // объём и изменение за сутки. Ограничиваем количество запросов —
+    // лента может быть длинной, а при открытии токена всё равно идёт
+    // отдельное, более свежее обновление.
     const withCurve = rows.filter((tok) => tok.curveAddress).slice(0, 12);
     if (!withCurve.length) return;
-    const states = await Promise.all(
-      withCurve.map((tok) => fetchCurveState(tok.curveAddress, TON_TESTNET)),
+    const markets = await Promise.all(
+      withCurve.map((tok) => fetchCurveMarket(tok.curveAddress, tok.address, TON_TESTNET)),
     );
     const priced = new Map();
     withCurve.forEach((tok, i) => {
-      const state = states[i];
-      if (!state) return;
-      const priceTon = curvePriceTon(state);
+      const m = markets[i];
+      if (!m) return;
       priced.set(tok.id, {
-        priceTon,
-        // Капитализация — цена за весь выпуск, а не за проданное:
-        // так её считают на всех подобных площадках.
-        mcapNum: priceTon * TON_USD * 1_000_000_000,
+        priceTon: m.priceTon,
+        // Капитализация — цена за весь выпуск, а не за проданное: так её
+        // считают на всех подобных площадках. Выпуск читается с цепочки.
+        mcapNum: m.mcapUsd,
+        vol: fmtCompact(m.vol24Usd),
+        liq: fmtCompact(m.liqUsd),
+        change: m.change24,
+        tx24h: m.tx24,
       });
     });
     if (!priced.size) return;
     setCommunityTokens((prev) =>
       prev.map((tok) => {
         const p = priced.get(tok.id);
-        return p ? { ...tok, priceTon: p.priceTon, mcapNum: p.mcapNum } : tok;
+        return p ? { ...tok, ...p } : tok;
       }),
     );
   }
@@ -7156,9 +7326,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   }
 
   async function handleTokenCreated(result) {
-    const buyNum = parseFloat(String(result.buyAmount || "0").replace(",", ".")) || 0;
-    const buyUsd = buyNum * TON_USD;
-
     if (!userId) {
       // Shouldn't normally happen — launching requires accountCreated —
       // but guard anyway rather than silently dropping the token.
@@ -7200,9 +7367,14 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       ticker: row.ticker,
       emoji: "🚀",
       verified: false,
-      mcapNum: buyUsd,
-      liq: buyUsd ? fmtCompact(buyUsd) : "0",
-      vol: "$0",
+      // Ноль, а не введённая сумма: настоящие цифры приедут с кривой
+      // через секунду после развёртывания, а до этого показывать оценку
+      // — значит рисовать капитализацию, которой ещё нет.
+      mcapNum: 0,
+      liq: "0",
+      vol: "0",
+      change: 0,
+      tx24h: 0,
       address: row.address,
       poolAddress: row.pool_address,
       curveAddress: row.curve_address || null,
@@ -7391,7 +7563,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       logoUrl: result.logoUrl || null,
       mcapNum: 0,
       liq: "0",
-      vol: "$0",
+      vol: "0",
       verified: false,
       curveAddress: result.curveAddress || null,
       curveJettonWallet: result.curveJettonWallet || null,
