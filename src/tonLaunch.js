@@ -895,8 +895,17 @@ export async function launchRealToken({
       admin: Address.parse(walletAddress),
       content: beginCell().storeUint(0x01, 8).storeStringTail(metadataUrl).endCell(),
     }));
-    const realWallet = await minterCheck.getWalletAddress(curveAddress);
-    if (!realWallet.equals(curveJettonWallet)) {
+    // Сверка адреса — необязательная страховка. Её сбой (сеть, лимит
+    // API) не значит, что запуск не удался: запас выше уже подтверждён
+    // чтением баланса. Раньше исключение отсюда ловил общий обработчик и
+    // выдавал «запас не появился», хотя он появился.
+    let realWallet = null;
+    try {
+      realWallet = await minterCheck.getWalletAddress(curveAddress);
+    } catch (e) {
+      warn(`Не удалось сверить адрес кошелька жетона (${describeError(e)}) — пропускаем проверку`);
+    }
+    if (realWallet && !realWallet.equals(curveJettonWallet)) {
       fail(
         `Кошелёк жетона у кривой определён неверно: привязан ${curveJettonWallet.toString()}, а мастер выдаёт ${realWallet.toString()}. Торговать таким токеном нельзя — запустите его заново`,
         new Error("jetton wallet mismatch"),
