@@ -1374,6 +1374,13 @@ async function fetchTokenInfo(tokenAddress) {
 // network the connected wallet happens to be on for launching/trading.
 const TONAPI_MAINNET_BASE = "https://tonapi.io";
 
+// Сеть, в которой приложение запускает и торгует своими токенами.
+// Отдельно от TONAPI_MAINNET_BASE выше: общая лента всегда читается из
+// mainnet, а собственные контракты пока живут в тестнете. Внутри
+// компонента есть TON_TESTNET — он берёт значение отсюда, чтобы сеть
+// была задана в одном месте.
+const TON_TESTNET_NETWORK = true;
+
 // Адрес кошелька жетона у конкретного владельца. Нужен для продажи:
 // продать — значит перевести жетоны со своего кошелька на кошелёк
 // кривой, а свой адрес заранее неизвестен и выводится мастером жетона.
@@ -1570,6 +1577,152 @@ async function fetchPoolOHLCV(poolAddress, tf) {
   } catch (err) {
     return null; // caller falls back to a synthetic random-walk chart
   }
+}
+
+// --- реальный график для токенов, запущенных в приложении -----------
+//
+// У такого токена нет пары на DEX, поэтому GeckoTerminal о нём ничего не
+// знает и рисовать было нечего — вместо цены показывался случайный
+// блуждающий график. Но вся история торгов лежит на самой кривой: цена
+// в любой момент однозначно определяется тем, сколько TON в ней
+// накоплено. Поэтому свечи собираются из списка транзакций кривой.
+//
+// Считать по TON, а не по количеству токенов, можно потому, что при
+// нулевой комиссии произведение резервов сохраняется: k =
+// virtualTon × virtualTokens задано при создании и не меняется ни
+// покупкой, ни продажей. Значит непроданный остаток выводится из
+// накопленного TON, а цена — это отношение резервов.
+const CURVE_K0 = CURVE_PARAMS.virtualTon * CURVE_PARAMS.virtualTokens;
+// tonapi печатает опкоды как строку с ведущими нулями («0x0f8a7ea5»),
+// поэтому сравниваем числами, а не текстом. Отсутствие опкода — пустое
+// тело, то есть обычный перевод TON.
+const CURVE_OP_BUY = 0x42555921;
+const CURVE_OP_JETTON_NOTIFY = 0x7362d09c;
+function msgOpCode(msg) {
+  const raw = msg?.op_code;
+  if (raw == null || raw === "") return null;
+  const n = Number.parseInt(String(raw), 16);
+  return Number.isFinite(n) ? n : null;
+}
+
+function curvePriceFromReserve(realTon) {
+  const tonReserve = CURVE_PARAMS.virtualTon + realTon;
+  const tokenReserve = CURVE_K0 / tonReserve;
+  if (tokenReserve <= 0n) return 0;
+  return Number(tonReserve) / Number(tokenReserve);
+}
+
+// Сделки кривой по возрастанию времени. У покупки берём приложенную
+// сумму за вычетом газа, у продажи — сколько TON ушло продавцу: обе
+// величины видны в транзакции и не требуют разбора тела сообщения.
+async function fetchCurveTrades(curveAddress, testnet) {
+  if (!curveAddress) return null;
+  const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
+  try {
+    const res = await fetch(`${host}/v2/blockchain/accounts/${curveAddress}/transactions?limit=200`);
+    if (!res.ok) throw new Error(`tonapi ${res.status}`);
+    const json = await res.json();
+    const txs = (json?.transactions || []).slice().sort((a, b) => (a.utime || 0) - (b.utime || 0));
+    const trades = [];
+    let realTon = 0n;
+    for (const tx of txs) {
+      const inMsg = tx.in_msg;
+      if (!inMsg || tx.success === false || tx.aborted) continue;
+      const op = msgOpCode(inMsg);
+      if (op === CURVE_OP_BUY) {
+        // Из приложенной суммы контракт удерживает газ, остальное идёт
+        // в резерв — ровно так же, как считает сам контракт.
+        const net = BigInt(inMsg.value || 0) - CURVE_GAS_BUY_OVERHEAD;
+        if (net <= 0n) continue;
+        realTon += net;
+        trades.push({ time: tx.utime, ton: net, kind: "buy", realTon });
+      } else if (op === CURVE_OP_JETTON_NOTIFY) {
+        // Продажа — это уведомление, после которого кривая платит TON
+        // обычным переводом без опкода. У прихода торгового запаса при
+        // запуске таких переводов нет, поэтому он сюда не попадает.
+        const payout = (tx.out_msgs || []).reduce((sum, m) => {
+          const outOp = msgOpCode(m);
+          return outOp ? sum : sum + BigInt(m.value || 0);
+        }, 0n);
+        if (payout <= 0n) continue;
+        realTon = realTon > payout ? realTon - payout : 0n;
+        trades.push({ time: tx.utime, ton: payout, kind: "sell", realTon });
+      }
+    }
+    return trades;
+  } catch (err) {
+    console.error("[mintly] не удалось прочитать историю кривой:", err);
+    return null;
+  }
+}
+
+// Свечи из истории сделок. Пустые промежутки заполняются плоскими
+// свечами по последней цене: на кривой цена между сделками действительно
+// не меняется, поэтому это не выдумка, а честное отображение.
+function buildCurveCandles(trades, timeframe, currentRealTon = null, limit = CHART_TOTAL) {
+  const step = TF_SECONDS[timeframe] || 3600;
+  const startPrice = curvePriceFromReserve(0n) * TON_USD;
+  const now = Math.floor(Date.now() / 1000);
+  const bucketOf = (t) => Math.floor(t / step) * step;
+
+  const points = (trades || []).map((tr) => ({
+    time: tr.time,
+    price: curvePriceFromReserve(tr.realTon) * TON_USD,
+    volume: Number(tr.ton) / 1e9 * TON_USD,
+  }));
+  // Последняя точка — состояние прямо из контракта, если оно прочитано:
+  // так конец графика совпадает с ценой, по которой идёт сделка.
+  const lastPrice = currentRealTon != null
+    ? curvePriceFromReserve(currentRealTon) * TON_USD
+    : (points.length ? points[points.length - 1].price : startPrice);
+
+  const firstTime = points.length ? points[0].time : now;
+  const lastBucket = bucketOf(now);
+  // Окно — последние limit интервалов, но не раньше начала торгов.
+  // Без верхней границы на мелком таймфрейме пришлось бы перебирать
+  // десятки тысяч пустых интервалов, а на экран попали бы самые старые.
+  let bucket = Math.max(
+    bucketOf(firstTime) - step * Math.min(limit - 1, 12),
+    lastBucket - step * (limit - 1),
+  );
+  const candles = [];
+  const volume = [];
+  let price = startPrice;
+  let i = 0;
+  // Сделки левее окна на экран не попадают, но цену двигают: прокручиваем
+  // их, чтобы первая видимая свеча открылась по реальной цене.
+  while (i < points.length && points[i].time < bucket) {
+    price = points[i].price;
+    i++;
+  }
+  while (bucket <= lastBucket) {
+    const open = price;
+    let high = open, low = open, close = open, vol = 0;
+    while (i < points.length && points[i].time < bucket + step) {
+      close = points[i].price;
+      high = Math.max(high, close);
+      low = Math.min(low, close);
+      vol += points[i].volume;
+      i++;
+    }
+    if (bucket === lastBucket) {
+      close = lastPrice;
+      high = Math.max(high, close);
+      low = Math.min(low, close);
+    }
+    candles.push({ time: bucket, open, high, low, close });
+    volume.push({ time: bucket, value: vol, color: close >= open ? hexA(T.up, 0.32) : hexA(T.down, 0.32) });
+    price = close;
+    bucket += step;
+  }
+  if (!candles.length) return null;
+  return { candles: candles.slice(-limit), volume: volume.slice(-limit) };
+}
+
+async function fetchCurveOHLCV(curveAddress, timeframe, testnet, currentRealTon = null) {
+  const trades = await fetchCurveTrades(curveAddress, testnet);
+  if (trades == null) return null;
+  return buildCurveCandles(trades, timeframe, currentRealTon);
 }
 
 // Lightweight REAL-price feed for the small sparkline previews (feed
@@ -3759,17 +3912,22 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   // chart otherwise (bundled demo tokens, or if the fetch fails) so the
   // screen never shows a blank chart. We render everything ourselves with
   // TerminalChart, so there's no external widget or watermark involved.
+  // Токен, запущенный здесь же, торгуется на своей кривой, а не на DEX:
+  // для него история берётся прямо из транзакций контракта. Случайный
+  // график остаётся только там, где реальных данных нет вовсе.
+  const curveChart = !token.poolAddress && !!token.curveAddress;
   useEffect(() => {
     let cancelled = false;
     setChartLoading(true);
     (async () => {
       let result = null;
       if (token.poolAddress) result = await fetchPoolOHLCV(token.poolAddress, tf);
+      else if (token.curveAddress) result = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK);
       if (!result) result = genSyntheticCandles(token.price, token.seed, tf, CHART_TOTAL);
-      if (!cancelled) { setChartData({ ...result, isLive: !!token.poolAddress }); setChartLoading(false); }
+      if (!cancelled) { setChartData({ ...result, isLive: !!token.poolAddress || curveChart }); setChartLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [tf, token.id, token.poolAddress]);
+  }, [tf, token.id, token.poolAddress, token.curveAddress]);
 
   // Live tick: for real pools, refetch the latest candles every few
   // seconds. For the synthetic fallback, wiggle the last candle locally
@@ -3791,6 +3949,13 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
         if (fresh?.candles?.length) {
           setChartData(prev => prev && ({ ...prev, candles: fresh.candles, volume: fresh.volume }));
         }
+      } else if (curveChart) {
+        // Кривая обновляется своей же историей: дорисовывать выдуманное
+        // дрожание поверх настоящей цены нельзя.
+        const fresh = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK);
+        if (fresh?.candles?.length) {
+          setChartData(prev => prev && ({ ...prev, candles: fresh.candles, volume: fresh.volume }));
+        }
       } else {
         setChartData(prev => {
           if (!prev?.candles?.length) return prev;
@@ -3806,9 +3971,9 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           return { ...prev, candles, volume };
         });
       }
-    }, token.poolAddress ? 8000 : 1000);
+    }, token.poolAddress ? 8000 : curveChart ? 15000 : 1000);
     return () => clearInterval(iv);
-  }, [token.id, token.poolAddress, tf, !!chartData]);
+  }, [token.id, token.poolAddress, token.curveAddress, curveChart, tf, !!chartData]);
 
   // Real supply estimate (mcap / price) derived from the same live data —
   // used only to scale the chart between "price" and "market cap" display,
@@ -6256,7 +6421,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // TonConnectUIProvider (обычно настраивается в index/main файле, не
   // в этом) тоже должен быть сконфигурирован под testnet — иначе
   // подключаемый кошелёк не будет знать, что вы работаете в тестовой сети.
-  const TON_TESTNET = true;
+  const TON_TESTNET = TON_TESTNET_NETWORK;
   const TONAPI_HOST = TON_TESTNET ? "testnet.tonapi.io" : "tonapi.io";
   // Бесплатный tonapi.io без ключа сильно лимитирован (мы поймали
   // 429 "rate limit: free tier"). Заведите бесплатный ключ на
