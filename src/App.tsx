@@ -878,6 +878,16 @@ function GlobalStyle() {
       @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
       /* Появляется на месте — только проявлением и лёгким укрупнением,
          без наезда сверху. Уходит вверх и растворяется. */
+      /* Лист всплывает снизу вверх, слегка поворачиваясь, и растворяется
+         на обоих концах пути — так фон не мигает подменой позиции.
+         Углы поворота приходят переменными, чтобы каждый лист летел
+         по-своему, а само правило было одно на всех. */
+      @keyframes leafFloat {
+        0%   { transform: translateY(18px) rotate(var(--r0)); opacity: 0; }
+        14%  { opacity: var(--o); }
+        80%  { opacity: var(--o); }
+        100% { transform: translateY(-140px) rotate(var(--r1)); opacity: 0; }
+      }
       @keyframes toastIn { from{opacity:0; transform:translateX(-50%) scale(0.94);} to{opacity:1; transform:translateX(-50%) scale(1);} }
       @keyframes toastOut { from{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} to{opacity:0; transform:translateX(-50%) translateY(-22px) scale(0.98);} }
       @keyframes rocketUp { 0%{ transform:translateY(0) scale(0.75); opacity:0; } 18%{ opacity:0.9; } 100%{ transform:translateY(-70px) scale(1); opacity:0; } }
@@ -946,6 +956,23 @@ function CyberGrid({ forceDark, showStars = true }) {
   const gridLine = dark ? "rgba(255,255,255,0.05)" : "rgba(20,21,26,0.06)";
   const starColor = dark ? "#FFFFFF" : "#14151A";
 
+  // Мятные листья — те же, что в знаке приложения. Их немного и они
+  // почти прозрачные: фон должен читаться как фактура, а не как узор,
+  // иначе он спорит с карточками поверх него.
+  const leaves = useMemo(() => {
+    const rnd = seededRand(88117);
+    return Array.from({ length: 9 }, () => ({
+      left: rnd() * 92,
+      top: 8 + rnd() * 84,
+      size: 26 + rnd() * 34,
+      opacity: 0.07 + rnd() * 0.08,
+      dur: 26 + rnd() * 22,
+      delay: -rnd() * 40,
+      r0: -50 + rnd() * 100,
+      r1: -50 + rnd() * 100,
+    }));
+  }, []);
+
   // Детерминированные позиции — звёзды не перескакивают при каждом ре-рендере.
   const stars = useMemo(() => {
     const rnd = seededRand(20240607);
@@ -976,6 +1003,28 @@ function CyberGrid({ forceDark, showStars = true }) {
 
       {/* звёзды-искры. В профиле их гасим: там своя карточка-подложка,
           и две россыпи звёзд друг на друге читаются как шум. */}
+      {showStars && leaves.map((l, i) => (
+        <svg
+          key={`leaf${i}`}
+          width={l.size}
+          height={l.size}
+          viewBox="-9 -27 18 28"
+          style={{
+            position: "absolute",
+            left: `${l.left}%`,
+            top: `${l.top}%`,
+            ["--o"]: l.opacity,
+            ["--r0"]: `${l.r0}deg`,
+            ["--r1"]: `${l.r1}deg`,
+            opacity: 0,
+            animation: `leafFloat ${l.dur}s linear ${l.delay}s infinite`,
+            willChange: "transform, opacity",
+          }}
+        >
+          <path d="M0 0 C -8 -7 -8 -19 0 -26 C 8 -19 8 -7 0 0 Z" fill={T.electric} />
+        </svg>
+      ))}
+
       {showStars && stars.map((s, i) => <FxStar key={i} star={s} color={starColor} />)}
     </div>
   );
