@@ -892,15 +892,17 @@ function GlobalStyle() {
         100% { transform: translate3d(var(--dx), 104vh, 0) rotate(var(--r1)); opacity: 0; }
       }
       @keyframes islandGlow { 0%,100%{ opacity:0.75; } 50%{ opacity:1; } }
-      /* Вспышка острова в момент, когда в него влетает ракета. */
-      @keyframes islandHit {
-        0%   { opacity:0.8; transform:scale(1); }
-        12%  { opacity:1;   transform:scale(1.16); }
-        26%  { opacity:0.5; transform:scale(1.02); }
-        40%  { opacity:1;   transform:scale(1.1); }
-        58%  { opacity:0.6; transform:scale(1); }
-        72%  { opacity:1;   transform:scale(1.05); }
-        100% { opacity:0.85; transform:scale(1); }
+      /* Реакция острова на прилёт ракеты: две искры бегут от середины
+         нижней грани в разные стороны, встречаются наверху, и после
+         этого вспыхивает и плавно гаснет весь контур. Смещение штриха
+         отрицательное у обеих: каждая идёт по своему пути, а он уже
+         задан в нужную сторону. */
+      @keyframes islandSparkRun { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -500; } }
+      @keyframes islandRingBurst {
+        0%   { opacity: 0; filter: drop-shadow(0 0 0 ${T.electric}); }
+        3%   { opacity: 1; }
+        16%  { opacity: 1; filter: drop-shadow(0 0 20px ${T.electric}); }
+        100% { opacity: 0; filter: drop-shadow(0 0 0 ${T.electric}); }
       }
       /* Ракета: разгон снизу, к концу — уменьшение и растворение внутри
          острова. Конечная точка приходит переменной --fly-to. */
@@ -911,7 +913,8 @@ function GlobalStyle() {
         92%  { transform: translate(-50%, var(--fly-to)) scale(0.34); opacity: 0.9; }
         100% { transform: translate(-50%, var(--fly-to)) scale(0.12); opacity: 0; }
       }
-      @keyframes rocketFlame { 0%,100%{ transform: scaleY(0.82) scaleX(0.94); } 50%{ transform: scaleY(1.14) scaleX(1.06); } }
+      @keyframes rocketFlame { 0%,100%{ transform: scaleY(0.82) scaleX(0.94); } 50%{ transform: scaleY(1.16) scaleX(1.06); } }
+      @keyframes rocketFlameCore { 0%,100%{ transform: scaleY(1.05) scaleX(1.02); } 50%{ transform: scaleY(0.85) scaleX(0.95); } }
       @keyframes rocketSpark { 0%{ opacity:0.95; transform: translateY(0) scale(1); } 100%{ opacity:0; transform: translateY(74px) scale(0.3); } }
       @keyframes toastIn { from{opacity:0; transform:translateX(-50%) scale(0.94);} to{opacity:1; transform:translateX(-50%) scale(1);} }
       @keyframes toastOut { from{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} to{opacity:0; transform:translateX(-50%) translateY(-22px) scale(0.98);} }
@@ -6933,44 +6936,87 @@ function LaunchRocket({ targetTop = ISLAND_TOP + ISLAND_HEIGHT / 2 }) {
           }} />
         ))}
 
-        {/* сама ракета: корпус, иллюминатор, крылья и пламя */}
+        {/* Сама ракета. Собрана из слоёв, а не из одной заливки:
+            носовой конус, корпус со стыком и панельными линиями,
+            иллюминатор со стеклом и бликом, крылья с теневой гранью и
+            сопло. Пламя двухслойное — внешний факел и белое ядро — и
+            каждое дышит со своей частотой, поэтому не выглядит
+            повторяющейся картинкой. */}
         <svg width="54" height="86" viewBox="-27 -50 54 86" style={{ position: "absolute", left: -27, top: -50, overflow: "visible" }}>
           <defs>
             <linearGradient id="rk-body" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#FFFFFF" />
-              <stop offset="52%" stopColor="#E9E9EE" />
-              <stop offset="100%" stopColor="#9A9AA6" />
+              <stop offset="0%" stopColor="#8E8E9A" />
+              <stop offset="14%" stopColor="#F2F2F6" />
+              <stop offset="42%" stopColor="#FFFFFF" />
+              <stop offset="68%" stopColor="#D8D8E0" />
+              <stop offset="88%" stopColor="#8A8A96" />
+              <stop offset="100%" stopColor="#6A6A76" />
+            </linearGradient>
+            <linearGradient id="rk-nose" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#FF8A5C" />
+              <stop offset="45%" stopColor={T.electric} />
+              <stop offset="100%" stopColor="#C4451B" />
             </linearGradient>
             <linearGradient id="rk-flame" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#FFD9A0" />
-              <stop offset="45%" stopColor={T.electric} />
+              <stop offset="0%" stopColor="#FFF7E2" />
+              <stop offset="30%" stopColor="#FFC46B" />
+              <stop offset="62%" stopColor={T.electric} />
               <stop offset="100%" stopColor="#FF2D2D" stopOpacity="0" />
             </linearGradient>
+            <radialGradient id="rk-glass" cx="50%" cy="30%">
+              <stop offset="0%" stopColor="#8ED8FF" />
+              <stop offset="60%" stopColor="#2C6E9B" />
+              <stop offset="100%" stopColor="#0E2A3E" />
+            </radialGradient>
           </defs>
 
-          {/* пламя — под корпусом, отдельно дышит */}
-          <g style={{ animation: "rocketFlame 130ms ease-in-out infinite", transformOrigin: "0px 16px" }}>
-            <path d="M-7 16 C -5 27, -2.5 33, 0 42 C 2.5 33, 5 27, 7 16 Z" fill="url(#rk-flame)" />
-            <path d="M-3.4 16 C -2.6 23, -1.2 27, 0 32 C 1.2 27, 2.6 23, 3.4 16 Z" fill="#FFF3DC" opacity="0.9" />
+          {/* пламя: внешний факел и белое ядро */}
+          <g style={{ animation: "rocketFlame 120ms ease-in-out infinite", transformOrigin: "0px 18px" }}>
+            <path d="M-8 18 C -6 30, -3 38, 0 48 C 3 38, 6 30, 8 18 Z" fill="url(#rk-flame)" />
+          </g>
+          <g style={{ animation: "rocketFlameCore 90ms ease-in-out infinite", transformOrigin: "0px 18px" }}>
+            <path d="M-3.6 18 C -2.8 25, -1.3 30, 0 35 C 1.3 30, 2.8 25, 3.6 18 Z" fill="#FFFBF0" opacity="0.95" />
           </g>
 
-          {/* крылья */}
-          <path d="M-7 4 C -13 8, -16 14, -16 20 L -7 16 Z" fill={T.electric} />
-          <path d="M7 4 C 13 8, 16 14, 16 20 L 7 16 Z" fill={T.electric} />
+          {/* задняя пара крыльев — в тени, даёт объём */}
+          <path d="M-6 2 C -12 7, -15 14, -14.5 21 L -6 15 Z" fill="#B44A20" />
+          <path d="M6 2 C 12 7, 15 14, 14.5 21 L 6 15 Z" fill="#B44A20" />
 
           {/* корпус */}
-          <path d="M0 -48 C 7.5 -36, 11 -22, 11 -6 C 11 4, 9.5 12, 7 17 L -7 17 C -9.5 12, -11 4, -11 -6 C -11 -22, -7.5 -36, 0 -48 Z" fill="url(#rk-body)" />
-          {/* теневая грань справа — объём без градиентной каши */}
-          <path d="M0 -48 C 7.5 -36, 11 -22, 11 -6 C 11 4, 9.5 12, 7 17 L 0 17 Z" fill="#000000" opacity="0.14" />
+          <path d="M0 -49 C 7.6 -37, 11.2 -22, 11.2 -6 C 11.2 4, 9.6 12, 7.2 17 L -7.2 17 C -9.6 12, -11.2 4, -11.2 -6 C -11.2 -22, -7.6 -37, 0 -49 Z" fill="url(#rk-body)" />
+
+          {/* носовой конус со стыком */}
+          <path d="M0 -49 C 5.2 -41, 8.2 -32, 9.4 -24 C 6 -26.5, -6 -26.5, -9.4 -24 C -8.2 -32, -5.2 -41, 0 -49 Z" fill="url(#rk-nose)" />
+          <path d="M0 -49 C 5.2 -41, 8.2 -32, 9.4 -24 C 7.6 -25.3, 5.2 -26.1, 2.6 -26.5 L 0 -49 Z" fill="#000000" opacity="0.12" />
+          <path d="M-9.4 -24 C -6 -26.5, 6 -26.5, 9.4 -24" fill="none" stroke="#0B0B0D" strokeOpacity="0.35" strokeWidth="1" />
 
           {/* иллюминатор */}
-          <circle cx="0" cy="-16" r="5.4" fill="#0B0B0D" />
-          <circle cx="0" cy="-16" r="4.1" fill={T.electric} opacity="0.85" />
-          <circle cx="-1.4" cy="-17.6" r="1.5" fill="#FFFFFF" opacity="0.75" />
+          <circle cx="0" cy="-13" r="6.2" fill="#0B0B0D" />
+          <circle cx="0" cy="-13" r="5" fill="url(#rk-glass)" />
+          <path d="M-4.4 -15.6 A 5 5 0 0 1 1.4 -17.7 L -2.2 -11.4 Z" fill="#FFFFFF" opacity="0.45" />
+          <circle cx="0" cy="-13" r="5" fill="none" stroke={T.electric} strokeWidth="1.1" opacity="0.9" />
 
-          {/* поясок и сопло */}
-          <path d="M-9.6 6 L 9.6 6" stroke="#0B0B0D" strokeOpacity="0.25" strokeWidth="1.6" />
-          <path d="M-7 17 L 7 17 L 5 21 L -5 21 Z" fill="#6E6E78" />
+          {/* панельные линии, заклёпки и блик вдоль корпуса */}
+          <path d="M-10.6 -2 L 10.6 -2" stroke="#0B0B0D" strokeOpacity="0.18" strokeWidth="0.8" />
+          <path d="M-9.8 6 L 9.8 6" stroke="#0B0B0D" strokeOpacity="0.22" strokeWidth="1.2" />
+          <path d="M0 -2 L 0 6" stroke="#0B0B0D" strokeOpacity="0.12" strokeWidth="0.7" />
+          <g fill="#0B0B0D" opacity="0.22">
+            <circle cx="-7.4" cy="1.8" r="0.65" />
+            <circle cx="-3.7" cy="1.8" r="0.65" />
+            <circle cx="3.7" cy="1.8" r="0.65" />
+            <circle cx="7.4" cy="1.8" r="0.65" />
+          </g>
+          <path d="M-5.4 -30 C -7.4 -20, -8 -8, -7.4 8" stroke="#FFFFFF" strokeOpacity="0.7" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+
+          {/* передние крылья */}
+          <path d="M-7.2 1 C -14 6, -17.4 13, -17 21 L -7.2 16 Z" fill="url(#rk-nose)" />
+          <path d="M7.2 1 C 14 6, 17.4 13, 17 21 L 7.2 16 Z" fill="url(#rk-nose)" />
+          <path d="M7.2 1 C 14 6, 17.4 13, 17 21 L 11 18.4 Z" fill="#000000" opacity="0.16" />
+
+          {/* сопло */}
+          <path d="M-7.2 17 L 7.2 17 L 5.6 22.4 L -5.6 22.4 Z" fill="#5E5E6A" />
+          <path d="M-5.6 22.4 L 5.6 22.4 L 4.6 24 L -4.6 24 Z" fill="#3A3A44" />
+          <path d="M-7.2 17 L 7.2 17" stroke="#0B0B0D" strokeOpacity="0.4" strokeWidth="0.9" />
         </svg>
       </div>
     </div>
@@ -6992,31 +7038,77 @@ const ISLAND_HEIGHT = 37.3;
 const ISLAND_TOP = 11;
 const ISLAND_GAP = 5;
 
-function DynamicIslandFrame({ topOffset = 0, hit = false }) {
+function DynamicIslandFrame({ topOffset = 0, hitKey = 0 }) {
   const w = ISLAND_WIDTH + ISLAND_GAP * 2;
   const h = ISLAND_HEIGHT + ISLAND_GAP * 2;
+  const r = h / 2;
+  const pad = 16; // место под свечение, чтобы его не срезало по краю
+
+  // Контур пилюли, начатый строго от середины нижней грани: искры
+  // стартуют оттуда и расходятся в обе стороны, поэтому обе половины
+  // описываются одним и тем же путём, пройденным в разные стороны.
+  const ringCW = `M ${w / 2} ${h} L ${w - r} ${h} A ${r} ${r} 0 0 0 ${w - r} 0 L ${r} 0 A ${r} ${r} 0 0 0 ${r} ${h} Z`;
+  const ringCCW = `M ${w / 2} ${h} L ${r} ${h} A ${r} ${r} 0 0 1 ${r} 0 L ${w - r} 0 A ${r} ${r} 0 0 1 ${w - r} ${h} Z`;
+
   return (
     <div
       aria-hidden
       style={{
         position: "fixed",
-        top: ISLAND_TOP - ISLAND_GAP + topOffset,
+        top: ISLAND_TOP - ISLAND_GAP - pad + topOffset,
         left: "50%",
-        marginLeft: -w / 2,
-        width: w,
-        height: h,
-        borderRadius: h / 2,
-        border: `${hit ? 2.2 : 1.5}px solid ${T.electric}`,
-        boxShadow: hit
-          ? `0 0 30px ${hexA(T.electric, 0.9)}, 0 0 60px ${hexA(T.electric, 0.45)}, inset 0 0 18px ${hexA(T.electric, 0.5)}`
-          : `0 0 14px ${hexA(T.electric, 0.55)}, inset 0 0 10px ${hexA(T.electric, 0.25)}`,
+        marginLeft: -(w / 2 + pad),
+        width: w + pad * 2,
+        height: h + pad * 2,
         pointerEvents: "none",
         // Выше всего, включая заставку и модальные окна: это обрамление
         // самого экрана телефона, а не элемент интерфейса.
         zIndex: 2000,
-        animation: hit ? "islandHit 1200ms ease-out" : "islandGlow 3.4s ease-in-out infinite",
       }}
-    />
+    >
+      <svg width={w + pad * 2} height={h + pad * 2} viewBox={`${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`} style={{ overflow: "visible" }}>
+        {/* спокойное состояние */}
+        <path
+          d={ringCW}
+          fill="none"
+          stroke={T.electric}
+          strokeWidth={1.5}
+          style={{ filter: `drop-shadow(0 0 6px ${hexA(T.electric, 0.6)})`, animation: "islandGlow 3.4s ease-in-out infinite" }}
+        />
+
+        {/* Реакция на прилёт ракеты. Ключ меняется на каждый запуск —
+            элементы пересоздаются, и анимация проигрывается заново. */}
+        {hitKey > 0 && (
+          <g key={hitKey}>
+            {/* две искры от середины нижней грани навстречу друг другу */}
+            {[["islandSparkRun", ringCW], ["islandSparkRun", ringCCW]].map(([anim, d], i) => (
+              <path
+                key={i}
+                d={d}
+                pathLength={1000}
+                fill="none"
+                stroke="#FFE9C8"
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeDasharray="26 974"
+                style={{
+                  filter: `drop-shadow(0 0 7px ${T.electric})`,
+                  animation: `${anim} 700ms cubic-bezier(0.5,0,0.6,1) forwards`,
+                }}
+              />
+            ))}
+            {/* встретились наверху — вспыхивает весь контур и плавно гаснет */}
+            <path
+              d={ringCW}
+              fill="none"
+              stroke="#FFC9A8"
+              strokeWidth={2.6}
+              style={{ opacity: 0, animation: "islandRingBurst 1400ms 640ms ease-out forwards" }}
+            />
+          </g>
+        )}
+      </svg>
+    </div>
   );
 }
 
@@ -7144,17 +7236,15 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // Полёт ракеты после удачного запуска токена и вспышка острова в
   // момент, когда она в него влетает.
   const [rocketFlying, setRocketFlying] = useState(false);
-  const [islandHit, setIslandHit] = useState(false);
+  const [islandHitKey, setIslandHitKey] = useState(0);
   const rocketTimers = useRef([]);
   function playLaunchRocket() {
     rocketTimers.current.forEach(clearTimeout);
     setRocketFlying(true);
-    setIslandHit(false);
     rocketTimers.current = [
-      // Вспышка — к моменту, когда ракета уже у самого острова.
-      setTimeout(() => setIslandHit(true), ROCKET_FLIGHT_MS - 260),
+      // Искры трогаются в тот момент, когда ракета уже у самого острова.
+      setTimeout(() => setIslandHitKey((n) => n + 1), ROCKET_FLIGHT_MS - 240),
       setTimeout(() => setRocketFlying(false), ROCKET_FLIGHT_MS + 60),
-      setTimeout(() => setIslandHit(false), ROCKET_FLIGHT_MS + 1000),
     ];
   }
   useEffect(() => () => rocketTimers.current.forEach(clearTimeout), []);
@@ -8246,7 +8336,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       style={{ background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden" }}
     >
       <GlobalStyle />
-      {showIsland && <DynamicIslandFrame hit={islandHit} />}
+      {showIsland && <DynamicIslandFrame hitKey={islandHitKey} />}
       {rocketFlying && <LaunchRocket targetTop={showIsland ? ISLAND_TOP + ISLAND_HEIGHT / 2 : -60} />}
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
