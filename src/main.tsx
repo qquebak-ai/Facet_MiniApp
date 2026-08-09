@@ -27,16 +27,17 @@ if (tg) {
   tg.disableVerticalSwipes?.();
 }
 
-// iOS игнорирует user-scalable=no, поэтому двойной тап и щипок гасим сами.
+// iOS игнорирует user-scalable=no, поэтому щипок гасим сами.
+//
+// Двойной тап раньше гасился здесь же: любой touchend в пределах 350 мс
+// после предыдущего отменялся. Это отменяло и сам клик — при быстрых
+// нажатиях подряд (например по предметам в магазине) второе нажатие
+// просто не доходило до интерфейса, и казалось, что выбор не срабатывает.
+// Масштабирование по двойному тапу выключает touch-action: manipulation
+// в стилях, и делает это не ломая нажатия.
 if (typeof document !== "undefined") {
   document.addEventListener("gesturestart", (e) => e.preventDefault());
   document.addEventListener("gesturechange", (e) => e.preventDefault());
-  let lastTouch = 0;
-  document.addEventListener("touchend", (e) => {
-    const now = Date.now();
-    if (now - lastTouch <= 350) e.preventDefault();
-    lastTouch = now;
-  }, { passive: false });
 }
 
 const manifestUrl = `${window.location.origin}/tonconnect-manifest.json`;

@@ -836,7 +836,10 @@ function GlobalStyle() {
       /* Щипок двумя пальцами ломал вёрстку: интерфейс рассчитан на
          ширину экрана и при масштабировании разъезжается. Одного
          user-scalable=no в мета-теге мало — iOS его игнорирует, поэтому
-         жест масштабирования гасится и на уровне стилей. */
+         жест масштабирования гасится и на уровне стилей. Этим же
+         правилом отключается и приближение по двойному тапу: любое
+         значение кроме auto его снимает. Гасить двойной тап вручную,
+         отменяя touchend, нельзя — вместе с ним отменяется и нажатие. */
       html, body { touch-action: pan-x pan-y; }
       /* iOS Safari (incl. Telegram's in-app WebView) auto-zooms the whole
          viewport when a focused input/textarea/select has a computed
@@ -3727,13 +3730,26 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, onEquip })
    «купить» здесь — это «надеть»: отдельного баланса у магазина нет. */
 function ShopView({ cosmetics, onEquip }) {
   const [tab, setTab] = useState("frames");
+  // Нажатие отмечается сразу здесь, не дожидаясь, пока выбор дойдёт до
+  // состояния всего приложения и вернётся обратно пропсом. Рамка при
+  // этом появляется в том же кадре, что и само нажатие.
+  const [pending, setPending] = useState(null); // { kind, id }
   // Обработчик через ссылку: сам onEquip создаётся заново при каждой
   // перерисовке приложения, и мемоизация карточек была бы бесполезна.
   const equipRef = useRef(onEquip);
   useEffect(() => { equipRef.current = onEquip; });
-  const equip = useCallback((kind, id) => equipRef.current(kind, id), []);
+  const equip = useCallback((kind, id) => {
+    setPending({ kind, id });
+    equipRef.current(kind, id);
+  }, []);
   const items = tab === "frames" ? AVATAR_FRAMES : PROFILE_CARDS;
-  const equippedId = tab === "frames" ? cosmetics.frame : cosmetics.card;
+  const kind = tab === "frames" ? "frame" : "card";
+  const equippedId = pending && pending.kind === kind ? pending.id : cosmetics[kind];
+  // Выбор доехал — своя пометка больше не нужна, дальше показываем то,
+  // что действительно надето.
+  useEffect(() => {
+    if (pending && cosmetics[pending.kind] === pending.id) setPending(null);
+  }, [cosmetics, pending]);
 
   return (
     <div className="flex flex-col gap-4 pt-2">
@@ -3761,7 +3777,7 @@ function ShopView({ cosmetics, onEquip }) {
           <ShopItem
             key={item.id}
             item={item}
-            kind={tab === "frames" ? "frame" : "card"}
+            kind={kind}
             equipped={equippedId === item.id}
             onEquip={equip}
           />
