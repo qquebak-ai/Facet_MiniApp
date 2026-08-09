@@ -1875,22 +1875,33 @@ async function loadCurveTrades(curveAddress, testnet, feeBps) {
 // Свечи из истории сделок. Пустые промежутки заполняются плоскими
 // свечами по последней цене: на кривой цена между сделками действительно
 // не меняется, поэтому это не выдумка, а честное отображение.
-function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL) {
+function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL, rate = tonUsd()) {
   const params = curveParamsOf(state);
-  const step = TF_SECONDS[timeframe] || 3600;
-  const startPrice = curvePriceFromReserve(0n, params) * tonUsd();
+  const baseStep = TF_SECONDS[timeframe] || 3600;
+  const startPrice = curvePriceFromReserve(0n, params) * rate;
   const now = Math.floor(Date.now() / 1000);
-  const bucketOf = (t) => Math.floor(t / step) * step;
 
   const points = (trades || []).map((tr) => ({
     time: tr.time,
-    price: curvePriceFromReserve(tr.realTon, params) * tonUsd(),
-    volume: Number(tr.ton) / 1e9 * tonUsd(),
+    price: curvePriceFromReserve(tr.realTon, params) * rate,
+    volume: Number(tr.ton) / 1e9 * rate,
   }));
+
+  // Вся история должна попасть на экран. У токена, запущенного пару
+  // часов назад, все сделки старше минутного окна, и на графике
+  // оставалась одна ровная линия — «ничего не показывает». Поэтому если
+  // история не помещается в отведённое число свечей, интервал
+  // укрупняется до ближайшего кратного: данные остаются настоящими,
+  // грубеет только шаг.
+  const spanFrom = points.length ? points[0].time : now;
+  const needed = Math.ceil((now - spanFrom) / baseStep) + 12;
+  const group = Math.max(1, Math.ceil(needed / limit));
+  const step = baseStep * group;
+  const bucketOf = (t) => Math.floor(t / step) * step;
   // Последняя точка — состояние прямо из контракта, если оно прочитано:
   // так конец графика совпадает с ценой, по которой идёт сделка.
   const lastPrice = state?.realTon != null
-    ? curvePriceFromReserve(state.realTon, params) * tonUsd()
+    ? curvePriceFromReserve(state.realTon, params) * rate
     : (points.length ? points[points.length - 1].price : startPrice);
 
   const firstTime = points.length ? points[0].time : now;
@@ -1942,7 +1953,7 @@ function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL)
 // мастеру жетона. Раньше здесь стояли ноль или заглушка, потому что
 // внешние агрегаторы про такой токен ничего не знают: пары на DEX у него
 // ещё нет.
-async function fetchCurveMarket(curveAddress, jettonMaster, testnet) {
+async function fetchCurveMarket(curveAddress, jettonMaster, testnet, rateArg = 0) {
   if (!curveAddress) return null;
   const state = await fetchCurveState(curveAddress, testnet);
   if (!state) return null;
@@ -1951,7 +1962,9 @@ async function fetchCurveMarket(curveAddress, jettonMaster, testnet) {
     fetchCurveTrades(curveAddress, testnet, params.feeBps),
     fetchJettonMeta(jettonMaster, testnet),
   ]);
-  const rate = tonUsd();
+  // Курс приходит параметром там, где он уже известен экрану: иначе
+  // числа на соседних экранах считаются по разным курсам и прыгают.
+  const rate = rateArg > 0 ? rateArg : tonUsd();
   const priceTon = curvePriceFromReserve(state.realTon, params);
   const supply = meta && meta.supply ? meta.supply : Number(CURVE_TOTAL_SUPPLY) / 1e9;
 
@@ -2032,13 +2045,13 @@ function flatCandles(price, timeframe, limit = CHART_TOTAL) {
   return { candles, volume };
 }
 
-async function fetchCurveOHLCV(curveAddress, timeframe, testnet) {
+async function fetchCurveOHLCV(curveAddress, timeframe, testnet, rate = tonUsd()) {
   // Состояние нужно не только ради последней точки: в нём лежат
   // параметры, с которыми развёрнута именно эта кривая.
   const state = await fetchCurveState(curveAddress, testnet);
   const trades = await fetchCurveTrades(curveAddress, testnet, curveParamsOf(state).feeBps);
   if (trades == null) return null;
-  return buildCurveCandles(trades, timeframe, state);
+  return buildCurveCandles(trades, timeframe, state, CHART_TOTAL, rate);
 }
 
 // Lightweight REAL-price feed for the small sparkline previews (feed
@@ -4264,7 +4277,7 @@ function HomeView({ onGoTab }) {
 
 const CHART_TOTAL = 140;
 
-function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey, currentUserId = null, onNeedAuth, onOpenProfile }) {
+function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey, currentUserId = null, onNeedAuth, onOpenProfile, tonPriceUsd = 0 }) {
   const [tab, setTab] = useState("chart"); // chart | info | tx
   const [chartMode] = useState("mcap"); // always market cap — price toggle removed
   const [tf, setTf] = useState(() => {
@@ -4303,7 +4316,10 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     (async () => {
       let result = null;
       if (token.poolAddress) result = await fetchPoolOHLCV(token.poolAddress, tf);
-      else if (token.curveAddress) result = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK);
+      // Курс передаём тот же, по которому посчитана цена в шапке. Раньше
+      // график брал его сам, и пока настоящий курс не приехал, строился
+      // по запасному — цифры на графике и над ним расходились в разы.
+      else if (token.curveAddress) result = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
       // Случайный график допустим только там, где настоящих данных не
       // существует в принципе. У токена на кривой они есть всегда, и
       // если запрос не прошёл (у бесплатного tonapi жёсткий лимит),
@@ -4320,7 +4336,9 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     return () => { cancelled = true; };
     // priceKnown в зависимостях намеренно: пока цена не приехала, ровную
     // линию строить не из чего, и попытку нужно повторить.
-  }, [tf, token.id, token.poolAddress, token.curveAddress, token.price > 0]);
+    // tonPriceUsd в зависимостях: график считается в долларах, и при
+    // смене курса его нужно пересобрать, иначе он повиснет на старом.
+  }, [tf, token.id, token.poolAddress, token.curveAddress, token.price > 0, tonPriceUsd]);
 
   // Live tick: for real pools, refetch the latest candles every few
   // seconds. For the synthetic fallback, wiggle the last candle locally
@@ -4345,7 +4363,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       } else if (curveChart) {
         // Кривая обновляется своей же историей: дорисовывать выдуманное
         // дрожание поверх настоящей цены нельзя.
-        const fresh = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK);
+        const fresh = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
         if (fresh?.candles?.length) {
           setChartData(prev => prev && ({ ...prev, candles: fresh.candles, volume: fresh.volume }));
         }
@@ -6919,33 +6937,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokens]);
 
-  // Токен на кривой во внешней ленте не появляется — пары на DEX у него
-  // нет, — поэтому его показатели обновляем сами, пока экран открыт.
-  // Всё считается по цепочке: цена и капитализация по резервам, объём и
-  // изменение по сделкам самой кривой.
-  useEffect(() => {
-    if (!token?.curveAddress) return;
-    const curve = token.curveAddress;
-    const jetton = token.tokenAddress;
-    let cancelled = false;
-    async function load() {
-      const m = await fetchCurveMarket(curve, jetton, TON_TESTNET);
-      if (cancelled || !m) return;
-      setToken((prev) => (prev && prev.curveAddress === curve ? {
-        ...prev,
-        price: m.priceUsd,
-        mcapNum: m.mcapUsd,
-        vol: fmtCompact(m.vol24Usd),
-        liq: fmtCompact(m.liqUsd),
-        change: m.change24,
-        tx24h: m.tx24,
-      } : prev));
-    }
-    load();
-    const iv = setInterval(load, 15000);
-    return () => { cancelled = true; clearInterval(iv); };
-  }, [token?.curveAddress, token?.tokenAddress]);
-
 
   // Настоящее подключение кошелька через TonConnect. `wallet` — null,
   // пока пользователь не подключил кошелёк; после подключения содержит
@@ -6961,6 +6952,34 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // но без ключа лимит очень низкий — см. TONAPI_KEY выше).
   const [tonBalance, setTonBalance] = useState(0);
   const [tonPriceUsd, setTonPriceUsd] = useState(0);
+
+  // Токен на кривой во внешней ленте не появляется — пары на DEX у него
+  // нет, — поэтому его показатели обновляем сами, пока экран открыт.
+  // Всё считается по цепочке: цена и капитализация по резервам, объём и
+  // изменение по сделкам самой кривой.
+  useEffect(() => {
+    if (!token?.curveAddress) return;
+    const curve = token.curveAddress;
+    const jetton = token.tokenAddress;
+    let cancelled = false;
+    async function load() {
+      const m = await fetchCurveMarket(curve, jetton, TON_TESTNET, tonPriceUsd);
+      if (cancelled || !m) return;
+      setToken((prev) => (prev && prev.curveAddress === curve ? {
+        ...prev,
+        price: m.priceUsd,
+        mcapNum: m.mcapUsd,
+        vol: fmtCompact(m.vol24Usd),
+        liq: fmtCompact(m.liqUsd),
+        change: m.change24,
+        tx24h: m.tx24,
+      } : prev));
+    }
+    load();
+    const iv = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [token?.curveAddress, token?.tokenAddress, tonPriceUsd]);
+
   // Диагностика запроса баланса — больше не рисуется на экране, но
   // остаётся в консоли (console.log/console.error) на случай отладки.
   const [tonDebug, setTonDebug] = useState(null);
@@ -7173,7 +7192,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const withCurve = rows.filter((tok) => tok.curveAddress).slice(0, 12);
     if (!withCurve.length) return;
     const markets = await Promise.all(
-      withCurve.map((tok) => fetchCurveMarket(tok.curveAddress, tok.address, TON_TESTNET)),
+      withCurve.map((tok) => fetchCurveMarket(tok.curveAddress, tok.address, TON_TESTNET, tonPriceUsd)),
     );
     const priced = new Map();
     withCurve.forEach((tok, i) => {
@@ -7986,7 +8005,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               insetTop={insetTop}
             />
           )}
-          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} onOpenProfile={openUserProfile} />}
+          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} onOpenProfile={openUserProfile} tonPriceUsd={tonPriceUsd} />}
           {view === "create" && (
             <CreateView
               showToast={showToast}
