@@ -2229,7 +2229,7 @@ function fmtSince(iso) {
    что и вкладка транзакций у токена; показываем по одной сделке за раз и
    раз в несколько секунд переключаем — так строка остаётся узкой и не
    отвлекает от виджета под ней. */
-function RecentBuysTicker({ tokens }) {
+function RecentBuysTicker({ tokens, onOpen }) {
   const [buys, setBuys] = useState([]);
   const [idx, setIdx] = useState(0);
   // Пока не пришёл первый ответ, на месте ленты стоит скелет той же
@@ -2317,9 +2317,10 @@ function RecentBuysTicker({ tokens }) {
   const b = buys[idx % buys.length];
 
   return (
-    <div
-      className="flex items-center gap-2 rounded-[16px] px-3 py-2 overflow-hidden"
-      style={{ background: hexA(T.up, 0.07), border: `1px solid ${hexA(T.up, 0.22)}` }}
+    <button
+      onClick={() => onOpen && onOpen(b.token)}
+      className="fx-tap w-full flex items-center gap-2 rounded-[16px] px-3 py-2 overflow-hidden"
+      style={{ background: hexA(T.up, 0.07), border: `1px solid ${hexA(T.up, 0.22)}`, textAlign: "left" }}
     >
       <div key={idx} className="flex items-center gap-2 min-w-0" style={{ flex: 1, animation: "tickerSwap 4s ease-in-out both" }}>
         <TokenAvatar size={20} tone="up" src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
@@ -2330,7 +2331,7 @@ function RecentBuysTicker({ tokens }) {
         <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 12, fontWeight: 700 }}>{b.token.ticker}</span>
       </div>
       <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 10.5, whiteSpace: "nowrap" }}>{fmtSince(b.at)}</span>
-    </div>
+    </button>
   );
 }
 
@@ -3616,7 +3617,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         </button>
       </div>
 
-      <RecentBuysTicker tokens={tokens} />
+      <RecentBuysTicker tokens={tokens} onOpen={onOpen} />
 
       {loading && !spotlight ? (
         <div className="fx-card rounded-[22px] p-6 flex flex-col items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
