@@ -1965,6 +1965,9 @@ async function fetchCurveMarket(curveAddress, jettonMaster, testnet, rateArg = 0
   // Курс приходит параметром там, где он уже известен экрану: иначе
   // числа на соседних экранах считаются по разным курсам и прыгают.
   const rate = rateArg > 0 ? rateArg : tonUsd();
+  // Без курса считать нечего: цена в долларах получилась бы нулевой, а
+  // капитализация — пустой. Вернём null, вызывающий подождёт.
+  if (!(rate > 0)) return null;
   const priceTon = curvePriceFromReserve(state.realTon, params);
   const supply = meta && meta.supply ? meta.supply : Number(CURVE_TOTAL_SUPPLY) / 1e9;
 
@@ -2046,6 +2049,7 @@ function flatCandles(price, timeframe, limit = CHART_TOTAL) {
 }
 
 async function fetchCurveOHLCV(curveAddress, timeframe, testnet, rate = tonUsd()) {
+  if (!(rate > 0)) return null;
   // Состояние нужно не только ради последней точки: в нём лежат
   // параметры, с которыми развёрнута именно эта кривая.
   const state = await fetchCurveState(curveAddress, testnet);
@@ -4330,8 +4334,12 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           ? flatCandles(token.price, tf, CHART_TOTAL)
           : genSyntheticCandles(token.price, token.seed, tf, CHART_TOTAL);
       }
-      if (!cancelled && result) { setChartData({ ...result, isLive: !!token.poolAddress || curveChart }); setChartLoading(false); }
-      else if (!cancelled) setChartLoading(false);
+      if (cancelled) return;
+      if (result) { setChartData({ ...result, isLive: !!token.poolAddress || curveChart }); setChartLoading(false); }
+      // У токена на кривой пустой график не показываем: данные есть
+      // всегда, просто ещё не приехали (обычно ждём курс TON). Оставляем
+      // загрузку — попытка повторится, когда курс появится.
+      else if (!curveChart) setChartLoading(false);
     })();
     return () => { cancelled = true; };
     // priceKnown в зависимостях намеренно: пока цена не приехала, ровную
@@ -4724,14 +4732,16 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
 
 /* Mock account context the trade sheet needs — a real app would read
    this from the connected wallet / portfolio instead of hardcoding it. */
-// Запасной курс TON. Настоящий приезжает с биржи через пару секунд после
-// запуска; до этого момента лучше показать близкое число, чем ноль.
-const TON_USD = 7.1;
-// Живой курс. Хранится вне React намеренно: его читают и функции вне
-// компонентов (график, пересчёт ленты), которым пропсы недоступны.
+// Курс TON. Только настоящий, с биржи: запасное «примерно столько»
+// здесь стоять не может — по нему считаются цена, капитализация и ось
+// графика, и разойтись они могут в разы (зашито было 7.1 при реальных
+// 1.3, то есть впятеро). Пока курс не приехал, функция возвращает ноль,
+// и всё, что от него зависит, честно ждёт, а не рисует выдуманное.
+// Хранится вне React намеренно: курс читают и функции вне компонентов
+// (график, пересчёт ленты), которым пропсы недоступны.
 let tonUsdLive = 0;
 function tonUsd() {
-  return tonUsdLive > 0 ? tonUsdLive : TON_USD;
+  return tonUsdLive > 0 ? tonUsdLive : 0;
 }
 const MIN_LAUNCH_USD = 5; // minimum initial-buy commitment required to launch a token
 const NETWORK_FEE_TON = 0.05;
@@ -5348,10 +5358,15 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
       showToast(t("buyAmountRequired"));
       return;
     }
-    const minBuyTon = MIN_LAUNCH_USD / tonUsd();
-    if (buyNum * tonUsd() < MIN_LAUNCH_USD) {
-      showToast(trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(2) }));
-      return;
+    // Порог задан в долларах, поэтому проверять его без курса нельзя:
+    // при нуле любая сумма выглядела бы недостаточной.
+    const rate = tonUsd();
+    if (rate > 0) {
+      const minBuyTon = MIN_LAUNCH_USD / rate;
+      if (buyNum * rate < MIN_LAUNCH_USD) {
+        showToast(trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(2) }));
+        return;
+      }
     }
     // Real launch: hands off to the root app, which deploys an actual
     // jetton on-chain via TonConnect and seeds a STON.fi pool with the
@@ -5435,7 +5450,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
 
       <div className="flex flex-col gap-1.5">
         <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("launchAmountLabel")}</span>
-        <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surface, border: `1px solid ${touched && !(parseFloat(form.buyAmount.replace(",", ".")) * tonUsd() >= MIN_LAUNCH_USD) ? T.down : T.line}` }}>
+        <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surface, border: `1px solid ${touched && tonUsd() > 0 && !(parseFloat(form.buyAmount.replace(",", ".")) * tonUsd() >= MIN_LAUNCH_USD) ? T.down : T.line}` }}>
           <input
             value={form.buyAmount}
             onChange={setBuyAmount}
@@ -5450,7 +5465,8 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
         </p>
         {(() => {
           const buyNum = parseFloat(form.buyAmount.replace(",", "."));
-          const minBuyTon = MIN_LAUNCH_USD / tonUsd();
+          const rate = tonUsd();
+          const minBuyTon = rate > 0 ? MIN_LAUNCH_USD / rate : 0;
           if (!Number.isFinite(buyNum) || buyNum <= 0) {
             return (
               <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.5 }}>
@@ -5458,7 +5474,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
               </p>
             );
           }
-          if (buyNum * tonUsd() < MIN_LAUNCH_USD) {
+          if (rate > 0 && buyNum * rate < MIN_LAUNCH_USD) {
             return (
               <p style={{ fontFamily: bodyFont, color: T.down, fontSize: 11, lineHeight: 1.5 }}>
                 {trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(2) })}
@@ -7038,15 +7054,38 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   }, [walletAddress, balanceRefreshTick]);
   const [tonPriceChecked, setTonPriceChecked] = useState(false);
   useEffect(() => {
-    fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd")
-      .then((r) => r.json())
-      .then((d) => {
-        const usd = (d && d["the-open-network"] && d["the-open-network"].usd) || 0;
-        setTonPriceUsd(usd);
-        if (usd > 0) tonUsdLive = usd;
-      })
-      .catch(() => {})
-      .finally(() => setTonPriceChecked(true));
+    // Два источника: если один недоступен (у CoinGecko бывает лимит на
+    // адрес), курс всё равно приедет. Без курса приложение не может
+    // показать ни цену, ни капитализацию, поэтому запасной источник тут
+    // не роскошь.
+    async function loadRate() {
+      const sources = [
+        async () => {
+          const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd");
+          const d = await r.json();
+          return (d && d["the-open-network"] && d["the-open-network"].usd) || 0;
+        },
+        async () => {
+          const r = await fetch(`${TONAPI_MAINNET_BASE}/v2/rates?tokens=ton&currencies=usd`);
+          const d = await r.json();
+          return Number(d?.rates?.TON?.prices?.USD) || 0;
+        },
+      ];
+      for (const load of sources) {
+        try {
+          const usd = await load();
+          if (usd > 0) {
+            tonUsdLive = usd;
+            setTonPriceUsd(usd);
+            return;
+          }
+        } catch (e) { /* пробуем следующий источник */ }
+      }
+    }
+    loadRate().finally(() => setTonPriceChecked(true));
+    // Курс живой: за час он успевает уйти, а экран может висеть долго.
+    const iv = setInterval(loadRate, 5 * 60 * 1000);
+    return () => clearInterval(iv);
   }, []);
 
   // Global toast — rendered once at the root (not nested inside any
