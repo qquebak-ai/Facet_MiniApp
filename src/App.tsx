@@ -4765,7 +4765,10 @@ let tonUsdLive = 0;
 function tonUsd() {
   return tonUsdLive > 0 ? tonUsdLive : 0;
 }
-const MIN_LAUNCH_USD = 5; // minimum initial-buy commitment required to launch a token
+// Минимальная стартовая покупка. В тестнете её нет: там TON ничего не
+// стоят, порог в долларах не имеет смысла и только мешает проверять.
+const MIN_LAUNCH_USD = 5;
+const MIN_LAUNCH_ENFORCED = !TON_TESTNET_NETWORK;
 const NETWORK_FEE_TON = 0.05;
 const SLIPPAGE_OPTIONS = [0.5, 1, 3];
 
@@ -5383,7 +5386,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
     // Порог задан в долларах, поэтому проверять его без курса нельзя:
     // при нуле любая сумма выглядела бы недостаточной.
     const rate = tonUsd();
-    if (rate > 0) {
+    if (MIN_LAUNCH_ENFORCED && rate > 0) {
       const minBuyTon = MIN_LAUNCH_USD / rate;
       if (buyNum * rate < MIN_LAUNCH_USD) {
         showToast(trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(2) }));
@@ -5472,7 +5475,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
 
       <div className="flex flex-col gap-1.5">
         <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("launchAmountLabel")}</span>
-        <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surface, border: `1px solid ${touched && tonUsd() > 0 && !(parseFloat(form.buyAmount.replace(",", ".")) * tonUsd() >= MIN_LAUNCH_USD) ? T.down : T.line}` }}>
+        <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surface, border: `1px solid ${touched && MIN_LAUNCH_ENFORCED && tonUsd() > 0 && !(parseFloat(form.buyAmount.replace(",", ".")) * tonUsd() >= MIN_LAUNCH_USD) ? T.down : T.line}` }}>
           <input
             value={form.buyAmount}
             onChange={setBuyAmount}
@@ -5496,7 +5499,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
               </p>
             );
           }
-          if (rate > 0 && buyNum * rate < MIN_LAUNCH_USD) {
+          if (MIN_LAUNCH_ENFORCED && rate > 0 && buyNum * rate < MIN_LAUNCH_USD) {
             return (
               <p style={{ fontFamily: bodyFont, color: T.down, fontSize: 11, lineHeight: 1.5 }}>
                 {trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(2) })}
