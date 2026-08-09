@@ -13,6 +13,7 @@ import { Address, beginCell, toNano } from "@ton/core";
 import { supabase } from "./supabaseClient";
 import {
   CURVE_PARAMS,
+  curveParamsOf,
   tokensOutFor,
   tonOutFor,
   curvePriceTon,
@@ -1399,10 +1400,22 @@ async function fetchCurveState(curveAddress, testnet) {
     if (!res.ok) throw new Error(`tonapi ${res.status}`);
     const json = await res.json();
     const stack = json?.stack || [];
-    if (stack.length < 4) return null;
+    if (stack.length < 7) return null;
     const num = (i) => BigInt(stack[i].num);
-    // Порядок полей задан структурой CurveData в контракте.
-    return { realTon: num(2), tokensSold: num(3) };
+    // Порядок полей задан структурой CurveData в контракте. Параметры
+    // читаются вместе с резервами намеренно: они зашиты в контракт при
+    // запуске и у токенов, созданных до смены настроек, отличаются от
+    // текущих. Считать по настройкам приложения — значит показывать
+    // цену, которой у этого токена нет.
+    return {
+      virtualTon: num(0),
+      virtualTokens: num(1),
+      realTon: num(2),
+      tokensSold: num(3),
+      tokensForSale: num(4),
+      graduationTon: num(5),
+      feeBps: num(6),
+    };
   } catch (err) {
     console.error("[mintly] не удалось прочитать состояние кривой:", err);
     return null;
@@ -1587,12 +1600,13 @@ async function fetchPoolOHLCV(poolAddress, tf) {
 // в любой момент однозначно определяется тем, сколько TON в ней
 // накоплено. Поэтому свечи собираются из списка транзакций кривой.
 //
-// Считать по TON, а не по количеству токенов, можно потому, что при
-// нулевой комиссии произведение резервов сохраняется: k =
-// virtualTon × virtualTokens задано при создании и не меняется ни
-// покупкой, ни продажей. Значит непроданный остаток выводится из
-// накопленного TON, а цена — это отношение резервов.
-const CURVE_K0 = CURVE_PARAMS.virtualTon * CURVE_PARAMS.virtualTokens;
+// Считать по TON, а не по количеству токенов, можно потому, что
+// произведение резервов сохраняется: k = virtualTon × virtualTokens
+// задано при создании и не меняется ни покупкой, ни продажей. Значит
+// непроданный остаток выводится из накопленного TON, а цена — это
+// отношение резервов. Комиссия площадки при этом снимается до того, как
+// деньги попадают в резерв, поэтому её надо вычитать отдельно —
+// параметры и её размер берутся у самой кривой.
 // tonapi печатает опкоды как строку с ведущими нулями («0x0f8a7ea5»),
 // поэтому сравниваем числами, а не текстом. Отсутствие опкода — пустое
 // тело, то есть обычный перевод TON.
@@ -1605,9 +1619,9 @@ function msgOpCode(msg) {
   return Number.isFinite(n) ? n : null;
 }
 
-function curvePriceFromReserve(realTon) {
-  const tonReserve = CURVE_PARAMS.virtualTon + realTon;
-  const tokenReserve = CURVE_K0 / tonReserve;
+function curvePriceFromReserve(realTon, params) {
+  const tonReserve = params.virtualTon + realTon;
+  const tokenReserve = (params.virtualTon * params.virtualTokens) / tonReserve;
   if (tokenReserve <= 0n) return 0;
   return Number(tonReserve) / Number(tokenReserve);
 }
@@ -1615,7 +1629,7 @@ function curvePriceFromReserve(realTon) {
 // Сделки кривой по возрастанию времени. У покупки берём приложенную
 // сумму за вычетом газа, у продажи — сколько TON ушло продавцу: обе
 // величины видны в транзакции и не требуют разбора тела сообщения.
-async function fetchCurveTrades(curveAddress, testnet) {
+async function fetchCurveTrades(curveAddress, testnet, feeBps = 0n) {
   if (!curveAddress) return null;
   const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
   try {
@@ -1630,9 +1644,11 @@ async function fetchCurveTrades(curveAddress, testnet) {
       if (!inMsg || tx.success === false || tx.aborted) continue;
       const op = msgOpCode(inMsg);
       if (op === CURVE_OP_BUY) {
-        // Из приложенной суммы контракт удерживает газ, остальное идёт
-        // в резерв — ровно так же, как считает сам контракт.
-        const net = BigInt(inMsg.value || 0) - CURVE_GAS_BUY_OVERHEAD;
+        // Из приложенной суммы контракт удерживает газ, потом свою
+        // комиссию, и только остаток идёт в резерв — считаем так же.
+        const tonIn = BigInt(inMsg.value || 0) - CURVE_GAS_BUY_OVERHEAD;
+        if (tonIn <= 0n) continue;
+        const net = tonIn - tonIn * feeBps / 10000n;
         if (net <= 0n) continue;
         realTon += net;
         trades.push({ time: tx.utime, ton: net, kind: "buy", realTon });
@@ -1640,6 +1656,8 @@ async function fetchCurveTrades(curveAddress, testnet) {
         // Продажа — это уведомление, после которого кривая платит TON
         // обычным переводом без опкода. У прихода торгового запаса при
         // запуске таких переводов нет, поэтому он сюда не попадает.
+        // Комиссия уходит таким же переводом, поэтому сумма всех таких
+        // сообщений — это ровно то, на сколько уменьшился резерв.
         const payout = (tx.out_msgs || []).reduce((sum, m) => {
           const outOp = msgOpCode(m);
           return outOp ? sum : sum + BigInt(m.value || 0);
@@ -1659,21 +1677,22 @@ async function fetchCurveTrades(curveAddress, testnet) {
 // Свечи из истории сделок. Пустые промежутки заполняются плоскими
 // свечами по последней цене: на кривой цена между сделками действительно
 // не меняется, поэтому это не выдумка, а честное отображение.
-function buildCurveCandles(trades, timeframe, currentRealTon = null, limit = CHART_TOTAL) {
+function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL) {
+  const params = curveParamsOf(state);
   const step = TF_SECONDS[timeframe] || 3600;
-  const startPrice = curvePriceFromReserve(0n) * TON_USD;
+  const startPrice = curvePriceFromReserve(0n, params) * TON_USD;
   const now = Math.floor(Date.now() / 1000);
   const bucketOf = (t) => Math.floor(t / step) * step;
 
   const points = (trades || []).map((tr) => ({
     time: tr.time,
-    price: curvePriceFromReserve(tr.realTon) * TON_USD,
+    price: curvePriceFromReserve(tr.realTon, params) * TON_USD,
     volume: Number(tr.ton) / 1e9 * TON_USD,
   }));
   // Последняя точка — состояние прямо из контракта, если оно прочитано:
   // так конец графика совпадает с ценой, по которой идёт сделка.
-  const lastPrice = currentRealTon != null
-    ? curvePriceFromReserve(currentRealTon) * TON_USD
+  const lastPrice = state?.realTon != null
+    ? curvePriceFromReserve(state.realTon, params) * TON_USD
     : (points.length ? points[points.length - 1].price : startPrice);
 
   const firstTime = points.length ? points[0].time : now;
@@ -1719,10 +1738,13 @@ function buildCurveCandles(trades, timeframe, currentRealTon = null, limit = CHA
   return { candles: candles.slice(-limit), volume: volume.slice(-limit) };
 }
 
-async function fetchCurveOHLCV(curveAddress, timeframe, testnet, currentRealTon = null) {
-  const trades = await fetchCurveTrades(curveAddress, testnet);
+async function fetchCurveOHLCV(curveAddress, timeframe, testnet) {
+  // Состояние нужно не только ради последней точки: в нём лежат
+  // параметры, с которыми развёрнута именно эта кривая.
+  const state = await fetchCurveState(curveAddress, testnet);
+  const trades = await fetchCurveTrades(curveAddress, testnet, curveParamsOf(state).feeBps);
   if (trades == null) return null;
-  return buildCurveCandles(trades, timeframe, currentRealTon);
+  return buildCurveCandles(trades, timeframe, state);
 }
 
 // Lightweight REAL-price feed for the small sparkline previews (feed
@@ -4354,12 +4376,16 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
   // редко, а для свежего токена её просто нет.
   let estimate;
   if (curveState) {
+    // Комиссию берём из самой кривой: у токенов, запущенных до её
+    // введения, она нулевая и такой останется навсегда.
+    const feeBps = curveParamsOf(curveState).feeBps;
     if (isBuy) {
-      const netTon = toNano(amount.toFixed(9)) * (10000n - CURVE_PARAMS.feeBps) / 10000n;
+      const tonIn = toNano(amount.toFixed(9));
+      const netTon = tonIn - tonIn * feeBps / 10000n;
       estimate = Number(tokensOutFor(curveState, netTon) / 1000000000n);
     } else {
       const gross = tonOutFor(curveState, toNano(amount.toFixed(9)));
-      const net = gross * (10000n - CURVE_PARAMS.feeBps) / 10000n;
+      const net = gross - gross * feeBps / 10000n;
       estimate = (Number(net) / 1e9) * tonPriceUsd;
     }
   } else {
@@ -6410,7 +6436,11 @@ function useTelegramViewport() {
 
 export default function TonLaunchApp() {
   const TREASURY_ADDRESS = "UQD8ipaRIc2X1zJw0C8S9XfsKQOYiNAEPRUpfNidEZ3pIDdo";
-const FEE_ADDRESS = "UQD8ipaRIc2X1zJw0C8S9XfsKQOYiNAEPRUpfNidEZ3pIDdo";
+// Кошелёк комиссии площадки. Он зашивается в кривую при запуске токена,
+// и контракт сам отправляет туда 1% с каждой покупки и продажи. Смена
+// адреса действует только на новые токены: у уже развёрнутых кривых
+// получатель поменять нельзя.
+const FEE_ADDRESS = "0QClGN5huzz-Z3bwgxr7GOPe5Jyi8PNKbsNnDFKFNGbjunBZ";
 const FEE_PERCENT = 0.01; // 1% комиссии
   // Балансовый API (tonapi.io) по умолчанию смотрит в mainnet. Если
   // кошелёк подключён в testnet (например, для проверки покупки на

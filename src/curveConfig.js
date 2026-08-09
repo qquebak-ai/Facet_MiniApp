@@ -28,12 +28,13 @@ export const CURVE_PARAMS = {
   virtualTokens: toNano("1073000000"),
   tokensForSale: toNano("900000000"),
   graduationTon: toNano("1500"),
-  // Ноль: покупка и продажа идут без комиссии платформы, поэтому первый
-  // покупатель, продав всё обратно, получает ровно внесённое за вычетом
-  // сетевого газа. Убрать газ нельзя — его берёт сеть, не мы.
-  // Платформа при этом ничего не зарабатывает на сделках; заработок
-  // остаётся только на выпуске токена, когда кривая доходит до порога.
-  feeBps: 0n,
+  // Комиссия площадки: 1% с каждой покупки и продажи. Контракт
+  // удерживает её сам и сразу отправляет на feeWallet, заданный при
+  // создании кривой. До этого комиссии не было вовсе, поэтому у токенов,
+  // запущенных раньше, она так и останется нулевой — параметры зашиты в
+  // контракт навсегда. Именно поэтому предпросчёт берёт feeBps из
+  // состояния конкретной кривой, а не отсюда.
+  feeBps: 100n,
 };
 
 // Весь выпуск токена. Чеканится целиком и целиком уходит на кривую:
@@ -105,19 +106,35 @@ export function buildSellPayload(minTonOut = 0n) {
 // округления: контракт округляет в свою пользу, и предпросмотр обязан
 // показывать то же самое, иначе сделка будет отклоняться по minTokensOut.
 
-export function tokensOutFor({ realTon, tokensSold }, tonIn) {
+// Параметры конкретной кривой. Состояние, прочитанное из контракта,
+// несёт их в себе, и брать нужно именно их: настройки приложения могли
+// смениться уже после запуска токена, а в развёрнутом контракте
+// остались прежние. Для вызовов без состояния — значения по умолчанию.
+export function curveParamsOf(state) {
+  return {
+    virtualTon: state?.virtualTon ?? CURVE_PARAMS.virtualTon,
+    virtualTokens: state?.virtualTokens ?? CURVE_PARAMS.virtualTokens,
+    feeBps: state?.feeBps ?? CURVE_PARAMS.feeBps,
+  };
+}
+
+export function tokensOutFor(state, tonIn) {
+  const { realTon, tokensSold } = state;
+  const params = curveParamsOf(state);
   if (tonIn <= 0n) return 0n;
-  const tonReserve = CURVE_PARAMS.virtualTon + realTon;
-  const tokenReserve = CURVE_PARAMS.virtualTokens - tokensSold;
+  const tonReserve = params.virtualTon + realTon;
+  const tokenReserve = params.virtualTokens - tokensSold;
   const k = tonReserve * tokenReserve;
   const out = tokenReserve - k / (tonReserve + tonIn);
   return out > 0n ? out : 0n;
 }
 
-export function tonOutFor({ realTon, tokensSold }, tokensIn) {
+export function tonOutFor(state, tokensIn) {
+  const { realTon, tokensSold } = state;
+  const params = curveParamsOf(state);
   if (tokensIn <= 0n) return 0n;
-  const tonReserve = CURVE_PARAMS.virtualTon + realTon;
-  const tokenReserve = CURVE_PARAMS.virtualTokens - tokensSold;
+  const tonReserve = params.virtualTon + realTon;
+  const tokenReserve = params.virtualTokens - tokensSold;
   const k = tonReserve * tokenReserve;
   const newTokenReserve = tokenReserve + tokensIn;
   const newTonReserve = (k + newTokenReserve - 1n) / newTokenReserve;
@@ -126,9 +143,11 @@ export function tonOutFor({ realTon, tokensSold }, tokensIn) {
 }
 
 // Цена одного токена в TON при текущем состоянии кривой.
-export function curvePriceTon({ realTon, tokensSold }) {
-  const tonReserve = CURVE_PARAMS.virtualTon + realTon;
-  const tokenReserve = CURVE_PARAMS.virtualTokens - tokensSold;
+export function curvePriceTon(state) {
+  const { realTon, tokensSold } = state;
+  const params = curveParamsOf(state);
+  const tonReserve = params.virtualTon + realTon;
+  const tokenReserve = params.virtualTokens - tokensSold;
   if (tokenReserve <= 0n) return 0;
   return Number(tonReserve) / Number(tokenReserve);
 }
