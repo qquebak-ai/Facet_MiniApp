@@ -876,7 +876,10 @@ function GlobalStyle() {
       }
       @keyframes mcapGlow { 0%,100%{text-shadow:0 0 10px currentColor,0 0 2px currentColor;} 50%{text-shadow:0 0 18px currentColor,0 0 4px currentColor;} }
       @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
-      @keyframes toastIn { from{opacity:0; transform:translateY(-10px) translateX(-50%);} to{opacity:1; transform:translateY(0) translateX(-50%);} }
+      /* Появляется на месте — только проявлением и лёгким укрупнением,
+         без наезда сверху. Уходит вверх и растворяется. */
+      @keyframes toastIn { from{opacity:0; transform:translateX(-50%) scale(0.94);} to{opacity:1; transform:translateX(-50%) scale(1);} }
+      @keyframes toastOut { from{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} to{opacity:0; transform:translateX(-50%) translateY(-22px) scale(0.98);} }
       @keyframes rocketUp { 0%{ transform:translateY(0) scale(0.75); opacity:0; } 18%{ opacity:0.9; } 100%{ transform:translateY(-70px) scale(1); opacity:0; } }
       @keyframes emberFall { 0%{ transform:translateY(-4px) scale(0.5); opacity:0; } 15%{ opacity:0.9; } 75%{ opacity:0.55; } 100%{ transform:translateY(60px) scale(1.1); opacity:0; } }
       @keyframes candleGrow { from{ transform:scaleY(0); opacity:0; } to{ transform:scaleY(1); opacity:1; } }
@@ -2704,10 +2707,20 @@ function SectionTitle({ children, action }) {
   );
 }
 
-function Toast({ toast, insetTop = 0 }) {
+// Сколько длится уход подсказки вверх. Ровно на это время её показ
+// продлевается после срока жизни, иначе она пропала бы мгновенно.
+const TOAST_OUT_MS = 280;
+
+function Toast({ toast, insetTop = 0, leaving = false }) {
   if (!toast) return null;
   return (
-    <div style={{ position: "absolute", top: insetTop + 14, left: "50%", zIndex: 50, animation: "toastIn 240ms cubic-bezier(0.16,1,0.3,1) both" }}>
+    <div style={{
+      position: "absolute", top: insetTop + 14, left: "50%", zIndex: 50,
+      willChange: "transform, opacity",
+      animation: leaving
+        ? `toastOut ${TOAST_OUT_MS}ms cubic-bezier(0.4,0,1,1) both`
+        : "toastIn 260ms cubic-bezier(0.16,1,0.3,1) both",
+    }}>
       {/* toast intentionally ignores the app theme — like a native OS toast it
           stays a fixed dark pill with light text/icon so it's always legible,
           instead of flipping to (illegible) dark-on-dark under the White theme */}
@@ -6653,13 +6666,31 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // scrolling view), so it's never clipped no matter which screen
   // triggered it.
   const [toast, setToast] = useState(null);
+  // Отдельный признак ухода: сама подсказка ещё в разметке, но уже
+  // проигрывает анимацию вверх. Без него она исчезала мгновенно.
+  const [toastLeaving, setToastLeaving] = useState(false);
+  // Номер показа: по нему подсказка пересоздаётся, и анимация появления
+  // проигрывается заново даже если текст совпал с предыдущим.
+  const [toastSeq, setToastSeq] = useState(0);
   const toastTimer = useRef(null);
+  const toastHideTimer = useRef(null);
   function showToast(msg) {
-    setToast(msg);
-    haptic();
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2400);
+    clearTimeout(toastHideTimer.current);
+    setToast(msg);
+    setToastLeaving(false);
+    setToastSeq((n) => n + 1);
+    haptic();
+    toastTimer.current = setTimeout(() => setToastLeaving(true), 2400);
+    toastHideTimer.current = setTimeout(() => {
+      setToast(null);
+      setToastLeaving(false);
+    }, 2400 + TOAST_OUT_MS);
   }
+  useEffect(() => () => {
+    clearTimeout(toastTimer.current);
+    clearTimeout(toastHideTimer.current);
+  }, []);
 
   // Profile / account state lives here (not inside ProfileView) so the
   // AuthModal bottom sheet can be rendered as a direct child of
@@ -7501,7 +7532,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       <GlobalStyle />
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
-      <Toast toast={toast} insetTop={insetTop} />
+      <Toast key={toastSeq} toast={toast} insetTop={insetTop} leaving={toastLeaving} />
 
       {pinLocked && appSettings.pinEnabled && pinCode && (
         <PinLockScreen pin={pinCode} profile={profile} onUnlock={() => setPinLocked(false)} onForgot={forgotPin} />
