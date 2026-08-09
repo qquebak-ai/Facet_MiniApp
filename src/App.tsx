@@ -904,18 +904,15 @@ function GlobalStyle() {
         16%  { opacity: 1; filter: drop-shadow(0 0 20px ${T.electric}); }
         100% { opacity: 0; filter: drop-shadow(0 0 0 ${T.electric}); }
       }
-      /* Ракета: разгон снизу, к концу — уменьшение и растворение внутри
-         острова. Конечная точка приходит переменной --fly-to. */
+      /* Ракета: разгон снизу слева, к концу — уменьшение и растворение
+         внутри острова. Конечная точка приходит переменной --fly-to. */
       @keyframes rocketFly {
-        0%   { transform: translate(-50%, calc(100vh + 120px)) scale(1); opacity: 0; }
-        8%   { opacity: 1; }
-        70%  { transform: translate(-50%, calc(var(--fly-to) + 120px)) scale(1); opacity: 1; }
-        92%  { transform: translate(-50%, var(--fly-to)) scale(0.34); opacity: 0.9; }
-        100% { transform: translate(-50%, var(--fly-to)) scale(0.12); opacity: 0; }
+        0%   { transform: translate(calc(-50% - 130px), calc(100vh + 150px)) scale(1); opacity: 0; }
+        7%   { opacity: 1; }
+        72%  { transform: translate(calc(-50% - 30px), calc(var(--fly-to) + 150px)) scale(1); opacity: 1; }
+        92%  { transform: translate(-50%, var(--fly-to)) scale(0.34); opacity: 0.95; }
+        100% { transform: translate(-50%, var(--fly-to)) scale(0.1); opacity: 0; }
       }
-      @keyframes rocketFlame { 0%,100%{ transform: scaleY(0.82) scaleX(0.94); } 50%{ transform: scaleY(1.16) scaleX(1.06); } }
-      @keyframes rocketFlameCore { 0%,100%{ transform: scaleY(1.05) scaleX(1.02); } 50%{ transform: scaleY(0.85) scaleX(0.95); } }
-      @keyframes rocketSpark { 0%{ opacity:0.95; transform: translateY(0) scale(1); } 100%{ opacity:0; transform: translateY(74px) scale(0.3); } }
       @keyframes toastIn { from{opacity:0; transform:translateX(-50%) scale(0.94);} to{opacity:1; transform:translateX(-50%) scale(1);} }
       @keyframes toastOut { from{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} to{opacity:0; transform:translateX(-50%) translateY(-22px) scale(0.98);} }
       @keyframes rocketUp { 0%{ transform:translateY(0) scale(0.75); opacity:0; } 18%{ opacity:0.9; } 100%{ transform:translateY(-70px) scale(1); opacity:0; } }
@@ -6893,132 +6890,72 @@ function useDevice() {
 
    Всё на CSS-анимациях: рисовать её покадрово в JS незачем, а на
    композиции она не даёт нагрузки поверх торгового экрана. */
-const ROCKET_FLIGHT_MS = 1700;
+const ROCKET_FLIGHT_MS = 1900;
 
-function LaunchRocket({ targetTop = ISLAND_TOP + ISLAND_HEIGHT / 2 }) {
-  // Искры позади ракеты: несколько независимых, чтобы след не выглядел
-  // одной повторяющейся полосой.
-  const sparks = useMemo(() => {
-    const rnd = seededRand(4242);
-    return Array.from({ length: 10 }, (_, i) => ({
-      dx: -14 + rnd() * 28,
-      size: 2 + rnd() * 3,
-      delay: 120 + i * 90 + rnd() * 80,
-      dur: 700 + rnd() * 500,
-    }));
-  }, []);
+// Анимация ракеты — настоящая из Telegram (Lottie). Файл лежит в public
+// и подгружается один раз: класть полмегабайта в основной пакет ради
+// анимации, которая играет раз в жизни токена, незачем.
+let rocketAnimData = null;
+let rocketAnimLoading = null;
+function loadRocketAnimation(variant = "default") {
+  if (rocketAnimData) return Promise.resolve(rocketAnimData);
+  if (rocketAnimLoading) return rocketAnimLoading;
+  const file = variant === "outline" ? "/rocket-outline.json" : "/rocket.json";
+  rocketAnimLoading = fetch(file)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => { rocketAnimData = data; rocketAnimLoading = null; return data; })
+    .catch(() => { rocketAnimLoading = null; return null; });
+  return rocketAnimLoading;
+}
+
+/* Ракета запуска.
+
+   Летит снизу слева вверх и «влетает» в остров: к концу пути
+   уменьшается и гаснет, а обрамление острова в этот момент вспыхивает.
+   Если острова нет (не тот айфон или окно Telegram начинается ниже),
+   ракета просто уходит за верхний край — анимация остаётся осмысленной.
+
+   Путь диагональный не случайно: сама ракета нарисована носом вверх-вправо,
+   и по прямой вертикали она летела бы боком. */
+function LaunchRocket({ targetTop = ISLAND_TOP + ISLAND_HEIGHT / 2, variant = "default" }) {
+  const holderRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let anim = null;
+    (async () => {
+      const [{ default: lottie }, data] = await Promise.all([
+        import("lottie-web/build/player/lottie_light"),
+        loadRocketAnimation(variant),
+      ]);
+      if (cancelled || !data || !holderRef.current) return;
+      anim = lottie.loadAnimation({
+        container: holderRef.current,
+        renderer: "svg",
+        loop: true,
+        autoplay: true,
+        animationData: data,
+      });
+    })();
+    return () => { cancelled = true; if (anim) anim.destroy(); };
+  }, [variant]);
 
   return (
     <div
       aria-hidden
       style={{
         position: "fixed", inset: 0, zIndex: 1900, pointerEvents: "none",
-        // Ракета летит к центру острова: сдвигаем систему координат так,
-        // чтобы конец пути пришёлся ровно туда.
+        // Ракета летит к центру острова: конец пути приходит переменной.
         ["--fly-to"]: `${targetTop}px`,
       }}
     >
       <div
+        ref={holderRef}
         style={{
-          position: "absolute", left: "50%", top: 0, width: 0, height: 0,
-          animation: `rocketFly ${ROCKET_FLIGHT_MS}ms cubic-bezier(0.5,0,0.5,1) forwards`,
+          position: "absolute", left: "50%", top: 0, width: 168, height: 168, marginLeft: -84, marginTop: -84,
+          animation: `rocketFly ${ROCKET_FLIGHT_MS}ms cubic-bezier(0.45,0,0.5,1) forwards`,
         }}
-      >
-        {/* след: искры сыплются из сопла и отстают */}
-        {sparks.map((sp, i) => (
-          <span key={i} style={{
-            position: "absolute", left: sp.dx, top: 26,
-            width: sp.size, height: sp.size, borderRadius: "50%",
-            background: T.electric,
-            filter: `drop-shadow(0 0 4px ${T.electric})`,
-            opacity: 0,
-            animation: `rocketSpark ${sp.dur}ms ease-out ${sp.delay}ms infinite`,
-          }} />
-        ))}
-
-        {/* Сама ракета. Собрана из слоёв, а не из одной заливки:
-            носовой конус, корпус со стыком и панельными линиями,
-            иллюминатор со стеклом и бликом, крылья с теневой гранью и
-            сопло. Пламя двухслойное — внешний факел и белое ядро — и
-            каждое дышит со своей частотой, поэтому не выглядит
-            повторяющейся картинкой. */}
-        <svg width="54" height="86" viewBox="-27 -50 54 86" style={{ position: "absolute", left: -27, top: -50, overflow: "visible" }}>
-          <defs>
-            <linearGradient id="rk-body" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#8E8E9A" />
-              <stop offset="14%" stopColor="#F2F2F6" />
-              <stop offset="42%" stopColor="#FFFFFF" />
-              <stop offset="68%" stopColor="#D8D8E0" />
-              <stop offset="88%" stopColor="#8A8A96" />
-              <stop offset="100%" stopColor="#6A6A76" />
-            </linearGradient>
-            <linearGradient id="rk-nose" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#FF8A5C" />
-              <stop offset="45%" stopColor={T.electric} />
-              <stop offset="100%" stopColor="#C4451B" />
-            </linearGradient>
-            <linearGradient id="rk-flame" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#FFF7E2" />
-              <stop offset="30%" stopColor="#FFC46B" />
-              <stop offset="62%" stopColor={T.electric} />
-              <stop offset="100%" stopColor="#FF2D2D" stopOpacity="0" />
-            </linearGradient>
-            <radialGradient id="rk-glass" cx="50%" cy="30%">
-              <stop offset="0%" stopColor="#8ED8FF" />
-              <stop offset="60%" stopColor="#2C6E9B" />
-              <stop offset="100%" stopColor="#0E2A3E" />
-            </radialGradient>
-          </defs>
-
-          {/* пламя: внешний факел и белое ядро */}
-          <g style={{ animation: "rocketFlame 120ms ease-in-out infinite", transformOrigin: "0px 18px" }}>
-            <path d="M-8 18 C -6 30, -3 38, 0 48 C 3 38, 6 30, 8 18 Z" fill="url(#rk-flame)" />
-          </g>
-          <g style={{ animation: "rocketFlameCore 90ms ease-in-out infinite", transformOrigin: "0px 18px" }}>
-            <path d="M-3.6 18 C -2.8 25, -1.3 30, 0 35 C 1.3 30, 2.8 25, 3.6 18 Z" fill="#FFFBF0" opacity="0.95" />
-          </g>
-
-          {/* задняя пара крыльев — в тени, даёт объём */}
-          <path d="M-6 2 C -12 7, -15 14, -14.5 21 L -6 15 Z" fill="#B44A20" />
-          <path d="M6 2 C 12 7, 15 14, 14.5 21 L 6 15 Z" fill="#B44A20" />
-
-          {/* корпус */}
-          <path d="M0 -49 C 7.6 -37, 11.2 -22, 11.2 -6 C 11.2 4, 9.6 12, 7.2 17 L -7.2 17 C -9.6 12, -11.2 4, -11.2 -6 C -11.2 -22, -7.6 -37, 0 -49 Z" fill="url(#rk-body)" />
-
-          {/* носовой конус со стыком */}
-          <path d="M0 -49 C 5.2 -41, 8.2 -32, 9.4 -24 C 6 -26.5, -6 -26.5, -9.4 -24 C -8.2 -32, -5.2 -41, 0 -49 Z" fill="url(#rk-nose)" />
-          <path d="M0 -49 C 5.2 -41, 8.2 -32, 9.4 -24 C 7.6 -25.3, 5.2 -26.1, 2.6 -26.5 L 0 -49 Z" fill="#000000" opacity="0.12" />
-          <path d="M-9.4 -24 C -6 -26.5, 6 -26.5, 9.4 -24" fill="none" stroke="#0B0B0D" strokeOpacity="0.35" strokeWidth="1" />
-
-          {/* иллюминатор */}
-          <circle cx="0" cy="-13" r="6.2" fill="#0B0B0D" />
-          <circle cx="0" cy="-13" r="5" fill="url(#rk-glass)" />
-          <path d="M-4.4 -15.6 A 5 5 0 0 1 1.4 -17.7 L -2.2 -11.4 Z" fill="#FFFFFF" opacity="0.45" />
-          <circle cx="0" cy="-13" r="5" fill="none" stroke={T.electric} strokeWidth="1.1" opacity="0.9" />
-
-          {/* панельные линии, заклёпки и блик вдоль корпуса */}
-          <path d="M-10.6 -2 L 10.6 -2" stroke="#0B0B0D" strokeOpacity="0.18" strokeWidth="0.8" />
-          <path d="M-9.8 6 L 9.8 6" stroke="#0B0B0D" strokeOpacity="0.22" strokeWidth="1.2" />
-          <path d="M0 -2 L 0 6" stroke="#0B0B0D" strokeOpacity="0.12" strokeWidth="0.7" />
-          <g fill="#0B0B0D" opacity="0.22">
-            <circle cx="-7.4" cy="1.8" r="0.65" />
-            <circle cx="-3.7" cy="1.8" r="0.65" />
-            <circle cx="3.7" cy="1.8" r="0.65" />
-            <circle cx="7.4" cy="1.8" r="0.65" />
-          </g>
-          <path d="M-5.4 -30 C -7.4 -20, -8 -8, -7.4 8" stroke="#FFFFFF" strokeOpacity="0.7" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-
-          {/* передние крылья */}
-          <path d="M-7.2 1 C -14 6, -17.4 13, -17 21 L -7.2 16 Z" fill="url(#rk-nose)" />
-          <path d="M7.2 1 C 14 6, 17.4 13, 17 21 L 7.2 16 Z" fill="url(#rk-nose)" />
-          <path d="M7.2 1 C 14 6, 17.4 13, 17 21 L 11 18.4 Z" fill="#000000" opacity="0.16" />
-
-          {/* сопло */}
-          <path d="M-7.2 17 L 7.2 17 L 5.6 22.4 L -5.6 22.4 Z" fill="#5E5E6A" />
-          <path d="M-5.6 22.4 L 5.6 22.4 L 4.6 24 L -4.6 24 Z" fill="#3A3A44" />
-          <path d="M-7.2 17 L 7.2 17" stroke="#0B0B0D" strokeOpacity="0.4" strokeWidth="0.9" />
-        </svg>
-      </div>
+      />
     </div>
   );
 }
@@ -7233,6 +7170,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // обрамлять нечего. Параметр ?island=1 включает её принудительно —
   // чтобы можно было посмотреть на любом устройстве.
   const forceIsland = typeof window !== "undefined" && /[?&]island=1/.test(window.location.search);
+  const rocketVariant = typeof window !== "undefined" && /[?&]rocket=outline/.test(window.location.search) ? "outline" : "default";
   // Полёт ракеты после удачного запуска токена и вспышка острова в
   // момент, когда она в него влетает.
   const [rocketFlying, setRocketFlying] = useState(false);
@@ -7248,6 +7186,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     ];
   }
   useEffect(() => () => rocketTimers.current.forEach(clearTimeout), []);
+  // Анимацию тянем заранее, в фоне: к моменту запуска токена она должна
+  // быть готова, иначе полёт начнётся с задержкой на загрузку.
+  useEffect(() => {
+    const to = setTimeout(() => loadRocketAnimation(rocketVariant), 4000);
+    return () => clearTimeout(to);
+  }, [rocketVariant]);
   // ?rocket=1 — проиграть полёт без запуска токена: чтобы посмотреть и
   // поправить, не тратя TON.
   useEffect(() => {
@@ -8337,7 +8281,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     >
       <GlobalStyle />
       {showIsland && <DynamicIslandFrame hitKey={islandHitKey} />}
-      {rocketFlying && <LaunchRocket targetTop={showIsland ? ISLAND_TOP + ISLAND_HEIGHT / 2 : -60} />}
+      {rocketFlying && <LaunchRocket targetTop={showIsland ? ISLAND_TOP + ISLAND_HEIGHT / 2 : -60} variant={rocketVariant} />}
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast key={toastSeq} toast={toast} insetTop={insetTop} leaving={toastLeaving} />
