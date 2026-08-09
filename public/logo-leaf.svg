@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Mintly">
+  <!-- Вариант с одним листом на правой вершине: спокойнее и лучше
+       читается в мелком размере, чем росток из впадины. -->
+  <path d="M12 56 V28 L32 45 L52 28 V56" fill="none" stroke="#FF6B35" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(52,26) rotate(34)">
+    <path d="M0 0 C -8 -7 -8 -19 0 -26 C 8 -19 8 -7 0 0 Z" fill="#FF6B35" stroke="#000000" stroke-width="3" stroke-linejoin="round"/>
+  </g>
+</svg>

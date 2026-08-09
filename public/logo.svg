@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Mintly">
+  <!-- Mintly: буква M, из впадины которой растёт мятный росток.
+       Один цвет плюс чёрный контур-зазор, чтобы лист не слипался с
+       буквой на мелких размерах. Контур того же цвета, что фон
+       приложения, — на светлой подложке используйте logo-badge.svg. -->
+  <path d="M11 56 V26 L32 45 L53 26 V56" fill="none" stroke="#FF6B35" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#FF6B35" stroke="#000000" stroke-width="3" stroke-linejoin="round">
+    <path d="M32 46 C 22 40, 19 28, 23 16 C 31 23, 33.5 35, 32 46 Z"/>
+    <path d="M32 46 C 42 40, 45 28, 41 16 C 33 23, 30.5 35, 32 46 Z"/>
+  </g>
+</svg>
