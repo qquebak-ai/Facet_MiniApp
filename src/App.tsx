@@ -897,7 +897,14 @@ function GlobalStyle() {
          этого вспыхивает и плавно гаснет весь контур. Смещение штриха
          отрицательное у обеих: каждая идёт по своему пути, а он уже
          задан в нужную сторону. */
-      @keyframes islandSparkRun { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -500; } }
+      /* Искры гаснут ровно в момент встречи наверху: дальше горит уже
+         весь контур, и две яркие точки поверх него читались бы как
+         забытый на месте след. */
+      @keyframes islandSparkRun {
+        0%   { stroke-dashoffset: 0; opacity: 1; }
+        94%  { opacity: 1; }
+        100% { stroke-dashoffset: -500; opacity: 0; }
+      }
       @keyframes islandRingBurst {
         0%   { opacity: 0; filter: drop-shadow(0 0 0 ${T.electric}); }
         3%   { opacity: 1; }
@@ -7056,7 +7063,7 @@ function DynamicIslandFrame({ topOffset = 0, hitKey = 0 }) {
               fill="none"
               stroke="#FFC9A8"
               strokeWidth={2.6}
-              style={{ opacity: 0, animation: "islandRingBurst 1400ms 640ms ease-out forwards" }}
+              style={{ opacity: 0, animation: "islandRingBurst 1400ms 690ms ease-out forwards" }}
             />
           </g>
         )}
