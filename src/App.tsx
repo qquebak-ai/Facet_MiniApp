@@ -6787,6 +6787,57 @@ const contentTopPad = (insetTop) => Math.max(0, insetTop + CONTENT_TOP_GAP);
 // оттянуть список — тогда под пальцем окажется карточка, а не пустой фон.
 const PROFILE_CARD_TOP = (insetTop) => -(contentTopPad(insetTop) + 10 + 160);
 
+/* Где именно запущено приложение.
+   Основной источник — сам Telegram: он сообщает платформу ("ios",
+   "android", "tdesktop", "macos", "web", "weba", "webk", "unknown") и
+   версию клиента. Это надёжнее разбора строки браузера, но внутри
+   Telegram доступно не всегда (например при открытии по обычной ссылке),
+   поэтому есть и запасной разбор userAgent.
+   Значение считается один раз: между перерисовками устройство не
+   меняется, а к строке браузера обращаться на каждый рендер незачем. */
+function detectDevice() {
+  if (typeof window === "undefined") {
+    return { platform: "unknown", inTelegram: false, isIOS: false, isAndroid: false, isDesktop: false, isMobile: false, isTouch: false, version: null };
+  }
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const ua = navigator.userAgent || "";
+  const tgPlatform = tg && tg.platform ? String(tg.platform).toLowerCase() : null;
+
+  // iPadOS с 13-й версии представляется макинтошем, отличить можно только
+  // по наличию сенсорного ввода.
+  const iPadAsMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  const uaIOS = /iPad|iPhone|iPod/.test(ua) || iPadAsMac;
+  const uaAndroid = /Android/.test(ua);
+
+  const platform = tgPlatform && tgPlatform !== "unknown"
+    ? tgPlatform
+    : uaIOS ? "ios" : uaAndroid ? "android" : "web";
+
+  const isIOS = platform === "ios" || platform === "macos" || uaIOS;
+  const isAndroid = platform === "android" || uaAndroid;
+  const isDesktop = platform === "tdesktop" || platform === "macos" || (!isIOS && !isAndroid);
+
+  return {
+    platform,
+    inTelegram: !!tg,
+    version: tg && tg.version ? tg.version : null,
+    isIOS,
+    isAndroid,
+    isDesktop,
+    isMobile: !isDesktop,
+    isTouch: navigator.maxTouchPoints > 0 || "ontouchstart" in window,
+  };
+}
+
+const DEVICE = detectDevice();
+
+// Тем, кому устройство нужно внутри разметки. Отдельный хук, а не просто
+// константа, — чтобы не тянуть её импортом через полфайла и чтобы позже
+// можно было пересчитывать при смене клиента, не трогая вызовы.
+function useDevice() {
+  return DEVICE;
+}
+
 function useTelegramViewport() {
   const [height, setHeight] = useState(
     typeof window !== "undefined" ? window.innerHeight : 720
@@ -6895,6 +6946,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [token, setToken] = useState(null);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const { height, insetBottom, insetTop } = useTelegramViewport();
+  const device = useDevice();
 
   // Always open on Home — closing and reopening the app (or refreshing)
   // should land the person back on the front page rather than wherever
@@ -7962,7 +8014,14 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   }, [bootDone]);
 
   return (
-    <div style={{ background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden" }}>
+    <div
+      // Устройство проставляется в разметку: по нему можно и стили
+      // цеплять, и видеть в инспекторе, где именно открыто приложение,
+      // когда проблема воспроизводится только на одном клиенте.
+      data-platform={device.platform}
+      data-telegram={device.inTelegram ? "1" : "0"}
+      style={{ background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden" }}
+    >
       <GlobalStyle />
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
