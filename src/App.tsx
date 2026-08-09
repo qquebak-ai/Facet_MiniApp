@@ -6,7 +6,7 @@ import {
   Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, MoreHorizontal, HeartCrack,
   Settings as SettingsIcon, Bell, Lock, Palette, Gift, LifeBuoy,
   FileText, ShieldQuestion, ArrowDownToLine, ArrowUpFromLine, Link2, CheckCircle2, RefreshCw, X,
-  Eye, EyeOff, LogIn, Mail, KeyRound, ShoppingBag, Trash2, FileCode2
+  Eye, EyeOff, LogIn, Mail, KeyRound, ShoppingBag, Trash2
 } from "lucide-react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, beginCell, toNano } from "@ton/core";
@@ -301,7 +301,7 @@ const STR = {
     connectWalletContinue: "Подключи TON-кошелёк, чтобы продолжить",
     walletConnectedToast: "Кошелёк подключён",
     walletDisconnectedToast: "Кошелёк отключён",
-    addressCopied: "Адрес скопирован", viewCurveContract: "Контракт кривой в эксплорере",
+    addressCopied: "Адрес скопирован",
     verifyRequestSent: "Заявка отправлена на проверку",
     profileVerified: "Профиль верифицирован",
     logOutShort: "Выйти",
@@ -571,7 +571,7 @@ const STR = {
     connectWalletContinue: "Connect a TON wallet to continue",
     walletConnectedToast: "Wallet connected",
     walletDisconnectedToast: "Wallet disconnected",
-    addressCopied: "Address copied", viewCurveContract: "Curve contract in explorer",
+    addressCopied: "Address copied",
     verifyRequestSent: "Request sent for review",
     profileVerified: "Profile verified",
     logOutShort: "Log out",
@@ -1373,18 +1373,6 @@ async function fetchTokenInfo(tokenAddress) {
 // from GeckoTerminal's mainnet trending pools regardless of which
 // network the connected wallet happens to be on for launching/trading.
 const TONAPI_MAINNET_BASE = "https://tonapi.io";
-
-// Сеть, в которой приложение запускает токены и торгует ими. Отдельно от
-// TONAPI_MAINNET_BASE выше: лента берётся из mainnet всегда, а свои
-// контракты пока живут в тестнете.
-const TON_TESTNET_NETWORK = true;
-// Эксплорер для ссылок «посмотреть контракт». Кривая — обычный аккаунт в
-// сети, у него на вкладке Code лежит наш скомпилированный код.
-const TONVIEWER_BASE = TON_TESTNET_NETWORK ? "https://testnet.tonviewer.com" : "https://tonviewer.com";
-function openExplorer(address) {
-  if (!address || typeof window === "undefined") return;
-  window.open(`${TONVIEWER_BASE}/${address}`, "_blank", "noopener,noreferrer");
-}
 
 // Адрес кошелька жетона у конкретного владельца. Нужен для продажи:
 // продать — значит перевести жетоны со своего кошелька на кошелёк
@@ -3945,29 +3933,14 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          {token.tokenAddress ? (
-            <button onClick={copyContract} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-              <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12 }}>{shortAddr(token.tokenAddress)}</span>
-              <Copy size={12} color={T.muted} />
-            </button>
-          ) : (
-            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>{tr("tokenNoAddress")}</span>
-          )}
-          {/* Кривая этого токена в эксплорере: вкладка Code показывает
-              наш контракт, вкладка Methods — его состояние. */}
-          {token.curveAddress && (
-            <button
-              onClick={() => openExplorer(token.curveAddress)}
-              title={tr("viewCurveContract")}
-              className="fx-tap flex items-center gap-1 rounded-full px-2.5 py-1.5"
-              style={{ background: T.surface, border: `1px solid ${T.line}` }}
-            >
-              <FileCode2 size={12} color={T.muted} />
-              <ExternalLink size={11} color={T.muted} />
-            </button>
-          )}
-        </div>
+        {token.tokenAddress ? (
+          <button onClick={copyContract} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12 }}>{shortAddr(token.tokenAddress)}</span>
+            <Copy size={12} color={T.muted} />
+          </button>
+        ) : (
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>{tr("tokenNoAddress")}</span>
+        )}
       </div>
 
       {/* Stats: big Market Cap on the left, compact real Holders/Volume
@@ -6283,7 +6256,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // TonConnectUIProvider (обычно настраивается в index/main файле, не
   // в этом) тоже должен быть сконфигурирован под testnet — иначе
   // подключаемый кошелёк не будет знать, что вы работаете в тестовой сети.
-  const TON_TESTNET = TON_TESTNET_NETWORK;
+  const TON_TESTNET = true;
   const TONAPI_HOST = TON_TESTNET ? "testnet.tonapi.io" : "tonapi.io";
   // Бесплатный tonapi.io без ключа сильно лимитирован (мы поймали
   // 429 "rate limit: free tier"). Заведите бесплатный ключ на
