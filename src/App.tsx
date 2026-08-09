@@ -2629,7 +2629,7 @@ function RecentBuysTicker({ tokens, onOpen }) {
    трансформах и градиентах, поэтому крутится на GPU и не считает
    ничего в JS. */
 function SpotlightGrid({ up = true, seedKey = 1 }) {
-  const line = "rgba(255,255,255,0.09)";
+  const line = "rgba(255,255,255,0.14)";
   const cell = "44px 44px";
   const grid = `linear-gradient(${line} 1px, transparent 1px), linear-gradient(90deg, ${line} 1px, transparent 1px)`;
   const tone = up ? T.up : T.down;
@@ -2655,11 +2655,18 @@ function SpotlightGrid({ up = true, seedKey = 1 }) {
         contain: "layout paint style",
       }}
     >
+      {/* сплошная подложка в цвет направления: виджет должен читаться
+          цветным, а не как чёрный прямоугольник с редкими бликами */}
+      <div style={{
+        position: "absolute", inset: 0,
+        background: `linear-gradient(160deg, ${hexA(tone, 0.22)} 0%, ${hexA(T.electric, 0.12)} 55%, ${hexA(T.bg, 0)} 100%)`,
+      }} />
+
       {/* плоская сетка по всей карточке — задаёт «стены» */}
       <div style={{
         position: "absolute", inset: 0,
         backgroundImage: grid, backgroundSize: cell,
-        opacity: 0.55,
+        opacity: 0.85,
         animation: "gridDrift 34s linear infinite",
         WebkitMaskImage: "radial-gradient(ellipse at 50% 50%, #000 20%, transparent 85%)",
         maskImage: "radial-gradient(ellipse at 50% 50%, #000 20%, transparent 85%)",
@@ -2688,7 +2695,7 @@ function SpotlightGrid({ up = true, seedKey = 1 }) {
       {/* силуэт свечей вдоль нижнего края — читается как «здесь торгуют» */}
       <div style={{
         position: "absolute", left: 0, right: 0, bottom: 0, height: 66,
-        display: "flex", alignItems: "flex-end", gap: 4, padding: "0 10px", opacity: 0.34,
+        display: "flex", alignItems: "flex-end", gap: 4, padding: "0 10px", opacity: 0.62,
         WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, #000 70%)",
         maskImage: "linear-gradient(to bottom, transparent 0%, #000 70%)",
       }}>
@@ -2697,7 +2704,7 @@ function SpotlightGrid({ up = true, seedKey = 1 }) {
             flex: 1,
             height: `${c.h}%`,
             borderRadius: 2,
-            background: c.up ? hexA(T.up, 0.5) : hexA(T.down, 0.45),
+            background: c.up ? hexA(T.up, 0.85) : hexA(T.down, 0.8),
             transformOrigin: "bottom",
             animation: `candleBreathe ${c.dur}s ease-in-out ${c.delay}s infinite`,
           }} />
@@ -2709,14 +2716,23 @@ function SpotlightGrid({ up = true, seedKey = 1 }) {
       <div style={{
         position: "absolute", left: "50%", top: "42%", width: 300, height: 300,
         marginLeft: -150, marginTop: -150, borderRadius: "50%", filter: "blur(46px)",
-        background: `radial-gradient(circle, ${hexA(tone, 0.3)} 0%, ${hexA(tone, 0)} 70%)`,
+        background: `radial-gradient(circle, ${hexA(tone, 0.6)} 0%, ${hexA(tone, 0)} 70%)`,
         animation: "spotlightPulse 6s ease-in-out infinite",
+      }} />
+
+      {/* второе пятно фирменным оранжевым, смещённое в угол: один цвет на
+          весь виджет выглядит плоско, два дают глубину */}
+      <div style={{
+        position: "absolute", left: "12%", top: "72%", width: 220, height: 220,
+        marginLeft: -110, marginTop: -110, borderRadius: "50%", filter: "blur(42px)",
+        background: `radial-gradient(circle, ${hexA(T.electric, 0.4)} 0%, ${hexA(T.electric, 0)} 70%)`,
+        animation: "spotlightPulse 8s ease-in-out -3s infinite",
       }} />
 
       {/* медленный луч, проходящий по карточке слева направо */}
       <div style={{
         position: "absolute", top: 0, bottom: 0, width: "45%", left: 0,
-        background: `linear-gradient(100deg, ${hexA(T.ice, 0)} 0%, ${hexA(T.ice, 0.07)} 50%, ${hexA(T.ice, 0)} 100%)`,
+        background: `linear-gradient(100deg, ${hexA(T.ice, 0)} 0%, ${hexA(T.ice, 0.13)} 50%, ${hexA(T.ice, 0)} 100%)`,
         animation: "spotlightSweep 7s ease-in-out infinite",
         willChange: "transform",
       }} />
@@ -2724,7 +2740,7 @@ function SpotlightGrid({ up = true, seedKey = 1 }) {
       {/* лёгкое затемнение к краям, чтобы фон не спорил с контентом */}
       <div style={{
         position: "absolute", inset: 0,
-        background: `radial-gradient(ellipse at 50% 45%, ${hexA(T.bg, 0.78)} 0%, ${hexA(T.bg, 0.3)} 58%, ${hexA(T.bg, 0)} 100%)`,
+        background: `radial-gradient(ellipse at 50% 45%, ${hexA(T.bg, 0.5)} 0%, ${hexA(T.bg, 0.12)} 58%, ${hexA(T.bg, 0)} 100%)`,
       }} />
     </div>
   );
