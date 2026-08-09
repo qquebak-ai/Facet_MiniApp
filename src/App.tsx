@@ -163,7 +163,7 @@ const STR = {
     mempadComingSoon: "Здесь скоро появится что-то ещё.",
     mempadSpotlight: "В центре внимания",
     mempadLaunchToken: "Запустить токен",
-    tickerBought: "купил",
+    tickerBought: "купил", tickerSold: "продал",
     sinceSec: "с", sinceMin: "м", sinceHour: "ч",
     mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX",
     homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionWallet: "Кошелёк",
@@ -433,7 +433,7 @@ const STR = {
     mempadComingSoon: "Something else is coming here soon.",
     mempadSpotlight: "Spotlight",
     mempadLaunchToken: "Launch token",
-    tickerBought: "bought",
+    tickerBought: "bought", tickerSold: "sold",
     sinceSec: "s", sinceMin: "m", sinceHour: "h",
     mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX",
     homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionWallet: "Wallet",
@@ -2260,7 +2260,7 @@ function RecentBuysTicker({ tokens, onOpen }) {
 
     function mergeIn(rows, token, into) {
       (rows || []).forEach((r) => {
-        if (r.kind !== "buy" || !r.at) return;
+        if ((r.kind !== "buy" && r.kind !== "sell") || !r.at) return;
         if (into.some((x) => x.id === r.id)) return;
         into.push({ ...r, token });
       });
@@ -2325,13 +2325,13 @@ function RecentBuysTicker({ tokens, onOpen }) {
     <button
       onClick={() => onOpen && onOpen(b.token)}
       className="fx-tap w-full flex items-center gap-2 rounded-[16px] px-3 py-2 overflow-hidden"
-      style={{ background: hexA(T.up, 0.07), border: `1px solid ${hexA(T.up, 0.22)}`, textAlign: "left" }}
+      style={{ background: hexA(b.kind === "sell" ? T.down : T.up, 0.07), border: `1px solid ${hexA(b.kind === "sell" ? T.down : T.up, 0.22)}`, textAlign: "left" }}
     >
       <div key={idx} className="flex items-center gap-2 min-w-0" style={{ flex: 1, animation: "tickerSwap 4s ease-in-out both" }}>
-        <TokenAvatar size={20} tone="up" src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
+        <TokenAvatar size={20} tone={b.kind === "sell" ? "down" : "up"} src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
         <span className="truncate" style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>{shortAddr(b.from) || "—"}</span>
-        <span style={{ fontFamily: bodyFont, color: T.up, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
-          {t("tickerBought")} ${fmtCompact(b.volUsd)}
+        <span style={{ fontFamily: bodyFont, color: b.kind === "sell" ? T.down : T.up, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
+          {b.kind === "sell" ? t("tickerSold") : t("tickerBought")} ${fmtCompact(b.volUsd)}
         </span>
         <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 12, fontWeight: 700 }}>{b.token.ticker}</span>
       </div>
