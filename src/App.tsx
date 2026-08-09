@@ -159,8 +159,8 @@ const STR = {
     launchingWait: "Не закрывай экран, это займёт пару секунд…",
     heroTitle: "Начни уже сейчас",
     heroBodyLead: "Создавай, торгуй и расти с ",
-    heroBodyTail: " первый месяц. Присоединяйся к экосистеме с первого дня.",
-    heroFee: "0% комиссией платформы",
+    heroBodyTail: " на сделку. Присоединяйся к экосистеме с первого дня.",
+    heroFee: "комиссией 1%",
     mempadComingSoon: "Здесь скоро появится что-то ещё.",
     mempadSpotlight: "В центре внимания",
     mempadLaunchToken: "Запустить токен",
@@ -429,8 +429,8 @@ const STR = {
     launchingWait: "Don't close this screen, this'll just take a second…",
     heroTitle: "Start right now",
     heroBodyLead: "Create, trade and grow with ",
-    heroBodyTail: " for the first month. Join the ecosystem from day one.",
-    heroFee: "0% platform fee",
+    heroBodyTail: " per trade. Join the ecosystem from day one.",
+    heroFee: "a 1% fee",
     mempadComingSoon: "Something else is coming here soon.",
     mempadSpotlight: "Spotlight",
     mempadLaunchToken: "Launch token",
@@ -878,15 +878,16 @@ function GlobalStyle() {
       @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
       /* Появляется на месте — только проявлением и лёгким укрупнением,
          без наезда сверху. Уходит вверх и растворяется. */
-      /* Лист всплывает снизу вверх, слегка поворачиваясь, и растворяется
-         на обоих концах пути — так фон не мигает подменой позиции.
+      /* Лист падает сверху вниз, покачиваясь и поворачиваясь, и
+         растворяется на обоих концах пути — так не видно, как он
+         возвращается наверх.
          Углы поворота приходят переменными, чтобы каждый лист летел
          по-своему, а само правило было одно на всех. */
-      @keyframes leafFloat {
-        0%   { transform: translateY(18px) rotate(var(--r0)); opacity: 0; }
-        14%  { opacity: var(--o); }
-        80%  { opacity: var(--o); }
-        100% { transform: translateY(-140px) rotate(var(--r1)); opacity: 0; }
+      @keyframes leafFall {
+        0%   { transform: translate3d(0, -14vh, 0) rotate(var(--r0)); opacity: 0; }
+        8%   { opacity: var(--o); }
+        88%  { opacity: var(--o); }
+        100% { transform: translate3d(var(--dx), 104vh, 0) rotate(var(--r1)); opacity: 0; }
       }
       @keyframes toastIn { from{opacity:0; transform:translateX(-50%) scale(0.94);} to{opacity:1; transform:translateX(-50%) scale(1);} }
       @keyframes toastOut { from{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} to{opacity:0; transform:translateX(-50%) translateY(-22px) scale(0.98);} }
@@ -948,42 +949,46 @@ function seededRand(seed) {
 
 /* CyberGrid — живой фон вместо плоской чёрной заливки.
    Два слоя, оба на CSS/SVG (без rAF и канваса, чтобы не жечь батарею в
-   Telegram WebView): россыпь белых четырёхлучевых звёздочек и тонкая
-   сетка. Всё под pointer-events:none и на zIndex 0 — контент приложения
-   лежит выше на zIndex 1. */
+   Telegram WebView): падающие мятные листья и тонкая сетка. Всё под
+   pointer-events:none и на zIndex 0 — контент приложения лежит выше на
+   zIndex 1. */
+const LEAF_COUNT = 22;
+
 function CyberGrid({ forceDark, showStars = true }) {
   const dark = forceDark || T.bg === DARK_THEME.bg;
   const gridLine = dark ? "rgba(255,255,255,0.05)" : "rgba(20,21,26,0.06)";
-  const starColor = dark ? "#FFFFFF" : "#14151A";
 
-  // Мятные листья — те же, что в знаке приложения. Их немного и они
-  // почти прозрачные: фон должен читаться как фактура, а не как узор,
-  // иначе он спорит с карточками поверх него.
+  // Мятные листья — те же, что в знаке приложения. Падают сверху вниз,
+  // покачиваясь и поворачиваясь.
+  //
+  // Каждому листу отведена своя вертикальная полоса экрана, и внутри неё
+  // он лишь немного смещается. При полностью случайных координатах
+  // несколько листьев неизбежно оказывались бы рядом и читались бы как
+  // ком; полосы этого не допускают. Задержки тоже разнесены по своему
+  // циклу — иначе они падали бы строем.
   const leaves = useMemo(() => {
     const rnd = seededRand(88117);
-    return Array.from({ length: 9 }, () => ({
-      left: rnd() * 92,
-      top: 8 + rnd() * 84,
-      size: 26 + rnd() * 34,
-      opacity: 0.07 + rnd() * 0.08,
-      dur: 26 + rnd() * 22,
-      delay: -rnd() * 40,
-      r0: -50 + rnd() * 100,
-      r1: -50 + rnd() * 100,
-    }));
-  }, []);
-
-  // Детерминированные позиции — звёзды не перескакивают при каждом ре-рендере.
-  const stars = useMemo(() => {
-    const rnd = seededRand(20240607);
-    return Array.from({ length: 45 }, () => ({
-      left: rnd() * 100,
-      top: rnd() * 100,
-      size: 5 + rnd() * 5,
-      opacity: 0.3 + rnd() * 0.55,
-      delay: -rnd() * 8,
-      dur: 4 + rnd() * 5,
-    }));
+    const order = Array.from({ length: LEAF_COUNT }, (_, i) => i);
+    // Полосы раздаются вперемешку, чтобы соседние по времени листья не
+    // шли слева направо по порядку.
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+    const band = 100 / LEAF_COUNT;
+    return order.map((slot, i) => {
+      const dur = 15 + rnd() * 20;
+      return {
+        left: slot * band + rnd() * band * 0.7,
+        size: 14 + rnd() * 44,
+        opacity: 0.06 + rnd() * 0.1,
+        dur,
+        delay: -(i / LEAF_COUNT) * dur - rnd() * 4,
+        r0: -60 + rnd() * 120,
+        r1: -180 + rnd() * 360,
+        dx: -34 + rnd() * 68,
+      };
+    });
   }, []);
 
   return (
@@ -1001,8 +1006,8 @@ function CyberGrid({ forceDark, showStars = true }) {
         }}
       />
 
-      {/* звёзды-искры. В профиле их гасим: там своя карточка-подложка,
-          и две россыпи звёзд друг на друге читаются как шум. */}
+      {/* листья. В профиле их гасим: там своя карточка-подложка, и два
+          слоя фона друг на друге читаются как шум. */}
       {showStars && leaves.map((l, i) => (
         <svg
           key={`leaf${i}`}
@@ -1012,53 +1017,23 @@ function CyberGrid({ forceDark, showStars = true }) {
           style={{
             position: "absolute",
             left: `${l.left}%`,
-            top: `${l.top}%`,
+            top: 0,
             ["--o"]: l.opacity,
             ["--r0"]: `${l.r0}deg`,
             ["--r1"]: `${l.r1}deg`,
+            ["--dx"]: `${l.dx}px`,
             opacity: 0,
-            animation: `leafFloat ${l.dur}s linear ${l.delay}s infinite`,
+            animation: `leafFall ${l.dur}s linear ${l.delay}s infinite`,
             willChange: "transform, opacity",
           }}
         >
           <path d="M0 0 C -8 -7 -8 -19 0 -26 C 8 -19 8 -7 0 0 Z" fill={T.electric} />
         </svg>
       ))}
-
-      {showStars && stars.map((s, i) => <FxStar key={i} star={s} color={starColor} />)}
     </div>
   );
 }
 
-/* Одна звёздочка. Цикл анимации ведёт её от полной прозрачности к своей
-   яркости и обратно в ноль; в момент, когда цикл замкнулся (то есть
-   звезда невидима), onAnimationIteration переставляет её в новую
-   случайную точку — так они мигают с прежней скоростью, но каждый раз
-   загораются в другом месте. */
-function FxStar({ star, color }) {
-  const [pos, setPos] = useState({ left: star.left, top: star.top });
-  return (
-    <svg
-      width={star.size}
-      height={star.size}
-      viewBox="0 0 10 10"
-      onAnimationIteration={() => setPos({ left: Math.random() * 100, top: Math.random() * 100 })}
-      style={{
-        position: "absolute",
-        left: `${pos.left}%`,
-        top: `${pos.top}%`,
-        ["--o" as any]: star.opacity,
-        opacity: 0,
-        animation: `starPulse ${star.dur}s ease-in-out ${star.delay}s infinite`,
-      }}
-    >
-      <path
-        d="M5 0 C5.4 3.2 6.8 4.6 10 5 C6.8 5.4 5.4 6.8 5 10 C4.6 6.8 3.2 5.4 0 5 C3.2 4.6 4.6 3.2 5 0 Z"
-        fill={color}
-      />
-    </svg>
-  );
-}
 
 /* animated 0 -> value counter, no external deps */
 function useCountUp(target, duration = 900, active = true) {
