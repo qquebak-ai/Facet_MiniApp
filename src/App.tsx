@@ -947,17 +947,15 @@ function seededRand(seed) {
   };
 }
 
-/* CyberGrid — живой фон вместо плоской чёрной заливки.
-   Два слоя, оба на CSS/SVG (без rAF и канваса, чтобы не жечь батарею в
-   Telegram WebView): падающие мятные листья и тонкая сетка. Всё под
-   pointer-events:none и на zIndex 0 — контент приложения лежит выше на
-   zIndex 1. */
+/* CyberGrid — живой фон вместо плоской чёрной заливки: падающие мятные
+   листья на CSS/SVG, без rAF и канваса, чтобы не жечь батарею в Telegram
+   WebView. Всё под pointer-events:none и на zIndex 0 — контент
+   приложения лежит выше на zIndex 1.
+   Сетка отсюда убрана: её тонкие линии просвечивали рядом с элементами
+   и спорили с содержимым. */
 const LEAF_COUNT = 33;
 
-function CyberGrid({ forceDark, showStars = true }) {
-  const dark = forceDark || T.bg === DARK_THEME.bg;
-  const gridLine = dark ? "rgba(255,255,255,0.05)" : "rgba(20,21,26,0.06)";
-
+function CyberGrid({ showStars = true }) {
   // Мятные листья — те же, что в знаке приложения. Падают сверху вниз,
   // покачиваясь и поворачиваясь.
   //
@@ -993,19 +991,6 @@ function CyberGrid({ forceDark, showStars = true }) {
 
   return (
     <div aria-hidden data-bg-fx style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
-      {/* сетка, растворяющаяся к краям */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundImage: `linear-gradient(${gridLine} 1px, transparent 1px), linear-gradient(90deg, ${gridLine} 1px, transparent 1px)`,
-          backgroundSize: "70px 70px, 70px 70px",
-          animation: "gridDrift 30s linear infinite",
-          WebkitMaskImage: "radial-gradient(ellipse at 50% 35%, #000 0%, transparent 80%)",
-          maskImage: "radial-gradient(ellipse at 50% 35%, #000 0%, transparent 80%)",
-        }}
-      />
-
       {/* листья. В профиле их гасим: там своя карточка-подложка, и два
           слоя фона друг на друге читаются как шум.
 
