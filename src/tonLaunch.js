@@ -116,7 +116,13 @@
 import { Address, beginCell, toNano, storeStateInit } from "@ton/core";
 import { TonClient4 } from "@ton/ton";
 import { getHttpV4Endpoint } from "@orbs-network/ton-access";
-import { AssetsSDK, JettonParams, JettonMinter, JettonWallet, createApi } from "@ton-community/assets-sdk";
+// Точечные импорты вместо корневого модуля. Корень тянет за собой
+// хранилище на Pinata, а с ним axios с несколькими высокими уязвимостями
+// — и всё это уезжало в пакет приложения, хотя из библиотеки нужны
+// только два низкоуровневых класса. Сам AssetsSDK здесь ни разу не
+// вызывался: объект создавался и оставался неиспользованным.
+import { JettonMinter } from "@ton-community/assets-sdk/dist/jetton/JettonMinter";
+import { JettonWallet } from "@ton-community/assets-sdk/dist/jetton/JettonWallet";
 import {
   curveContract,
   buildBuyBody,
@@ -608,45 +614,31 @@ export async function launchRealToken({
     fail("Не удалось загрузить метаданные токена", e);
   }
 
-  // TON Access would normally pick a healthy TON API v4 node for us
-  // instead of pinning to one hardcoded host. The officially documented
-  // way to get this (see ton-community/assets-sdk's own examples) is
-  // simply `createApi(network)` — that's what every example in the
-  // SDK's docs actually uses. An earlier diagnostic pass found this
-  // failing in this environment and worked around it with a manually
-  // built TonClient4 pinned to a single community fallback host — but
-  // that workaround is itself the likely reason deployJetton kept
-  // failing: assets-sdk's internal calls may need endpoints/behavior
-  // the fallback host doesn't fully support, even though our own
-  // simpler probes (block/latest, getAccountLite) succeeded against it.
-  // So: try the documented createApi() first, and only fall back to the
-  // manual client if that genuinely throws.
-  let client, sender, sdk;
+  // Рабочий узел TON API v4. Раньше сначала пробовался createApi() из
+  // библиотеки, но он приходил из её корневого модуля — а тот тянет за
+  // собой хранилище на Pinata с уязвимым axios. Своего кода тут на
+  // десяток строк: спросить у TON Access адрес, при неудаче взять из
+  // запасного списка и проверить, что узел отвечает.
+  let client, sender;
+  let taEndpoint = null;
   try {
-    client = await createApi(network);
-    log(`createApi(${network}) succeeded — using the SDK's own documented client`);
-  } catch (e) {
-    warn(`createApi(${network}) failed, falling back to a manually-built TonClient4: ${describeError(e)}`);
-    let taEndpoint = null;
-    try {
-      taEndpoint = await getHttpV4Endpoint({ network });
-      log(`TON Access suggested endpoint: ${taEndpoint} (network: ${network})`);
-    } catch (e2) {
-      warn(`getHttpV4Endpoint failed too, relying on hardcoded fallback list: ${describeError(e2)}`);
-    }
-    let endpoint;
-    try {
-      endpoint = await pickWorkingEndpoint(taEndpoint, network, log, warn);
-      log(`using RPC endpoint: ${endpoint}`);
-    } catch (e2) {
-      fail("Не удалось найти рабочий TON RPC-узел ни через createApi(), ни через фоллбэк-список", e2);
-    }
-    try {
-      client = new TonClient4({ endpoint });
-      log("TonClient4 initialized (fallback path)");
-    } catch (e2) {
-      fail("Не удалось инициализировать TON-клиент", e2);
-    }
+    taEndpoint = await getHttpV4Endpoint({ network });
+    log(`TON Access suggested endpoint: ${taEndpoint} (network: ${network})`);
+  } catch (e2) {
+    warn(`getHttpV4Endpoint failed, relying on hardcoded fallback list: ${describeError(e2)}`);
+  }
+  let endpoint;
+  try {
+    endpoint = await pickWorkingEndpoint(taEndpoint, network, log, warn);
+    log(`using RPC endpoint: ${endpoint}`);
+  } catch (e2) {
+    fail("Не удалось найти рабочий TON RPC-узел", e2);
+  }
+  try {
+    client = new TonClient4({ endpoint });
+    log("TonClient4 initialized");
+  } catch (e2) {
+    fail("Не удалось инициализировать TON-клиент", e2);
   }
 
   try {
@@ -664,33 +656,6 @@ export async function launchRealToken({
   // which comfortably covers these 3.
   const batch = [];
   const batchSender = tonConnectSender(tonConnectUI, walletAddress, network, log, warn, batch);
-
-  // IMPORTANT: AssetsSDK gets the RAW client here, unwrapped — exactly as
-  // in the official examples. An earlier revision wrapped this in a
-  // logging Proxy (instrumentApi) for diagnostics, but the trail proved
-  // that was the actual problem: createApi() succeeds, and a direct
-  // getAccountLite call against the SAME raw client succeeds too — yet
-  // deployJetton, called through the wrapped copy, failed identically on
-  // every attempt with a bare, cause-less "Exceeded number of retries"
-  // (no deeper error, no real stack — just minified coordinates). That
-  // pattern points at the Proxy itself breaking some internal `this` or
-  // instanceof assumption inside the SDK, not a network/RPC problem.
-  // instrumentApi is kept only for the standalone getAccountLite probe
-  // below, on its own separate wrapped copy — never for the reference
-  // AssetsSDK actually uses.
-  try {
-    // storage intentionally omitted (not set to null): content.uri already
-    // points at metadata we uploaded ourselves via Supabase, so AssetsSDK
-    // doesn't need a storage backend for this call — and passing an
-    // explicit `storage: null` risks the SDK calling a method on it
-    // internally before ever reaching sender.send, which ton-core's
-    // retry() wrapper would swallow into exactly the generic
-    // "Exceeded number of retries" seen in every prior attempt.
-    sdk = AssetsSDK.create({ api: client, sender });
-    log("AssetsSDK initialized (no storage backend passed — using uri-only content)");
-  } catch (e) {
-    fail("Не удалось инициализировать AssetsSDK", e);
-  }
 
   // Instrumented copy — used ONLY for our own standalone diagnostic call
   // below, never handed to AssetsSDK (see note above).

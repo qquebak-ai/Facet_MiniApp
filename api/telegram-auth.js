@@ -106,21 +106,72 @@ async function freeNickname(admin, base) {
   return `${base.slice(0, 20 - suffix.length)}${suffix}`;
 }
 
+// Простое ограничение частоты. Каждый вызов ходит в админский API
+// Supabase и способен завести пользователя, поэтому дверь не должна быть
+// бесконечной. Память общая на экземпляр функции: при нескольких
+// экземплярах предел мягче номинального, но поток запросов с одного
+// адреса всё равно упирается в потолок.
+const RATE_WINDOW_MS = 5 * 60 * 1000;
+const RATE_MAX = 20;
+const rateHits = new Map(); // ключ -> массив меток времени
+
+function rateLimited(key) {
+  const now = Date.now();
+  const hits = (rateHits.get(key) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  hits.push(now);
+  rateHits.set(key, hits);
+  // Подчищаем чужие протухшие записи, иначе карта растёт без предела.
+  if (rateHits.size > 5000) {
+    for (const [k, v] of rateHits) {
+      if (!v.length || now - v[v.length - 1] > RATE_WINDOW_MS) rateHits.delete(k);
+    }
+  }
+  return hits.length > RATE_MAX;
+}
+
+function clientKey(req) {
+  const fwd = req.headers["x-forwarded-for"];
+  const ip = (Array.isArray(fwd) ? fwd[0] : String(fwd || "")).split(",")[0].trim();
+  return ip || req.socket?.remoteAddress || "unknown";
+}
+
+// Больше строка initData не бывает: подпись, пользователь и служебные
+// поля укладываются в пару килобайт. Всё, что длиннее, разбирать незачем.
+const MAX_INIT_DATA_LEN = 4096;
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "method_not_allowed" });
   }
+  if (rateLimited(clientKey(req))) {
+    res.setHeader("Retry-After", "60");
+    return res.status(429).json({ error: "too_many_requests" });
+  }
   if (!BOT_TOKEN || !SUPABASE_URL || !SERVICE_ROLE_KEY) {
     return res.status(500).json({ error: "server_not_configured" });
   }
 
-  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+  let body;
+  try {
+    body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+  } catch (err) {
+    return fail(res, 400, "bad_body", err && err.message);
+  }
+  if (typeof body.initData !== "string" || body.initData.length > MAX_INIT_DATA_LEN) {
+    return fail(res, 400, "bad_init_data", "missing or oversized initData");
+  }
   const checked = verifyInitData(body.initData);
   if (!checked.user) {
     return fail(res, 401, "invalid_init_data", checked.reason);
   }
   const tgUser = checked.user;
+  // Отдельный счётчик на самого пользователя: подпись у него настоящая,
+  // но повторять вход сотнями раз в минуту незачем.
+  if (rateLimited(`tg:${tgUser.id}`)) {
+    res.setHeader("Retry-After", "60");
+    return res.status(429).json({ error: "too_many_requests" });
+  }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },

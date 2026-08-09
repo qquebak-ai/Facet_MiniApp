@@ -14,4 +14,18 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Разбор токенов из адресной строки выключен намеренно. Приложение
+    // входит только по подписи Telegram и обменивает одноразовый токен
+    // через verifyOtp, поэтому подхватывать сессию из ссылки не нужно —
+    // а с включённым разбором чужая ссылка с параметрами могла бы
+    // подсунуть открытому приложению постороннюю сессию.
+    detectSessionInUrl: false,
+    // Обмен кода на сессию с проверочным ключом: перехваченный код без
+    // него бесполезен.
+    flowType: "pkce",
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});
