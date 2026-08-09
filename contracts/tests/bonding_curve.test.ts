@@ -261,6 +261,10 @@ describe("BondingCurve", () => {
 
   it("возвращает деньги, если жетоны выдать не удалось", async () => {
     await bindWallet();
+    // Запас уже пришёл: значит неудача выдачи — это настоящая ошибка, а
+    // не гонка при запуске, и деньги надо вернуть.
+    await curve.send(jettonWallet.getSender(), { value: toNano("0.2") },
+      sellNotification(TOKENS_FOR_SALE, buyer.address));
     const before = await curve.getData();
 
     const res = await buy("10");
@@ -294,36 +298,31 @@ describe("BondingCurve", () => {
     expect(afterBounce.tokensSold).toBe(before.tokensSold);
   });
 
-  it("не отменяет выданную покупку возвратом от прошлой попытки", async () => {
+  it("повторяет выдачу только после возврата и не отменяет её опоздавшим возвратом", async () => {
     await bindWallet();
     const first = jettonTransferFrom(await buy("10"))!;
     const before = await curve.getData();
 
-    // Приход торгового запаса — кривая повторяет выдачу под новым
-    // номером.
+    // Выдача вернулась: запаса ещё нет, деньги держим, ждём повтора.
+    const bounceBody = beginCell()
+      .storeUint(0xffffffff, 32).storeUint(0xf8a7ea5, 32)
+      .storeUint(first.queryId, 64).storeCoins(first.amount).endCell();
+    const bounced = await blockchain.sendMessage(internal({
+      from: jettonWallet.address, to: curve.address, value: toNano("0.05"), bounced: true, body: bounceBody,
+    }));
+    expect(bounced.transactions).not.toHaveTransaction({ from: curve.address, to: buyer.address });
+
+    // Пришёл запас — выдача повторяется под новым номером.
     const flush = await curve.send(jettonWallet.getSender(), { value: toNano("0.2") },
       sellNotification(TOKENS_FOR_SALE, buyer.address));
     const retry = jettonTransferFrom(flush)!;
-    expect(retry).not.toBeNull();
     expect(retry.amount).toBe(first.amount);
     expect(retry.queryId).not.toBe(first.queryId);
 
-    // Возврат от первой попытки приходит с опозданием. Он относится к
-    // номеру, которого уже нет, поэтому сделку трогать не должен.
-    const late = await blockchain.sendMessage(
-      internal({
-        from: jettonWallet.address,
-        to: curve.address,
-        value: toNano("0.05"),
-        bounced: true,
-        body: beginCell()
-          .storeUint(0xffffffff, 32)
-          .storeUint(0xf8a7ea5, 32)
-          .storeUint(first.queryId, 64)
-          .storeCoins(first.amount)
-          .endCell(),
-      }),
-    );
+    // Опоздавший возврат по старому номеру ничего не отменяет.
+    const late = await blockchain.sendMessage(internal({
+      from: jettonWallet.address, to: curve.address, value: toNano("0.05"), bounced: true, body: bounceBody,
+    }));
     expect(late.transactions).not.toHaveTransaction({ from: curve.address, to: buyer.address });
 
     const after = await curve.getData();

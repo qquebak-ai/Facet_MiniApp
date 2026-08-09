@@ -81,10 +81,11 @@ struct PendingBuy {
     buyer: Address;
     ton: Int as coins;
     tokens: Int as coins;
-    // Покупка сделана до прихода торгового запаса, то есть могла не
-    // исполниться из-за отсутствия жетонов. Только такие имеет смысл
-    // повторять: повтор уже удавшейся выдаёт жетоны второй раз.
-    beforeSupply: Bool;
+    // Выдача по этой покупке вернулась, то есть точно не состоялась.
+    // Повторяем только такие: повтор удавшейся выдаёт жетоны дважды, а
+    // «покупка была до прихода запаса» этого не гарантирует — она могла
+    // исполниться и с первой попытки.
+    failed: Bool;
 }
 
 struct CurveData {
@@ -305,7 +306,7 @@ contract BondingCurve with Deployable {
         // человек просто получит свои TON назад.
         let id: Int = self.nextQueryId;
         self.nextQueryId = id + 1;
-        self.pending.set(id, PendingBuy{ buyer: sender(), ton: net, tokens: tokensOut, beforeSupply: !self.supplyReady });
+        self.pending.set(id, PendingBuy{ buyer: sender(), ton: net, tokens: tokensOut, failed: false });
 
         send(SendParameters{
             to: wallet,
@@ -425,12 +426,12 @@ contract BondingCurve with Deployable {
         // и токены, и деньги обратно.
         let fresh: map<Int as uint64, PendingBuy> = emptyMap();
         foreach (id, buy in self.pending) {
-            if (!buy.beforeSupply) {
+            if (!buy.failed) {
                 fresh.set(id, buy);
             } else {
             let attempt: Int = self.nextQueryId;
             self.nextQueryId = attempt + 1;
-            fresh.set(attempt, buy);
+            fresh.set(attempt, PendingBuy{ buyer: buy.buyer, ton: buy.ton, tokens: buy.tokens, failed: false });
             send(SendParameters{
                 to: wallet,
                 value: self.GasJettonTransfer,
@@ -471,8 +472,16 @@ contract BondingCurve with Deployable {
             return;
         }
         let buy: PendingBuy = entry!!;
-        self.pending.del(id);
 
+        // Запас ещё не пришёл — жетонов физически не было, повторим
+        // выдачу, когда они появятся. Деньги пока держим.
+        if (!self.supplyReady) {
+            self.pending.set(id, PendingBuy{ buyer: buy.buyer, ton: buy.ton, tokens: buy.tokens, failed: true });
+            return;
+        }
+
+        // Запас на месте, а выдача всё равно не прошла — возвращаем.
+        self.pending.del(id);
         self.realTon = self.realTon - buy.ton;
         self.tokensSold = self.tokensSold - buy.tokens;
 
