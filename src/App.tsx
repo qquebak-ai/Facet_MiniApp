@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   Search, Flame, TrendingUp, Clock, Sparkles, ArrowUpRight, ArrowDownRight,
   Wallet, Home as HomeIcon, PlusCircle, User, ChevronLeft, Share2, Star,
@@ -5098,9 +5099,24 @@ function ImageCropModal({ file, shape = "circle", onCancel, onConfirm }) {
 
   if (!file) return null;
 
-  return (
-    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.9)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={(e) => { e.stopPropagation(); onCancel(); }}>
-      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 24, padding: 20, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+  // Окно кадрирования выносится порталом прямо в документ. Оно вставлено
+  // внутрь прокручиваемого содержимого (форма создания токена, экран
+  // профиля), и раньше позиционировалось относительно него: выезжало
+  // вместе с прокруткой, затемнение накрывало не весь экран, а кнопки
+  // уходили под нижнее меню. Одного position: fixed мало — экраны
+  // появляются с анимацией, а элемент с transform становится системой
+  // отсчёта и для fixed-потомков тоже.
+  const modal = (
+    <div
+      className="fx-modal-back"
+      style={{
+        position: "fixed", inset: 0, zIndex: 300,
+        background: "rgba(0,0,0,0.9)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+      }}
+      onClick={(e) => { e.stopPropagation(); onCancel(); }}
+    >
+      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, maxHeight: "100%", overflowY: "auto", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 24, padding: 20, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
         <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700 }}>{t("cropImageTitle")}</div>
         <div
           onMouseDown={onPointerDown} onMouseMove={onPointerMove} onMouseUp={onPointerUp} onMouseLeave={onPointerUp}
@@ -5140,6 +5156,8 @@ function ImageCropModal({ file, shape = "circle", onCancel, onConfirm }) {
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modal, document.body) : modal;
 }
 
 /* ---------------------------------------------------------
