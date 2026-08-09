@@ -1216,8 +1216,14 @@ const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, curve
       const anchor = closes[closes.length - 1] || 1;
       return closes.map((v, i) => ({ i, mcap: v * ratio + Math.sin((i + tick) * 0.7 + seed) * anchor * 0.0015 }));
     }
+    // У токена на кривой история есть всегда — если она ещё не приехала,
+    // рисуем ровную линию, а не выдуманное движение.
+    if (curveAddress) {
+      const flat = base || 0;
+      return Array.from({ length }, (_, i) => ({ i, mcap: flat }));
+    }
     return mcapSeries(base, seed, length, tick);
-  }, [closes, base, seed, length, tick]);
+  }, [closes, base, seed, length, tick, curveAddress]);
 
   const color = positive ? T.up : T.down;
   const padX = 2, padTop = 4, padBottom = 2;
@@ -1505,11 +1511,62 @@ const TON_TESTNET_NETWORK = true;
 // производные от этих двух чисел. Считать их из введённой при запуске
 // суммы нельзя: если покупка не прошла и деньги вернулись, в ленте
 // нарисовалась бы капитализация, которой не существует.
+// Запросы к tonapi идут через общий шлюз: бесплатный тариф отвечает 429
+// уже на паре запросов подряд, а их тут много — состояние кривой, её
+// сделки, метаданные жетона, балансы. Ошибка выглядела как «данных
+// нет», и график молча подменялся случайным.
+const TONAPI_MIN_GAP_MS = 180;
+let tonapiLastRequestAt = 0;
+async function tonFetch(url, init) {
+  const wait = tonapiLastRequestAt + TONAPI_MIN_GAP_MS - Date.now();
+  if (wait > 0) await sleep(wait);
+  tonapiLastRequestAt = Date.now();
+  const res = await fetch(url, init);
+  if (res.status !== 429) return res;
+  const retryAfter = Number(res.headers.get("Retry-After")) || 0;
+  await sleep(Math.min(6000, retryAfter ? retryAfter * 1000 : 1500));
+  tonapiLastRequestAt = Date.now();
+  return fetch(url, init);
+}
+
+// Один и тот же ответ нужен графику, ленте и окну сделки. Без общего
+// кэша это втрое больше запросов на ровном месте — и снова 429.
+function cachedFetcher(ttlMs) {
+  const cache = new Map();
+  const inflight = new Map();
+  return function run(key, load) {
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.ts < ttlMs) return Promise.resolve(hit.value);
+    if (inflight.has(key)) return inflight.get(key);
+    const p = load().then(
+      (value) => {
+        inflight.delete(key);
+        // Неудачу не кэшируем, но и не теряем прошлый удачный ответ:
+        // лучше показать данные десятисекундной давности, чем ничего.
+        if (value != null) cache.set(key, { value, ts: Date.now() });
+        return value != null ? value : (hit ? hit.value : null);
+      },
+      () => {
+        inflight.delete(key);
+        return hit ? hit.value : null;
+      },
+    );
+    inflight.set(key, p);
+    return p;
+  };
+}
+const curveStateCached = cachedFetcher(8000);
+const curveTradesCached = cachedFetcher(12000);
+
 async function fetchCurveState(curveAddress, testnet) {
   if (!curveAddress) return null;
+  return curveStateCached(`${testnet ? "t" : "m"}:${curveAddress}`, () => loadCurveState(curveAddress, testnet));
+}
+
+async function loadCurveState(curveAddress, testnet) {
   const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
   try {
-    const res = await fetch(`${host}/v2/blockchain/accounts/${curveAddress}/methods/data`, { method: "POST" });
+    const res = await tonFetch(`${host}/v2/blockchain/accounts/${curveAddress}/methods/data`, { method: "POST" });
     if (!res.ok) throw new Error(`tonapi ${res.status}`);
     const json = await res.json();
     const stack = json?.stack || [];
@@ -1591,7 +1648,7 @@ async function fetchJettonMeta(tokenAddress, testnet = false) {
   const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
   const p = (async () => {
     try {
-      const res = await fetch(`${host}/v2/jettons/${tokenAddress}`);
+      const res = await tonFetch(`${host}/v2/jettons/${tokenAddress}`);
       if (!res.ok) throw new Error(`tonapi ${res.status}`);
       const json = await res.json();
       const decimals = Number(json?.metadata?.decimals ?? 9) || 9;
@@ -1765,9 +1822,16 @@ function curvePriceFromReserve(realTon, params) {
 // величины видны в транзакции и не требуют разбора тела сообщения.
 async function fetchCurveTrades(curveAddress, testnet, feeBps = 0n) {
   if (!curveAddress) return null;
+  return curveTradesCached(
+    `${testnet ? "t" : "m"}:${curveAddress}:${feeBps}`,
+    () => loadCurveTrades(curveAddress, testnet, feeBps),
+  );
+}
+
+async function loadCurveTrades(curveAddress, testnet, feeBps) {
   const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
   try {
-    const res = await fetch(`${host}/v2/blockchain/accounts/${curveAddress}/transactions?limit=200`);
+    const res = await tonFetch(`${host}/v2/blockchain/accounts/${curveAddress}/transactions?limit=200`);
     if (!res.ok) throw new Error(`tonapi ${res.status}`);
     const json = await res.json();
     const txs = (json?.transactions || []).slice().sort((a, b) => (a.utime || 0) - (b.utime || 0));
@@ -1948,6 +2012,24 @@ async function fetchCurveSparkCloses(curveAddress, n = 24) {
   const closes = res?.candles?.length ? res.candles.slice(-n).map((c) => c.close) : null;
   if (closes && closes.length > 1) curveSparkCache.set(curveAddress, { closes, ts: Date.now() });
   return closes || (cached ? cached.closes : null);
+}
+
+// Ровный ряд по известной цене. Нужен, когда история кривой ещё не
+// приехала: у токена на кривой цена всё равно между сделками не
+// меняется, так что прямая линия — это правда, а случайный график —
+// нет.
+function flatCandles(price, timeframe, limit = CHART_TOTAL) {
+  if (!(price > 0)) return null;
+  const step = TF_SECONDS[timeframe] || 3600;
+  const last = Math.floor(Date.now() / 1000 / step) * step;
+  const candles = [];
+  const volume = [];
+  for (let i = limit - 1; i >= 0; i--) {
+    const time = last - i * step;
+    candles.push({ time, open: price, high: price, low: price, close: price });
+    volume.push({ time, value: 0, color: hexA(T.up, 0.32) });
+  }
+  return { candles, volume };
 }
 
 async function fetchCurveOHLCV(curveAddress, timeframe, testnet) {
@@ -4222,11 +4304,23 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       let result = null;
       if (token.poolAddress) result = await fetchPoolOHLCV(token.poolAddress, tf);
       else if (token.curveAddress) result = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK);
-      if (!result) result = genSyntheticCandles(token.price, token.seed, tf, CHART_TOTAL);
-      if (!cancelled) { setChartData({ ...result, isLive: !!token.poolAddress || curveChart }); setChartLoading(false); }
+      // Случайный график допустим только там, где настоящих данных не
+      // существует в принципе. У токена на кривой они есть всегда, и
+      // если запрос не прошёл (у бесплатного tonapi жёсткий лимит),
+      // рисуем ровную линию по текущей цене и ждём следующего круга —
+      // подменять её выдуманным движением нельзя.
+      if (!result) {
+        result = curveChart
+          ? flatCandles(token.price, tf, CHART_TOTAL)
+          : genSyntheticCandles(token.price, token.seed, tf, CHART_TOTAL);
+      }
+      if (!cancelled && result) { setChartData({ ...result, isLive: !!token.poolAddress || curveChart }); setChartLoading(false); }
+      else if (!cancelled) setChartLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [tf, token.id, token.poolAddress, token.curveAddress]);
+    // priceKnown в зависимостях намеренно: пока цена не приехала, ровную
+    // линию строить не из чего, и попытку нужно повторить.
+  }, [tf, token.id, token.poolAddress, token.curveAddress, token.price > 0]);
 
   // Live tick: for real pools, refetch the latest candles every few
   // seconds. For the synthetic fallback, wiggle the last candle locally
@@ -4255,7 +4349,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
         if (fresh?.candles?.length) {
           setChartData(prev => prev && ({ ...prev, candles: fresh.candles, volume: fresh.volume }));
         }
-      } else {
+      } else if (!token.curveAddress) {
         setChartData(prev => {
           if (!prev?.candles?.length) return prev;
           const candles = [...prev.candles];
