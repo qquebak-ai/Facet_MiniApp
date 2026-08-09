@@ -7390,11 +7390,17 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             payload: body.toBoc().toString("base64"),
           }];
         } else {
-          // У токенов из внешней ленты кривой нет — оставляем прежнее
-          // поведение, чтобы ничего не сломать.
+          // У токенов из внешней ленты кривой нет: настоящей продажи
+          // здесь не происходит, но комиссия площадки берётся с любой
+          // сделки — те же 1%, что удерживает кривая. Считаем их от
+          // суммы продажи в TON; совсем маленькая сумма упирается в
+          // минимум, иначе сообщение не покрыло бы даже пересылку.
+          const usdValue = rawAmount * (token.price > 0 ? token.price : 0);
+          const tonValue = tonPriceUsd > 0 ? usdValue / tonPriceUsd : 0;
+          const feeTon = Math.max(0.01, tonValue * FEE_PERCENT);
           messages = [{
             address: FEE_ADDRESS,
-            amount: toNano(NETWORK_FEE_TON.toFixed(9)).toString(),
+            amount: toNano(feeTon.toFixed(9)).toString(),
           }];
         }
         await tonConnectUI.sendTransaction({
