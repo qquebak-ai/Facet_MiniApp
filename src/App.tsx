@@ -904,14 +904,17 @@ function GlobalStyle() {
         16%  { opacity: 1; filter: drop-shadow(0 0 20px ${T.electric}); }
         100% { opacity: 0; filter: drop-shadow(0 0 0 ${T.electric}); }
       }
-      /* Ракета: разгон снизу слева, к концу — уменьшение и растворение
-         внутри острова. Конечная точка приходит переменной --fly-to. */
+      /* Ракета: строго снизу вверх по центру, к концу — уменьшение и
+         растворение внутри острова. Конечная точка приходит переменной
+         --fly-to. Сама картинка нарисована носом вверх-вправо, поэтому
+         разворачивается на 45 градусов — иначе при вертикальном полёте
+         она шла бы боком. */
       @keyframes rocketFly {
-        0%   { transform: translate(calc(-50% - 130px), calc(100vh + 150px)) scale(1); opacity: 0; }
+        0%   { transform: translate(-50%, calc(100vh + 150px)) rotate(-45deg) scale(1); opacity: 0; }
         7%   { opacity: 1; }
-        72%  { transform: translate(calc(-50% - 30px), calc(var(--fly-to) + 150px)) scale(1); opacity: 1; }
-        92%  { transform: translate(-50%, var(--fly-to)) scale(0.34); opacity: 0.95; }
-        100% { transform: translate(-50%, var(--fly-to)) scale(0.1); opacity: 0; }
+        72%  { transform: translate(-50%, calc(var(--fly-to) + 150px)) rotate(-45deg) scale(1); opacity: 1; }
+        92%  { transform: translate(-50%, var(--fly-to)) rotate(-45deg) scale(0.34); opacity: 0.95; }
+        100% { transform: translate(-50%, var(--fly-to)) rotate(-45deg) scale(0.1); opacity: 0; }
       }
       @keyframes toastIn { from{opacity:0; transform:translateX(-50%) scale(0.94);} to{opacity:1; transform:translateX(-50%) scale(1);} }
       @keyframes toastOut { from{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} to{opacity:0; transform:translateX(-50%) translateY(-22px) scale(0.98);} }
@@ -6910,13 +6913,13 @@ function loadRocketAnimation(variant = "default") {
 
 /* Ракета запуска.
 
-   Летит снизу слева вверх и «влетает» в остров: к концу пути
+   Летит снизу вверх по центру и «влетает» в остров: к концу пути
    уменьшается и гаснет, а обрамление острова в этот момент вспыхивает.
    Если острова нет (не тот айфон или окно Telegram начинается ниже),
    ракета просто уходит за верхний край — анимация остаётся осмысленной.
 
-   Путь диагональный не случайно: сама ракета нарисована носом вверх-вправо,
-   и по прямой вертикали она летела бы боком. */
+   Картинка нарисована носом вверх-вправо, поэтому при вертикальном
+   полёте её разворачивают на 45 градусов. */
 function LaunchRocket({ targetTop = ISLAND_TOP + ISLAND_HEIGHT / 2, variant = "default" }) {
   const holderRef = useRef(null);
 
@@ -6949,13 +6952,26 @@ function LaunchRocket({ targetTop = ISLAND_TOP + ISLAND_HEIGHT / 2, variant = "d
         ["--fly-to"]: `${targetTop}px`,
       }}
     >
+      {/* Два слоя: внешний ведёт полёт, внутренний доворачивает картинку
+          и сдвигает её так, чтобы центром вращения и точкой прилёта был
+          сам корпус. В исходном кадре ракета нарисована не по центру
+          холста, а в его верхнем правом углу — без поправки она уходила
+          в остров мимо, левее и выше. */}
       <div
-        ref={holderRef}
         style={{
-          position: "absolute", left: "50%", top: 0, width: 168, height: 168, marginLeft: -84, marginTop: -84,
+          // По горизонтали центрует translate(-50%) в самой анимации,
+          // поэтому отрицательного поля здесь быть не должно: вместе они
+          // сдвигали ракету на её же ширину влево. По вертикали поле
+          // нужно — чтобы --fly-to означала центр, а не верхний край.
+          position: "absolute", left: "50%", top: 0, width: 168, height: 168, marginTop: -84,
           animation: `rocketFly ${ROCKET_FLIGHT_MS}ms cubic-bezier(0.45,0,0.5,1) forwards`,
         }}
-      />
+      >
+        {/* Поправка на то, что в исходном кадре ракета нарисована не по
+            центру холста: измерено по отрисовке, смещение около 13 на 11
+            точек для этого размера. */}
+        <div ref={holderRef} style={{ width: "100%", height: "100%", transform: "translate(13px, -11px)" }} />
+      </div>
     </div>
   );
 }
