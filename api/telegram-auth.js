@@ -23,9 +23,24 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// initData считается протухшей через сутки — столько же, сколько живёт
-// сессия мини-приложения у самого Telegram.
-const MAX_AUTH_AGE_SEC = 24 * 60 * 60;
+// Окно, в течение которого initData считается свежей. Строка выдаётся
+// при открытии мини-приложения и после проверки обменивается на обычную
+// сессию Supabase, которая дальше живёт сама и продлевается без неё.
+// Значит держать окно сутки незачем: всё это время утёкшая строка
+// (журнал прокси, история браузера, скриншот) остаётся годным ключом от
+// аккаунта. Часа с запасом хватает на любой вход.
+const MAX_AUTH_AGE_SEC = 60 * 60;
+
+// Подробности ошибки уходят в ответ только когда это явно включено
+// переменной окружения. По умолчанию наружу идёт лишь код: сообщения
+// Supabase и внутренние причины — это разведданные для чужого, а
+// «bad_signature (bot token len 46)» и вовсе рассказывал о длине
+// секрета.
+const EXPOSE_DETAIL = process.env.AUTH_DEBUG === "1";
+function fail(res, status, error, detail) {
+  if (detail) console.error(`[telegram-auth] ${error}:`, detail);
+  return res.status(status).json(EXPOSE_DETAIL && detail ? { error, detail: String(detail) } : { error });
+}
 
 /* Проверка подписи по документации Telegram: собираем строку из всех
    полей кроме hash (отсортированных по имени), считаем HMAC-SHA256 с
@@ -53,9 +68,8 @@ function verifyInitData(initData) {
   const b = Buffer.from(hash, "utf8");
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     // Подпись не сошлась — почти всегда это чужой или испорченный
-    // TELEGRAM_BOT_TOKEN. Показываем длину токена, чтобы отличить
-    // «переменная не та» от «токен обрезан при вставке».
-    return { reason: `bad_signature (bot token len ${String(BOT_TOKEN || "").length})` };
+    // TELEGRAM_BOT_TOKEN.
+    return { reason: "bad_signature" };
   }
 
   const authDate = Number(params.get("auth_date") || 0);
@@ -82,7 +96,10 @@ function nicknameFromTelegram(user) {
 }
 
 async function freeNickname(admin, base) {
-  const { data } = await admin.from("profiles").select("nickname").ilike("nickname", base).maybeSingle();
+  // Подчёркивание — подстановочный знак ILIKE, а в никнеймах оно
+  // разрешено: без экранирования «user_1» совпадал бы с «userA1».
+  const pattern = base.replace(/[%_\\]/g, "\\$&");
+  const { data } = await admin.from("profiles").select("nickname").ilike("nickname", pattern).maybeSingle();
   if (!data) return base;
   // Занят — добавляем короткий суффикс, не выходя за 20 символов.
   const suffix = `_${Math.random().toString(36).slice(2, 6)}`;
@@ -101,8 +118,7 @@ export default async function handler(req, res) {
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
   const checked = verifyInitData(body.initData);
   if (!checked.user) {
-    console.error("[telegram-auth] initData rejected:", checked.reason);
-    return res.status(401).json({ error: "invalid_init_data", detail: checked.reason });
+    return fail(res, 401, "invalid_init_data", checked.reason);
   }
   const tgUser = checked.user;
 
@@ -130,23 +146,42 @@ export default async function handler(req, res) {
       },
     });
     if (createErr && !/already|exists|registered/i.test(createErr.message || "")) {
-      console.error("[telegram-auth] createUser failed:", createErr);
-      return res.status(500).json({ error: "create_user_failed", detail: createErr.message });
+      return fail(res, 500, "create_user_failed", createErr.message);
     }
 
     // generateLink и создаёт одноразовый токен входа, и возвращает самого
     // пользователя — так мы узнаём его id, не перебирая список.
     const { data: link, error: linkErr } = await admin.auth.admin.generateLink({ type: "magiclink", email });
     if (linkErr || !link?.properties?.hashed_token || !link?.user?.id) {
-      console.error("[telegram-auth] generateLink failed:", linkErr);
-      return res.status(500).json({ error: "link_failed", detail: linkErr && linkErr.message });
+      return fail(res, 500, "link_failed", linkErr && linkErr.message);
     }
 
     const userId = link.user.id;
 
+    // Адрес вида tg<id>@telegram.local предсказуем: зная чей-то
+    // telegram_id, на него можно было зарегистрироваться заранее обычной
+    // почтой с паролем — и тогда владелец, впервые войдя через Telegram,
+    // попадал бы в чужой, уже подконтрольный аккаунт. Поэтому вход
+    // разрешаем только если у найденного пользователя действительно
+    // стоит привязка к этому telegram_id (её ставим здесь же при
+    // создании) либо если профиль привязан к нему в базе.
+    const boundId = link.user.user_metadata && link.user.user_metadata.telegram_id;
+    if (boundId != null && String(boundId) !== String(tgUser.id)) {
+      return fail(res, 409, "account_conflict", `metadata telegram_id ${boundId} != ${tgUser.id}`);
+    }
+
     // Профиль заводим только если его ещё нет: при повторном входе нельзя
     // затирать никнейм, описание и аватарку, которые человек поменял сам.
     const { data: profile } = await admin.from("profiles").select("id, telegram_id").eq("id", userId).maybeSingle();
+    if (profile && profile.telegram_id != null && String(profile.telegram_id) !== String(tgUser.id)) {
+      return fail(res, 409, "account_conflict", `profile telegram_id ${profile.telegram_id} != ${tgUser.id}`);
+    }
+    if (boundId == null && profile && profile.telegram_id == null) {
+      // Пользователь с таким адресом есть, но ни в метаданных, ни в
+      // профиле привязки нет — значит его завели не мы. Молча
+      // «доклеивать» её к чужой записи нельзя: это и есть захват.
+      return fail(res, 409, "account_conflict", "existing account without telegram binding");
+    }
     if (!profile) {
       const nickname = await freeNickname(admin, nicknameFromTelegram(tgUser));
       const { error: insertErr } = await admin.from("profiles").upsert({
@@ -159,17 +194,12 @@ export default async function handler(req, res) {
         emoji: tgUser.photo_url ? null : "🚀",
       }, { onConflict: "id" });
       if (insertErr) {
-        console.error("[telegram-auth] profile upsert failed:", insertErr);
-        return res.status(500).json({ error: "profile_failed", detail: insertErr.message });
+        return fail(res, 500, "profile_failed", insertErr.message);
       }
-    } else if (!profile.telegram_id) {
-      // Профиль остался с прошлой (почтовой) схемы — доклеиваем привязку.
-      await admin.from("profiles").update({ telegram_id: tgUser.id }).eq("id", userId);
     }
 
     return res.status(200).json({ token_hash: link.properties.hashed_token });
   } catch (err) {
-    console.error("[telegram-auth] unexpected error:", err);
-    return res.status(500).json({ error: "unexpected", detail: err && err.message });
+    return fail(res, 500, "unexpected", err && err.message);
   }
 }

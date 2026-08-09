@@ -210,10 +210,32 @@ function tonConnectSender(tonConnectUI, walletAddress, network = "mainnet", log 
 /* ---------------------------------------------------------
    2. Metadata — upload logo + TEP-64 off-chain JSON to Supabase Storage
 --------------------------------------------------------- */
+// Расширение берём из типа файла, а не из его имени: имя приходит от
+// пользователя, и «logo.png/../../чужая-папка» превратилось бы в путь
+// мимо своей директории.
+const IMAGE_EXT_BY_TYPE = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/svg+xml": "png", // svg не принимаем: он умеет исполнять скрипты
+};
+
 async function uploadJettonAssets({ logoFile, name, symbol, description }) {
+  // Папка своя у каждого пользователя. Раньше первым сегментом стояло
+  // время, и при upsert любой вошедший мог перезаписать чужой
+  // metadata.json — то есть подменить имя, символ и картинку уже
+  // выпущенного токена. Своя папка плюс запрет перезаписи это исключают,
+  // а политика хранилища (supabase_storage_policies.sql) сверяет первый
+  // сегмент пути с идентификатором пользователя.
+  const { data: auth } = await supabase.auth.getUser();
+  const uid = auth && auth.user && auth.user.id;
+  if (!uid) throw new Error("Нужно войти в аккаунт, чтобы загрузить логотип токена");
+
   const stamp = Date.now();
-  const ext = (logoFile.name || "logo.png").split(".").pop();
-  const imagePath = `${stamp}/logo.${ext}`;
+  const contentType = logoFile.type || "image/png";
+  const ext = IMAGE_EXT_BY_TYPE[contentType] || "png";
+  const imagePath = `${uid}/${stamp}/logo.${ext}`;
 
   // WebKit inside Telegram's in-app WKWebView has a known bug where
   // fetch() silently fails with the bare message "Load failed" when the
@@ -223,11 +245,10 @@ async function uploadJettonAssets({ logoFile, name, symbol, description }) {
   // Reading the file into a plain ArrayBuffer first sends it as a normal
   // binary body instead, sidestepping that streaming path entirely.
   const imageBuffer = await logoFile.arrayBuffer();
-  const imageContentType = logoFile.type || "image/png";
 
   const { error: imgErr } = await supabase.storage
     .from("token-assets")
-    .upload(imagePath, imageBuffer, { upsert: true, contentType: imageContentType });
+    .upload(imagePath, imageBuffer, { upsert: false, contentType });
   if (imgErr) {
     // Surface everything Supabase actually gave back (status/statusText
     // included, when present) instead of just imgErr.message, so a
@@ -247,12 +268,12 @@ async function uploadJettonAssets({ logoFile, name, symbol, description }) {
     image: imageUrl,
     decimals: 9,
   };
-  const metaPath = `${stamp}/metadata.json`;
+  const metaPath = `${uid}/${stamp}/metadata.json`;
   // Same fix applied here: encode to raw bytes rather than passing a Blob.
   const metaBuffer = new TextEncoder().encode(JSON.stringify(metadata));
   const { error: metaErr } = await supabase.storage
     .from("token-assets")
-    .upload(metaPath, metaBuffer, { upsert: true, contentType: "application/json" });
+    .upload(metaPath, metaBuffer, { upsert: false, contentType: "application/json" });
   if (metaErr) {
     const status = metaErr.statusCode || metaErr.status;
     const detail = [metaErr.message, status ? `(HTTP ${status})` : null].filter(Boolean).join(" ");

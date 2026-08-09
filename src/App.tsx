@@ -4534,8 +4534,20 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     return () => { cancelled = true; clearInterval(iv); };
   }, [tab, token.poolAddress]);
 
+  // Ссылки на сайт и соцсети приходят из внешнего источника, то есть их
+  // содержимое мы не контролируем. Открываем только http и https:
+  // javascript:-адрес, попавший в такое поле, выполнился бы в окне
+  // приложения со всеми его правами.
   function openSocial(url) {
-    if (typeof window !== "undefined" && url) window.open(url, "_blank", "noopener,noreferrer");
+    if (typeof window === "undefined" || !url) return;
+    let parsed;
+    try {
+      parsed = new URL(String(url), window.location.origin);
+    } catch (e) {
+      return;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return;
+    window.open(parsed.href, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -6395,11 +6407,24 @@ function handleAvatarCropConfirm(croppedFile, croppedUrl) {
   setAvatarCropFile(null);
 }
 
+// Расширение файла берём из его типа, а не из имени. Имя приходит от
+// пользователя: «logo.png/../../что-то» превратилось бы в путь, который
+// уезжает из своей папки, а «.svg» — в картинку, умеющую исполнять
+// скрипты у того, кто откроет её напрямую.
+const UPLOAD_EXT_BY_TYPE = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+function safeImageExt(file) {
+  return UPLOAD_EXT_BY_TYPE[(file && file.type) || ""] || "png";
+}
+
 // Загружает файл в Supabase Storage и возвращает публичный URL
 async function uploadAvatarIfNeeded(userId) {
   if (!avatarFile) return avatarUrl; // ничего не выбирали — оставляем как было
-  const ext = avatarFile.name.split(".").pop();
-  const path = `${userId}/${Date.now()}.${ext}`;
+  const path = `${userId}/${Date.now()}.${safeImageExt(avatarFile)}`;
   const { error: uploadError } = await supabase.storage
     .from("avatars")
     .upload(path, avatarFile, { upsert: true });
@@ -7962,12 +7987,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       let persistentLogoUrl = null;
       if (req.logoFile && userId) {
         try {
-          const ext = (req.logoFile.name || "logo.png").split(".").pop();
           // Путь обязан начинаться с id пользователя: политика хранилища
           // сверяет первую папку с auth.uid(). Раньше здесь был префикс
           // `tokens/`, из-за него загрузка отклонялась, и в базу уезжала
           // мёртвая blob-ссылка — логотипы не открывались ни у кого.
-          const path = `${userId}/token-${Date.now()}.${ext}`;
+          const path = `${userId}/token-${Date.now()}.${safeImageExt(req.logoFile)}`;
           const { error: logoUploadError } = await supabase.storage
             .from("avatars")
             .upload(path, req.logoFile, { upsert: true });
