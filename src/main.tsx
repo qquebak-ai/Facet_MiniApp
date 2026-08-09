@@ -27,6 +27,18 @@ if (tg) {
   tg.disableVerticalSwipes?.();
 }
 
+// iOS игнорирует user-scalable=no, поэтому двойной тап и щипок гасим сами.
+if (typeof document !== "undefined") {
+  document.addEventListener("gesturestart", (e) => e.preventDefault());
+  document.addEventListener("gesturechange", (e) => e.preventDefault());
+  let lastTouch = 0;
+  document.addEventListener("touchend", (e) => {
+    const now = Date.now();
+    if (now - lastTouch <= 350) e.preventDefault();
+    lastTouch = now;
+  }, { passive: false });
+}
+
 const manifestUrl = `${window.location.origin}/tonconnect-manifest.json`;
 
 try {

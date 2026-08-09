@@ -832,6 +832,11 @@ function GlobalStyle() {
       html { overflow: hidden; overscroll-behavior: none; }
       body { position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; overscroll-behavior: none; }
       * { -webkit-tap-highlight-color: transparent; }
+      /* Щипок двумя пальцами ломал вёрстку: интерфейс рассчитан на
+         ширину экрана и при масштабировании разъезжается. Одного
+         user-scalable=no в мета-теге мало — iOS его игнорирует, поэтому
+         жест масштабирования гасится и на уровне стилей. */
+      html, body { touch-action: pan-x pan-y; }
       /* iOS Safari (incl. Telegram's in-app WebView) auto-zooms the whole
          viewport when a focused input/textarea/select has a computed
          font-size under 16px. Forcing a 16px floor here — on top of the
