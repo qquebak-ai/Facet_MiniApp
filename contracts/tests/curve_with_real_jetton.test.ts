@@ -17,6 +17,8 @@ import { BondingCurve } from "../build/bonding_curve_BondingCurve";
 const VIRTUAL_TON = toNano("291.217");
 const VIRTUAL_TOKENS = toNano("1073000000");
 const TOKENS_FOR_SALE = toNano("900000000");
+// Приложение чеканит на кривую весь выпуск, а не только торговый запас.
+const TOTAL_SUPPLY = toNano("1000000000");
 const GRADUATION_TON = toNano("1500");
 const FEE_BPS = 100n;
 
@@ -75,8 +77,8 @@ describe("BondingCurve с настоящим жетоном", () => {
   });
 
   it("выдаёт жетоны покупателю, у которого ещё нет кошелька", async () => {
-    await minter.sendMint(deployer.getSender(), curve.address, TOKENS_FOR_SALE);
-    expect(await jettonBalance(curve.address)).toBe(TOKENS_FOR_SALE);
+    await minter.sendMint(deployer.getSender(), curve.address, TOTAL_SUPPLY);
+    expect(await jettonBalance(curve.address)).toBe(TOTAL_SUPPLY);
     expect(await jettonBalance(buyer.address)).toBe(0n);
 
     const res = await curve.send(buyer.getSender(), { value: toNano("5") }, {
@@ -104,7 +106,7 @@ describe("BondingCurve с настоящим жетоном", () => {
     });
     expect(await jettonBalance(buyer.address)).toBe(0n);
 
-    await minter.sendMint(deployer.getSender(), curve.address, TOKENS_FOR_SALE);
+    await minter.sendMint(deployer.getSender(), curve.address, TOTAL_SUPPLY);
 
     const got = await jettonBalance(buyer.address);
     expect(got).toBeGreaterThan(0n);
@@ -113,7 +115,7 @@ describe("BondingCurve с настоящим жетоном", () => {
   });
 
   it("выкупает жетоны обратно и платит TON", async () => {
-    await minter.sendMint(deployer.getSender(), curve.address, TOKENS_FOR_SALE);
+    await minter.sendMint(deployer.getSender(), curve.address, TOTAL_SUPPLY);
     await curve.send(buyer.getSender(), { value: toNano("10") }, {
       $$type: "Buy",
       queryId: 0n,

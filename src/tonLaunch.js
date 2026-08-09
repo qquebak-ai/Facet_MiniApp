@@ -122,6 +122,7 @@ import {
   buildBuyBody,
   buildSetJettonWalletBody,
   CURVE_PARAMS,
+  CURVE_TOTAL_SUPPLY,
   CURVE_GAS_BUY_OVERHEAD,
 } from "./curveConfig";
 import { supabase } from "./supabaseClient";
@@ -766,16 +767,17 @@ export async function launchRealToken({
     curveAddress = curve.address;
     log(`адрес кривой (детерминированный, без запроса в сеть): ${curveAddress.toString()}`);
 
-    // Весь торговый запас минтится сразу на кривую: владельцем кошелька
-    // жетона становится она, а не создатель. Из-за этого создатель
+    // Весь выпуск минтится сразу на кривую: владельцем кошелька
+    // жетона становится она, а не создатель. Продаёт кривая только
+    // tokensForSale, остальное держит до выпуска на DEX. Из-за этого создатель
     // больше не получает долю бесплатно — он покупает через кривую на
     // общих основаниях, как и все остальные.
     const minter = client.open(JettonMinter.createFromConfig({
       admin: Address.parse(walletAddress),
       content: beginCell().storeUint(0x01, 8).storeStringTail(metadataUrl).endCell(),
     }));
-    await minter.sendMint(batchSender, curveAddress, CURVE_PARAMS.tokensForSale);
-    log(`выпуск запаса на кривую поставлен в очередь: ${CURVE_PARAMS.tokensForSale.toString()} базовых единиц`);
+    await minter.sendMint(batchSender, curveAddress, CURVE_TOTAL_SUPPLY);
+    log(`выпуск на кривую поставлен в очередь: ${CURVE_TOTAL_SUPPLY.toString()} базовых единиц`);
 
     // Адрес кошелька жетона у кривой выводится из пары «владелец +
     // мастер жетона», поэтому считается офлайн — сеть спрашивать не о

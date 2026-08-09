@@ -11,6 +11,8 @@ const JETTON_MASTER = new Address(0, Buffer.alloc(32, 7));
 const VIRTUAL_TON = toNano("291.217");
 const VIRTUAL_TOKENS = toNano("1073000000");
 const TOKENS_FOR_SALE = toNano("900000000");
+// Чеканится весь выпуск, кривая продаёт только его часть.
+const TOTAL_SUPPLY = toNano("1000000000");
 const GRADUATION_TON = toNano("1500");
 const FEE_BPS = 100n; // 1%
 // Должно совпадать с GasBuyOverhead в bonding_curve.tact и с
@@ -59,6 +61,14 @@ describe("BondingCurve", () => {
       $$type: "SetJettonWallet",
       wallet: jettonWallet.address,
     });
+  }
+
+  // Приход торгового запаса: настоящий кошелёк жетона присылает такое
+  // уведомление после чеканки всего выпуска на кривую. До него кривая
+  // не знает, сколько жетонов у неё на руках.
+  async function deliverSupply(amount: bigint = TOTAL_SUPPLY) {
+    return curve.send(jettonWallet.getSender(), { value: toNano("0.1") },
+      sellNotification(amount, admin.address));
   }
 
   async function buy(value: string, minTokensOut: bigint = 0n) {
@@ -229,6 +239,7 @@ describe("BondingCurve", () => {
 
   it("закрывает торговлю и отдаёт ликвидность только на заданный адрес", async () => {
     await bindWallet();
+    await deliverSupply();
 
     // Добираем порог покупками. Порог теперь 1500 TON — столько нужно на
     // заведение пары на DEX, — поэтому и покупки крупные.
@@ -253,10 +264,13 @@ describe("BondingCurve", () => {
     const transfer = jettonTransferFrom(res);
     expect(transfer).not.toBeNull();
     expect(transfer!.destination.toString()).toBe(dexSeeder.address.toString());
+    // На пару уходит всё, что осталось на кривой: непроданный остаток
+    // торгового запаса плюс доля выпуска, которая под пару и чеканилась.
+    expect(transfer!.amount).toBe(TOTAL_SUPPLY - data.tokensSold);
 
     const done = await curve.getData();
     expect(done.realTon).toBe(0n);
-    expect(done.tokensSold).toBe(TOKENS_FOR_SALE);
+    expect(done.tokensSold).toBe(TOTAL_SUPPLY);
   });
 
   it("возвращает деньги, если жетоны выдать не удалось", async () => {

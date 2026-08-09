@@ -125,6 +125,13 @@ contract BondingCurve with Deployable {
     pending: map<Int as uint64, PendingBuy>;
     nextQueryId: Int as uint64 = 1;
     supplyReady: Bool = false;
+    // Сколько жетонов пришло на кривую при запуске. Это не то же самое,
+    // что tokensForSale: чеканится весь выпуск, а кривая продаёт только
+    // его часть — остаток лежит здесь и уходит в пару на DEX при
+    // выпуске. Число берётся из фактического прихода, а не из
+    // параметров, поэтому кривая одинаково верно работает и когда
+    // чеканят ровно торговый запас, и когда чеканят весь выпуск.
+    supplyReceived: Int as coins = 0;
 
     // Сколько TON удерживается из входящего сообщения на газ: перевод
     // жетона покупателю, отправка комиссии и хранение самого контракта.
@@ -350,8 +357,9 @@ contract BondingCurve with Deployable {
         // обычная продажа завышенного количества: контракт молча забирал
         // жетоны и ничего не платил. Теперь такая продажа отвергается, и
         // жетоны возвращаются продавцу.
-        if (msg.amount >= self.tokensForSale) {
+        if (!self.supplyReady && msg.amount >= self.tokensForSale) {
             self.supplyReady = true;
+            self.supplyReceived = msg.amount;
             self.flushPending();
             return;
         }
@@ -509,9 +517,11 @@ contract BondingCurve with Deployable {
 
         // Непроданный остаток уходит вместе с деньгами — из него на
         // стороне DEX собирается пара.
-        let leftover: Int = self.tokensForSale - self.tokensSold;
+        // Всё, что осталось на кривой: и непроданный торговый запас, и
+        // доля выпуска, которая изначально предназначалась паре.
+        let leftover: Int = self.supplyReceived - self.tokensSold;
         if (leftover > 0) {
-            self.tokensSold = self.tokensForSale;
+            self.tokensSold = self.supplyReceived;
             send(SendParameters{
                 to: wallet,
                 value: self.GasJettonTransfer,
