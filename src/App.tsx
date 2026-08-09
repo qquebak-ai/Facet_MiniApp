@@ -890,6 +890,7 @@ function GlobalStyle() {
         88%  { opacity: var(--o); }
         100% { transform: translate3d(var(--dx), 104vh, 0) rotate(var(--r1)); opacity: 0; }
       }
+      @keyframes islandGlow { 0%,100%{ opacity:0.75; } 50%{ opacity:1; } }
       @keyframes toastIn { from{opacity:0; transform:translateX(-50%) scale(0.94);} to{opacity:1; transform:translateX(-50%) scale(1);} }
       @keyframes toastOut { from{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} to{opacity:0; transform:translateX(-50%) translateY(-22px) scale(0.98);} }
       @keyframes rocketUp { 0%{ transform:translateY(0) scale(0.75); opacity:0; } 18%{ opacity:0.9; } 100%{ transform:translateY(-70px) scale(1); opacity:0; } }
@@ -6838,12 +6839,58 @@ function useDevice() {
   return DEVICE;
 }
 
+/* Обрамление «Динамического острова».
+
+   Отличить айфон с островом от айфона с чёлкой по строке браузера
+   нельзя — модель там не пишут. Но верхний безопасный отступ у них
+   разный: у чёлки это 44–48 точек, у острова 59 (у Pro-моделей 16-й
+   серии 62). Порог посередине и разделяет поколения.
+
+   Размеры самого острова заданы системой: 125.7 × 36.7 точки, отступ
+   сверху 11. Рамка рисуется чуть больше, ровно вокруг него. */
+const ISLAND_MIN_SAFE_TOP = 51;
+const ISLAND_WIDTH = 126;
+const ISLAND_HEIGHT = 37.3;
+const ISLAND_TOP = 11;
+const ISLAND_GAP = 5;
+
+function DynamicIslandFrame({ topOffset = 0 }) {
+  const w = ISLAND_WIDTH + ISLAND_GAP * 2;
+  const h = ISLAND_HEIGHT + ISLAND_GAP * 2;
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "fixed",
+        top: ISLAND_TOP - ISLAND_GAP + topOffset,
+        left: "50%",
+        marginLeft: -w / 2,
+        width: w,
+        height: h,
+        borderRadius: h / 2,
+        border: `1.5px solid ${T.electric}`,
+        boxShadow: `0 0 14px ${hexA(T.electric, 0.55)}, inset 0 0 10px ${hexA(T.electric, 0.25)}`,
+        pointerEvents: "none",
+        // Выше всего, включая заставку и модальные окна: это обрамление
+        // самого экрана телефона, а не элемент интерфейса.
+        zIndex: 2000,
+        animation: "islandGlow 3.4s ease-in-out infinite",
+      }}
+    />
+  );
+}
+
 function useTelegramViewport() {
   const [height, setHeight] = useState(
     typeof window !== "undefined" ? window.innerHeight : 720
   );
   const [insetBottom, setInsetBottom] = useState(0);
   const [insetTop, setInsetTop] = useState(0);
+  // Отдельно от суммарного отступа: это отступ железа телефона (чёлка
+  // или «остров»), без учёта собственной шапки Telegram. По нему видно,
+  // какой именно вырез у экрана.
+  const [deviceTop, setDeviceTop] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -6871,6 +6918,8 @@ function useTelegramViewport() {
         const content = tg.contentSafeAreaInset || {};
         setInsetTop((device.top || 0) + (content.top || 0));
         setInsetBottom((device.bottom || 0) + (content.bottom || 0));
+        setDeviceTop(device.top || 0);
+        setFullscreen(!!tg.isFullscreen);
         setReady(true);
       };
       update();
@@ -6902,7 +6951,7 @@ function useTelegramViewport() {
     return () => { cancelled = true; window.removeEventListener("resize", onResize); };
   }, []);
 
-  return { height, insetBottom, insetTop, ready };
+  return { height, insetBottom, insetTop, deviceTop, fullscreen, ready };
 }
 
 /* ---------------------------------------------------------
@@ -6945,8 +6994,14 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [tab, setTab] = useState("home");
   const [token, setToken] = useState(null);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
-  const { height, insetBottom, insetTop } = useTelegramViewport();
+  const { height, insetBottom, insetTop, deviceTop, fullscreen } = useTelegramViewport();
   const device = useDevice();
+  // Рамка вокруг «острова» рисуется только там, где остров есть и где он
+  // виден: в обычном режиме окно Telegram начинается ниже него, и
+  // обрамлять нечего. Параметр ?island=1 включает её принудительно —
+  // чтобы можно было посмотреть на любом устройстве.
+  const forceIsland = typeof window !== "undefined" && /[?&]island=1/.test(window.location.search);
+  const showIsland = forceIsland || (device.isIOS && deviceTop >= ISLAND_MIN_SAFE_TOP && (fullscreen || !device.inTelegram));
 
   // Always open on Home — closing and reopening the app (or refreshing)
   // should land the person back on the front page rather than wherever
@@ -8023,6 +8078,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       style={{ background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden" }}
     >
       <GlobalStyle />
+      {showIsland && <DynamicIslandFrame />}
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast key={toastSeq} toast={toast} insetTop={insetTop} leaving={toastLeaving} />
