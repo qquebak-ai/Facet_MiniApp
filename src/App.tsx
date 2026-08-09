@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
   Search, Flame, TrendingUp, Clock, Sparkles, ArrowUpRight, ArrowDownRight,
   Wallet, Home as HomeIcon, PlusCircle, User, ChevronLeft, Share2, Star,
@@ -886,9 +886,17 @@ function GlobalStyle() {
       @keyframes heroRocketFloat { 0%,100%{ transform: translateY(0) rotate(-3deg); } 50%{ transform: translateY(-5px) rotate(3deg); } }
       @keyframes widgetSparkRise { 0%{ transform:translateY(0) scale(0.7); opacity:0; } 15%{ opacity:0.9; } 85%{ opacity:0.5; } 100%{ transform:translateY(-130px) scale(1.05); opacity:0; } }
       button { touch-action: manipulation; cursor: pointer; }
-      .fx-card { animation: fadeInUp 480ms cubic-bezier(0.16,1,0.3,1) both; transition: transform ${SPRING}, border-color ${EASE}; will-change: transform; }
+      .fx-card { animation: fadeInUp 480ms cubic-bezier(0.16,1,0.3,1) both; transition: transform ${SPRING}, border-color ${EASE}, box-shadow ${EASE}; will-change: transform; }
       .fx-card:active { transform: scale(0.98); transition: transform ${PRESS}; }
-      .fx-card:hover { border-color: ${T.lineHi} !important; }
+      /* Только для настоящей мыши. На тач-экране :hover прилипает после
+         касания и не снимается до тапа в стороне, а !important перебивал
+         рамку выбранного предмета — выделение выглядело залипшим. */
+      @media (hover: hover) and (pointer: fine) {
+        .fx-card:not(.fx-picked):hover { border-color: ${T.lineHi}; }
+      }
+      /* Рамка выбора рисуется тенью, а не border: она не входит в поток и
+         не заставляет пересчитывать раскладку карточки при переключении. */
+      .fx-picked { border-color: ${T.electric} !important; box-shadow: 0 0 0 1.5px ${T.electric}; }
       .fx-tap { transition: transform ${SPRING}; will-change: transform; }
       .fx-tap:active { transform: scale(0.96); transition: transform ${PRESS}; }
       .fx-view { animation: fadeInUp 320ms cubic-bezier(0.16,1,0.3,1) both; }
@@ -3469,7 +3477,12 @@ const CARD_BY_ID = Object.fromEntries(PROFILE_CARDS.map(c => [c.id, c]));
 /* AvatarFrame — круглая рамка вокруг аватарки. Толщина считается от
    размера, чтобы предмет одинаково смотрелся и на 120px в профиле, и на
    64px в превью магазина. */
-function AvatarFrame({ frameId, size = 120, children }) {
+// Мемоизация не украшение: и рамка, и подложка — это десятки
+// анимированных слоёв с размытием. Без неё любое обновление состояния
+// приложения (например всплывающая подсказка после выбора) заставляло
+// браузер заново раскладывать всю витрину, и выделение появлялось с
+// заметной задержкой.
+const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, children }) {
   const f = FRAME_BY_ID[frameId] || FRAME_BY_ID.none;
   const ring = Math.max(2, Math.round(size * 0.035));
   const inner = (
@@ -3531,12 +3544,12 @@ function AvatarFrame({ frameId, size = 120, children }) {
       })}
     </div>
   );
-}
+});
 
 /* ProfileCardBg — подложка, которая рисуется за аватаркой и шапкой
    профиля. Абсолютная, ничего не ловит по клику и обрезается по своему
    контейнеру. */
-function ProfileCardBg({ cardId, height = 260, radius = 24, bleed = 0, top = 0 }) {
+const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, radius = 24, bleed = 0, top = 0 }) {
   const c = CARD_BY_ID[cardId] || CARD_BY_ID.none;
   const blobs = useMemo(() => {
     const rnd = seededRand(hashSeed(cardId || "none"));
@@ -3623,7 +3636,7 @@ function ProfileCardBg({ cardId, height = 260, radius = 24, bleed = 0, top = 0 }
       }} />
     </div>
   );
-}
+});
 
 /* BootSplash — стартовая заставка. Перекрывает весь интерфейс, пока идут
    первые запросы, и показывает, что именно ещё грузится: так пустые
@@ -3676,11 +3689,49 @@ function BootSplash({ steps, done, insetTop = 0 }) {
   );
 }
 
+/* Одна карточка витрины. Отдельный мемоизированный компонент: при выборе
+   предмета меняются ровно две карточки из десятка, а остальные — со всеми
+   своими размытиями и анимациями — вообще не перерисовываются. Раньше
+   перерисовывались все, и оранжевая рамка появлялась с задержкой. */
+const ShopItem = React.memo(function ShopItem({ item, kind, equipped, onEquip }) {
+  const handle = useCallback(() => onEquip(kind, item.id), [onEquip, kind, item.id]);
+  return (
+    <button
+      onClick={handle}
+      className={`fx-card flex flex-col items-center gap-2.5 rounded-[22px] p-3${equipped ? " fx-picked" : ""}`}
+      style={{ background: T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden", contain: "paint" }}
+    >
+      <div style={{ position: "relative", width: "100%", height: 96, borderRadius: 16, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {kind === "card" && <ProfileCardBg cardId={item.id} height={96} radius={16} />}
+        <div style={{ position: "relative", zIndex: 1 }}>
+          {/* Внутри рамки — просто чёрный кружок: витрина про сам
+              предмет, а своя аватарка тут только отвлекает. */}
+          <AvatarFrame frameId={kind === "frame" ? item.id : "none"} size={62}>
+            <div style={{ width: "100%", height: "100%", background: T.bg }} />
+          </AvatarFrame>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 12.5, fontWeight: 700 }}>{pickLabel(item.label)}</span>
+        {equipped && <CheckCircle2 size={13} color={T.electric} />}
+      </div>
+      <span style={{ fontFamily: bodyFont, fontSize: 11, color: equipped ? T.electric : T.muted }}>
+        {equipped ? t("shopEquipped") : t("shopEquip")}
+      </span>
+    </button>
+  );
+});
+
 /* ShopView — витрина косметики: рамки для аватарки и карточки профиля.
    Предметы применяются мгновенно и запоминаются на устройстве, поэтому
    «купить» здесь — это «надеть»: отдельного баланса у магазина нет. */
 function ShopView({ cosmetics, onEquip }) {
   const [tab, setTab] = useState("frames");
+  // Обработчик через ссылку: сам onEquip создаётся заново при каждой
+  // перерисовке приложения, и мемоизация карточек была бы бесполезна.
+  const equipRef = useRef(onEquip);
+  useEffect(() => { equipRef.current = onEquip; });
+  const equip = useCallback((kind, id) => equipRef.current(kind, id), []);
   const items = tab === "frames" ? AVATAR_FRAMES : PROFILE_CARDS;
   const equippedId = tab === "frames" ? cosmetics.frame : cosmetics.card;
 
@@ -3706,35 +3757,15 @@ function ShopView({ cosmetics, onEquip }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2.5" key={tab}>
-        {items.map((item) => {
-          const equipped = equippedId === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onEquip(tab === "frames" ? "frame" : "card", item.id)}
-              className="fx-card flex flex-col items-center gap-2.5 rounded-[22px] p-3"
-              style={{ background: T.surface, border: `1px solid ${equipped ? T.electric : T.line}`, position: "relative", overflow: "hidden" }}
-            >
-              <div style={{ position: "relative", width: "100%", height: 96, borderRadius: 16, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {tab === "cards" && <ProfileCardBg cardId={item.id} height={96} radius={16} />}
-                <div style={{ position: "relative", zIndex: 1 }}>
-                  {/* Внутри рамки — просто чёрный кружок: витрина про сам
-                      предмет, а своя аватарка тут только отвлекает. */}
-                  <AvatarFrame frameId={tab === "frames" ? item.id : "none"} size={62}>
-                    <div style={{ width: "100%", height: "100%", background: T.bg }} />
-                  </AvatarFrame>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 12.5, fontWeight: 700 }}>{pickLabel(item.label)}</span>
-                {equipped && <CheckCircle2 size={13} color={T.electric} />}
-              </div>
-              <span style={{ fontFamily: bodyFont, fontSize: 11, color: equipped ? T.electric : T.muted }}>
-                {equipped ? t("shopEquipped") : t("shopEquip")}
-              </span>
-            </button>
-          );
-        })}
+        {items.map((item) => (
+          <ShopItem
+            key={item.id}
+            item={item}
+            kind={tab === "frames" ? "frame" : "card"}
+            equipped={equippedId === item.id}
+            onEquip={equip}
+          />
+        ))}
       </div>
     </div>
   );
