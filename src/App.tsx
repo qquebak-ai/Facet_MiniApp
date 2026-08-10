@@ -4296,6 +4296,8 @@ const CreatorWreath = React.memo(function CreatorWreath({ tier = 0, size = 20, a
    вокруг аватарки места хватает на клён, дуб и мяту со всеми прожилками.
    Какой из трёх — выбирается в магазине, поэтому вид приходит снаружи. */
 const WREATH_LEAF_KINDS = [
+  // Порядок важен: номер в этом списке и есть то, что лежит в профиле.
+  { id: "mix", leaf: -1, label: { RU: "Все три", EN: "All three" } },
   { id: "maple", leaf: 0, label: { RU: "Клён", EN: "Maple" } },
   { id: "oak", leaf: 1, label: { RU: "Дуб", EN: "Oak" } },
   { id: "mint", leaf: 2, label: { RU: "Мята", EN: "Mint" } },
@@ -4316,9 +4318,13 @@ function wreathBigBranchPath(side) {
   return `M${x1} ${y1} A ${r} ${r} 0 0 ${side > 0 ? 1 : 0} ${x2} ${y2}`;
 }
 
-const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId = "maple", size = 200, animate = true }) {
+const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId = "mix", size = 200, animate = true }) {
   if (!tier) return null;
-  const kind = LEAF_KINDS[(WREATH_LEAF_BY_ID[kindId] || WREATH_LEAF_KINDS[0]).leaf];
+  // Вид листа берётся на каждый листик отдельно: в смешанном венке они
+  // чередуются клён — дуб — мята, причём по номеру места на ветке, так
+  // что левая и правая половины остаются зеркальными.
+  const pick = (WREATH_LEAF_BY_ID[kindId] || WREATH_LEAF_KINDS[0]).leaf;
+  const leafAt = (i) => LEAF_KINDS[pick < 0 ? i % LEAF_KINDS.length : pick];
   const filled = tier >= 2;
   const glow = tier >= 3 ? `drop-shadow(0 0 ${Math.max(4, size * 0.05)}px ${hexA(T.electric, 0.85)})` : "none";
   const veinColor = filled ? T.bg : T.electric;
@@ -4334,7 +4340,9 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
           stroke={T.electric} strokeWidth={2.6} strokeLinecap="round" opacity={0.8}
         />
       ))}
-      {WREATH_POS.map((p, idx) => (
+      {WREATH_POS.map((p, idx) => {
+        const kind = leafAt(p.i);
+        return (
         <g key={idx} transform={`rotate(${p.deg} 100 100) translate(100 ${100 - WREATH_BIG_R})`}>
           <g style={animate ? {
             transformBox: "fill-box", transformOrigin: "50% 100%",
@@ -4349,7 +4357,8 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
             </g>
           </g>
         </g>
-      ))}
+        );
+      })}
       {tier >= 3 && (
         <path
           d={starPath(100, 21, 19)} fill={T.electric}
@@ -4365,7 +4374,7 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
 
 /* WreathAvatar — венок обнимает аватарку. Клики не перехватывает,
    поверх рамки из магазина рисуется без конфликта. */
-function WreathAvatar({ tier = 0, size = 128, kindId = "maple", children }) {
+function WreathAvatar({ tier = 0, size = 128, kindId = "mix", children }) {
   if (!tier) return children;
   // 1.6 — не на глаз: ветка венка лежит на радиусе 62 из 200 единиц
   // картинки, и при таком размере она проходит чуть внутри края
@@ -8685,7 +8694,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // оформление устройства, серверу о нём знать нечего, поэтому храним в
   // localStorage рядом с темой и языком.
   const [cosmetics, setCosmetics] = useState(() => {
-    const base = { frame: "none", card: "none", wreath: "maple" };
+    const base = { frame: "none", card: "none", wreath: "mix" };
     try {
       if (typeof window !== "undefined") {
         const f = window.localStorage.getItem("mintly_frame");
@@ -8713,7 +8722,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // у листьев на фоне.
       const patch = kind === "frame" ? { frame_id: id }
         : kind === "card" ? { card_id: id }
-        : { wreath_leaf: (WREATH_LEAF_BY_ID[id] || WREATH_LEAF_KINDS[0]).leaf };
+        : { wreath_leaf: Math.max(0, WREATH_LEAF_KINDS.findIndex((k) => k.id === id)) };
       supabase
         .from("profiles")
         .update(patch)
