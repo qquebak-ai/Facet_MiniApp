@@ -125,7 +125,8 @@ const STR = {
     tgAuthNotConfigured: "Вход через Telegram пока не настроен на сервере.",
     bootStepAuth: "Вход в аккаунт", bootStepFeed: "Лента покупок",
     bootStepTokens: "Токены сообщества", bootStepRate: "Курс TON",
-    shopTabFrames: "Рамки", shopTabCards: "Карточки",
+    shopTabFrames: "Рамки", shopTabCards: "Карточки", shopTabWreath: "Венок",
+    wreathLockHint: "Открывается вместе со знаком создателя",
     shopEquip: "Надеть", shopEquipped: "Надето",
     cosmeticApplied: "Применено", cosmeticRemoved: "Снято",
     connect: "Подключить", connected: "Подключён",
@@ -417,7 +418,8 @@ const STR = {
     tgAuthNotConfigured: "Telegram sign-in is not configured on the server yet.",
     bootStepAuth: "Signing in", bootStepFeed: "Buy feed",
     bootStepTokens: "Community tokens", bootStepRate: "TON rate",
-    shopTabFrames: "Frames", shopTabCards: "Cards",
+    shopTabFrames: "Frames", shopTabCards: "Cards", shopTabWreath: "Wreath",
+    wreathLockHint: "Unlocked together with the creator badge",
     shopEquip: "Equip", shopEquipped: "Equipped",
     cosmeticApplied: "Applied", cosmeticRemoved: "Removed",
     connect: "Connect", connected: "Connected",
@@ -3801,7 +3803,7 @@ async function fetchCreatorProfile(userId) {
   if (creatorCache.has(userId)) return creatorCache.get(userId);
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, nickname, bio, avatar_url, emoji, frame_id, card_id, creator_tier")
+    .select("id, nickname, bio, avatar_url, emoji, frame_id, card_id, creator_tier, wreath_leaf")
     .eq("id", userId)
     .maybeSingle();
   const profile = error ? null : data;
@@ -4023,6 +4025,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
   const frame = FRAME_BY_ID[profile.frame_id] ? profile.frame_id : "none";
   const card = CARD_BY_ID[profile.card_id] ? profile.card_id : "none";
   const creatorTier = Number(profile.creator_tier) || 0;
+  const wreathKind = (WREATH_LEAF_KINDS[Number(profile.wreath_leaf) || 0] || WREATH_LEAF_KINDS[0]).id;
 
   return (
     <div className="fx-view" style={{ position: "relative" }}>
@@ -4041,7 +4044,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
         </div>
 
         <div style={{ position: "relative", zIndex: 1, lineHeight: 0 }}>
-          <WreathAvatar tier={creatorTier} size={128}>
+          <WreathAvatar tier={creatorTier} size={128} kindId={wreathKind}>
             <AvatarFrame frameId={frame} size={128}>
               <div style={{
                 width: "100%", height: "100%", borderRadius: "50%",
@@ -4287,28 +4290,97 @@ const CreatorWreath = React.memo(function CreatorWreath({ tier = 0, size = 20, a
   );
 });
 
-/* WreathAvatar — тот же венок, но обнимает аватарку. Венок крупнее
-   самого кружка: иначе листья лягут поверх лица. Клики не перехватывает,
+/* Венок вокруг аватарки — из настоящих листьев с фона.
+
+   Рядом с ником знак живёт в 16–20px, там нужен простой силуэт, а вот
+   вокруг аватарки места хватает на клён, дуб и мяту со всеми прожилками.
+   Какой из трёх — выбирается в магазине, поэтому вид приходит снаружи. */
+const WREATH_LEAF_KINDS = [
+  { id: "maple", leaf: 0, label: { RU: "Клён", EN: "Maple" } },
+  { id: "oak", leaf: 1, label: { RU: "Дуб", EN: "Oak" } },
+  { id: "mint", leaf: 2, label: { RU: "Мята", EN: "Mint" } },
+];
+const WREATH_LEAF_BY_ID = Object.fromEntries(WREATH_LEAF_KINDS.map((k) => [k.id, k]));
+
+// Расстановка та же, что у малого знака: пять листьев на ветку по дуге,
+// к верхнему разрыву мельчают. Размеры — в единицах картинки 200×200.
+const WREATH_BIG_R = 62;
+function wreathBigBranchPath(side) {
+  const cx = 100, cy = 100, r = WREATH_BIG_R;
+  const p = (deg) => {
+    const a = (deg * Math.PI) / 180;
+    return [cx + side * r * Math.sin(a), cy - r * Math.cos(a)];
+  };
+  const [x1, y1] = p(WREATH_FROM);
+  const [x2, y2] = p(WREATH_TO);
+  return `M${x1} ${y1} A ${r} ${r} 0 0 ${side > 0 ? 1 : 0} ${x2} ${y2}`;
+}
+
+const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId = "maple", size = 200, animate = true }) {
+  if (!tier) return null;
+  const kind = LEAF_KINDS[(WREATH_LEAF_BY_ID[kindId] || WREATH_LEAF_KINDS[0]).leaf];
+  const filled = tier >= 2;
+  const glow = tier >= 3 ? `drop-shadow(0 0 ${Math.max(4, size * 0.05)}px ${hexA(T.electric, 0.85)})` : "none";
+  const veinColor = filled ? T.bg : T.electric;
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 200 200"
+      style={{ display: "block", overflow: "visible", filter: glow }}
+      aria-hidden="true"
+    >
+      {[-1, 1].map((side) => (
+        <path
+          key={side} d={wreathBigBranchPath(side)} fill="none"
+          stroke={T.electric} strokeWidth={2.6} strokeLinecap="round" opacity={0.8}
+        />
+      ))}
+      {WREATH_POS.map((p, idx) => (
+        <g key={idx} transform={`rotate(${p.deg} 100 100) translate(100 ${100 - WREATH_BIG_R})`}>
+          <g style={animate ? {
+            transformBox: "fill-box", transformOrigin: "50% 100%",
+            animation: `wreathSway 3.4s ease-in-out ${(p.i * 0.12 + (p.side > 0 ? 0.2 : 0)).toFixed(2)}s infinite`,
+          } : undefined}>
+            <g transform={`rotate(${p.side * -14}) scale(${(1.12 * p.scale).toFixed(3)})`}>
+              <path d={kind.outline} fill={filled ? T.electric : "none"} stroke={T.electric} strokeWidth={filled ? 0.8 : 1.5} strokeLinejoin="round" />
+              {kind.veins.map((v, vi) => (
+                <path key={vi} d={v} fill="none" stroke={veinColor} strokeWidth={0.8} opacity={filled ? 0.4 : 0.55} strokeLinecap="round" />
+              ))}
+              <path d={kind.stem} fill="none" stroke={T.electric} strokeWidth={1.2} strokeLinecap="round" />
+            </g>
+          </g>
+        </g>
+      ))}
+      {tier >= 3 && (
+        <path
+          d={starPath(100, 21, 19)} fill={T.electric}
+          style={animate ? {
+            transformBox: "fill-box", transformOrigin: "50% 50%",
+            animation: "wreathStar 4.5s ease-in-out infinite",
+          } : undefined}
+        />
+      )}
+    </svg>
+  );
+});
+
+/* WreathAvatar — венок обнимает аватарку. Клики не перехватывает,
    поверх рамки из магазина рисуется без конфликта. */
-function WreathAvatar({ tier = 0, size = 128, children }) {
+function WreathAvatar({ tier = 0, size = 128, kindId = "maple", children }) {
   if (!tier) return children;
-  // 1.65 — не на глаз: ветка венка лежит на радиусе 17 из 60 единиц
+  // 1.6 — не на глаз: ветка венка лежит на радиусе 62 из 200 единиц
   // картинки, и при таком размере она проходит чуть внутри края
   // аватарки, а наружу торчат только листья. Больше — венок отрывается
   // от аватарки и становится похож на солнце.
-  const outer = Math.round(size * 1.65);
-  // Центр венка в картинке смещён вниз на две единицы из шестидесяти —
-  // компенсируем, иначе знак сидит криво.
-  const shift = outer * (2 / 60);
+  const outer = Math.round(size * 1.6);
   return (
     <div style={{ position: "relative", width: size, height: size, lineHeight: 0 }}>
       {children}
       <div style={{
         position: "absolute", left: "50%", top: "50%", width: outer, height: outer,
-        transform: `translate(-50%, calc(-50% - ${shift.toFixed(1)}px))`,
+        transform: "translate(-50%, -50%)",
         pointerEvents: "none", zIndex: 2,
       }}>
-        <CreatorWreath tier={tier} size={outer} />
+        <AvatarWreathArt tier={tier} kindId={kindId} size={outer} />
       </div>
     </div>
   );
@@ -4559,9 +4631,17 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, locked, lo
         <div style={{ position: "relative", zIndex: 1 }}>
           {/* Внутри рамки — просто чёрный кружок: витрина про сам
               предмет, а своя аватарка тут только отвлекает. */}
-          <AvatarFrame frameId={kind === "frame" ? item.id : "none"} size={62}>
-            <div style={{ width: "100%", height: "100%", background: T.bg }} />
-          </AvatarFrame>
+          {kind === "wreath" ? (
+            // Венок показываем сразу высшей ступени: на витрине важен
+            // сам лист, а не то, докуда дорос его хозяин.
+            <WreathAvatar tier={3} size={46} kindId={item.id}>
+              <div style={{ width: 46, height: 46, borderRadius: "50%", background: T.bg, border: `1px solid ${T.lineHi}` }} />
+            </WreathAvatar>
+          ) : (
+            <AvatarFrame frameId={kind === "frame" ? item.id : "none"} size={62}>
+              <div style={{ width: "100%", height: "100%", background: T.bg }} />
+            </AvatarFrame>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-1.5">
@@ -4690,7 +4770,7 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
 /* ShopView — витрина косметики: рамки для аватарки и карточки профиля.
    Предметы применяются мгновенно и запоминаются на устройстве, поэтому
    «купить» здесь — это «надеть»: отдельного баланса у магазина нет. */
-function ShopView({ cosmetics, onEquip, achievements = [], onOpenAchievements, showToast }) {
+function ShopView({ cosmetics, onEquip, achievements = [], onOpenAchievements, showToast, creatorTier = 0 }) {
   const [tab, setTab] = useState("frames");
   // Нажатие отмечается сразу здесь, не дожидаясь, пока выбор дойдёт до
   // состояния всего приложения и вернётся обратно пропсом. Рамка при
@@ -4704,8 +4784,8 @@ function ShopView({ cosmetics, onEquip, achievements = [], onOpenAchievements, s
     setPending({ kind, id });
     equipRef.current(kind, id);
   }, []);
-  const items = tab === "frames" ? AVATAR_FRAMES : PROFILE_CARDS;
-  const kind = tab === "frames" ? "frame" : "card";
+  const items = tab === "frames" ? AVATAR_FRAMES : tab === "cards" ? PROFILE_CARDS : WREATH_LEAF_KINDS;
+  const kind = tab === "frames" ? "frame" : tab === "cards" ? "card" : "wreath";
   const equippedId = pending && pending.kind === kind ? pending.id : cosmetics[kind];
   // Выбор доехал — своя пометка больше не нужна, дальше показываем то,
   // что действительно надето.
@@ -4719,7 +4799,7 @@ function ShopView({ cosmetics, onEquip, achievements = [], onOpenAchievements, s
       <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("shopIntro")}</p>
 
       <div className="flex items-center gap-2">
-        {[["frames", t("shopTabFrames")], ["cards", t("shopTabCards")]].map(([id, label]) => {
+        {[["frames", t("shopTabFrames")], ["cards", t("shopTabCards")], ["wreath", t("shopTabWreath")]].map(([id, label]) => {
           const active = tab === id;
           return (
             <button key={id} onClick={() => setTab(id)} className="fx-tap fx-chip rounded-full px-3.5 py-1.5"
@@ -4736,8 +4816,10 @@ function ShopView({ cosmetics, onEquip, achievements = [], onOpenAchievements, s
 
       <div className="grid grid-cols-2 gap-2.5" key={tab}>
         {items.map((item) => {
-          const unlocked = cosmeticUnlocked(kind, item.id, achievements);
-          const achId = COSMETIC_LOCKS[`${kind}:${item.id}`];
+          // Лист венка выбирают только те, у кого есть сам знак: без него
+          // и венка на аватарке нет, менять было бы нечего.
+          const unlocked = kind === "wreath" ? creatorTier > 0 : cosmeticUnlocked(kind, item.id, achievements);
+          const achId = kind === "wreath" ? null : COSMETIC_LOCKS[`${kind}:${item.id}`];
           const ach = achId ? achievements.find((a) => a.id === achId) : null;
           return (
             <ShopItem
@@ -4746,7 +4828,7 @@ function ShopView({ cosmetics, onEquip, achievements = [], onOpenAchievements, s
               kind={kind}
               equipped={equippedId === item.id}
               locked={!unlocked}
-              lockHint={ach ? ach.hint : ""}
+              lockHint={ach ? ach.hint : kind === "wreath" ? t("wreathLockHint") : ""}
               onEquip={equip}
               onLocked={(hint) => {
                 if (showToast) showToast(hint || t("shopLocked"));
@@ -7292,7 +7374,7 @@ function ProfileView({
             className="fx-tap"
             style={{ position: "relative", zIndex: 1, background: "transparent", border: "none", padding: 0, lineHeight: 0 }}
           >
-            <WreathAvatar tier={creatorTier} size={128}>
+            <WreathAvatar tier={creatorTier} size={128} kindId={cosmetics.wreath}>
               <AvatarFrame frameId={cosmetics.frame} size={128}>
                 <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: profile.avatarUrl ? `center/cover no-repeat url(${profile.avatarUrl})` : T.surfaceHi, border: cosmetics.frame === "none" ? (profile.avatarUrl ? `2px solid ${T.lineHi}` : `2px dashed ${T.lineHi}`) : "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: accountCreated ? 52 : 40 }}>
                   {!profile.avatarUrl && (accountCreated && profile.emoji ? profile.emoji : <User size={40} color={T.muted} />)}
@@ -8384,7 +8466,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
     const { data: prof, error } = await supabase
       .from("profiles")
-      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id, creator_tier")
+      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id, creator_tier, wreath_leaf")
       .eq("id", user.id)
       .single();
     if (error || !prof) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
@@ -8401,6 +8483,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setCosmetics((local) => {
       const serverFrame = FRAME_BY_ID[prof.frame_id] ? prof.frame_id : "none";
       const serverCard = CARD_BY_ID[prof.card_id] ? prof.card_id : "none";
+      const serverWreath = (WREATH_LEAF_KINDS[Number(prof.wreath_leaf) || 0] || WREATH_LEAF_KINDS[0]).id;
       const frame = serverFrame === "none" && local.frame !== "none" ? local.frame : serverFrame;
       const card = serverCard === "none" && local.card !== "none" ? local.card : serverCard;
 
@@ -8412,7 +8495,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           if (error) console.warn("[mintly] failed to migrate cosmetics:", error.message);
         });
       }
-      return { frame, card };
+      return { frame, card, wreath: serverWreath };
     });
     loadMyTokens(user.id);
   }
@@ -8602,30 +8685,38 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // оформление устройства, серверу о нём знать нечего, поэтому храним в
   // localStorage рядом с темой и языком.
   const [cosmetics, setCosmetics] = useState(() => {
-    const base = { frame: "none", card: "none" };
+    const base = { frame: "none", card: "none", wreath: "maple" };
     try {
       if (typeof window !== "undefined") {
         const f = window.localStorage.getItem("mintly_frame");
         const c = window.localStorage.getItem("mintly_card");
+        const w = window.localStorage.getItem("mintly_wreath");
         if (f && FRAME_BY_ID[f]) base.frame = f;
         if (c && CARD_BY_ID[c]) base.card = c;
+        if (w && WREATH_LEAF_BY_ID[w]) base.wreath = w;
       }
     } catch (e) { /* localStorage unavailable */ }
     return base;
   });
+  const COSMETIC_STORAGE = { frame: "mintly_frame", card: "mintly_card", wreath: "mintly_wreath" };
   function equipCosmetic(kind, id) {
     setCosmetics((c) => ({ ...c, [kind]: id }));
     try {
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(kind === "frame" ? "mintly_frame" : "mintly_card", id);
+        window.localStorage.setItem(COSMETIC_STORAGE[kind] || "mintly_frame", id);
       }
     } catch (e) { /* localStorage unavailable */ }
     // localStorage оставляем для мгновенного отклика и гостей, но выбор
     // вошедшего уходит в профиль — иначе его предметы не увидит никто.
     if (userId) {
+      // Лист венка хранится числом: это индекс вида листа, тот же, что и
+      // у листьев на фоне.
+      const patch = kind === "frame" ? { frame_id: id }
+        : kind === "card" ? { card_id: id }
+        : { wreath_leaf: (WREATH_LEAF_BY_ID[id] || WREATH_LEAF_KINDS[0]).leaf };
       supabase
         .from("profiles")
-        .update(kind === "frame" ? { frame_id: id } : { card_id: id })
+        .update(patch)
         .eq("id", userId)
         .then(({ error }) => {
           if (error) console.warn("[mintly] failed to save cosmetics:", error.message);
@@ -9373,6 +9464,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               achievements={achievements}
               onOpenAchievements={() => setView("achievements")}
               showToast={showToast}
+              creatorTier={creatorTier}
             />
           )}
           {view === "achievements" && (

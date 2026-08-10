@@ -16,3 +16,14 @@ alter table public.profiles
   drop constraint if exists profiles_creator_tier_range;
 alter table public.profiles
   add constraint profiles_creator_tier_range check (creator_tier between 0 and 3);
+
+-- Каким листом выложен венок вокруг аватарки: 0 — клён, 1 — дуб,
+-- 2 — мята. Те же три вида, что падают на фоне приложения. Выбор
+-- меняется в магазине и лежит в профиле, потому что венок видят другие.
+alter table public.profiles
+  add column if not exists wreath_leaf smallint not null default 0;
+
+alter table public.profiles
+  drop constraint if exists profiles_wreath_leaf_range;
+alter table public.profiles
+  add constraint profiles_wreath_leaf_range check (wreath_leaf between 0 and 2);
