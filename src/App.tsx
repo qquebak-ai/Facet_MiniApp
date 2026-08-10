@@ -339,6 +339,13 @@ const STR = {
     activityTitle: "Активность",
     achievementsTitle: "Достижения",
     achUnlockedOf: "{done} из {total}",
+    achievementsIntro: "За простые достижения открываются рамки и карточки из магазина.",
+    achProgress: "Прогресс",
+    achRewardOpened: "Открыто",
+    achRewardLocked: "Награда",
+    achGoShop: "Открыть магазин",
+    achAll: "Все",
+    shopLocked: "Предмет откроется за достижение",
     achFirstLaunch: "Первый запуск", achFirstLaunchHint: "Запустить свой первый токен",
     achSerial: "Серийный запуск", achSerialHint: "Запустить пять токенов",
     achFactory: "Фабрика", achFactoryHint: "Запустить двадцать токенов",
@@ -620,6 +627,13 @@ const STR = {
     activityTitle: "Activity",
     achievementsTitle: "Achievements",
     achUnlockedOf: "{done} of {total}",
+    achievementsIntro: "Simple achievements unlock frames and cards from the shop.",
+    achProgress: "Progress",
+    achRewardOpened: "Unlocked",
+    achRewardLocked: "Reward",
+    achGoShop: "Open shop",
+    achAll: "All",
+    shopLocked: "This item unlocks with an achievement",
     achFirstLaunch: "First launch", achFirstLaunchHint: "Launch your first token",
     achSerial: "Serial launcher", achSerialHint: "Launch five tokens",
     achFactory: "Factory", achFactoryHint: "Launch twenty tokens",
@@ -3354,6 +3368,29 @@ const ACTIVITY = [];
 
    Каждое достижение возвращает текущее значение и цель, поэтому у
    незакрытых виден прогресс, а не просто замок. */
+/* Что открывается за достижение. Часть предметов магазина не выдаётся
+   просто так: рамка «Уголёк» приходит за первый запуск, карточка «Жар» —
+   за подключённый кошелёк и так далее. Список общий для обоих экранов:
+   магазин по нему запирает предметы, страница достижений — показывает
+   награду. */
+const ACH_REWARDS = {
+  firstLaunch: { kind: "frame", id: "ember" },
+  wallet: { kind: "card", id: "emberCard" },
+  face: { kind: "frame", id: "ice" },
+  firstFollower: { kind: "card", id: "night" },
+  serial: { kind: "frame", id: "gold" },
+  watcher: { kind: "card", id: "mint" },
+  ten: { kind: "frame", id: "orbit" },
+  factory: { kind: "frame", id: "toxic" },
+  hundred: { kind: "card", id: "sunset" },
+};
+
+// Обратная таблица: по предмету — какое достижение его открывает.
+const COSMETIC_LOCKS = Object.entries(ACH_REWARDS).reduce((acc, [achId, reward]) => {
+  acc[`${reward.kind}:${reward.id}`] = achId;
+  return acc;
+}, {});
+
 function buildAchievements({ tokensCount = 0, followers = 0, following = 0, connected = false, profile = {}, cosmetics = {} }) {
   const bioLen = (profile.bio || "").trim().length;
   const hasFace = (profile.avatarUrl ? 1 : 0) + (bioLen >= 10 ? 1 : 0);
@@ -3375,7 +3412,16 @@ function buildAchievements({ tokensCount = 0, followers = 0, following = 0, conn
     done: a.value >= a.target,
     label: t(`ach${a.id.charAt(0).toUpperCase()}${a.id.slice(1)}`),
     hint: t(`ach${a.id.charAt(0).toUpperCase()}${a.id.slice(1)}Hint`),
+    reward: ACH_REWARDS[a.id] || null,
   }));
+}
+
+// Открыт ли предмет магазина. Незапертые доступны всегда.
+function cosmeticUnlocked(kind, id, achievements) {
+  const achId = COSMETIC_LOCKS[`${kind}:${id}`];
+  if (!achId) return true;
+  const ach = (achievements || []).find((a) => a.id === achId);
+  return !!(ach && ach.done);
 }
 
 const SETTINGS_ITEMS = [
@@ -4321,13 +4367,16 @@ function BootSplash({ steps, done, insetTop = 0 }) {
    предмета меняются ровно две карточки из десятка, а остальные — со всеми
    своими размытиями и анимациями — вообще не перерисовываются. Раньше
    перерисовывались все, и оранжевая рамка появлялась с задержкой. */
-const ShopItem = React.memo(function ShopItem({ item, kind, equipped, onEquip }) {
-  const handle = useCallback(() => onEquip(kind, item.id), [onEquip, kind, item.id]);
+const ShopItem = React.memo(function ShopItem({ item, kind, equipped, locked, lockHint, onEquip, onLocked }) {
+  const handle = useCallback(
+    () => (locked ? onLocked && onLocked(lockHint) : onEquip(kind, item.id)),
+    [locked, lockHint, onLocked, onEquip, kind, item.id],
+  );
   return (
     <button
       onClick={handle}
       className={`fx-card flex flex-col items-center gap-2.5 rounded-[22px] p-3${equipped ? " fx-picked" : ""}`}
-      style={{ background: T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden", contain: "paint" }}
+      style={{ background: T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden", contain: "paint", opacity: locked ? 0.55 : 1 }}
     >
       <div style={{ position: "relative", width: "100%", height: 96, borderRadius: 16, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
         {kind === "card" && <ProfileCardBg cardId={item.id} height={96} radius={16} />}
@@ -4342,18 +4391,130 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, onEquip })
       <div className="flex items-center gap-1.5">
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 12.5, fontWeight: 700 }}>{pickLabel(item.label)}</span>
         {equipped && <CheckCircle2 size={13} color={T.electric} />}
+        {locked && <Lock size={12} color={T.muted} />}
       </div>
-      <span style={{ fontFamily: bodyFont, fontSize: 11, color: equipped ? T.electric : T.muted }}>
-        {equipped ? t("shopEquipped") : t("shopEquip")}
+      <span style={{ fontFamily: bodyFont, fontSize: 11, color: equipped ? T.electric : T.muted, textAlign: "center", lineHeight: 1.3 }}>
+        {locked ? lockHint : equipped ? t("shopEquipped") : t("shopEquip")}
       </span>
     </button>
   );
 });
 
+/* AchievementsView — отдельная страница достижений.
+
+   На ней видно и что уже закрыто, и что за это даётся: у награды
+   рисуется сам предмет — рамка кружком, карточка полоской подложки, —
+   чтобы не гадать по названию. */
+function AchievementsView({ achievements = [], onGoShop, onBack }) {
+  const done = achievements.filter((a) => a.done).length;
+  return (
+    <div className="fx-view flex flex-col gap-4 pt-2">
+      {onBack && (
+        <button onClick={onBack} className="fx-tap flex items-center gap-1 self-start" style={{ fontFamily: bodyFont, fontSize: 13, color: T.muted }}>
+          <ChevronLeft size={16} /> {t("back")}
+        </button>
+      )}
+      <div>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("achievementsTitle")}</span>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 4 }}>{t("achievementsIntro")}</p>
+      </div>
+
+      {/* Общий прогресс */}
+      <div className="rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("achProgress")}</span>
+          <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>{tf("achUnlockedOf", { done, total: achievements.length })}</span>
+        </div>
+        <div style={{ height: 6, borderRadius: 3, background: T.surfaceHi, overflow: "hidden" }}>
+          <div style={{ width: `${achievements.length ? (done / achievements.length) * 100 : 0}%`, height: "100%", background: T.electric, transition: `width ${EASE}` }} />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {achievements.map((a, i) => {
+          const frame = a.reward && a.reward.kind === "frame" ? a.reward.id : null;
+          const card = a.reward && a.reward.kind === "card" ? a.reward.id : null;
+          const rewardLabel = frame
+            ? pickLabel((FRAME_BY_ID[frame] || {}).label || { RU: frame, EN: frame })
+            : card ? pickLabel((CARD_BY_ID[card] || {}).label || { RU: card, EN: card }) : null;
+          return (
+            <div
+              key={a.id}
+              className="fx-card rounded-[22px] p-3.5 flex items-center gap-3"
+              style={{
+                background: T.surface,
+                border: `1px solid ${a.done ? hexA(a.color, 0.45) : T.line}`,
+                animationDelay: `${i * 40}ms`,
+                position: "relative", overflow: "hidden",
+              }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                background: a.done ? hexA(a.color, 0.16) : T.surfaceHi,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <a.icon size={18} color={a.done ? a.color : T.muted} />
+              </div>
+
+              <div className="min-w-0" style={{ flex: 1 }}>
+                <div className="flex items-center gap-1.5">
+                  <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{a.label}</span>
+                  {a.done && <CheckCircle2 size={13} color={a.color} />}
+                </div>
+                <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, lineHeight: 1.35, marginTop: 2 }}>{a.hint}</div>
+                {!a.done && a.target > 1 && (
+                  <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
+                    <div style={{ flex: 1, height: 4, borderRadius: 2, background: T.surfaceHi, overflow: "hidden" }}>
+                      <div style={{ width: `${Math.min(100, (a.value / a.target) * 100)}%`, height: "100%", background: hexA(a.color, 0.65) }} />
+                    </div>
+                    <span style={{ fontFamily: monoFont, fontSize: 10.5, color: T.muted }}>{Math.min(a.value, a.target)}/{a.target}</span>
+                  </div>
+                )}
+                {rewardLabel && (
+                  <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
+                    <Gift size={11} color={a.done ? a.color : T.muted} />
+                    <span style={{ fontFamily: bodyFont, fontSize: 10.5, color: a.done ? T.ice : T.muted }}>
+                      {a.done ? t("achRewardOpened") : t("achRewardLocked")}: {rewardLabel}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Сам предмет — видно, за что стараться */}
+              {frame && (
+                <div style={{ flexShrink: 0, opacity: a.done ? 1 : 0.45 }}>
+                  <AvatarFrame frameId={frame} size={46}>
+                    <div style={{ width: "100%", height: "100%", background: T.bg }} />
+                  </AvatarFrame>
+                </div>
+              )}
+              {card && (
+                <div style={{ width: 60, height: 46, borderRadius: 12, overflow: "hidden", position: "relative", flexShrink: 0, background: T.surfaceHi, opacity: a.done ? 1 : 0.45 }}>
+                  <ProfileCardBg cardId={card} height={46} radius={12} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {onGoShop && (
+        <button
+          onClick={onGoShop}
+          className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3"
+          style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
+        >
+          <ShoppingBag size={15} color={T.electric} /> {t("achGoShop")}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ShopView — витрина косметики: рамки для аватарки и карточки профиля.
    Предметы применяются мгновенно и запоминаются на устройстве, поэтому
    «купить» здесь — это «надеть»: отдельного баланса у магазина нет. */
-function ShopView({ cosmetics, onEquip }) {
+function ShopView({ cosmetics, onEquip, achievements = [], onOpenAchievements, showToast }) {
   const [tab, setTab] = useState("frames");
   // Нажатие отмечается сразу здесь, не дожидаясь, пока выбор дойдёт до
   // состояния всего приложения и вернётся обратно пропсом. Рамка при
@@ -4398,15 +4559,26 @@ function ShopView({ cosmetics, onEquip }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2.5" key={tab}>
-        {items.map((item) => (
-          <ShopItem
-            key={item.id}
-            item={item}
-            kind={kind}
-            equipped={equippedId === item.id}
-            onEquip={equip}
-          />
-        ))}
+        {items.map((item) => {
+          const unlocked = cosmeticUnlocked(kind, item.id, achievements);
+          const achId = COSMETIC_LOCKS[`${kind}:${item.id}`];
+          const ach = achId ? achievements.find((a) => a.id === achId) : null;
+          return (
+            <ShopItem
+              key={item.id}
+              item={item}
+              kind={kind}
+              equipped={equippedId === item.id}
+              locked={!unlocked}
+              lockHint={ach ? ach.hint : ""}
+              onEquip={equip}
+              onLocked={(hint) => {
+                if (showToast) showToast(hint || t("shopLocked"));
+                if (onOpenAchievements) onOpenAchievements();
+              }}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -6843,46 +7015,18 @@ function ProfileView({
   connected, walletAddress, tonBalance, tonPriceUsd, onConnect, onDisconnect, onOpenConnectModal, showToast,
   accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut,
   onOpenSetting, onManageToken, onGoCreate, onOpenToken, myTokens = [], onClearAllTokens,
-  cosmetics = { frame: "none", card: "none" }, onGoShop, insetTop = 0, userId = null,
+  cosmetics = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
+  // Счётчики подписок и достижения считаются в корне: их же показывает
+  // магазин и отдельная страница достижений, дублировать запрос незачем.
+  followCounts = { followers: 0, following: 0 }, achievements = [],
 }) {
   const [loading, setLoading] = useState(true);
   const [verifyStatus, setVerifyStatus] = useState("none");
   const [confirmingClearAll, setConfirmingClearAll] = useState(false);
-  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
-  const achievements = useMemo(
-    () => buildAchievements({
-      tokensCount: myTokens.length,
-      followers: followCounts.followers,
-      following: followCounts.following,
-      connected,
-      profile,
-      cosmetics,
-    }),
-    [myTokens.length, followCounts.followers, followCounts.following, connected, profile, cosmetics],
-  );
+
 
   useEffect(() => { const t = setTimeout(() => setLoading(false), 650); return () => clearTimeout(t); }, []);
 
-  // Подписчики и подписки. Считаем на стороне базы (head + exact count),
-  // сами строки на этом экране не нужны.
-  useEffect(() => {
-    if (!userId) { setFollowCounts({ followers: 0, following: 0 }); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const [followers, following] = await Promise.all([
-          supabase.from("follows").select("follower_id", { count: "exact", head: true }).eq("following_id", userId),
-          supabase.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", userId),
-        ]);
-        if (cancelled) return;
-        setFollowCounts({ followers: followers.count || 0, following: following.count || 0 });
-      } catch (err) {
-        // Таблицы ещё нет — показываем нули, а не ломаем весь профиль.
-        console.warn("[mintly] follow counts unavailable:", err && err.message);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [userId]);
 
   const unlocked = accountCreated && connected;
   function requireUnlock(missingMsg) {
@@ -7061,52 +7205,30 @@ function ProfileView({
 
         <div className="mt-5">
           <SectionTitle action={
-            <span style={{ fontFamily: monoFont, fontSize: 11.5, color: T.muted }}>
-              {tf("achUnlockedOf", { done: achievements.filter((a) => a.done).length, total: achievements.length })}
-            </span>
+            <button onClick={onOpenAchievements} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 11.5, color: T.electric }}>
+              {t("achAll")} <ChevronRight size={13} />
+            </button>
           }>{t("achievementsTitle")}</SectionTitle>
-          <div className="grid grid-cols-2 gap-2">
-            {achievements.map((a, i) => (
-              <GlassCard
-                key={a.id}
-                style={{
-                  padding: "11px 12px",
-                  animationDelay: `${i * 40}ms`,
-                  border: `1px solid ${a.done ? hexA(a.color, 0.45) : T.line}`,
-                  opacity: a.done ? 1 : 0.72,
-                }}
-                className="flex items-center gap-2.5"
-              >
-                <div style={{
-                  width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-                  background: a.done ? hexA(a.color, 0.16) : T.surfaceHi,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <a.icon size={15} color={a.done ? a.color : T.muted} />
-                </div>
-                <div className="min-w-0" style={{ flex: 1 }}>
-                  <div style={{ fontFamily: bodyFont, fontSize: 11.5, color: a.done ? T.ice : T.muted, lineHeight: 1.25, fontWeight: a.done ? 600 : 500 }}>{a.label}</div>
-                  {a.done ? (
-                    <div style={{ fontFamily: bodyFont, fontSize: 10, color: a.color, marginTop: 2 }}>✓</div>
-                  ) : (
-                    <>
-                      <div style={{
-                        fontFamily: bodyFont, fontSize: 10, color: T.muted, marginTop: 2, lineHeight: 1.3,
-                        // Подсказка в две строки: в одну она обрезалась на
-                        // полуслове и не объясняла, что делать.
-                        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
-                      }}>{a.hint}</div>
-                      {a.target > 1 && (
-                        <div style={{ marginTop: 4, height: 3, borderRadius: 2, background: T.surfaceHi, overflow: "hidden" }}>
-                          <div style={{ width: `${Math.min(100, (a.value / a.target) * 100)}%`, height: "100%", background: hexA(a.color, 0.6) }} />
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </GlassCard>
-            ))}
-          </div>
+          <button onClick={onOpenAchievements} className="fx-tap w-full text-left rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("achProgress")}</span>
+              <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>
+                {tf("achUnlockedOf", { done: achievements.filter((a) => a.done).length, total: achievements.length })}
+              </span>
+            </div>
+            <div style={{ height: 6, borderRadius: 3, background: T.surfaceHi, overflow: "hidden" }}>
+              <div style={{ width: `${achievements.length ? (achievements.filter((a) => a.done).length / achievements.length) * 100 : 0}%`, height: "100%", background: T.electric }} />
+            </div>
+            {/* Ближайшие незакрытые — чтобы было видно, за чем идти */}
+            <div className="flex items-center gap-1.5" style={{ marginTop: 10, flexWrap: "wrap" }}>
+              {achievements.filter((a) => !a.done).slice(0, 3).map((a) => (
+                <span key={a.id} className="flex items-center gap-1 rounded-full px-2 py-1" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
+                  <a.icon size={11} color={T.muted} />
+                  <span style={{ fontFamily: bodyFont, fontSize: 10.5, color: T.muted }}>{a.label}</span>
+                </span>
+              ))}
+            </div>
+          </button>
         </div>
 
         <div className="mt-5">
@@ -7995,6 +8117,29 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [authChecked, setAuthChecked] = useState(false);
   const [userId, setUserId] = useState(null);
 
+  // Подписчики и подписки текущего человека. Считаем на стороне базы
+  // (head + exact count): сами строки здесь не нужны. Живут в корне,
+  // потому что от них зависят и профиль, и достижения, и магазин.
+  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
+  useEffect(() => {
+    if (!userId) { setFollowCounts({ followers: 0, following: 0 }); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [followers, following] = await Promise.all([
+          supabase.from("follows").select("follower_id", { count: "exact", head: true }).eq("following_id", userId),
+          supabase.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", userId),
+        ]);
+        if (cancelled) return;
+        setFollowCounts({ followers: followers.count || 0, following: following.count || 0 });
+      } catch (err) {
+        console.warn("[mintly] follow counts unavailable:", err && err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userId]);
+
+
   async function loadProfileForUser(user) {
     setUserId(user ? user.id : null);
     if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
@@ -8282,6 +8427,20 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // loadMyTokens/loadProfileForUser above), scoped per-account instead of
   // per-browser. Starts empty and is populated once the session resolves.
   const [myTokens, setMyTokens] = useState([]);
+
+  // Достижения. Считаются здесь, потому что нужны сразу трём экранам:
+  // профилю, отдельной странице и магазину — он по ним запирает предметы.
+  const achievements = useMemo(
+    () => buildAchievements({
+      tokensCount: myTokens.length,
+      followers: followCounts.followers,
+      following: followCounts.following,
+      connected,
+      profile,
+      cosmetics,
+    }),
+    [myTokens.length, followCounts.followers, followCounts.following, connected, profile, cosmetics],
+  );
   async function deleteMyToken(id) {
     // Optimistic local removal, then the real delete — RLS (see
     // supabase_tokens_schema.sql) already guarantees a user can only
@@ -8914,7 +9073,18 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), paddingBottom: 116 + insetBottom }} key={view}>
           {view === "home" && <HomeView onGoTab={goTab} />}
           {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />}
-          {view === "shop" && <ShopView cosmetics={cosmetics} onEquip={equipCosmetic} />}
+          {view === "shop" && (
+            <ShopView
+              cosmetics={cosmetics}
+              onEquip={equipCosmetic}
+              achievements={achievements}
+              onOpenAchievements={() => setView("achievements")}
+              showToast={showToast}
+            />
+          )}
+          {view === "achievements" && (
+            <AchievementsView achievements={achievements} onGoShop={() => goTab("shop")} onBack={() => setView("profile")} />
+          )}
           {view === "user" && (
             <PublicProfileView
               userId={viewedUserId}
@@ -8962,6 +9132,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onClearAllTokens={clearAllMyTokens}
               cosmetics={cosmetics}
               onGoShop={() => goTab("shop")}
+              onOpenAchievements={() => setView("achievements")}
+              followCounts={followCounts}
+              achievements={achievements}
               insetTop={insetTop}
               userId={userId}
             />
