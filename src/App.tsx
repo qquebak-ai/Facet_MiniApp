@@ -917,11 +917,12 @@ function GlobalStyle() {
          разворачивается на 45 градусов — иначе при вертикальном полёте
          она шла бы боком. */
       @keyframes rocketFly {
-        0%   { transform: translate(-50%, calc(100vh + 150px)) rotate(-45deg) scale(1); opacity: 0; }
+        0%   { transform: translate(-50%, calc(100vh + 150px)) rotate(-45deg); opacity: 0; }
         7%   { opacity: 1; }
-        72%  { transform: translate(-50%, calc(var(--fly-to) + 150px)) rotate(-45deg) scale(1); opacity: 1; }
-        92%  { transform: translate(-50%, var(--fly-to)) rotate(-45deg) scale(0.34); opacity: 0.95; }
-        100% { transform: translate(-50%, var(--fly-to)) rotate(-45deg) scale(0.1); opacity: 0; }
+        /* До самого конца летит в полную величину: уменьшать её на
+           подлёте незачем, гаснет она у самой рамки. */
+        88%  { transform: translate(-50%, calc(var(--fly-to) + 46px)) rotate(-45deg); opacity: 1; }
+        100% { transform: translate(-50%, var(--fly-to)) rotate(-45deg); opacity: 0; }
       }
       @keyframes toastIn { from{opacity:0; transform:translateX(-50%) scale(0.94);} to{opacity:1; transform:translateX(-50%) scale(1);} }
       @keyframes toastOut { from{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} to{opacity:0; transform:translateX(-50%) translateY(-22px) scale(0.98);} }
@@ -937,7 +938,13 @@ function GlobalStyle() {
       @keyframes heroRocketFloat { 0%,100%{ transform: translateY(0) rotate(-3deg); } 50%{ transform: translateY(-5px) rotate(3deg); } }
       @keyframes widgetSparkRise { 0%{ transform:translateY(0) scale(0.7); opacity:0; } 15%{ opacity:0.9; } 85%{ opacity:0.5; } 100%{ transform:translateY(-130px) scale(1.05); opacity:0; } }
       button { touch-action: manipulation; cursor: pointer; }
-      .fx-card { animation: fadeInUp 480ms cubic-bezier(0.16,1,0.3,1) both; transition: transform ${SPRING}, border-color ${EASE}, box-shadow ${EASE}; will-change: transform; }
+      /* Заполнение backwards, а не both, и никаких will-change.
+         Оставленная после анимации трансформация делает элемент
+         системой отсчёта для своего содержимого, и WebKit рисует
+         текстовую каретку внутри полей мимо строки — на айфоне она
+         уезжала под поле. Конечный кадр здесь и так совпадает с обычным
+         состоянием, так что визуально ничего не меняется. */
+      .fx-card { animation: fadeInUp 480ms cubic-bezier(0.16,1,0.3,1) backwards; transition: transform ${SPRING}, border-color ${EASE}, box-shadow ${EASE}; }
       .fx-card:active { transform: scale(0.98); transition: transform ${PRESS}; }
       /* Только для настоящей мыши. На тач-экране :hover прилипает после
          касания и не снимается до тапа в стороне, а !important перебивал
@@ -948,20 +955,20 @@ function GlobalStyle() {
       /* Рамка выбора рисуется тенью, а не border: она не входит в поток и
          не заставляет пересчитывать раскладку карточки при переключении. */
       .fx-picked { border-color: ${T.electric} !important; box-shadow: 0 0 0 1.5px ${T.electric}; }
-      .fx-tap { transition: transform ${SPRING}; will-change: transform; }
+      .fx-tap { transition: transform ${SPRING}; }
       .fx-tap:active { transform: scale(0.96); transition: transform ${PRESS}; }
-      .fx-view { animation: fadeInUp 320ms cubic-bezier(0.16,1,0.3,1) both; }
+      .fx-view { animation: fadeInUp 320ms cubic-bezier(0.16,1,0.3,1) backwards; }
       .fx-skeleton { background: linear-gradient(90deg, ${T.surface} 25%, ${T.surfaceHi} 37%, ${T.surface} 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; }
-      .fx-chip { transition: border-color ${EASE}, background ${EASE}, color ${EASE}, transform ${SPRING}; will-change: transform; }
+      .fx-chip { transition: border-color ${EASE}, background ${EASE}, color ${EASE}, transform ${SPRING}; }
       .fx-chip:active { transition: border-color ${EASE}, background ${EASE}, color ${EASE}, transform ${PRESS}; }
       .fx-modal-back { animation: fadeIn 220ms ease-out both; }
-      .fx-modal-card { animation: scaleIn 260ms cubic-bezier(0.16,1,0.3,1) both; }
-      .fx-avatar { transition: transform ${SPRING}; will-change: transform; }
+      .fx-modal-card { animation: scaleIn 260ms cubic-bezier(0.16,1,0.3,1) backwards; }
+      .fx-avatar { transition: transform ${SPRING}; }
       .fx-avatar:active { transform: scale(0.96); transition: transform ${PRESS}; }
-      .cta-launch { transition: transform ${SPRING}, opacity ${EASE}; will-change: transform; }
+      .cta-launch { transition: transform ${SPRING}, opacity ${EASE}; }
       .cta-launch:hover { opacity: 0.92; }
       .cta-launch:active { transform: scale(0.98); transition: transform ${PRESS}; }
-      .tf-btn { transition: background ${EASE}, color ${EASE}, transform ${SPRING}; will-change: transform; }
+      .tf-btn { transition: background ${EASE}, color ${EASE}, transform ${SPRING}; }
       .tf-btn:active { transform: scale(0.92); transition: background ${EASE}, color ${EASE}, transform ${PRESS}; }
       /* none, а не contain: contain лишь запрещает утянуть за собой окно,
          но сам список всё равно отскакивает на резинке — и над контентом
@@ -5383,8 +5390,15 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
   const bannerInputRef = useRef(null);
 
   function set(key) { return (e) => setForm(f => ({ ...f, [key]: e.target.value })); }
+  // Разделитель допускается ровно один: без этого в поле набиралось
+  // «0,1,2», а parseFloat от такого — не число, и запуск молча упирался
+  // в «введите сумму». Запятая приводится к точке сразу, чтобы значение
+  // в состоянии всегда годилось для разбора.
   function setBuyAmount(e) {
-    setForm(f => ({ ...f, buyAmount: e.target.value.replace(/[^0-9.,]/g, "") }));
+    const raw = String(e.target.value).replace(/[^0-9.,]/g, "").replace(/,/g, ".");
+    const [head, ...rest] = raw.split(".");
+    const cleaned = (rest.length ? `${head}.${rest.join("")}` : head).slice(0, 12);
+    setForm((f) => ({ ...f, buyAmount: cleaned }));
   }
   function onPickLogo(e) {
     const file = e.target.files && e.target.files[0];
@@ -5521,7 +5535,14 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
             onChange={setBuyAmount}
             placeholder="10"
             inputMode="decimal"
-            style={{ fontFamily: displayFont, fontWeight: 700, color: T.ice, fontSize: 16, background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 0 }}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="done"
+            // Высота строки задаётся явно: без неё каретка наследует
+            // межстрочный интервал от родителя и рисуется выше самого
+            // текста.
+            style={{ fontFamily: displayFont, fontWeight: 700, color: T.ice, fontSize: 16, lineHeight: "20px", height: 20, background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 0, padding: 0 }}
           />
           <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>TON</span>
         </div>
@@ -6952,7 +6973,7 @@ function loadRocketAnimation(variant = "default") {
 
    Картинка нарисована носом вверх-вправо, поэтому при вертикальном
    полёте её разворачивают на 45 градусов. */
-function LaunchRocket({ targetTop = ISLAND_TOP + ISLAND_HEIGHT / 2, variant = "default" }) {
+function LaunchRocket({ targetTop = ROCKET_TOUCH_TOP, variant = "default" }) {
   const holderRef = useRef(null);
 
   useEffect(() => {
@@ -7022,6 +7043,13 @@ const ISLAND_WIDTH = 126;
 const ISLAND_HEIGHT = 37.3;
 const ISLAND_TOP = 11;
 const ISLAND_GAP = 5;
+// Нижняя граница обрамления и вынос носа ракеты от её центра. Ракета
+// должна погаснуть ровно в тот миг, когда нос коснулся рамки, а не
+// пролететь сквозь неё: значит центр в конце пути стоит настолько ниже
+// границы, насколько нос выступает вперёд.
+const ISLAND_BOTTOM = ISLAND_TOP - ISLAND_GAP + ISLAND_HEIGHT + ISLAND_GAP * 2;
+const ROCKET_NOSE_OFFSET = 50;
+const ROCKET_TOUCH_TOP = ISLAND_BOTTOM + ROCKET_NOSE_OFFSET;
 
 function DynamicIslandFrame({ topOffset = 0, hitKey = 0 }) {
   const w = ISLAND_WIDTH + ISLAND_GAP * 2;
@@ -7229,7 +7257,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setRocketFlying(true);
     rocketTimers.current = [
       // Искры трогаются в тот момент, когда ракета уже у самого острова.
-      setTimeout(() => setIslandHitKey((n) => n + 1), ROCKET_FLIGHT_MS - 240),
+      setTimeout(() => setIslandHitKey((n) => n + 1), ROCKET_FLIGHT_MS - 130),
       setTimeout(() => setRocketFlying(false), ROCKET_FLIGHT_MS + 60),
     ];
   }
@@ -8328,7 +8356,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     >
       <GlobalStyle />
       {showIsland && <DynamicIslandFrame hitKey={islandHitKey} />}
-      {rocketFlying && <LaunchRocket targetTop={showIsland ? ISLAND_TOP + ISLAND_HEIGHT / 2 : -60} variant={rocketVariant} />}
+      {rocketFlying && <LaunchRocket targetTop={showIsland ? ROCKET_TOUCH_TOP : -60} variant={rocketVariant} />}
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast key={toastSeq} toast={toast} insetTop={insetTop} leaving={toastLeaving} />
