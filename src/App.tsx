@@ -4516,8 +4516,9 @@ function CreatorWreathBadge({ tier = 0, kindId = "mix", size = 19 }) {
             }}
           >
             {/* Венок показываем без аватарки внутри: окно про сам знак.
-                Он не возникает готовым, а медленно вырастает — награду
-                сначала показывают, и только потом объясняют. */}
+                Он не возникает готовым, а медленно вырастает. Подпись
+                проявляется вместе с ним, а не после: ждать текста,
+                глядя на растущую картинку, незачем. */}
             <div style={{
               width: 160, height: 160, display: "flex", alignItems: "center", justifyContent: "center",
               animation: "wreathGrowIn 1100ms cubic-bezier(0.22,1,0.28,1) 120ms both",
@@ -4526,7 +4527,7 @@ function CreatorWreathBadge({ tier = 0, kindId = "mix", size = 19 }) {
             </div>
             <div style={{
               display: "flex", flexDirection: "column", alignItems: "center", width: "100%",
-              animation: "wreathCaptionIn 420ms ease-out 900ms both",
+              animation: "wreathCaptionIn 520ms ease-out 160ms both",
             }}>
               <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700, marginTop: 12 }}>
                 {tr("wreathBadgeTitle")}
