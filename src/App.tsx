@@ -7,7 +7,7 @@ import {
   Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, MoreHorizontal, HeartCrack,
   Settings as SettingsIcon, Bell, Lock, Palette, Gift, LifeBuoy,
   FileText, ShieldQuestion, ArrowDownToLine, ArrowUpFromLine, Link2, CheckCircle2, RefreshCw, X,
-  Eye, EyeOff, LogIn, Mail, KeyRound, ShoppingBag, Trash2
+  Eye, EyeOff, LogIn, Mail, KeyRound, ShoppingBag, Trash2, Crown
 } from "lucide-react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, beginCell, toNano } from "@ton/core";
@@ -350,8 +350,9 @@ const STR = {
     achAll: "Все",
     shopLocked: "Предмет откроется за достижение",
     achFirstLaunch: "Первый запуск", achFirstLaunchHint: "Запустить свой первый токен",
-    achSerial: "Серийный запуск", achSerialHint: "Запустить пять токенов",
-    achFactory: "Фабрика", achFactoryHint: "Запустить двадцать токенов",
+    achMcap1k: "Первая тысяча", achMcap1kHint: "Довести свой токен до $1K капитализации",
+    achMcap10k: "Десять тысяч", achMcap10kHint: "Довести свой токен до $10K капитализации",
+    achMcap100k: "Сто тысяч", achMcap100kHint: "Довести свой токен до $100K капитализации",
     achWallet: "Кошелёк на месте", achWalletHint: "Подключить кошелёк TON",
     achFace: "Лицо профиля", achFaceHint: "Поставить аватарку и написать о себе",
     achStyle: "Со вкусом", achStyleHint: "Надеть рамку и карточку из магазина",
@@ -641,8 +642,9 @@ const STR = {
     achAll: "All",
     shopLocked: "This item unlocks with an achievement",
     achFirstLaunch: "First launch", achFirstLaunchHint: "Launch your first token",
-    achSerial: "Serial launcher", achSerialHint: "Launch five tokens",
-    achFactory: "Factory", achFactoryHint: "Launch twenty tokens",
+    achMcap1k: "First thousand", achMcap1kHint: "Take one of your tokens to a $1K market cap",
+    achMcap10k: "Ten thousand", achMcap10kHint: "Take one of your tokens to a $10K market cap",
+    achMcap100k: "Hundred thousand", achMcap100kHint: "Take one of your tokens to a $100K market cap",
     achWallet: "Wallet ready", achWalletHint: "Connect a TON wallet",
     achFace: "A face to the name", achFaceHint: "Add an avatar and a bio",
     achStyle: "Good taste", achStyleHint: "Equip a frame and a card from the shop",
@@ -3383,8 +3385,9 @@ const ACH_REWARDS = {
   firstLaunch: { kind: "frame", id: "ember" },
   wallet: { kind: "card", id: "emberCard" },
   face: { kind: "frame", id: "ice" },
-  serial: { kind: "frame", id: "gold" },
-  factory: { kind: "frame", id: "toxic" },
+  mcap1k: { kind: "frame", id: "gold" },
+  mcap10k: { kind: "frame", id: "toxic" },
+  mcap100k: { kind: "frame", id: "spark" },
   invite1: { kind: "card", id: "night" },
   invite5: { kind: "card", id: "mint" },
   invite10: { kind: "frame", id: "orbit" },
@@ -3397,15 +3400,18 @@ const COSMETIC_LOCKS = Object.entries(ACH_REWARDS).reduce((acc, [achId, reward])
   return acc;
 }, {});
 
-function buildAchievements({ tokensCount = 0, invites = 0, connected = false, profile = {}, cosmetics = {} }) {
+function buildAchievements({ tokensCount = 0, bestMcapUsd = 0, invites = 0, connected = false, profile = {}, cosmetics = {} }) {
   const bioLen = (profile.bio || "").trim().length;
   const hasFace = (profile.avatarUrl ? 1 : 0) + (bioLen >= 10 ? 1 : 0);
   const dressed = ((cosmetics.frame && cosmetics.frame !== "none") ? 1 : 0)
     + ((cosmetics.card && cosmetics.card !== "none") ? 1 : 0);
   return [
     { id: "firstLaunch", icon: Rocket, color: T.electric, value: tokensCount, target: 1 },
-    { id: "serial", icon: Flame, color: T.electric, value: tokensCount, target: 5 },
-    { id: "factory", icon: TrendingUp, color: T.electric, value: tokensCount, target: 20 },
+    // Не «сколько запустил», а «как высоко забрался»: берётся лучшая
+    // капитализация среди своих токенов, считанная с самой кривой.
+    { id: "mcap1k", icon: Flame, color: T.electric, value: bestMcapUsd, target: 1000, unit: "usd" },
+    { id: "mcap10k", icon: TrendingUp, color: T.electric, value: bestMcapUsd, target: 10000, unit: "usd" },
+    { id: "mcap100k", icon: Crown, color: T.electric, value: bestMcapUsd, target: 100000, unit: "usd" },
     { id: "wallet", icon: Wallet, color: T.up, value: connected ? 1 : 0, target: 1 },
     { id: "face", icon: User, color: T.up, value: hasFace, target: 2 },
     { id: "style", icon: ShoppingBag, color: T.up, value: dressed, target: 2 },
@@ -3423,6 +3429,14 @@ function buildAchievements({ tokensCount = 0, invites = 0, connected = false, pr
     hint: t(`ach${a.id.charAt(0).toUpperCase()}${a.id.slice(1)}Hint`),
     reward: ACH_REWARDS[a.id] || null,
   }));
+}
+
+// Прогресс строкой. Деньги показываем в долларах и сокращённо, иначе
+// «332/100000» читается как ошибка.
+function achProgressText(a) {
+  const now = Math.min(a.value, a.target);
+  if (a.unit === "usd") return `$${fmtCompact(now)}/$${fmtCompact(a.target)}`;
+  return `${now}/${a.target}`;
 }
 
 // Открыт ли предмет магазина. Незапертые доступны всегда.
@@ -4476,7 +4490,7 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
                     <div style={{ flex: 1, height: 4, borderRadius: 2, background: T.surfaceHi, overflow: "hidden" }}>
                       <div style={{ width: `${Math.min(100, (a.value / a.target) * 100)}%`, height: "100%", background: hexA(a.color, 0.65) }} />
                     </div>
-                    <span style={{ fontFamily: monoFont, fontSize: 10.5, color: T.muted }}>{Math.min(a.value, a.target)}/{a.target}</span>
+                    <span style={{ fontFamily: monoFont, fontSize: 10.5, color: T.muted }}>{achProgressText(a)}</span>
                   </div>
                 )}
                 {rewardLabel && (
@@ -8497,17 +8511,54 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // per-browser. Starts empty and is populated once the session resolves.
   const [myTokens, setMyTokens] = useState([]);
 
+  // Лучшая капитализация среди своих токенов — на ней держатся
+  // достижения «довести токен до $1K/$10K/$100K». Это рекорд, а не
+  // текущее значение: цена ходит вверх-вниз, и было бы странно отбирать
+  // уже полученную рамку из-за просадки. Рекорд лежит рядом с
+  // пользователем в браузере — на цепочке его хранить негде.
+  const [bestMcapUsd, setBestMcapUsd] = useState(0);
+  const mcapPeakKey = userId ? `mintly:mcapPeak:${userId}` : "";
+  useEffect(() => {
+    if (!mcapPeakKey) { setBestMcapUsd(0); return; }
+    try {
+      const saved = Number(localStorage.getItem(mcapPeakKey) || 0);
+      if (saved > 0) setBestMcapUsd(saved);
+    } catch { /* приватный режим — просто начнём с нуля */ }
+  }, [mcapPeakKey]);
+  const myCurveKey = myTokens.map((tok) => tok.curveAddress || "").filter(Boolean).join(",");
+  useEffect(() => {
+    if (!myCurveKey || !tonPriceUsd) return;
+    let cancelled = false;
+    (async () => {
+      const list = myTokens.filter((tok) => tok.curveAddress).slice(0, 8);
+      const markets = await Promise.all(
+        list.map((tok) => fetchCurveMarket(tok.curveAddress, tok.address || tok.tokenAddress, TON_TESTNET, tonPriceUsd).catch(() => null)),
+      );
+      if (cancelled) return;
+      const top = markets.reduce((max, m) => (m && m.mcapUsd > max ? m.mcapUsd : max), 0);
+      if (top <= 0) return;
+      setBestMcapUsd((prev) => {
+        if (top <= prev) return prev;
+        try { if (mcapPeakKey) localStorage.setItem(mcapPeakKey, String(top)); } catch { /* не критично */ }
+        return top;
+      });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myCurveKey, tonPriceUsd, mcapPeakKey]);
+
   // Достижения. Считаются здесь, потому что нужны сразу трём экранам:
   // профилю, отдельной странице и магазину — он по ним запирает предметы.
   const achievements = useMemo(
     () => buildAchievements({
       tokensCount: myTokens.length,
+      bestMcapUsd,
       invites: inviteCount,
       connected,
       profile,
       cosmetics,
     }),
-    [myTokens.length, inviteCount, connected, profile, cosmetics],
+    [myTokens.length, bestMcapUsd, inviteCount, connected, profile, cosmetics],
   );
   async function deleteMyToken(id) {
     // Optimistic local removal, then the real delete — RLS (see
