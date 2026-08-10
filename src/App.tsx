@@ -4319,6 +4319,7 @@ function wreathBigBranchPath(side) {
 }
 
 const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId = "mix", size = 200, animate = true }) {
+  const glowId = React.useId();
   if (!tier) return null;
   // Вид листа берётся на каждый листик отдельно: в смешанном венке они
   // чередуются клён — дуб — мята, причём по номеру места на ветке, так
@@ -4326,14 +4327,12 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
   const pick = (WREATH_LEAF_BY_ID[kindId] || WREATH_LEAF_KINDS[0]).leaf;
   const leafAt = (i) => LEAF_KINDS[pick < 0 ? i % LEAF_KINDS.length : pick];
   const filled = tier >= 2;
-  const glow = tier >= 3 ? `drop-shadow(0 0 ${Math.max(4, size * 0.05)}px ${hexA(T.electric, 0.85)})` : "none";
   const veinColor = filled ? T.bg : T.electric;
-  return (
-    <svg
-      width={size} height={size} viewBox="0 0 200 200"
-      style={{ display: "block", overflow: "visible", filter: glow }}
-      aria-hidden="true"
-    >
+
+  // Сам венок — без черенков: они торчали внутрь и ложились палками на
+  // аватарку. Лист крепится прямо к ветке, этого достаточно.
+  const body = (
+    <>
       {[-1, 1].map((side) => (
         <path
           key={side} d={wreathBigBranchPath(side)} fill="none"
@@ -4343,20 +4342,19 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
       {WREATH_POS.map((p, idx) => {
         const kind = leafAt(p.i);
         return (
-        <g key={idx} transform={`rotate(${p.deg} 100 100) translate(100 ${100 - WREATH_BIG_R})`}>
-          <g style={animate ? {
-            transformBox: "fill-box", transformOrigin: "50% 100%",
-            animation: `wreathSway 3.4s ease-in-out ${(p.i * 0.12 + (p.side > 0 ? 0.2 : 0)).toFixed(2)}s infinite`,
-          } : undefined}>
-            <g transform={`rotate(${p.side * -14}) scale(${(1.12 * p.scale).toFixed(3)})`}>
-              <path d={kind.outline} fill={filled ? T.electric : "none"} stroke={T.electric} strokeWidth={filled ? 0.8 : 1.5} strokeLinejoin="round" />
-              {kind.veins.map((v, vi) => (
-                <path key={vi} d={v} fill="none" stroke={veinColor} strokeWidth={0.8} opacity={filled ? 0.4 : 0.55} strokeLinecap="round" />
-              ))}
-              <path d={kind.stem} fill="none" stroke={T.electric} strokeWidth={1.2} strokeLinecap="round" />
+          <g key={idx} transform={`rotate(${p.deg} 100 100) translate(100 ${100 - WREATH_BIG_R})`}>
+            <g style={animate ? {
+              transformBox: "fill-box", transformOrigin: "50% 100%",
+              animation: `wreathSway 3.4s ease-in-out ${(p.i * 0.12 + (p.side > 0 ? 0.2 : 0)).toFixed(2)}s infinite`,
+            } : undefined}>
+              <g transform={`rotate(${p.side * -14}) scale(${(1.12 * p.scale).toFixed(3)})`}>
+                <path d={kind.outline} fill={filled ? T.electric : "none"} stroke={T.electric} strokeWidth={filled ? 0.8 : 1.5} strokeLinejoin="round" />
+                {kind.veins.map((v, vi) => (
+                  <path key={vi} d={v} fill="none" stroke={veinColor} strokeWidth={0.8} opacity={filled ? 0.32 : 0.55} strokeLinecap="round" />
+                ))}
+              </g>
             </g>
           </g>
-        </g>
         );
       })}
       {tier >= 3 && (
@@ -4368,6 +4366,29 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
           } : undefined}
         />
       )}
+    </>
+  );
+
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 200 200"
+      style={{ display: "block", overflow: "visible" }}
+      aria-hidden="true"
+    >
+      {/* Свечение — отдельным размытым слоем снизу, а не фильтром на всей
+          картинке: drop-shadow размывал и сами листья, и венок выглядел
+          мутным. Так гало есть, а края остаются острыми. */}
+      {tier >= 3 && (
+        <>
+          <defs>
+            <filter id={glowId} x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="4.5" />
+            </filter>
+          </defs>
+          <g filter={`url(#${glowId})`} opacity={0.7} aria-hidden="true">{body}</g>
+        </>
+      )}
+      {body}
     </svg>
   );
 });
