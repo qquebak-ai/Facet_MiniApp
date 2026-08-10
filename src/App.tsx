@@ -2751,30 +2751,46 @@ function fmtSince(iso) {
    что и вкладка транзакций у токена; показываем по одной сделке за раз и
    раз в несколько секунд переключаем — так строка остаётся узкой и не
    отвлекает от виджета под ней. */
-function RecentBuysTicker({ tokens, onOpen }) {
+function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
   const [buys, setBuys] = useState([]);
   // Пока не пришёл первый ответ, на месте ленты стоит скелет той же
   // высоты: пустого прыгающего места на экране быть не должно.
   const [loaded, setLoaded] = useState(false);
 
-  // Опрашиваем три пула — у бесплатного API жёсткий лимит запросов, а
-  // лента всё равно показывает по одной сделке. Берём самые активные за
-  // час, а не самые крупные: у крупного, но спящего пула свежих покупок
-  // может не быть вовсе, и лента тогда стоит пустой.
+  // Раньше опрашивались только три самых активных пула, и в ленту
+  // попадали сделки трёх токенов из всей мемпады. Теперь берутся все, но
+  // не разом: у бесплатного GeckoTerminal жёсткий лимит (около тридцати
+  // запросов в минуту на адрес), и опрос сорока пулов сразу упёрся бы в
+  // 429, то есть лента встала бы совсем.
+  //
+  // Поэтому список обходится по кругу: за цикл опрашивается небольшая
+  // пачка, следующий цикл берёт следующую. Полный круг по сорока токенам
+  // занимает пару минут, а сделки не теряются — они копятся в общем
+  // списке, а не собираются заново на каждом заходе.
   const pools = useMemo(
     () =>
       [...(tokens || [])]
-        .filter(tok => tok.poolAddress)
-        .sort((a, b) => (b.tx1h || b.tx24h || 0) - (a.tx1h || a.tx24h || 0))
-        .slice(0, 3),
+        .filter((tok) => tok.poolAddress)
+        .sort((a, b) => (b.tx1h || b.tx24h || 0) - (a.tx1h || a.tx24h || 0)),
     [tokens]
   );
+  // Токены, запущенные в приложении: у них своя кривая вместо пула, и
+  // сделки читаются прямо из контракта.
+  const curves = useMemo(
+    () => (curveTokens || []).filter((tok) => tok.curveAddress),
+    [curveTokens]
+  );
+
+  const collectedRef = useRef([]);
+  const poolCursor = useRef(0);
+  const curveCursor = useRef(0);
 
   useEffect(() => {
-    if (!pools.length) { setBuys([]); return; }
+    if (!pools.length && !curves.length) { setBuys([]); return; }
     let cancelled = false;
 
-    function mergeIn(rows, token, into) {
+    function mergeIn(rows, token) {
+      const into = collectedRef.current;
       (rows || []).forEach((r) => {
         if ((r.kind !== "buy" && r.kind !== "sell") || !r.at) return;
         // Сверяем и по идентификатору, и по самой сделке: одна и та же
@@ -2786,35 +2802,52 @@ function RecentBuysTicker({ tokens, onOpen }) {
         into.push({ ...r, token });
       });
       into.sort((a, b) => new Date(b.at) - new Date(a.at));
-      return into.slice(0, 20);
+      collectedRef.current = into.slice(0, 60);
+      if (!cancelled) setBuys(collectedRef.current);
     }
 
-    async function load() {
-      // Кэш прошлого захода — рисуем сразу, не дожидаясь сети.
-      let collected = [];
-      pools.forEach((p) => {
-        collected = mergeIn(cachedPoolTrades(p.poolAddress), p, collected);
-      });
-      if (collected.length && !cancelled) setBuys(collected);
+    // Сколько пулов берём за один заход. Пять запросов раз в двадцать
+    // секунд — это пятнадцать в минуту, вдвое ниже лимита.
+    const BATCH = 5;
+    const INTERVAL_MS = 20000;
 
-      // Дальше каждый ответ подмешиваем по мере готовности, а не ждём,
-      // пока приедут все три: первая покупка появляется на экране сразу
-      // после первого ответа.
+    async function load(first) {
+      if (first) {
+        // Ответы прошлого захода уже лежат в кэше — рисуем их сразу, не
+        // дожидаясь сети.
+        pools.forEach((p) => mergeIn(cachedPoolTrades(p.poolAddress), p));
+      }
+
+      const slice = [];
+      for (let i = 0; i < Math.min(BATCH, pools.length); i++) {
+        slice.push(pools[(poolCursor.current + i) % pools.length]);
+      }
+      if (pools.length) poolCursor.current = (poolCursor.current + slice.length) % pools.length;
+
       await Promise.all(
-        pools.map(async (p) => {
+        slice.map(async (p) => {
           const rows = await fetchPoolTrades(p.poolAddress, 12);
           if (cancelled || !rows) return;
-          collected = mergeIn(rows, p, collected);
-          setBuys(collected);
+          mergeIn(rows, p);
         })
       );
+
+      // И одна своя кривая за цикл — они читаются из другого источника,
+      // со своим лимитом, поэтому идут отдельным неспешным потоком.
+      if (curves.length) {
+        const tok = curves[curveCursor.current % curves.length];
+        curveCursor.current += 1;
+        const m = await fetchCurveMarket(tok.curveAddress, tok.tokenAddress || tok.address, TON_TESTNET_NETWORK);
+        if (!cancelled && m) mergeIn(curveTradesToFeed(m.trades, curveParamsOf(m.state), 12), tok);
+      }
+
       if (!cancelled) setLoaded(true);
     }
 
-    load();
-    const poll = setInterval(load, 60000);
+    load(true);
+    const poll = setInterval(() => load(false), INTERVAL_MS);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [pools]);
+  }, [pools, curves]);
 
   // Показанные сделки запоминаются: лента должна идти вперёд, а не
   // крутить по кругу одну и ту же покупку. Когда непоказанных не
@@ -4223,7 +4256,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         </button>
       </div>
 
-      <RecentBuysTicker tokens={tokens} onOpen={onOpen} />
+      <RecentBuysTicker tokens={tokens} curveTokens={myTokens} onOpen={onOpen} />
 
       {loading && !spotlight ? (
         <div className="fx-card rounded-[22px] p-6 flex flex-col items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
