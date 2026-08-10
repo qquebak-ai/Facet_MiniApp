@@ -139,6 +139,19 @@ function clientKey(req) {
 // поля укладываются в пару килобайт. Всё, что длиннее, разбирать незачем.
 const MAX_INIT_DATA_LEN = 4096;
 
+// Кто пригласил. В ссылке приглашения после startapp= стоит ref_<id>,
+// Telegram передаёт это в start_param. Значение приходит от клиента, то
+// есть подделать его может кто угодно — поэтому оно только читается как
+// подсказка: id обязан быть настоящим uuid, чужим (не самим собой) и
+// существующим, а записывается связь единожды, при создании профиля.
+const REF_PREFIX = "ref_";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function inviterFromStartParam(startParam) {
+  if (typeof startParam !== "string" || !startParam.startsWith(REF_PREFIX)) return null;
+  const id = startParam.slice(REF_PREFIX.length).trim();
+  return UUID_RE.test(id) ? id : null;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -235,6 +248,18 @@ export default async function handler(req, res) {
     }
     if (!profile) {
       const nickname = await freeNickname(admin, nicknameFromTelegram(tgUser));
+
+      // Приглашение засчитывается только при первом входе и только если
+      // пригласивший действительно есть в базе. Сам себя пригласить
+      // нельзя, переписать связь позже — тоже: здесь она ставится один
+      // раз и больше не трогается.
+      let invitedBy = inviterFromStartParam(body.startParam);
+      if (invitedBy === userId) invitedBy = null;
+      if (invitedBy) {
+        const { data: inviter } = await admin.from("profiles").select("id").eq("id", invitedBy).maybeSingle();
+        if (!inviter) invitedBy = null;
+      }
+
       const { error: insertErr } = await admin.from("profiles").upsert({
         id: userId,
         telegram_id: tgUser.id,
@@ -243,6 +268,7 @@ export default async function handler(req, res) {
         bio: "",
         avatar_url: tgUser.photo_url || null,
         emoji: tgUser.photo_url ? null : "🚀",
+        invited_by: invitedBy,
       }, { onConflict: "id" });
       if (insertErr) {
         return fail(res, 500, "profile_failed", insertErr.message);

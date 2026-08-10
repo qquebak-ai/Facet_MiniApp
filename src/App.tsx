@@ -261,7 +261,10 @@ const STR = {
     pinContinueNote: "Введи PIN-код, чтобы продолжить",
     pinForgot: "Забыл(а) PIN-код?",
     walletRequiredNote: "Покупка, продажа и запуск токенов доступны после подключения кошелька.",
-    refCodeCopied: "Реферальный код скопирован",
+    refCodeCopied: "Ссылка приглашения скопирована",
+    refInvited: "Приглашено",
+    refShare: "Поделиться ссылкой",
+    refShareText: "Запускай мемкоины на TON вместе со мной в Mintly",
     editProfileDesc: "Никнейм, аватар, почта и описание профиля.",
     walletConnectedStatus: "Кошелёк подключён",
     walletNotConnectedStatus: "Кошелёк не подключён",
@@ -351,11 +354,11 @@ const STR = {
     achFactory: "Фабрика", achFactoryHint: "Запустить двадцать токенов",
     achWallet: "Кошелёк на месте", achWalletHint: "Подключить кошелёк TON",
     achFace: "Лицо профиля", achFaceHint: "Поставить аватарку и написать о себе",
-    achFirstFollower: "Первый подписчик", achFirstFollowerHint: "Получить первого подписчика",
-    achTen: "Круг в десять", achTenHint: "Десять подписчиков",
-    achHundred: "Сотня", achHundredHint: "Сто подписчиков",
     achStyle: "Со вкусом", achStyleHint: "Надеть рамку и карточку из магазина",
-    achWatcher: "Свой круг", achWatcherHint: "Подписаться на пятерых создателей",
+    achInvite1: "Первый приглашённый", achInvite1Hint: "Пригласить друга по своей ссылке",
+    achInvite5: "Свой круг", achInvite5Hint: "Пригласить пятерых",
+    achInvite10: "Десятка", achInvite10Hint: "Пригласить десятерых",
+    achInvite25: "Сарафанное радио", achInvite25Hint: "Пригласить двадцать пять человек",
     verificationTitle: "Верификация",
     verifiedStatus: "Подтверждён",
     pendingStatus: "На проверке",
@@ -549,7 +552,10 @@ const STR = {
     pinContinueNote: "Enter your PIN to continue",
     pinForgot: "Forgot PIN?",
     walletRequiredNote: "Buying, selling and launching tokens are available once a wallet is connected.",
-    refCodeCopied: "Referral code copied",
+    refCodeCopied: "Invite link copied",
+    refInvited: "Invited",
+    refShare: "Share the link",
+    refShareText: "Launch memecoins on TON with me on Mintly",
     editProfileDesc: "Nickname, avatar, email and profile bio.",
     walletConnectedStatus: "Wallet connected",
     walletNotConnectedStatus: "Wallet not connected",
@@ -639,11 +645,11 @@ const STR = {
     achFactory: "Factory", achFactoryHint: "Launch twenty tokens",
     achWallet: "Wallet ready", achWalletHint: "Connect a TON wallet",
     achFace: "A face to the name", achFaceHint: "Add an avatar and a bio",
-    achFirstFollower: "First follower", achFirstFollowerHint: "Get your first follower",
-    achTen: "Circle of ten", achTenHint: "Ten followers",
-    achHundred: "Hundred", achHundredHint: "A hundred followers",
     achStyle: "Good taste", achStyleHint: "Equip a frame and a card from the shop",
-    achWatcher: "Your crowd", achWatcherHint: "Follow five creators",
+    achInvite1: "First invite", achInvite1Hint: "Invite a friend with your link",
+    achInvite5: "Your crowd", achInvite5Hint: "Invite five people",
+    achInvite10: "Ten strong", achInvite10Hint: "Invite ten people",
+    achInvite25: "Word of mouth", achInvite25Hint: "Invite twenty five people",
     verificationTitle: "Verification",
     verifiedStatus: "Verified",
     pendingStatus: "Pending",
@@ -3377,12 +3383,12 @@ const ACH_REWARDS = {
   firstLaunch: { kind: "frame", id: "ember" },
   wallet: { kind: "card", id: "emberCard" },
   face: { kind: "frame", id: "ice" },
-  firstFollower: { kind: "card", id: "night" },
   serial: { kind: "frame", id: "gold" },
-  watcher: { kind: "card", id: "mint" },
-  ten: { kind: "frame", id: "orbit" },
   factory: { kind: "frame", id: "toxic" },
-  hundred: { kind: "card", id: "sunset" },
+  invite1: { kind: "card", id: "night" },
+  invite5: { kind: "card", id: "mint" },
+  invite10: { kind: "frame", id: "orbit" },
+  invite25: { kind: "card", id: "sunset" },
 };
 
 // Обратная таблица: по предмету — какое достижение его открывает.
@@ -3391,7 +3397,7 @@ const COSMETIC_LOCKS = Object.entries(ACH_REWARDS).reduce((acc, [achId, reward])
   return acc;
 }, {});
 
-function buildAchievements({ tokensCount = 0, followers = 0, following = 0, connected = false, profile = {}, cosmetics = {} }) {
+function buildAchievements({ tokensCount = 0, invites = 0, connected = false, profile = {}, cosmetics = {} }) {
   const bioLen = (profile.bio || "").trim().length;
   const hasFace = (profile.avatarUrl ? 1 : 0) + (bioLen >= 10 ? 1 : 0);
   const dressed = ((cosmetics.frame && cosmetics.frame !== "none") ? 1 : 0)
@@ -3402,11 +3408,14 @@ function buildAchievements({ tokensCount = 0, followers = 0, following = 0, conn
     { id: "factory", icon: TrendingUp, color: T.electric, value: tokensCount, target: 20 },
     { id: "wallet", icon: Wallet, color: T.up, value: connected ? 1 : 0, target: 1 },
     { id: "face", icon: User, color: T.up, value: hasFace, target: 2 },
-    { id: "firstFollower", icon: Star, color: T.violet, value: followers, target: 1 },
-    { id: "ten", icon: Star, color: T.violet, value: followers, target: 10 },
-    { id: "hundred", icon: ShieldCheck, color: T.violet, value: followers, target: 100 },
     { id: "style", icon: ShoppingBag, color: T.up, value: dressed, target: 2 },
-    { id: "watcher", icon: User, color: T.muted, value: following, target: 5 },
+    // Приглашения по своей ссылке. Считаются по профилям, у которых в
+    // поле «кто пригласил» стоит этот человек, — то есть по людям,
+    // которые действительно зашли и завели аккаунт, а не по переходам.
+    { id: "invite1", icon: Gift, color: T.violet, value: invites, target: 1 },
+    { id: "invite5", icon: Gift, color: T.violet, value: invites, target: 5 },
+    { id: "invite10", icon: Star, color: T.violet, value: invites, target: 10 },
+    { id: "invite25", icon: ShieldCheck, color: T.violet, value: invites, target: 25 },
   ].map((a) => ({
     ...a,
     done: a.value >= a.target,
@@ -6387,7 +6396,7 @@ function SettingsPanel({
   connected, onConnectWallet, onDisconnectWallet, onCopyAddress,
   onOpenEditProfile, profile, showToast,
   onTogglePin, onChangePin, insetBottom = 0, insetTop = 0,
-  accountCreated, onDeleteAccount,
+  accountCreated, onDeleteAccount, userId, inviteCount = 0,
 }) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -6406,10 +6415,20 @@ function SettingsPanel({
   function contactSupport() {
     if (typeof window !== "undefined") window.open("https://t.me/mintly_support", "_blank", "noopener,noreferrer");
   }
+  const refLink = referralLink(userId);
   function copyReferral() {
-    const code = "MINTLY-" + (profile.nickname ? profile.nickname.toUpperCase() : "GUEST");
-    if (typeof navigator !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(code).catch(() => {});
+    if (!refLink) return;
+    if (typeof navigator !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(refLink).catch(() => {});
     showToast(t("refCodeCopied"));
+  }
+  // Внутри Telegram открываем родной экран «переслать», снаружи — обычную
+  // вкладку с тем же адресом.
+  function shareReferral() {
+    if (!refLink || typeof window === "undefined") return;
+    const url = `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent(t("refShareText"))}`;
+    const wa = window.Telegram && window.Telegram.WebApp;
+    if (wa && wa.openTelegramLink) wa.openTelegramLink(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
   }
 
   let body = null;
@@ -6542,10 +6561,19 @@ function SettingsPanel({
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, textAlign: "center" }}>
             {t("referralDesc")}
           </p>
-          <div className="flex items-center gap-2 mt-3 rounded-[20px] px-3 py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
-            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12.5, flex: 1 }}>{"MINTLY-" + (profile.nickname ? profile.nickname.toUpperCase() : "GUEST")}</span>
-            <button onClick={copyReferral} className="fx-tap"><Copy size={14} color={T.muted} /></button>
+          <div className="flex items-center justify-between mt-3 rounded-[20px] px-3.5 py-3" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{t("refInvited")}</span>
+            <span style={{ fontFamily: displayFont, color: T.turquoise, fontSize: 16, fontWeight: 700 }}>{inviteCount}</span>
           </div>
+          <div className="flex items-center gap-2 mt-2 rounded-[20px] px-3 py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
+            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 11.5, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{refLink || "—"}</span>
+            <button onClick={copyReferral} className="fx-tap" disabled={!refLink}><Copy size={14} color={T.muted} /></button>
+          </div>
+          {refLink && (
+            <button onClick={shareReferral} className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
+              <Send size={14} /> {t("refShare")}
+            </button>
+          )}
         </>
       );
       break;
@@ -6695,15 +6723,35 @@ function telegramUser() {
   return (wa && wa.initDataUnsafe && wa.initDataUnsafe.user) || null;
 }
 
+// Ссылка приглашения. Имя бота и мини-приложения знает только тот, кто
+// заводил бота, поэтому берём их из переменных окружения сборки. Если их
+// не задали — показываем хотя бы сам код, чтобы экран не был пустым.
+const TG_BOT = String(import.meta.env.VITE_TG_BOT || "").replace(/^@/, "").trim();
+const TG_APP = String(import.meta.env.VITE_TG_APP || "").trim();
+function referralCode(userId) { return userId ? "ref_" + userId : ""; }
+function referralLink(userId) {
+  const code = referralCode(userId);
+  if (!code) return "";
+  if (!TG_BOT) return code;
+  return `https://t.me/${TG_BOT}${TG_APP ? "/" + TG_APP : ""}?startapp=${code}`;
+}
+
 // Бросает ошибку с понятным кодом — вызывающая сторона показывает текст.
 async function signInWithTelegram() {
   const initData = telegramInitData();
   if (!initData) throw new Error("no_telegram");
 
+  // Кто пригласил. Telegram кладёт сюда то, что стояло после startapp= в
+  // ссылке приглашения. Значение только передаём — доверять ему нельзя,
+  // сервер сам проверит, что такой пользователь есть и что это не сам
+  // приглашённый, и запишет связь единожды, при создании профиля.
+  const tg = typeof window !== "undefined" ? window.Telegram && window.Telegram.WebApp : null;
+  const startParam = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || "";
+
   const res = await fetch("/api/telegram-auth", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ initData }),
+    body: JSON.stringify({ initData, startParam }),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -8121,6 +8169,27 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // (head + exact count): сами строки здесь не нужны. Живут в корне,
   // потому что от них зависят и профиль, и достижения, и магазин.
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
+  // Сколько человек пришло по своей ссылке. Считается по профилям, где
+  // стоит связь с этим пользователем: то есть по тем, кто действительно
+  // зашёл и завёл аккаунт, а не по кликам.
+  const [inviteCount, setInviteCount] = useState(0);
+  useEffect(() => {
+    if (!userId) { setInviteCount(0); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { count } = await supabase
+          .from("profiles")
+          .select("id", { count: "exact", head: true })
+          .eq("invited_by", userId);
+        if (!cancelled) setInviteCount(count || 0);
+      } catch (err) {
+        // Колонки ещё нет — показываем ноль, а не ломаем экран.
+        console.warn("[mintly] invite count unavailable:", err && err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userId]);
   useEffect(() => {
     if (!userId) { setFollowCounts({ followers: 0, following: 0 }); return; }
     let cancelled = false;
@@ -8433,13 +8502,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const achievements = useMemo(
     () => buildAchievements({
       tokensCount: myTokens.length,
-      followers: followCounts.followers,
-      following: followCounts.following,
+      invites: inviteCount,
       connected,
       profile,
       cosmetics,
     }),
-    [myTokens.length, followCounts.followers, followCounts.following, connected, profile, cosmetics],
+    [myTokens.length, inviteCount, connected, profile, cosmetics],
   );
   async function deleteMyToken(id) {
     // Optimistic local removal, then the real delete — RLS (see
@@ -9036,6 +9104,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         onChangePin={requestChangePin}
         accountCreated={accountCreated}
         onDeleteAccount={deleteAccountForever}
+        userId={userId}
+        inviteCount={inviteCount}
       />
       <PinSetupModal
         mode={pinModal ? pinModal.mode : null}
