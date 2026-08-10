@@ -4103,7 +4103,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
         </div>
       </div>
 
-      <div className="mt-5 pb-4">
+      <div className="mt-5 pb-4" style={{ position: "relative", zIndex: 1 }}>
         <SectionTitle>{tr("creatorTokens")}</SectionTitle>
         {tokens.length === 0 ? (
           <div className="rounded-[22px] p-5 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
@@ -7580,6 +7580,13 @@ function ProfileView({
           </div>
         </div>
 
+        {/* Всё, что ниже шапки, поднято над её слоем. Подложка карточки
+            профиля лежит внутри шапки и заканчивается сплошной чёрной
+            растушёвкой; по правилам отрисовки позиционированный слой
+            рисуется поверх фонов обычных блоков, и эта растушёвка
+            срезала верх виджета кошелька. */}
+        <div style={{ position: "relative", zIndex: 1 }}>
+
         <div className="mt-5"><WalletCard connected={connected} walletAddress={walletAddress} tonBalance={tonBalance} tonPriceUsd={tonPriceUsd} onConnect={connectWallet} onDisconnect={disconnectWallet} onCopy={copyAddress} onExplore={exploreWallet} /></div>
 
         <div className="mt-5">
@@ -7746,6 +7753,7 @@ function ProfileView({
           </GlassCard>
         </div>
 
+        </div>
       </div>
     </div>
   );
