@@ -4386,10 +4386,22 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
     <div className="flex flex-col gap-5" style={{ paddingBottom: 12 }}>
       <div className="flex items-center justify-between">
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("navMempad")}</span>
-        <button onClick={onLaunch} className="fx-tap flex items-center gap-1.5 rounded-full px-3.5 py-2" style={{ background: "rgba(49,208,123,0.14)", border: `1px solid rgba(49,208,123,0.35)`, position: "relative", overflow: "hidden" }}>
+        {/* Кнопка в цвете приложения: зелёный здесь был из набора
+            «рост цены», к запуску токена отношения не имеющего. Фирменный
+            оранжевый, лист тем же цветом. */}
+        <button
+          onClick={onLaunch}
+          className="fx-tap flex items-center gap-1.5 rounded-full px-3.5 py-2"
+          style={{
+            background: hexA(T.electric, 0.13),
+            border: `1px solid ${hexA(T.electric, 0.4)}`,
+            boxShadow: `0 0 14px ${hexA(T.electric, 0.18)}`,
+            position: "relative", overflow: "hidden",
+          }}
+        >
           <ButtonRocketFlyby size={34} />
-          <LeafIcon size={16} color={T.up} />
-          <span style={{ fontFamily: bodyFont, color: T.up, fontSize: 12.5, fontWeight: 600, position: "relative", zIndex: 1 }}>{t("mempadLaunchToken")}</span>
+          <LeafIcon size={16} color={T.electric} />
+          <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 12.5, fontWeight: 700, position: "relative", zIndex: 1 }}>{t("mempadLaunchToken")}</span>
         </button>
       </div>
 
