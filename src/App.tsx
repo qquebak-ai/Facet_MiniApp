@@ -3505,15 +3505,11 @@ function cosmeticUnlocked(kind, id, achievements) {
 
 const SETTINGS_ITEMS = [
   { key: "profile", icon: SettingsIcon, tKey: "profileSettings" },
-  { key: "wallet", icon: Wallet, tKey: "wallet" },
-  { key: "notifications", icon: Bell, tKey: "notifications" },
   { key: "security", icon: Lock, tKey: "security" },
   { key: "language", icon: Globe2, tKey: "langTitle" },
-  { key: "appearance", icon: Palette, tKey: "themeTitle" },
   { key: "referral", icon: Gift, tKey: "referral" },
   { key: "support", icon: LifeBuoy, tKey: "support" },
   { key: "privacy", icon: FileText, tKey: "privacy" },
-  { key: "terms", icon: ShieldQuestion, tKey: "terms" },
 ];
 
 /* ---------------------------------------------------------
@@ -6957,48 +6953,9 @@ function SettingsPanel({
         </>
       );
       break;
-    case "wallet":
-      body = (
-        <>
-          <div className="flex items-center justify-center gap-2 mt-1 mb-3">
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: connected ? T.turquoise : T.muted }} />
-            <span style={{ fontFamily: bodyFont, fontSize: 12.5, color: connected ? T.turquoise : T.muted }}>{connected ? t("walletConnectedStatus") : t("walletNotConnectedStatus")}</span>
-          </div>
-          {connected ? (
-            <div className="flex flex-col gap-2">
-              <button onClick={onCopyAddress} className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}>
-                <Copy size={14} color={T.muted} /> {t("copyAddress")}
-              </button>
-              <button onClick={() => { onDisconnectWallet(); onClose(); }} className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3" style={{ background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, fontFamily: bodyFont, fontSize: 13, color: T.rose }}>
-                <LogOut size={14} /> {t("disconnectWallet")}
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => { onConnectWallet(); onClose(); }} className="fx-tap w-full rounded-[20px] py-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
-              {t("connectWallet")}
-            </button>
-          )}
-        </>
-      );
-      break;
-    case "notifications":
-      body = (
-        <div className="mt-2">
-          <SettingsRow label={t("pushNotif")} sub={t("pushNotifSub")}>
-            <ToggleSwitch on={appSettings.pushNotif} onChange={(v) => onUpdateSetting("pushNotif", v)} />
-          </SettingsRow>
-          <SettingsRow label={t("emailNotif")} sub={t("emailNotifSub")}>
-            <ToggleSwitch on={appSettings.emailNotif} onChange={(v) => onUpdateSetting("emailNotif", v)} />
-          </SettingsRow>
-        </div>
-      );
-      break;
     case "security":
       body = (
         <div className="mt-2">
-          <SettingsRow label={t("twoFA")} sub={t("twoFASub")}>
-            <ToggleSwitch on={appSettings.twoFA} onChange={(v) => onUpdateSetting("twoFA", v)} />
-          </SettingsRow>
           <SettingsRow label={t("pinRow")} sub={t("pinRowSub")}>
             <ToggleSwitch on={appSettings.pinEnabled} onChange={onTogglePin} />
           </SettingsRow>
@@ -7022,18 +6979,6 @@ function SettingsPanel({
             </button>
           ))}
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.5, marginTop: 2 }}>{t("langFullNote")}</p>
-        </div>
-      );
-      break;
-    case "appearance":
-      body = (
-        <div className="flex flex-col gap-2 mt-2">
-          {[{ id: "Dark", label: t("themeDark") }, { id: "White", label: t("themeWhite") }].map((th) => (
-            <button key={th.id} onClick={() => onUpdateSetting("theme", th.id)} className="fx-tap w-full flex items-center justify-between rounded-[20px] py-3 px-3.5" style={{ background: T.surfaceHi, border: `1px solid ${appSettings.theme === th.id ? T.turquoise : T.line}` }}>
-              <span style={{ fontFamily: bodyFont, fontSize: 13, color: T.ice }}>{th.label}</span>
-              {appSettings.theme === th.id && <CheckCircle2 size={16} color={T.turquoise} />}
-            </button>
-          ))}
         </div>
       );
       break;
@@ -7073,9 +7018,6 @@ function SettingsPanel({
       break;
     case "privacy":
       body = <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.6, marginTop: 4 }}>{t("privacyText")}</p>;
-      break;
-    case "terms":
-      body = <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.6, marginTop: 4 }}>{t("termsText")}</p>;
       break;
     default:
       body = null;
