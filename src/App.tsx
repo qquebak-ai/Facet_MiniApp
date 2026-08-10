@@ -351,7 +351,7 @@ const STR = {
     achAll: "Все",
     shopLocked: "Предмет откроется за достижение",
     achFirstLaunch: "Первый запуск", achFirstLaunchHint: "Запустить свой первый токен",
-    wreathBadgeTitle: "Знак создателя",
+    wreathBadgeTitle: "Знак создателя", wreathClose: "Закрыть",
     wreathBadgeBody: "Выдан за то, что токен этого человека дорос до капитализации {sum}.",
     wreathTier1: "Первая тысяча", wreathTier2: "Десять тысяч", wreathTier3: "Сто тысяч",
     achMcap1k: "Первая тысяча", achMcap1kHint: "Довести свой токен до $1K капитализации",
@@ -647,7 +647,7 @@ const STR = {
     achAll: "All",
     shopLocked: "This item unlocks with an achievement",
     achFirstLaunch: "First launch", achFirstLaunchHint: "Launch your first token",
-    wreathBadgeTitle: "Creator badge",
+    wreathBadgeTitle: "Creator badge", wreathClose: "Close",
     wreathBadgeBody: "Awarded for taking their token to a {sum} market cap.",
     wreathTier1: "First thousand", wreathTier2: "Ten thousand", wreathTier3: "Hundred thousand",
     achMcap1k: "First thousand", achMcap1kHint: "Take one of your tokens to a $1K market cap",
@@ -4555,7 +4555,7 @@ function CreatorWreathBadge({ tier = 0, kindId = "mix", size = 19 }) {
                 className="fx-tap w-full rounded-[20px] py-3"
                 style={{ marginTop: 18, maxWidth: 320, background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
               >
-                {tr("doneClose")}
+                {tr("wreathClose")}
               </button>
             </div>
           </div>
