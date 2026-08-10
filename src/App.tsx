@@ -4377,7 +4377,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
       <div className="flex items-center justify-between">
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("navMempad")}</span>
         <button onClick={onLaunch} className="fx-tap flex items-center gap-1.5 rounded-full px-3.5 py-2" style={{ background: "rgba(49,208,123,0.14)", border: `1px solid rgba(49,208,123,0.35)` }}>
-          <Sparkles size={13} color={T.up} />
+          <LeafIcon size={16} color={T.up} />
           <span style={{ fontFamily: bodyFont, color: T.up, fontSize: 12.5, fontWeight: 600 }}>{t("mempadLaunchToken")}</span>
         </button>
       </div>
@@ -7280,6 +7280,20 @@ function DynamicIslandFrame({ topOffset = 0, hitKey = 0 }) {
         )}
       </svg>
     </div>
+  );
+}
+
+/* Лист как иконка. Тот же контур, что падает на фоне приложения, —
+   чтобы кнопка запуска была из того же набора, что и всё остальное, а
+   не из чужого. Прожилки на такой величине не рисуются: они
+   превращаются в грязь. */
+function LeafIcon({ size = 14, color = T.up, kind = 2 }) {
+  const leaf = LEAF_KINDS[kind % LEAF_KINDS.length];
+  return (
+    <svg width={size * (30 / 38)} height={size} viewBox="-15 -32 30 38" style={{ flexShrink: 0 }} aria-hidden>
+      <path d={leaf.stem} stroke={color} strokeWidth={1.6} strokeLinecap="round" fill="none" />
+      <path d={leaf.outline} fill={color} />
+    </svg>
   );
 }
 
