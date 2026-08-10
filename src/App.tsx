@@ -2269,6 +2269,11 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
 
   const n = candles?.length || 0;
   const viewRef = useRef({ start: Math.max(0, n - CHART_DEFAULT_VISIBLE), count: Math.min(n, CHART_DEFAULT_VISIBLE) || 1 });
+  // Пока человек не двигал график рукой, окно держится за правый край.
+  // Окно задавалось номерами свечей и не пересчитывалось при обновлении,
+  // а число свечей меняется на каждом обновлении — от этого график сам
+  // уезжал то влево, то вправо.
+  const pinnedRef = useRef(true);
   // Vertical (price) window — { min, max } in price units. Unlike before,
   // this is NOT recomputed from whatever candles happen to be visible;
   // it's set once (auto-fit on first draw) and from then on only changes
@@ -2499,6 +2504,19 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   // Redraw on data refresh (live tick), resize, or theme swap — but this
   // never touches viewRef, so the user's pan/zoom position survives a
   // live update untouched (no snapping back).
+  // Пришли новые свечи — если график не сдвигали рукой, окно
+  // переставляется на правый край. Иначе при каждом обновлении оно
+  // оставалось на прежних номерах свечей, а сами свечи под ним
+  // сдвигались: график будто ездил сам по себе.
+  useEffect(() => {
+    if (!n) return;
+    if (pinnedRef.current) {
+      const v = viewRef.current;
+      v.count = Math.max(CHART_MIN_VISIBLE, Math.min(n, v.count || CHART_DEFAULT_VISIBLE));
+      v.start = Math.max(0, n - v.count);
+    }
+  }, [n]);
+
   useEffect(() => { draw(); });
 
   // The bar-close countdown needs a redraw every second even when nothing
@@ -2527,6 +2545,9 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     if (!layout) return;
     viewRef.current.start -= dxScreen / layout.slot;
     clampView();
+    // Отпустили у самого правого края — снова держимся за него.
+    const v = viewRef.current;
+    pinnedRef.current = v.start + v.count >= n - 0.75;
     draw();
   }
   // Vertical pan: shifts the frozen price window up/down so the content
@@ -4482,6 +4503,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   }
   const [chartData, setChartData] = useState(null); // { candles, volume, isLive }
   const [chartLoading, setChartLoading] = useState(true);
+  const chartSrcRef = useRef(null);
   const [hovered, setHovered] = useState(null);
   const up = token.change >= 0;
   // У токена на кривой жетон живёт в той же сети, что и приложение.
@@ -4501,9 +4523,16 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     setChartLoading(true);
     (async () => {
       let result = null;
-      if (token.poolAddress) result = await fetchPoolOHLCV(token.poolAddress, tf);
+      let src = null;
+      if (token.poolAddress) {
+        result = await fetchPoolOHLCV(token.poolAddress, tf);
+        if (result) src = "pool";
+      }
       // Основной источник не ответил — берём историю курса у tonapi.
-      if (!result && token.tokenAddress && !token.curveAddress) result = await fetchTonapiChart(token.tokenAddress, tf);
+      if (!result && token.tokenAddress && !token.curveAddress) {
+        result = await fetchTonapiChart(token.tokenAddress, tf);
+        if (result) src = "tonapi";
+      }
       // Курс передаём тот же, по которому посчитана цена в шапке. Раньше
       // график брал его сам, и пока настоящий курс не приехал, строился
       // по запасному — цифры на графике и над ним расходились в разы.
@@ -4514,8 +4543,12 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       // между сделками цена и правда стоит. У токена с биржи данные
       // либо пришли, либо нет: во втором случае показываем «нет
       // данных», а не случайное движение.
-      if (!result && curveChart) result = flatCandles(token.price, tf, CHART_TOTAL);
+      if (!result && curveChart) { result = flatCandles(token.price, tf, CHART_TOTAL); src = "curve"; }
       if (cancelled) return;
+      // Источник запоминается: обновлять график надо из того же места.
+      // Иначе свечи биржи и точки tonapi сменяли друг друга — сетка
+      // времени у них разная, и картинка дёргалась вбок.
+      chartSrcRef.current = src;
       if (result) { setChartData({ ...result, isLive: true }); setChartLoading(false); }
       else { setChartData(null); setChartLoading(false); }
     })();
@@ -4535,9 +4568,23 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     if (!token.poolAddress && !curveChart) return;
     let cancelled = false;
     async function refresh() {
-      const fresh = token.poolAddress
-        ? (await fetchPoolOHLCV(token.poolAddress, tf)) || (token.tokenAddress ? await fetchTonapiChart(token.tokenAddress, tf) : null)
-        : await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
+      const src = chartSrcRef.current;
+      let fresh = null;
+      if (curveChart) {
+        fresh = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
+      } else if (src === "tonapi") {
+        fresh = token.tokenAddress ? await fetchTonapiChart(token.tokenAddress, tf) : null;
+      } else {
+        fresh = token.poolAddress ? await fetchPoolOHLCV(token.poolAddress, tf) : null;
+        // Ни разу не получилось — пробуем запасной источник и с этого
+        // момента держимся его.
+        if (!fresh && !src && token.tokenAddress) {
+          fresh = await fetchTonapiChart(token.tokenAddress, tf);
+          if (fresh) chartSrcRef.current = "tonapi";
+        } else if (fresh && !src) {
+          chartSrcRef.current = "pool";
+        }
+      }
       if (cancelled || !fresh?.candles?.length) return;
       setChartData((prev) => (prev
         ? { ...prev, candles: fresh.candles, volume: fresh.volume }
