@@ -6726,8 +6726,8 @@ function telegramUser() {
 // Ссылка приглашения. Имя бота и мини-приложения знает только тот, кто
 // заводил бота, поэтому берём их из переменных окружения сборки. Если их
 // не задали — показываем хотя бы сам код, чтобы экран не был пустым.
-const TG_BOT = String(import.meta.env.VITE_TG_BOT || "").replace(/^@/, "").trim();
-const TG_APP = String(import.meta.env.VITE_TG_APP || "").trim();
+const TG_BOT = String(import.meta.env.VITE_TG_BOT || "MintlyAppbot").replace(/^@/, "").trim();
+const TG_APP = String(import.meta.env.VITE_TG_APP || "Mintly").trim();
 function referralCode(userId) { return userId ? "ref_" + userId : ""; }
 function referralLink(userId) {
   const code = referralCode(userId);
