@@ -338,6 +338,17 @@ const STR = {
     portfolioConnectBody: "Подключи TON-кошелёк, чтобы видеть портфель и начать торговать.",
     activityTitle: "Активность",
     achievementsTitle: "Достижения",
+    achUnlockedOf: "{done} из {total}",
+    achFirstLaunch: "Первый запуск", achFirstLaunchHint: "Запустить свой первый токен",
+    achSerial: "Серийный запуск", achSerialHint: "Запустить пять токенов",
+    achFactory: "Фабрика", achFactoryHint: "Запустить двадцать токенов",
+    achWallet: "Кошелёк на месте", achWalletHint: "Подключить кошелёк TON",
+    achFace: "Лицо профиля", achFaceHint: "Поставить аватарку и написать о себе",
+    achFirstFollower: "Первый подписчик", achFirstFollowerHint: "Получить первого подписчика",
+    achTen: "Круг в десять", achTenHint: "Десять подписчиков",
+    achHundred: "Сотня", achHundredHint: "Сто подписчиков",
+    achStyle: "Со вкусом", achStyleHint: "Надеть рамку и карточку из магазина",
+    achWatcher: "Свой круг", achWatcherHint: "Подписаться на пятерых создателей",
     verificationTitle: "Верификация",
     verifiedStatus: "Подтверждён",
     pendingStatus: "На проверке",
@@ -608,6 +619,17 @@ const STR = {
     portfolioConnectBody: "Connect your TON Wallet to view your portfolio and start trading.",
     activityTitle: "Activity",
     achievementsTitle: "Achievements",
+    achUnlockedOf: "{done} of {total}",
+    achFirstLaunch: "First launch", achFirstLaunchHint: "Launch your first token",
+    achSerial: "Serial launcher", achSerialHint: "Launch five tokens",
+    achFactory: "Factory", achFactoryHint: "Launch twenty tokens",
+    achWallet: "Wallet ready", achWalletHint: "Connect a TON wallet",
+    achFace: "A face to the name", achFaceHint: "Add an avatar and a bio",
+    achFirstFollower: "First follower", achFirstFollowerHint: "Get your first follower",
+    achTen: "Circle of ten", achTenHint: "Ten followers",
+    achHundred: "Hundred", achHundredHint: "A hundred followers",
+    achStyle: "Good taste", achStyleHint: "Equip a frame and a card from the shop",
+    achWatcher: "Your crowd", achWatcherHint: "Follow five creators",
     verificationTitle: "Verification",
     verifiedStatus: "Verified",
     pendingStatus: "Pending",
@@ -3324,7 +3346,37 @@ const FILTERS = [
 const PORTFOLIO_TOKENS = [];
 const MY_TOKENS = [];
 const ACTIVITY = [];
-const ACHIEVEMENTS = [];
+/* Достижения. Считаются по тому, что приложение действительно знает:
+   сколько токенов человек запустил, сколько у него подписчиков и на
+   скольких подписан он сам, подключён ли кошелёк, заполнен ли профиль,
+   надета ли косметика. Ничего выдуманного и никаких «очков» — иначе
+   значок ничего не значит.
+
+   Каждое достижение возвращает текущее значение и цель, поэтому у
+   незакрытых виден прогресс, а не просто замок. */
+function buildAchievements({ tokensCount = 0, followers = 0, following = 0, connected = false, profile = {}, cosmetics = {} }) {
+  const bioLen = (profile.bio || "").trim().length;
+  const hasFace = (profile.avatarUrl ? 1 : 0) + (bioLen >= 10 ? 1 : 0);
+  const dressed = ((cosmetics.frame && cosmetics.frame !== "none") ? 1 : 0)
+    + ((cosmetics.card && cosmetics.card !== "none") ? 1 : 0);
+  return [
+    { id: "firstLaunch", icon: Rocket, color: T.electric, value: tokensCount, target: 1 },
+    { id: "serial", icon: Flame, color: T.electric, value: tokensCount, target: 5 },
+    { id: "factory", icon: TrendingUp, color: T.electric, value: tokensCount, target: 20 },
+    { id: "wallet", icon: Wallet, color: T.up, value: connected ? 1 : 0, target: 1 },
+    { id: "face", icon: User, color: T.up, value: hasFace, target: 2 },
+    { id: "firstFollower", icon: Star, color: T.violet, value: followers, target: 1 },
+    { id: "ten", icon: Star, color: T.violet, value: followers, target: 10 },
+    { id: "hundred", icon: ShieldCheck, color: T.violet, value: followers, target: 100 },
+    { id: "style", icon: ShoppingBag, color: T.up, value: dressed, target: 2 },
+    { id: "watcher", icon: User, color: T.muted, value: following, target: 5 },
+  ].map((a) => ({
+    ...a,
+    done: a.value >= a.target,
+    label: t(`ach${a.id.charAt(0).toUpperCase()}${a.id.slice(1)}`),
+    hint: t(`ach${a.id.charAt(0).toUpperCase()}${a.id.slice(1)}Hint`),
+  }));
+}
 
 const SETTINGS_ITEMS = [
   { key: "profile", icon: SettingsIcon, tKey: "profileSettings" },
@@ -6797,6 +6849,17 @@ function ProfileView({
   const [verifyStatus, setVerifyStatus] = useState("none");
   const [confirmingClearAll, setConfirmingClearAll] = useState(false);
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
+  const achievements = useMemo(
+    () => buildAchievements({
+      tokensCount: myTokens.length,
+      followers: followCounts.followers,
+      following: followCounts.following,
+      connected,
+      profile,
+      cosmetics,
+    }),
+    [myTokens.length, followCounts.followers, followCounts.following, connected, profile, cosmetics],
+  );
 
   useEffect(() => { const t = setTimeout(() => setLoading(false), 650); return () => clearTimeout(t); }, []);
 
@@ -6997,22 +7060,53 @@ function ProfileView({
         </div>
 
         <div className="mt-5">
-          <SectionTitle>{t("achievementsTitle")}</SectionTitle>
-          {ACHIEVEMENTS.length === 0 ? (
-            <GlassCard style={{ padding: 22 }} className="flex flex-col items-center text-center gap-2">
-              <MintlyFrame size={40} glow={`${T.violet}44`}><Star size={16} color={T.violet} /></MintlyFrame>
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("noAchievementsYet")}</p>
-            </GlassCard>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {ACHIEVEMENTS.map((a, i) => (
-                <GlassCard key={a.label} style={{ padding: "12px 12px", animationDelay: `${i * 50}ms` }} className="flex items-center gap-2">
-                  <div style={{ width: 32, height: 32, borderRadius: 10, background: `${a.color}18`, display: "flex", alignItems: "center", justifyContent: "center" }}><a.icon size={15} color={a.color} /></div>
-                  <span style={{ fontFamily: bodyFont, fontSize: 11.5, color: T.ice, lineHeight: 1.2 }}>{a.label}</span>
-                </GlassCard>
-              ))}
-            </div>
-          )}
+          <SectionTitle action={
+            <span style={{ fontFamily: monoFont, fontSize: 11.5, color: T.muted }}>
+              {tf("achUnlockedOf", { done: achievements.filter((a) => a.done).length, total: achievements.length })}
+            </span>
+          }>{t("achievementsTitle")}</SectionTitle>
+          <div className="grid grid-cols-2 gap-2">
+            {achievements.map((a, i) => (
+              <GlassCard
+                key={a.id}
+                style={{
+                  padding: "11px 12px",
+                  animationDelay: `${i * 40}ms`,
+                  border: `1px solid ${a.done ? hexA(a.color, 0.45) : T.line}`,
+                  opacity: a.done ? 1 : 0.72,
+                }}
+                className="flex items-center gap-2.5"
+              >
+                <div style={{
+                  width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+                  background: a.done ? hexA(a.color, 0.16) : T.surfaceHi,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <a.icon size={15} color={a.done ? a.color : T.muted} />
+                </div>
+                <div className="min-w-0" style={{ flex: 1 }}>
+                  <div style={{ fontFamily: bodyFont, fontSize: 11.5, color: a.done ? T.ice : T.muted, lineHeight: 1.25, fontWeight: a.done ? 600 : 500 }}>{a.label}</div>
+                  {a.done ? (
+                    <div style={{ fontFamily: bodyFont, fontSize: 10, color: a.color, marginTop: 2 }}>✓</div>
+                  ) : (
+                    <>
+                      <div style={{
+                        fontFamily: bodyFont, fontSize: 10, color: T.muted, marginTop: 2, lineHeight: 1.3,
+                        // Подсказка в две строки: в одну она обрезалась на
+                        // полуслове и не объясняла, что делать.
+                        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+                      }}>{a.hint}</div>
+                      {a.target > 1 && (
+                        <div style={{ marginTop: 4, height: 3, borderRadius: 2, background: T.surfaceHi, overflow: "hidden" }}>
+                          <div style={{ width: `${Math.min(100, (a.value / a.target) * 100)}%`, height: "100%", background: hexA(a.color, 0.6) }} />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </GlassCard>
+            ))}
+          </div>
         </div>
 
         <div className="mt-5">
