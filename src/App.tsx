@@ -3842,7 +3842,7 @@ async function fetchCreatorProfile(userId) {
   if (creatorCache.has(userId)) return creatorCache.get(userId);
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, nickname, bio, avatar_url, emoji, frame_id, card_id, creator_tier, wreath_leaf")
+    .select("id, nickname, bio, avatar_url, emoji, frame_id, card_id, creator_tier, wreath_leaf, verified")
     .eq("id", userId)
     .maybeSingle();
   const profile = error ? null : data;
@@ -4100,6 +4100,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
         <div className="flex flex-col items-center gap-2" style={{ position: "relative", zIndex: 1, width: "100%" }}>
           <span className="flex items-center gap-1.5" style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, marginTop: 4 }}>
             {profile.nickname}
+            {profile.verified && <ShieldCheck size={16} color={T.electric} />}
             <CreatorWreathBadge tier={creatorTier} kindId={wreathKind} size={19} />
           </span>
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
@@ -7495,10 +7496,15 @@ function ProfileView({
   cosmetics = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
   // Счётчики подписок и достижения считаются в корне: их же показывает
   // магазин и отдельная страница достижений, дублировать запрос незачем.
-  followCounts = { followers: 0, following: 0 }, achievements = [], creatorTier = 0,
+  followCounts = { followers: 0, following: 0 }, achievements = [], creatorTier = 0, onVerified,
 }) {
   const [loading, setLoading] = useState(true);
-  const [verifyStatus, setVerifyStatus] = useState("none");
+  // Подтверждение хранится в профиле, а не только на экране: иначе
+  // значок пропадал при первом же обновлении страницы.
+  const [verifyStatus, setVerifyStatus] = useState(profile.verified ? "verified" : "none");
+  useEffect(() => {
+    setVerifyStatus((cur) => (profile.verified ? "verified" : cur === "pending" ? "pending" : "none"));
+  }, [profile.verified]);
   const [confirmingClearAll, setConfirmingClearAll] = useState(false);
 
 
@@ -7521,7 +7527,11 @@ function ProfileView({
     if (!requireUnlock()) return;
     setVerifyStatus("pending");
     showToast(t("verifyRequestSent"));
-    setTimeout(() => { setVerifyStatus("verified"); showToast(t("profileVerified")); }, 2200);
+    setTimeout(() => {
+      setVerifyStatus("verified");
+      showToast(t("profileVerified"));
+      if (onVerified) onVerified();
+    }, 2200);
   }
   function goCreateToken() {
     if (!requireUnlock()) return;
@@ -8603,7 +8613,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // Source of truth is now the real Supabase auth session (not
   // localStorage) — this is what makes login persist across reloads and
   // work across devices instead of just faking it client-side.
-  const EMPTY_PROFILE = { nickname: "", email: "", bio: "", avatarUrl: null, emoji: null };
+  const EMPTY_PROFILE = { nickname: "", email: "", bio: "", avatarUrl: null, emoji: null, verified: false };
   const [accountCreated, setAccountCreated] = useState(false);
   const [profile, setProfile] = useState(EMPTY_PROFILE);
   const [authChecked, setAuthChecked] = useState(false);
@@ -8658,11 +8668,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
     const { data: prof, error } = await supabase
       .from("profiles")
-      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id, creator_tier, wreath_leaf")
+      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id, creator_tier, wreath_leaf, verified")
       .eq("id", user.id)
       .single();
     if (error || !prof) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
-    setProfile({ nickname: prof.nickname, email: prof.email, bio: prof.bio || "", avatarUrl: prof.avatar_url, emoji: prof.emoji });
+    setProfile({ nickname: prof.nickname, email: prof.email, bio: prof.bio || "", avatarUrl: prof.avatar_url, emoji: prof.emoji, verified: !!prof.verified });
     // Ступень знака создателя лежит в профиле, а не только на устройстве:
     // её должны видеть другие. Здесь только читаем, повышает её эффект
     // ниже, когда посчитается лучшая капитализация.
@@ -8989,6 +8999,16 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myCurveKey, tonPriceUsd, mcapPeakKey]);
+
+  // Подтверждение аккаунта. Тоже в профиле: значок у ника должен
+  // переживать перезапуск приложения и быть виден другим.
+  function markProfileVerified() {
+    setProfile((p) => ({ ...p, verified: true }));
+    if (!userId) return;
+    supabase.from("profiles").update({ verified: true }).eq("id", userId).then(({ error }) => {
+      if (error) console.warn("[mintly] failed to save verification:", error.message);
+    });
+  }
 
   // Ступень знака создателя. Живёт в профиле, потому что её видят другие,
   // и только растёт: если токен просядет, знак остаётся.
@@ -9719,6 +9739,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               insetTop={insetTop}
               userId={userId}
               creatorTier={creatorTier}
+              onVerified={markProfileVerified}
             />
           )}
         </div>
