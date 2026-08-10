@@ -4834,7 +4834,12 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             </div>
           </div>
 
-          <div className="rounded-[22px] overflow-hidden" style={{ background: "#000000", border: `1px solid ${T.line}`, padding: 2, position: "relative" }}>
+          {/* График идёт во всю ширину страницы, а не лежит в карточке:
+              рамка и скругление вокруг него мешали читать свечи у краёв,
+              а места под сам график оставалось меньше. Отрицательные
+              поля ровно на отступ страницы — так он доходит до краёв
+              экрана. */}
+          <div style={{ position: "relative", marginLeft: -16, marginRight: -16, background: T.bg, borderTop: `1px solid ${T.line}`, borderBottom: `1px solid ${T.line}` }}>
             {chartLoading ? (
               <div className="flex items-center justify-center" style={{ height: 340, fontFamily: monoFont, fontSize: 11, color: T.muted }}>
                 {tr("chartLoading")}
