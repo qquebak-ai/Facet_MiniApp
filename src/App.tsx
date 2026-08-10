@@ -4400,7 +4400,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
           }}
         >
           <ButtonRocketFlyby size={34} />
-          <LeafIcon size={16} color={T.electric} />
+          <LeafIcon size={17} color={T.electric} />
           <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 12.5, fontWeight: 700, position: "relative", zIndex: 1 }}>{t("mempadLaunchToken")}</span>
         </button>
       </div>
@@ -7360,7 +7360,10 @@ function ButtonRocketFlyby({ size = 26 }) {
    чтобы кнопка запуска была из того же набора, что и всё остальное, а
    не из чужого. Прожилки на такой величине не рисуются: они
    превращаются в грязь. */
-function LeafIcon({ size = 14, color = T.up, kind = 2 }) {
+// Кленовый по умолчанию: из трёх фоновых пород он единственный, чей
+// силуэт остаётся узнаваемым листом на шестнадцати точках. Дубовый на
+// такой величине рассыпается в зубчики, мятный читается как капля.
+function LeafIcon({ size = 14, color = T.electric, kind = 0 }) {
   const leaf = LEAF_KINDS[kind % LEAF_KINDS.length];
   return (
     <svg width={size * (30 / 38)} height={size} viewBox="-15 -32 30 38" style={{ flexShrink: 0 }} aria-hidden>
