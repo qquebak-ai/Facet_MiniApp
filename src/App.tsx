@@ -7125,6 +7125,98 @@ function DynamicIslandFrame({ topOffset = 0, hitKey = 0 }) {
   );
 }
 
+/* Обрамление экрана — для телефонов без «острова».
+
+   Там врезаться не во что, поэтому ракета доходит до верхней границы
+   самого экрана, а светится его контур. Эффект тот же самый: две искры
+   от середины нижней грани расходятся по контуру, встречаются наверху и
+   поджигают весь обрамок, который потом плавно гаснет.
+
+   Скругление угла экрана веб-страница не знает: у телефонов оно около
+   сорока точек, у настольного окна прямые углы. Разделяем по наличию
+   сенсорного ввода. */
+const SCREEN_FRAME_INSET = 3;
+const SCREEN_FRAME_RADIUS = 44;
+const ROCKET_TOUCH_TOP_SCREEN = SCREEN_FRAME_INSET + ROCKET_NOSE_OFFSET;
+
+function ScreenFrame({ hitKey = 0 }) {
+  const [size, setSize] = useState(() => (typeof window === "undefined"
+    ? { w: 0, h: 0 }
+    : { w: window.innerWidth, h: window.innerHeight }));
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const update = () => setSize({ w: window.innerWidth, h: window.innerHeight });
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+
+  if (!size.w || !size.h) return null;
+
+  const inset = SCREEN_FRAME_INSET;
+  const w = size.w - inset * 2;
+  const h = size.h - inset * 2;
+  const r = Math.min(DEVICE.isTouch ? SCREEN_FRAME_RADIUS : 14, w / 2, h / 2);
+
+  // Контур начинается от середины нижней грани — оттуда стартуют искры.
+  const ringCW = `M ${w / 2} ${h} L ${w - r} ${h} A ${r} ${r} 0 0 0 ${w} ${h - r} L ${w} ${r} A ${r} ${r} 0 0 0 ${w - r} 0 L ${r} 0 A ${r} ${r} 0 0 0 0 ${r} L 0 ${h - r} A ${r} ${r} 0 0 0 ${r} ${h} Z`;
+  const ringCCW = `M ${w / 2} ${h} L ${r} ${h} A ${r} ${r} 0 0 1 0 ${h - r} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 L ${w - r} 0 A ${r} ${r} 0 0 1 ${w} ${r} L ${w} ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h} Z`;
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "fixed", left: inset, top: inset, width: w, height: h,
+        pointerEvents: "none", zIndex: 2000,
+      }}
+    >
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ overflow: "visible" }}>
+        <path
+          d={ringCW}
+          fill="none"
+          stroke={T.electric}
+          strokeWidth={1.5}
+          style={{ filter: `drop-shadow(0 0 6px ${hexA(T.electric, 0.6)})`, animation: "islandGlow 3.4s ease-in-out infinite" }}
+        />
+        {hitKey > 0 && (
+          <g key={hitKey}>
+            {[ringCW, ringCCW].map((d, i) => (
+              <path
+                key={i}
+                d={d}
+                pathLength={1000}
+                fill="none"
+                stroke="#FFE9C8"
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeDasharray="26 974"
+                style={{
+                  filter: `drop-shadow(0 0 7px ${T.electric})`,
+                  // Контур экрана длиннее островного, поэтому и бежать по
+                  // нему дольше: иначе искры мелькали бы рывком.
+                  animation: "islandSparkRun 1100ms cubic-bezier(0.5,0,0.6,1) forwards",
+                }}
+              />
+            ))}
+            <path
+              d={ringCW}
+              fill="none"
+              stroke="#FFC9A8"
+              strokeWidth={2.6}
+              style={{ opacity: 0, animation: "islandRingBurst 1400ms 1090ms ease-out forwards" }}
+            />
+          </g>
+        )}
+      </svg>
+    </div>
+  );
+}
+
 function useTelegramViewport() {
   const [height, setHeight] = useState(
     typeof window !== "undefined" ? window.innerHeight : 720
@@ -8355,8 +8447,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       style={{ background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden" }}
     >
       <GlobalStyle />
-      {showIsland && <DynamicIslandFrame hitKey={islandHitKey} />}
-      {rocketFlying && <LaunchRocket targetTop={showIsland ? ROCKET_TOUCH_TOP : -60} variant={rocketVariant} />}
+      {showIsland
+        ? <DynamicIslandFrame hitKey={islandHitKey} />
+        : <ScreenFrame hitKey={islandHitKey} />}
+      {rocketFlying && <LaunchRocket targetTop={showIsland ? ROCKET_TOUCH_TOP : ROCKET_TOUCH_TOP_SCREEN} variant={rocketVariant} />}
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast key={toastSeq} toast={toast} insetTop={insetTop} leaving={toastLeaving} />
