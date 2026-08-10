@@ -353,7 +353,7 @@ const STR = {
     achFirstLaunch: "Первый запуск", achFirstLaunchHint: "Запустить свой первый токен",
     wreathBadgeTitle: "Знак создателя", wreathClose: "Закрыть",
     verifiedBadgeTitle: "Подтверждённый аккаунт",
-    verifiedBadgeBody: "Приложение проверило, что этот профиль принадлежит своему владельцу. Значок виден всем и снимается только вместе с подтверждением.",
+    verifiedBadgeBody: "Приложение проверило, что этот профиль принадлежит своему владельцу.",
     wreathBadgeBody: "Выдан за то, что токен этого человека дорос до капитализации {sum}.",
     wreathTier1: "Первая тысяча", wreathTier2: "Десять тысяч", wreathTier3: "Сто тысяч",
     achMcap1k: "Первая тысяча", achMcap1kHint: "Довести свой токен до $1K капитализации",
@@ -651,7 +651,7 @@ const STR = {
     achFirstLaunch: "First launch", achFirstLaunchHint: "Launch your first token",
     wreathBadgeTitle: "Creator badge", wreathClose: "Close",
     verifiedBadgeTitle: "Verified account",
-    verifiedBadgeBody: "The app confirmed this profile belongs to its owner. The badge is visible to everyone and only goes away with the verification itself.",
+    verifiedBadgeBody: "The app confirmed this profile belongs to its owner.",
     wreathBadgeBody: "Awarded for taking their token to a {sum} market cap.",
     wreathTier1: "First thousand", wreathTier2: "Ten thousand", wreathTier3: "Hundred thousand",
     achMcap1k: "First thousand", achMcap1kHint: "Take one of your tokens to a $1K market cap",
@@ -4612,7 +4612,6 @@ function VerifiedBadge({ verified = false, size = 16 }) {
             </div>
           )}
           title={tr("verifiedBadgeTitle")}
-          subtitle={tr("verifiedStatus")}
           text={tr("verifiedBadgeBody")}
         />
       )}
