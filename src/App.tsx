@@ -4347,7 +4347,7 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
 
   // Сам венок — без черенков: они торчали внутрь и ложились палками на
   // аватарку. Лист крепится прямо к ветке, этого достаточно.
-  const body = (
+  const renderBody = (moving) => (
     <>
       {[-1, 1].map((side) => (
         <path
@@ -4359,9 +4359,10 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
         const kind = leafAt(p.i);
         return (
           <g key={idx} transform={`rotate(${p.deg} 100 100) translate(100 ${100 - WREATH_BIG_R})`}>
-            <g style={animate ? {
+            <g style={moving ? {
               transformBox: "fill-box", transformOrigin: "50% 100%",
               animation: `wreathSway ${wreathSwayTime(p)} ease-in-out ${wreathSwayDelay(p)} infinite`,
+              willChange: "transform",
             } : undefined}>
               <g transform={`rotate(${p.side * -14}) scale(${(1.12 * p.scale).toFixed(3)})`}>
                 <path d={kind.outline} fill={filled ? T.electric : "none"} stroke={T.electric} strokeWidth={filled ? 0.8 : 1.5} strokeLinejoin="round" />
@@ -4376,7 +4377,7 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
       {tier >= 3 && (
         <path
           d={starPath(100, 21, 19)} fill={T.electric}
-          style={animate ? {
+          style={moving ? {
             transformBox: "fill-box", transformOrigin: "50% 50%",
             animation: "wreathStar 4.5s ease-in-out infinite",
           } : undefined}
@@ -4393,7 +4394,13 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
     >
       {/* Свечение — отдельным размытым слоем снизу, а не фильтром на всей
           картинке: drop-shadow размывал и сами листья, и венок выглядел
-          мутным. Так гало есть, а края остаются острыми. */}
+          мутным. Так гало есть, а края остаются острыми.
+
+          Слой свечения намеренно неподвижен. Пока он повторял анимацию,
+          браузер каждый кадр пересчитывал размытие и подгонял область
+          фильтра к целым пикселям — от этого вся конструкция чуть
+          подрагивала вверх-вниз. Неподвижное гало этого не делает, а на
+          глаз размытое пятно и не должно качаться вместе с листьями. */}
       {tier >= 3 && (
         <>
           <defs>
@@ -4401,10 +4408,10 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
               <feGaussianBlur stdDeviation="4.5" />
             </filter>
           </defs>
-          <g filter={`url(#${glowId})`} opacity={0.7} aria-hidden="true">{body}</g>
+          <g filter={`url(#${glowId})`} opacity={0.7} aria-hidden="true">{renderBody(false)}</g>
         </>
       )}
-      {body}
+      {renderBody(animate)}
     </svg>
   );
 });
