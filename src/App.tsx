@@ -924,6 +924,17 @@ function GlobalStyle() {
         100% { transform: translate3d(var(--dx), 104vh, 0) rotate(var(--r1)); opacity: 0; }
       }
       @keyframes islandGlow { 0%,100%{ opacity:0.75; } 50%{ opacity:1; } }
+      /* Венок создателя: листья чуть покачиваются от черенка, звезда
+         медленно разгорается. Углы намеренно крошечные — знак висит
+         рядом с ником, и заметное движение там раздражало бы. */
+      @keyframes wreathSway {
+        0%, 100% { transform: rotate(-2.5deg); }
+        50%      { transform: rotate(2.5deg); }
+      }
+      @keyframes wreathStar {
+        0%, 100% { opacity: 0.75; transform: scale(0.94); }
+        50%      { opacity: 1;    transform: scale(1.06); }
+      }
       /* Обрамление проявляется, а не возникает рывком: его показывают
          после заставки, и резкое появление читалось бы как подёргивание. */
       @keyframes frameFadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -3790,7 +3801,7 @@ async function fetchCreatorProfile(userId) {
   if (creatorCache.has(userId)) return creatorCache.get(userId);
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, nickname, bio, avatar_url, emoji, frame_id, card_id")
+    .select("id, nickname, bio, avatar_url, emoji, frame_id, card_id, creator_tier")
     .eq("id", userId)
     .maybeSingle();
   const profile = error ? null : data;
@@ -3847,6 +3858,7 @@ function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast, onOpe
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{tr("creatorLabel")}</span>
           <div className="flex items-center gap-1 min-w-0">
             <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>{creator.nickname}</span>
+            <CreatorWreath tier={Number(creator.creator_tier) || 0} size={16} />
             <ChevronRight size={14} color={T.muted} />
           </div>
           <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>
@@ -4010,6 +4022,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
 
   const frame = FRAME_BY_ID[profile.frame_id] ? profile.frame_id : "none";
   const card = CARD_BY_ID[profile.card_id] ? profile.card_id : "none";
+  const creatorTier = Number(profile.creator_tier) || 0;
 
   return (
     <div className="fx-view" style={{ position: "relative" }}>
@@ -4028,20 +4041,25 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
         </div>
 
         <div style={{ position: "relative", zIndex: 1, lineHeight: 0 }}>
-          <AvatarFrame frameId={frame} size={128}>
-            <div style={{
-              width: "100%", height: "100%", borderRadius: "50%",
-              background: profile.avatar_url ? `center/cover no-repeat url(${profile.avatar_url})` : T.surfaceHi,
-              border: frame === "none" ? `2px solid ${T.lineHi}` : "none",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 52,
-            }}>
-              {!profile.avatar_url && (profile.emoji || <User size={40} color={T.muted} />)}
-            </div>
-          </AvatarFrame>
+          <WreathAvatar tier={creatorTier} size={128}>
+            <AvatarFrame frameId={frame} size={128}>
+              <div style={{
+                width: "100%", height: "100%", borderRadius: "50%",
+                background: profile.avatar_url ? `center/cover no-repeat url(${profile.avatar_url})` : T.surfaceHi,
+                border: frame === "none" ? `2px solid ${T.lineHi}` : "none",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 52,
+              }}>
+                {!profile.avatar_url && (profile.emoji || <User size={40} color={T.muted} />)}
+              </div>
+            </AvatarFrame>
+          </WreathAvatar>
         </div>
 
         <div className="flex flex-col items-center gap-2" style={{ position: "relative", zIndex: 1, width: "100%" }}>
-          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, marginTop: 4 }}>{profile.nickname}</span>
+          <span className="flex items-center gap-1.5" style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, marginTop: 4 }}>
+            {profile.nickname}
+            <CreatorWreath tier={creatorTier} size={19} />
+          </span>
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
             {profile.bio || tr("bioEmptyPlaceholder")}
           </p>
@@ -4170,6 +4188,141 @@ const PROFILE_CARDS = [
 
 const FRAME_BY_ID = Object.fromEntries(AVATAR_FRAMES.map(f => [f.id, f]));
 const CARD_BY_ID = Object.fromEntries(PROFILE_CARDS.map(c => [c.id, c]));
+
+/* Знак создателя — лавровый венок за капитализацию своего токена.
+
+   Ступени: 1 — контур ($1K), 2 — заливка ($10K), 3 — заливка со звездой
+   и свечением ($100K). Цифру внутрь не ставим: рядом с ником знак живёт
+   в 16–20px, и любой текст там превращается в кашу — уровень читается
+   по заливке и звезде.
+
+   Венок рисуется из двух веток по пять листиков. Листики расставлены по
+   дуге и к концу ветки мельчают — так растёт настоящий лавр, и без этого
+   венок выглядит штампованным. */
+const WREATH_LEAVES = 5;
+const WREATH_FROM = 34;   // угол первого листика от вертикали
+const WREATH_TO = 152;    // угол последнего — ветка почти смыкается внизу
+
+function wreathLeafPositions() {
+  const out = [];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < WREATH_LEAVES; i++) {
+      const a = WREATH_FROM + ((WREATH_TO - WREATH_FROM) * i) / (WREATH_LEAVES - 1);
+      out.push({ side, deg: side * a, scale: 1 - i * 0.09, i });
+    }
+  }
+  return out;
+}
+const WREATH_POS = wreathLeafPositions();
+
+// Дуга самой ветки — от первого листика к последнему.
+function wreathBranchPath(side) {
+  const cx = 30, cy = 32, r = 17;
+  const p = (deg) => {
+    const a = (deg * Math.PI) / 180;
+    return [cx + side * r * Math.sin(a), cy - r * Math.cos(a)];
+  };
+  const [x1, y1] = p(WREATH_FROM);
+  const [x2, y2] = p(WREATH_TO);
+  return `M${x1} ${y1} A ${r} ${r} 0 0 ${side > 0 ? 1 : 0} ${x2} ${y2}`;
+}
+
+function starPath(cx, cy, r) {
+  let d = "";
+  for (let i = 0; i < 5; i++) {
+    const ao = ((i * 72 - 90) * Math.PI) / 180;
+    const ai = ((i * 72 - 54) * Math.PI) / 180;
+    d += `${i ? "L" : "M"}${cx + r * Math.cos(ao)} ${cy + r * Math.sin(ao)} `;
+    d += `L${cx + r * 0.45 * Math.cos(ai)} ${cy + r * 0.45 * Math.sin(ai)} `;
+  }
+  return d + "Z";
+}
+
+const CreatorWreath = React.memo(function CreatorWreath({ tier = 0, size = 20, animate = true }) {
+  if (!tier) return null;
+  const filled = tier >= 2;
+  const fill = filled ? T.electric : "none";
+  const glow = tier >= 3 ? `drop-shadow(0 0 ${Math.max(3, size * 0.09)}px ${hexA(T.electric, 0.85)})` : "none";
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 60 60"
+      style={{ display: "block", overflow: "visible", filter: glow, flexShrink: 0 }}
+      aria-hidden="true"
+    >
+      {[-1, 1].map((side) => (
+        <path
+          key={side} d={wreathBranchPath(side)} fill="none"
+          stroke={T.electric} strokeWidth={1.6} strokeLinecap="round" opacity={0.85}
+        />
+      ))}
+      {WREATH_POS.map((p, idx) => (
+        // Качание висит на отдельной обёртке: css-свойство transform
+        // перебивает одноимённый атрибут целиком, и анимация прямо на
+        // этой группе сбила бы весь разворот листика по дуге.
+        <g key={idx} transform={`rotate(${p.deg} 30 32) translate(30 15) rotate(${p.side * -26})`}>
+          <g style={animate ? {
+            transformBox: "fill-box", transformOrigin: "50% 100%",
+            animation: `wreathSway 3.4s ease-in-out ${(p.i * 0.12 + (p.side > 0 ? 0.2 : 0)).toFixed(2)}s infinite`,
+          } : undefined}>
+            <g transform={`scale(${p.scale})`}>
+              <path
+                d="M0 0 C 4.2 -2.6 5 -7.4 0 -12 C -5 -7.4 -4.2 -2.6 0 0 Z"
+                fill={fill} stroke={filled ? "none" : T.electric} strokeWidth={1.5} strokeLinejoin="round"
+              />
+              <path d="M0 -0.6 L0 -11" stroke={filled ? T.bg : T.electric} strokeWidth={0.9} opacity={filled ? 0.45 : 0.9} />
+            </g>
+          </g>
+        </g>
+      ))}
+      {tier >= 3 && (
+        <path
+          d={starPath(30, 6.5, 6)} fill={T.electric}
+          style={animate ? {
+            transformBox: "fill-box", transformOrigin: "50% 50%",
+            animation: "wreathStar 4.5s ease-in-out infinite",
+          } : undefined}
+        />
+      )}
+    </svg>
+  );
+});
+
+/* WreathAvatar — тот же венок, но обнимает аватарку. Венок крупнее
+   самого кружка: иначе листья лягут поверх лица. Клики не перехватывает,
+   поверх рамки из магазина рисуется без конфликта. */
+function WreathAvatar({ tier = 0, size = 128, children }) {
+  if (!tier) return children;
+  // 1.65 — не на глаз: ветка венка лежит на радиусе 17 из 60 единиц
+  // картинки, и при таком размере она проходит чуть внутри края
+  // аватарки, а наружу торчат только листья. Больше — венок отрывается
+  // от аватарки и становится похож на солнце.
+  const outer = Math.round(size * 1.65);
+  // Центр венка в картинке смещён вниз на две единицы из шестидесяти —
+  // компенсируем, иначе знак сидит криво.
+  const shift = outer * (2 / 60);
+  return (
+    <div style={{ position: "relative", width: size, height: size, lineHeight: 0 }}>
+      {children}
+      <div style={{
+        position: "absolute", left: "50%", top: "50%", width: outer, height: outer,
+        transform: `translate(-50%, calc(-50% - ${shift.toFixed(1)}px))`,
+        pointerEvents: "none", zIndex: 2,
+      }}>
+        <CreatorWreath tier={tier} size={outer} />
+      </div>
+    </div>
+  );
+}
+
+// Ступень по лучшей капитализации своего токена. Пороги те же, что у
+// достижений, — знак и достижение всегда приходят вместе.
+function creatorTierOf(mcapUsd) {
+  const v = Number(mcapUsd) || 0;
+  if (v >= 100000) return 3;
+  if (v >= 10000) return 2;
+  if (v >= 1000) return 1;
+  return 0;
+}
 
 /* AvatarFrame — круглая рамка вокруг аватарки. Толщина считается от
    размера, чтобы предмет одинаково смотрелся и на 120px в профиле, и на
@@ -7080,7 +7233,7 @@ function ProfileView({
   cosmetics = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
   // Счётчики подписок и достижения считаются в корне: их же показывает
   // магазин и отдельная страница достижений, дублировать запрос незачем.
-  followCounts = { followers: 0, following: 0 }, achievements = [],
+  followCounts = { followers: 0, following: 0 }, achievements = [], creatorTier = 0,
 }) {
   const [loading, setLoading] = useState(true);
   const [verifyStatus, setVerifyStatus] = useState("none");
@@ -7139,17 +7292,20 @@ function ProfileView({
             className="fx-tap"
             style={{ position: "relative", zIndex: 1, background: "transparent", border: "none", padding: 0, lineHeight: 0 }}
           >
-            <AvatarFrame frameId={cosmetics.frame} size={128}>
-              <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: profile.avatarUrl ? `center/cover no-repeat url(${profile.avatarUrl})` : T.surfaceHi, border: cosmetics.frame === "none" ? (profile.avatarUrl ? `2px solid ${T.lineHi}` : `2px dashed ${T.lineHi}`) : "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: accountCreated ? 52 : 40 }}>
-                {!profile.avatarUrl && (accountCreated && profile.emoji ? profile.emoji : <User size={40} color={T.muted} />)}
-              </div>
-            </AvatarFrame>
+            <WreathAvatar tier={creatorTier} size={128}>
+              <AvatarFrame frameId={cosmetics.frame} size={128}>
+                <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: profile.avatarUrl ? `center/cover no-repeat url(${profile.avatarUrl})` : T.surfaceHi, border: cosmetics.frame === "none" ? (profile.avatarUrl ? `2px solid ${T.lineHi}` : `2px dashed ${T.lineHi}`) : "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: accountCreated ? 52 : 40 }}>
+                  {!profile.avatarUrl && (accountCreated && profile.emoji ? profile.emoji : <User size={40} color={T.muted} />)}
+                </div>
+              </AvatarFrame>
+            </WreathAvatar>
           </button>
           <div className="flex flex-col items-center text-center gap-2" style={{ position: "relative", zIndex: 1, width: "100%" }}>
           {accountCreated ? (
             <>
               <div className="flex items-center gap-1.5 mt-1">
                 <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{profile.nickname}</span>
+                <CreatorWreath tier={creatorTier} size={19} />
                 {verifyStatus === "verified" && <ShieldCheck size={16} color={T.electric} />}
               </div>
               <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
@@ -8228,11 +8384,15 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
     const { data: prof, error } = await supabase
       .from("profiles")
-      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id")
+      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id, creator_tier")
       .eq("id", user.id)
       .single();
     if (error || !prof) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
     setProfile({ nickname: prof.nickname, email: prof.email, bio: prof.bio || "", avatarUrl: prof.avatar_url, emoji: prof.emoji });
+    // Ступень знака создателя лежит в профиле, а не только на устройстве:
+    // её должны видеть другие. Здесь только читаем, повышает её эффект
+    // ниже, когда посчитается лучшая капитализация.
+    setCreatorTier(Number(prof.creator_tier) || 0);
     setAccountCreated(true);
     // Косметика хранится в профиле, а не только на устройстве — иначе её
     // не увидят другие. Но если на сервере пусто, а локально что-то
@@ -8546,6 +8706,18 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myCurveKey, tonPriceUsd, mcapPeakKey]);
+
+  // Ступень знака создателя. Живёт в профиле, потому что её видят другие,
+  // и только растёт: если токен просядет, знак остаётся.
+  const [creatorTier, setCreatorTier] = useState(0);
+  useEffect(() => {
+    const earned = creatorTierOf(bestMcapUsd);
+    if (!userId || earned <= creatorTier) return;
+    setCreatorTier(earned);
+    supabase.from("profiles").update({ creator_tier: earned }).eq("id", userId).then(({ error }) => {
+      if (error) console.warn("[mintly] failed to save creator tier:", error.message);
+    });
+  }, [bestMcapUsd, creatorTier, userId]);
 
   // Достижения. Считаются здесь, потому что нужны сразу трём экранам:
   // профилю, отдельной странице и магазину — он по ним запирает предметы.
@@ -9258,6 +9430,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               achievements={achievements}
               insetTop={insetTop}
               userId={userId}
+              creatorTier={creatorTier}
             />
           )}
         </div>
