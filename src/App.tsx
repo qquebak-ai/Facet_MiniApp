@@ -352,6 +352,8 @@ const STR = {
     shopLocked: "Предмет откроется за достижение",
     achFirstLaunch: "Первый запуск", achFirstLaunchHint: "Запустить свой первый токен",
     wreathBadgeTitle: "Знак создателя", wreathClose: "Закрыть",
+    verifiedBadgeTitle: "Подтверждённый аккаунт",
+    verifiedBadgeBody: "Приложение проверило, что этот профиль принадлежит своему владельцу. Значок виден всем и снимается только вместе с подтверждением.",
     wreathBadgeBody: "Выдан за то, что токен этого человека дорос до капитализации {sum}.",
     wreathTier1: "Первая тысяча", wreathTier2: "Десять тысяч", wreathTier3: "Сто тысяч",
     achMcap1k: "Первая тысяча", achMcap1kHint: "Довести свой токен до $1K капитализации",
@@ -648,6 +650,8 @@ const STR = {
     shopLocked: "This item unlocks with an achievement",
     achFirstLaunch: "First launch", achFirstLaunchHint: "Launch your first token",
     wreathBadgeTitle: "Creator badge", wreathClose: "Close",
+    verifiedBadgeTitle: "Verified account",
+    verifiedBadgeBody: "The app confirmed this profile belongs to its owner. The badge is visible to everyone and only goes away with the verification itself.",
     wreathBadgeBody: "Awarded for taking their token to a {sum} market cap.",
     wreathTier1: "First thousand", wreathTier2: "Ten thousand", wreathTier3: "Hundred thousand",
     achMcap1k: "First thousand", achMcap1kHint: "Take one of your tokens to a $1K market cap",
@@ -4100,7 +4104,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
         <div className="flex flex-col items-center gap-2" style={{ position: "relative", zIndex: 1, width: "100%" }}>
           <span className="flex items-center gap-1.5" style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, marginTop: 4 }}>
             {profile.nickname}
-            {profile.verified && <ShieldCheck size={16} color={T.electric} />}
+            <VerifiedBadge verified={!!profile.verified} size={16} />
             <CreatorWreathBadge tier={creatorTier} kindId={wreathKind} size={19} />
           </span>
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
@@ -4473,13 +4477,92 @@ function WreathAvatar({ tier = 0, size = 128, kindId = "mix", children }) {
   );
 }
 
-/* CreatorWreathBadge — знак рядом с ником, по нажатию объясняет себя.
+/* Значки рядом с ником — венок создателя и подтверждение аккаунта.
 
-   Значок висит и на чужих профилях, где догадаться о его смысле неоткуда,
-   поэтому нажатие открывает окно с самим венком и строкой, за что он
-   выдан. Окно уходит в портал: значок нередко лежит внутри кнопки
-   перехода на профиль и внутри блоков с обрезкой. */
+   Оба объясняют себя по нажатию, поэтому окно у них одно на двоих:
+   отличаются только картинкой и текстом. Значки висят и на чужих
+   профилях, где догадаться об их смысле неоткуда.
+
+   Окно уходит в портал: значок нередко лежит внутри кнопки перехода на
+   профиль и внутри блоков с обрезкой. */
 const WREATH_TIER_SUM = ["", "$1K", "$10K", "$100K"];
+
+/* BadgeSheet — карточка снизу: картинка вырастает, подпись проявляется
+   вместе с ней. Не впритык к краям экрана, иначе читается как обрезанная
+   полоса, а не как отдельное окно. */
+function BadgeSheet({ onClose, art, title, subtitle, text }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fx-modal-back"
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.8)",
+        backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end",
+        justifyContent: "center",
+        padding: "0 12px calc(12px + env(safe-area-inset-bottom))",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 420, background: T.surface,
+          border: `1px solid ${T.lineHi}`, borderRadius: 26,
+          padding: "26px 22px 22px",
+          display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+          animation: "wreathSheetUp 340ms cubic-bezier(0.16,1,0.3,1) both",
+        }}
+      >
+        <div style={{
+          width: 160, height: 160, display: "flex", alignItems: "center", justifyContent: "center",
+          animation: "wreathGrowIn 1100ms cubic-bezier(0.22,1,0.28,1) 120ms both",
+        }}>
+          {art}
+        </div>
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center", width: "100%",
+          animation: "wreathCaptionIn 520ms ease-out 160ms both",
+        }}>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700, marginTop: 12 }}>{title}</span>
+          {subtitle && (
+            <span style={{ fontFamily: displayFont, color: T.electric, fontSize: 13, fontWeight: 700, marginTop: 2 }}>{subtitle}</span>
+          )}
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 8, maxWidth: 280 }}>{text}</p>
+          <button
+            onClick={onClose}
+            className="fx-tap w-full rounded-[20px] py-3"
+            style={{ marginTop: 18, maxWidth: 320, background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
+          >
+            {tr("wreathClose")}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/* BadgeTap — область нажатия вокруг значка. Палец толще самого значка
+   (16–19px), поэтому область расширена отступом и тут же убрана
+   отрицательным полем: на раскладку это не влияет. zIndex поднят —
+   венок вокруг аватарки заходит своим слоем на строку с ником. */
+function BadgeTap({ label, onOpen, children }) {
+  return (
+    <span
+      role="button" tabIndex={0} aria-label={label}
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); onOpen(); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer", lineHeight: 0, padding: 13, margin: -13, borderRadius: 999,
+        position: "relative", zIndex: 3, pointerEvents: "auto", touchAction: "manipulation",
+        WebkitTapHighlightColor: "transparent",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
 
 function CreatorWreathBadge({ tier = 0, kindId = "mix", size = 19 }) {
   const [open, setOpen] = useState(false);
@@ -4487,81 +4570,51 @@ function CreatorWreathBadge({ tier = 0, kindId = "mix", size = 19 }) {
   const close = (e) => { if (e) { e.stopPropagation(); e.preventDefault(); } setOpen(false); };
   return (
     <>
-      {/* Палец толще значка: сам венок 16–19px, а попасть по нему надо
-          уверенно. Поэтому область нажатия расширена отступом и тут же
-          убрана отрицательным полем — на раскладку это не влияет.
-          zIndex поднят: венок вокруг аватарки заходит своим слоем на
-          строку с ником, и хотя он нажатия не ловит, лучше лежать выше. */}
-      <span
-        role="button" tabIndex={0} aria-label={tr("wreathBadgeTitle")}
-        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setOpen(true); }}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
-        style={{
-          display: "inline-flex", alignItems: "center", justifyContent: "center",
-          cursor: "pointer", lineHeight: 0, padding: 13, margin: -13, borderRadius: 999,
-          position: "relative", zIndex: 3, pointerEvents: "auto", touchAction: "manipulation",
-          WebkitTapHighlightColor: "transparent",
-        }}
-      >
+      <BadgeTap label={tr("wreathBadgeTitle")} onOpen={() => setOpen(true)}>
         <CreatorWreath tier={tier} size={size} />
-      </span>
-      {open && typeof document !== "undefined" && createPortal(
-        <div
-          className="fx-modal-back"
-          onClick={close}
-          style={{
-            position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.8)",
-            backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end",
-            justifyContent: "center",
-            padding: "0 12px calc(12px + env(safe-area-inset-bottom))",
-          }}
-        >
-          {/* Карточка снизу, но не впритык к краям: иначе она выглядит
-              обрезанной экраном, а не отдельным окном. */}
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "100%", maxWidth: 420, background: T.surface,
-              border: `1px solid ${T.lineHi}`, borderRadius: 26,
-              padding: "26px 22px 22px",
-              display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
-              animation: "wreathSheetUp 340ms cubic-bezier(0.16,1,0.3,1) both",
-            }}
-          >
-            {/* Венок показываем без аватарки внутри: окно про сам знак.
-                Он не возникает готовым, а медленно вырастает. Подпись
-                проявляется вместе с ним, а не после: ждать текста,
-                глядя на растущую картинку, незачем. */}
+      </BadgeTap>
+      {open && (
+        <BadgeSheet
+          onClose={close}
+          art={<AvatarWreathArt tier={tier} kindId={kindId} size={160} />}
+          title={tr("wreathBadgeTitle")}
+          subtitle={tr(`wreathTier${tier}`)}
+          text={trf("wreathBadgeBody", { sum: WREATH_TIER_SUM[tier] || "" })}
+        />
+      )}
+    </>
+  );
+}
+
+/* VerifiedBadge — щит подтверждения. Окно то же, что у венка: человек
+   уже знает, что значок можно нажать, и ждёт такого же объяснения. */
+function VerifiedBadge({ verified = false, size = 16 }) {
+  const [open, setOpen] = useState(false);
+  if (!verified) return null;
+  const close = (e) => { if (e) { e.stopPropagation(); e.preventDefault(); } setOpen(false); };
+  return (
+    <>
+      <BadgeTap label={tr("verifiedBadgeTitle")} onOpen={() => setOpen(true)}>
+        <ShieldCheck size={size} color={T.electric} />
+      </BadgeTap>
+      {open && (
+        <BadgeSheet
+          onClose={close}
+          art={(
             <div style={{
-              width: 160, height: 160, display: "flex", alignItems: "center", justifyContent: "center",
-              animation: "wreathGrowIn 1100ms cubic-bezier(0.22,1,0.28,1) 120ms both",
+              width: 132, height: 132, borderRadius: "50%",
+              background: hexA(T.electric, 0.12),
+              border: `1px solid ${hexA(T.electric, 0.35)}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              filter: `drop-shadow(0 0 14px ${hexA(T.electric, 0.45)})`,
             }}>
-              <AvatarWreathArt tier={tier} kindId={kindId} size={160} />
+              <ShieldCheck size={68} color={T.electric} />
             </div>
-            <div style={{
-              display: "flex", flexDirection: "column", alignItems: "center", width: "100%",
-              animation: "wreathCaptionIn 520ms ease-out 160ms both",
-            }}>
-              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700, marginTop: 12 }}>
-                {tr("wreathBadgeTitle")}
-              </span>
-              <span style={{ fontFamily: displayFont, color: T.electric, fontSize: 13, fontWeight: 700, marginTop: 2 }}>
-                {tr(`wreathTier${tier}`)}
-              </span>
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 8, maxWidth: 280 }}>
-                {trf("wreathBadgeBody", { sum: WREATH_TIER_SUM[tier] || "" })}
-              </p>
-              <button
-                onClick={close}
-                className="fx-tap w-full rounded-[20px] py-3"
-                style={{ marginTop: 18, maxWidth: 320, background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
-              >
-                {tr("wreathClose")}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body,
+          )}
+          title={tr("verifiedBadgeTitle")}
+          subtitle={tr("verifiedStatus")}
+          text={tr("verifiedBadgeBody")}
+        />
       )}
     </>
   );
@@ -7578,7 +7631,7 @@ function ProfileView({
               <div className="flex items-center gap-1.5 mt-1">
                 <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{profile.nickname}</span>
                 <CreatorWreathBadge tier={creatorTier} kindId={cosmetics.wreath} size={19} />
-                {verifyStatus === "verified" && <ShieldCheck size={16} color={T.electric} />}
+                <VerifiedBadge verified={verifyStatus === "verified"} size={16} />
               </div>
               <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
                 {profile.bio || t("bioEmptyPlaceholder")}
