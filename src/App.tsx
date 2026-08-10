@@ -2275,7 +2275,12 @@ const CHART_DEFAULT_VISIBLE = 60;
 // Width reserved on the right for the price-axis gutter (labels + the
 // live current-price pill) — candles are plotted to the left of this,
 // never underneath it.
-const CHART_GUTTER_W = 58;
+// Минимальная ширина правой шкалы. Настоящая считается по самой длинной
+// подписи: в режиме капитализации там «$32.57M» вместо «0.0000031», и в
+// фиксированные пятьдесят восемь точек такая подпись не помещалась —
+// упиралась в оба края, а плашка текущей цены казалась раздутой.
+const CHART_GUTTER_MIN = 58;
+const CHART_GUTTER_MAX = 104;
 
 function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt }) {
   const canvasRef = useRef(null);
@@ -2348,7 +2353,12 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     const range = (max - min) || (max * 0.02) || 1;
     const padTop = height * 0.08, padBottom = height * 0.1;
     const drawHeight = height - padTop - padBottom;
-    const plotW = Math.max(1, widthPx - CHART_GUTTER_W);
+    // Ширина шкалы под самую длинную подпись: берём крайние значения
+    // окна, они и дают самый длинный текст.
+    const sample = [valueFmt ? valueFmt(max) : String(max), valueFmt ? valueFmt(min) : String(min)]
+      .reduce((a, b) => (String(b).length > String(a).length ? b : a), "");
+    const gutter = Math.max(CHART_GUTTER_MIN, Math.min(CHART_GUTTER_MAX, String(sample).length * 7.2 + 18));
+    const plotW = Math.max(1, widthPx - gutter);
     const slot = plotW / count;
     const bodyW = Math.max(2, Math.min(14, slot * 0.7));
     // Clamp so a stray out-of-range price (bad tick, huge wick) draws a
@@ -2360,7 +2370,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       return Math.max(-height, Math.min(height * 2, t));
     };
     const xFor = (idx) => (idx - v.start + 0.5) * slot;
-    return { startI, endI, min, max, range, slot, bodyW, yFor, xFor, padTop, padBottom, drawHeight, plotW };
+    return { startI, endI, min, max, range, slot, bodyW, yFor, xFor, padTop, padBottom, drawHeight, plotW, gutter };
   }
 
   function draw() {
@@ -2379,7 +2389,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, widthPx, height);
 
-    const { startI, endI, min, max, range, yFor, xFor, bodyW, plotW, padTop, padBottom, drawHeight } = layout;
+    const { startI, endI, min, max, range, yFor, xFor, bodyW, plotW, padTop, padBottom, drawHeight, gutter } = layout;
     const fmt = valueFmt || fmtPrice;
 
     // Фоновая сетка — та же идея, что и в CyberGrid на фоне приложения,
@@ -2459,7 +2469,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     // Price axis (right gutter) — evenly spaced "nice" price levels, like
     // a real trading chart's scale, instead of the old 3 faint labels.
     ctx.fillStyle = T.surface;
-    ctx.fillRect(plotW, 0, CHART_GUTTER_W, height);
+    ctx.fillRect(plotW, 0, gutter, height);
     const targetLines = Math.max(4, Math.round(drawHeight / 44));
     const rawStep = range / targetLines;
     const mag = Math.pow(10, Math.floor(Math.log10(rawStep || 1)));
@@ -2491,13 +2501,13 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       const closeAtMs = (lastCandle.time + barSec) * 1000;
       const countdownLabel = fmtCountdown(closeAtMs - Date.now());
       ctx.fillStyle = lastColor;
-      ctx.fillRect(widthPx - CHART_GUTTER_W, pillTop, CHART_GUTTER_W, pillTop + 32 - pillTop);
+      ctx.fillRect(widthPx - gutter, pillTop, gutter, 32);
       ctx.fillStyle = T.bg;
       ctx.textAlign = "center";
       ctx.font = "700 11px " + monoFont;
-      ctx.fillText(priceLabel, widthPx - CHART_GUTTER_W / 2, pillTop + 13);
+      ctx.fillText(priceLabel, widthPx - gutter / 2, pillTop + 13);
       ctx.font = "9px " + monoFont;
-      ctx.fillText(countdownLabel, widthPx - CHART_GUTTER_W / 2, pillTop + 26);
+      ctx.fillText(countdownLabel, widthPx - gutter / 2, pillTop + 26);
       ctx.textAlign = "left";
     }
 
@@ -2734,6 +2744,10 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   function onScaleMouseMove(e) { if (!yScaleRef.current || e.buttons !== 1) return; e.stopPropagation(); scaleMove(e.clientY); }
 
   if (!n) return null;
+  // Полоса захвата шкалы по ширине совпадает с самой шкалой: иначе
+  // тянуть приходится мимо подписей.
+  const layoutNow = computeLayout();
+  const scaleGutter = (layoutNow && layoutNow.gutter) || CHART_GUTTER_MIN;
   return (
     <div ref={wrapRef} style={{ width: "100%", height, position: "relative", touchAction: "none" }}
       onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
@@ -2746,7 +2760,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       <div
         onTouchStart={onScaleTouchStart} onTouchMove={onScaleTouchMove} onTouchEnd={scaleEnd} onTouchCancel={scaleEnd}
         onMouseDown={onScaleMouseDown} onMouseMove={onScaleMouseMove} onMouseUp={scaleEnd} onMouseLeave={scaleEnd}
-        style={{ position: "absolute", right: 0, top: 0, width: CHART_GUTTER_W, height: "100%", touchAction: "none", cursor: "ns-resize" }}
+        style={{ position: "absolute", right: 0, top: 0, width: scaleGutter, height: "100%", touchAction: "none", cursor: "ns-resize" }}
       />
     </div>
   );
