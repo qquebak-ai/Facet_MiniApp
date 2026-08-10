@@ -1815,7 +1815,11 @@ function cachedPoolTrades(poolAddress) {
   return (poolAddress && tradesCache.get(poolAddress)) || null;
 }
 
-async function fetchPoolTrades(poolAddress, limit = 25, priority = GT_PRIORITY.trades) {
+// limit по умолчанию щедрый: эндпоинт отдаёт последние сделки одной
+// страницей, и обрезать её незачем — из этих же строк собирается и
+// вкладка сделок, и общая лента, а пропущенная сделка обратно уже не
+// приедет.
+async function fetchPoolTrades(poolAddress, limit = 300, priority = GT_PRIORITY.trades) {
   if (!poolAddress) return null;
   try {
     const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/trades`, { priority });
@@ -2152,7 +2156,7 @@ async function fetchCurveMarket(curveAddress, jettonMaster, testnet, rateArg = 0
 
 // Сделки кривой в том же виде, в каком приходят сделки с DEX, — чтобы
 // вкладка «Транзакции» рисовала и те и другие одним кодом.
-function curveTradesToFeed(trades, params, limit = 30) {
+function curveTradesToFeed(trades, params, limit = 200) {
   const rate = tonUsd();
   return (trades || [])
     .slice(-limit)
@@ -2920,7 +2924,10 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
         into.push({ ...r, token });
       });
       into.sort((a, b) => new Date(b.at) - new Date(a.at));
-      collectedRef.current = into.slice(0, 60);
+      // Держим большой запас: за круг по всем токенам набегают сотни
+      // сделок, и лента должна показать каждую, а не последние
+      // несколько.
+      collectedRef.current = into.slice(0, 600);
       if (!cancelled) setBuys(collectedRef.current);
     }
 
@@ -2945,7 +2952,7 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
 
       await Promise.all(
         slice.map(async (p) => {
-          const rows = await fetchPoolTrades(p.poolAddress, 12, GT_PRIORITY.feed);
+          const rows = await fetchPoolTrades(p.poolAddress, 300, GT_PRIORITY.feed);
           if (cancelled || !rows) return;
           mergeIn(rows, p);
         })
@@ -2957,7 +2964,7 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
         const tok = curves[curveCursor.current % curves.length];
         curveCursor.current += 1;
         const m = await fetchCurveMarket(tok.curveAddress, tok.tokenAddress || tok.address, TON_TESTNET_NETWORK);
-        if (!cancelled && m) mergeIn(curveTradesToFeed(m.trades, curveParamsOf(m.state), 12), tok);
+        if (!cancelled && m) mergeIn(curveTradesToFeed(m.trades, curveParamsOf(m.state), 200), tok);
       }
 
       if (!cancelled) setLoaded(true);
@@ -2987,7 +2994,7 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
     }
     setCurrent((prev) => pickNext(buys, prev));
     if (!buys.length) return;
-    const swap = setInterval(() => setCurrent((prev) => pickNext(buys, prev)), 4000);
+    const swap = setInterval(() => setCurrent((prev) => pickNext(buys, prev)), 2600);
     return () => clearInterval(swap);
   }, [buys]);
 
@@ -3016,7 +3023,7 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
       className="fx-tap w-full flex items-center gap-2 rounded-[16px] px-3 py-2 overflow-hidden"
       style={{ background: hexA(b.kind === "sell" ? T.down : T.up, 0.07), border: `1px solid ${hexA(b.kind === "sell" ? T.down : T.up, 0.22)}`, textAlign: "left" }}
     >
-      <div key={b.id} className="flex items-center gap-2 min-w-0" style={{ flex: 1, animation: "tickerSwap 4s ease-in-out both" }}>
+      <div key={b.id} className="flex items-center gap-2 min-w-0" style={{ flex: 1, animation: "tickerSwap 2.6s ease-in-out both" }}>
         <TokenAvatar size={20} tone={b.kind === "sell" ? "down" : "up"} src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
         <span className="truncate" style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>{shortAddr(b.from) || "—"}</span>
         <span style={{ fontFamily: bodyFont, color: b.kind === "sell" ? T.down : T.up, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
@@ -4688,7 +4695,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     if (cached) setTrades(cached);
     setTradesLoading(!cached);
     async function load() {
-      const res = await fetchPoolTrades(token.poolAddress);
+      const res = await fetchPoolTrades(token.poolAddress, 300, GT_PRIORITY.trades);
       if (cancelled) return;
       // null = запрос не прошёл. Уже показанный список в этом случае
       // оставляем на месте: мигать пустым экраном из-за одного 429 хуже,
@@ -4897,7 +4904,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           {/* Пустой список и неудавшийся запрос — разные вещи, и раньше
               оба показывали «недоступно». Теперь видно, где сделок правда
               нет, а где просто не достучались до API. */}
-          {!token.poolAddress ? (
+          {!token.poolAddress && !token.curveAddress ? (
             <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
               <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("txUnavailable")}</span>
             </div>
