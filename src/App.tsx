@@ -5,9 +5,9 @@ import {
   Wallet, Home as HomeIcon, PlusCircle, User, ChevronLeft, Share2, Star,
   ShieldCheck, ShieldAlert, Globe, Globe2, Send, Twitter, Image as ImageIcon, Upload,
   Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, MoreHorizontal, HeartCrack,
-  Settings as SettingsIcon, Bell, Lock, Palette, Gift, LifeBuoy,
-  FileText, ShieldQuestion, ArrowDownToLine, ArrowUpFromLine, Link2, CheckCircle2, RefreshCw, X,
-  Eye, EyeOff, LogIn, Mail, KeyRound, ShoppingBag, Trash2, Crown
+  Settings as SettingsIcon, Lock, Gift, LifeBuoy,
+  FileText, CheckCircle2, RefreshCw, X,
+  Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown
 } from "lucide-react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, beginCell, toNano } from "@ton/core";
@@ -128,65 +128,46 @@ const STR = {
     shopTabFrames: "Рамки", shopTabCards: "Карточки", shopTabWreath: "Венок",
     wreathLockHint: "Открывается вместе со знаком создателя",
     shopEquip: "Надеть", shopEquipped: "Надето",
-    cosmeticApplied: "Применено", cosmeticRemoved: "Снято",
-    connect: "Подключить", connected: "Подключён",
+    cosmeticApplied: "Применено", cosmeticRemoved: "Снято", connected: "Подключён",
     settingsSaved: "Настройки сохранены",
-    langTitle: "Язык", themeTitle: "Оформление",
-    themeDark: "Тёмная", themeWhite: "Светлая",
+    langTitle: "Язык", themeTitle: "Оформление", themeWhite: "Светлая",
     langFullNote: "Интерфейс переведён на выбранный язык.",
-    search: "Поиск токенов",
-    buy: "Купить", sell: "Продать", cancel: "Отмена", confirm: "Подтвердить",
-    follow: "Подписаться", following: "Вы подписаны", share: "Поделиться",
-    copyAddress: "Скопировать адрес", disconnectWallet: "Отключить кошелёк",
+    buy: "Купить", sell: "Продать", cancel: "Отмена", confirm: "Подтвердить", following: "Вы подписаны", share: "Поделиться", disconnectWallet: "Отключить кошелёк",
     disconnectShort: "Отключить", tonExplorerBtn: "Обозреватель TON", walletProvider: "Кошелёк",
     connectWallet: "Подключить TON-кошелёк",
-    editProfile: "Редактировать профиль",
-    logOut: "Выйти", deleteAccount: "Удалить аккаунт",
-    createToken: "Создать токен",
-    settings: "Настройки",
-    notifications: "Уведомления", security: "Безопасность",
+    editProfile: "Редактировать профиль", deleteAccount: "Удалить аккаунт",
+    settings: "Настройки", security: "Безопасность",
     wallet: "Кошелёк", profileSettings: "Профиль", referral: "Реферальная программа",
     privacy: "Конфиденциальность", terms: "Условия использования", support: "Поддержка",
     launchPreparing: "Подготовка метаданных…",
     launchGenerating: "Генерация токена…",
     launchDeploying: "Деплой…",
     launchConfirming: "Подтверждение…",
-    launchSuccessTitle: "Токен создан",
     launchSuccessSub: "Токен успешно выпущен и готов к торгам",
     tokenCreatedStatus: "Токен создан",
     contractAddress: "Адрес контракта",
     totalSupply: "Общий выпуск",
     initialBuy: "Стартовая покупка",
-    viewToken: "Открыть токен",
     doneClose: "Готово",
     launchingWait: "Не закрывай экран, это займёт пару секунд…",
     heroTitle: "Начни уже сейчас",
     heroBodyLead: "Создавай, торгуй и расти с ",
     heroBodyTail: " на сделку. Присоединяйся к экосистеме с первого дня.",
     heroFee: "комиссией 1%",
-    mempadComingSoon: "Здесь скоро появится что-то ещё.",
     mempadSpotlight: "В центре внимания",
     mempadLaunchToken: "Запустить токен",
     tickerBought: "купил", tickerSold: "продал",
-    sinceSec: "с", sinceMin: "м", sinceHour: "ч",
-    mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX",
-    homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionWallet: "Кошелёк",
-    homeTopGainer: "Лидер роста",
+    sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", homeActionMempad: "Мемпад", homeActionWallet: "Кошелёк",
     homeUpdatesComingSoon: "Здесь скоро появятся новости и обновления платформы.",
-    searchPlaceholder: "Найти токен или тикер",
-    emptyFilter: "По этому фильтру пока пусто — попробуй другой или загляни позже.",
-    catAll: "Все", catMemes: "Мемы", catUtility: "Утилиты", catGames: "Игры", catAI: "AI", catSocial: "Соц",
+    emptyFilter: "По этому фильтру пока пусто — попробуй другой или загляни позже.", catMemes: "Мемы", catUtility: "Утилиты", catGames: "Игры", catAI: "AI", catSocial: "Соц",
     linkCopied: "Ссылка скопирована",
     tokenLinkCopied: "Ссылка на токен скопирована",
     reportSent: "Жалоба отправлена на проверку",
     back: "Назад",
     perToken: "/ токен",
-    chartLoading: "загрузка графика…", chartNoData: "Истории торгов пока нет",
-    fakeChartBadge: "Фейковый график",
-    ohlcOpen: "О", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
+    chartLoading: "загрузка графика…", chartNoData: "Истории торгов пока нет", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
     statPrice: "Цена", statLiquidity: "Ликвидность", statHolders: "Держателей", statVolume24h: "Объём 24ч",
-    tabChart: "График", tabInfo: "Инфо", tabTx: "Транзакции",
-    chartModeMcap: "МКап", chartModePrice: "Цена",
+    tabChart: "График", tabInfo: "Инфо", tabTx: "Транзакции", chartModePrice: "Цена",
     tokenNoAddress: "Адрес недоступен",
     txUnavailable: "Список транзакций пока недоступен для этого пула",
     txEmpty: "По этому пулу пока нет сделок",
@@ -243,7 +224,6 @@ const STR = {
     descPlaceholder: "О чём этот токен и почему он появился",
     descRequiredShort: "Описание обязательно — после запуска изменить его будет нельзя",
     siteLabel: "Сайт",
-    categoryLabel: "Категория",
     launchAmountLabel: "Сумма для запуска (TON)",
     launchAmountNote: "На эту сумму сразу после запуска будут выкуплены первые токены — это стартовая ликвидность и первая цена токена.",
     youWillGet: "Ты получишь ≈",
@@ -267,14 +247,6 @@ const STR = {
     refShare: "Поделиться ссылкой",
     refShareText: "Запускай мемкоины на TON вместе со мной в Mintly",
     editProfileDesc: "Никнейм, аватар, почта и описание профиля.",
-    walletConnectedStatus: "Кошелёк подключён",
-    walletNotConnectedStatus: "Кошелёк не подключён",
-    pushNotif: "Push-уведомления",
-    pushNotifSub: "Сделки, рост цены, ответы в комментариях",
-    emailNotif: "Email-уведомления",
-    emailNotifSub: "Еженедельный дайджест по портфелю",
-    twoFA: "Двухфакторная аутентификация",
-    twoFASub: "Подтверждение входа кодом",
     pinRow: "PIN-код",
     pinRowSub: "Запрашивать код при каждом открытии Mintly",
     enablePinFirst: "Сначала включи PIN-код",
@@ -284,7 +256,6 @@ const STR = {
     contactSupport: "Написать в поддержку",
     copyLink: "Скопировать ссылку",
     privacyText: "Мы собираем только данные, необходимые для работы приложения: никнейм, адрес кошелька и историю сделок внутри Mintly. Данные не передаются третьим лицам в рекламных целях. Ты можешь удалить аккаунт в любой момент — все локальные данные профиля будут стёрты немедленно.",
-    termsText: "Используя Mintly, ты подтверждаешь, что совершаешь сделки на свой риск. Mintly не гарантирует доходность токенов и не несёт ответственности за потери, вызванные волатильностью рынка. Запрещено создавать токены, вводящие пользователей в заблуждение, или использующие чужой бренд без разрешения.",
     accountLabel: "Аккаунт",
     loginTab: "Войти", createTab: "Создать аккаунт",
     changeAvatarHint: "Нажми, чтобы заменить",
@@ -293,12 +264,6 @@ const STR = {
     createHint: "Никнейм, почта и пароль обязательны, остальное можно заполнить позже.",
     nicknameLabel: "Никнейм",
     nicknameError: "2–20 символов, только латинские буквы, цифры, _ и ., начинается с буквы",
-    emailLabel: "Почта",
-    emailRequired: "Укажите email — поле обязательно",
-    emailInvalid: "Введите корректный email",
-    passwordLabel: "Пароль",
-    passwordPlaceholder: "Минимум 6 символов",
-    passwordError: "Пароль должен быть не короче 6 символов",
     bioLabel: "О себе (необязательно)",
     bioPlaceholder: "Пара слов о себе",
     submittingText: "Проверяем...",
@@ -317,25 +282,21 @@ const STR = {
     accountNotCreated: "Аккаунт не создан",
     accountNotCreatedBody: "Войди в свой аккаунт или создай новый, чтобы запускать токены, торговать и собирать достижения.",
     loginCta: "Войти",
-    createCta: "Создать",
     myTokensCreate: "Создать",
     myTokensTitle: "Мои токены",
     unnamedToken: "Токен без названия",
     noTokensYet: "Ты ещё не запустил ни одного токена.",
     noActivityYet: "Пока нет активности — покупки, продажи и запуски токенов появятся здесь.",
-    noAchievementsYet: "Достижений пока нет — торгуй и запускай токены, чтобы получить первое.",
     profileConfirmed: "Профиль подтверждён",
     verifyPending: "Заявка на проверке",
     verifyCta: "Подтверди личность для бейджа",
     deleteAccountForever: "Удалить аккаунт навсегда",
     editProfileBtn: "Редактировать профиль",
     statsTitle: "Статистика",
-    statPortfolioValue: "Стоимость портфеля",
     statTotalProfit: "Общая прибыль",
     statCreatedTokens: "Создано токенов",
     statTokensOwned: "Токенов в портфеле",
     statTotalTrades: "Всего сделок",
-    statWinRate: "Процент побед",
     statFollowers: "Подписчики",
     statFollowing: "Подписки",
     portfolioTitle: "Портфель",
@@ -371,7 +332,6 @@ const STR = {
     pendingStatus: "На проверке",
     notVerifiedStatus: "Не подтверждён",
     verifyAccountBtn: "Подтвердить аккаунт",
-    dangerZoneTitle: "Опасная зона",
     marketCapLabel: "Маркеткап",
     manageBtn: "Управлять",
     connectWalletModalTitle: "Подключи TON-кошелёк, чтобы продолжить",
@@ -408,8 +368,6 @@ const STR = {
     authErrNicknameTaken: "Никнейм \"{name}\" уже занят",
     authErrGeneric: "Что-то пошло не так, попробуй ещё раз",
     authErrAvatarUpload: "Не удалось загрузить аватар: {msg}",
-    authErrProfileLoad: "Не удалось загрузить профиль, попробуй ещё раз",
-    authConfirmEmailSent: "Мы отправили письмо для подтверждения — перейди по ссылке, потом войди",
   },
   EN: {
     navHome: "Home", navMempad: "Mempad", navCreate: "Create", navProfile: "Profile", navShop: "Shop",
@@ -426,65 +384,46 @@ const STR = {
     shopTabFrames: "Frames", shopTabCards: "Cards", shopTabWreath: "Wreath",
     wreathLockHint: "Unlocked together with the creator badge",
     shopEquip: "Equip", shopEquipped: "Equipped",
-    cosmeticApplied: "Applied", cosmeticRemoved: "Removed",
-    connect: "Connect", connected: "Connected",
+    cosmeticApplied: "Applied", cosmeticRemoved: "Removed", connected: "Connected",
     settingsSaved: "Settings saved",
-    langTitle: "Language", themeTitle: "Appearance",
-    themeDark: "Dark", themeWhite: "White",
+    langTitle: "Language", themeTitle: "Appearance", themeWhite: "White",
     langFullNote: "The interface is translated into the selected language.",
-    search: "Search tokens",
-    buy: "Buy", sell: "Sell", cancel: "Cancel", confirm: "Confirm",
-    follow: "Follow", following: "Following", share: "Share",
-    copyAddress: "Copy address", disconnectWallet: "Disconnect wallet",
+    buy: "Buy", sell: "Sell", cancel: "Cancel", confirm: "Confirm", following: "Following", share: "Share", disconnectWallet: "Disconnect wallet",
     disconnectShort: "Disconnect", tonExplorerBtn: "TON Explorer", walletProvider: "Wallet",
     connectWallet: "Connect TON Wallet",
-    editProfile: "Edit profile",
-    logOut: "Log out", deleteAccount: "Delete account",
-    createToken: "Create token",
-    settings: "Settings",
-    notifications: "Notifications", security: "Security",
+    editProfile: "Edit profile", deleteAccount: "Delete account",
+    settings: "Settings", security: "Security",
     wallet: "Wallet", profileSettings: "Profile", referral: "Referral program",
     privacy: "Privacy", terms: "Terms of use", support: "Support",
     launchPreparing: "Preparing metadata…",
     launchGenerating: "Generating token…",
     launchDeploying: "Deploying…",
     launchConfirming: "Confirming…",
-    launchSuccessTitle: "Success",
     launchSuccessSub: "Your token has been created and is ready to trade",
     tokenCreatedStatus: "Token Created",
     contractAddress: "Contract address",
     totalSupply: "Total supply",
     initialBuy: "Initial buy",
-    viewToken: "View token",
     doneClose: "Done",
     launchingWait: "Don't close this screen, this'll just take a second…",
     heroTitle: "Start right now",
     heroBodyLead: "Create, trade and grow with ",
     heroBodyTail: " per trade. Join the ecosystem from day one.",
     heroFee: "a 1% fee",
-    mempadComingSoon: "Something else is coming here soon.",
     mempadSpotlight: "Spotlight",
     mempadLaunchToken: "Launch token",
     tickerBought: "bought", tickerSold: "sold",
-    sinceSec: "s", sinceMin: "m", sinceHour: "h",
-    mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX",
-    homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionWallet: "Wallet",
-    homeTopGainer: "Top gainer",
+    sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", homeActionMempad: "Mempad", homeActionWallet: "Wallet",
     homeUpdatesComingSoon: "News and platform updates are coming here soon.",
-    searchPlaceholder: "Search token or ticker",
-    emptyFilter: "Nothing here for this filter yet — try another or check back later.",
-    catAll: "All", catMemes: "Memes", catUtility: "Utility", catGames: "Games", catAI: "AI", catSocial: "Social",
+    emptyFilter: "Nothing here for this filter yet — try another or check back later.", catMemes: "Memes", catUtility: "Utility", catGames: "Games", catAI: "AI", catSocial: "Social",
     linkCopied: "Link copied",
     tokenLinkCopied: "Token link copied",
     reportSent: "Report sent for review",
     back: "Back",
     perToken: "/ token",
-    chartLoading: "loading chart…", chartNoData: "No trading history yet",
-    fakeChartBadge: "Fake chart",
-    ohlcOpen: "O", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
+    chartLoading: "loading chart…", chartNoData: "No trading history yet", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
     statPrice: "Price", statLiquidity: "Liquidity", statHolders: "Holders", statVolume24h: "24h Volume",
-    tabChart: "Chart", tabInfo: "Info", tabTx: "Transactions",
-    chartModeMcap: "MCap", chartModePrice: "Price",
+    tabChart: "Chart", tabInfo: "Info", tabTx: "Transactions", chartModePrice: "Price",
     tokenNoAddress: "Address unavailable",
     txUnavailable: "Transaction list isn't available for this pool yet",
     txEmpty: "No trades on this pool yet",
@@ -541,7 +480,6 @@ const STR = {
     descPlaceholder: "What this token is about and why it exists",
     descRequiredShort: "Description is required — it can't be changed after launch",
     siteLabel: "Website",
-    categoryLabel: "Category",
     launchAmountLabel: "Launch amount (TON)",
     launchAmountNote: "This amount buys the first tokens right after launch — it's the starting liquidity and initial price.",
     youWillGet: "You'll get ≈",
@@ -565,14 +503,6 @@ const STR = {
     refShare: "Share the link",
     refShareText: "Launch memecoins on TON with me on Mintly",
     editProfileDesc: "Nickname, avatar, email and profile bio.",
-    walletConnectedStatus: "Wallet connected",
-    walletNotConnectedStatus: "Wallet not connected",
-    pushNotif: "Push notifications",
-    pushNotifSub: "Trades, price moves, comment replies",
-    emailNotif: "Email notifications",
-    emailNotifSub: "Weekly portfolio digest",
-    twoFA: "Two-factor authentication",
-    twoFASub: "Confirm sign-in with a code",
     pinRow: "PIN code",
     pinRowSub: "Require a code every time Mintly opens",
     enablePinFirst: "Enable PIN code first",
@@ -582,7 +512,6 @@ const STR = {
     contactSupport: "Message support",
     copyLink: "Copy link",
     privacyText: "We only collect data needed to run the app: nickname, wallet address, and your trade history within Mintly. Data is never shared with third parties for advertising. You can delete your account at any time — all local profile data is erased immediately.",
-    termsText: "By using Mintly, you confirm you trade at your own risk. Mintly does not guarantee token returns and is not liable for losses caused by market volatility. Creating tokens that mislead users or use someone else's brand without permission is prohibited.",
     accountLabel: "Account",
     loginTab: "Log in", createTab: "Create account",
     changeAvatarHint: "Tap to replace",
@@ -591,12 +520,6 @@ const STR = {
     createHint: "Nickname, email and password are required, everything else can be filled in later.",
     nicknameLabel: "Nickname",
     nicknameError: "2–20 characters, Latin letters, digits, _ and . only, must start with a letter",
-    emailLabel: "Email",
-    emailRequired: "Email is required",
-    emailInvalid: "Enter a valid email",
-    passwordLabel: "Password",
-    passwordPlaceholder: "At least 6 characters",
-    passwordError: "Password must be at least 6 characters",
     bioLabel: "Bio (optional)",
     bioPlaceholder: "A few words about yourself",
     submittingText: "Checking...",
@@ -615,25 +538,21 @@ const STR = {
     accountNotCreated: "No account yet",
     accountNotCreatedBody: "Log in or create an account to launch tokens, trade and earn achievements.",
     loginCta: "Log in",
-    createCta: "Create",
     myTokensCreate: "Create",
     myTokensTitle: "My Tokens",
     unnamedToken: "Unnamed Token",
     noTokensYet: "You haven't launched any tokens yet.",
     noActivityYet: "No activity yet — buys, sells and launches will show up here.",
-    noAchievementsYet: "No achievements yet — trade and launch tokens to earn your first one.",
     profileConfirmed: "Profile verified",
     verifyPending: "Review pending",
     verifyCta: "Verify your identity for a badge",
     deleteAccountForever: "Delete account forever",
     editProfileBtn: "Edit Profile",
     statsTitle: "Statistics",
-    statPortfolioValue: "Portfolio Value",
     statTotalProfit: "Total Profit",
     statCreatedTokens: "Created Tokens",
     statTokensOwned: "Tokens Owned",
     statTotalTrades: "Total Trades",
-    statWinRate: "Win Rate",
     statFollowers: "Followers",
     statFollowing: "Following",
     portfolioTitle: "Portfolio",
@@ -669,7 +588,6 @@ const STR = {
     pendingStatus: "Pending",
     notVerifiedStatus: "Not Verified",
     verifyAccountBtn: "Verify Account",
-    dangerZoneTitle: "Danger Zone",
     marketCapLabel: "Market Cap",
     manageBtn: "Manage",
     connectWalletModalTitle: "Connect your TON Wallet to continue",
@@ -706,8 +624,6 @@ const STR = {
     authErrNicknameTaken: "Nickname \"{name}\" is already taken",
     authErrGeneric: "Something went wrong, try again",
     authErrAvatarUpload: "Couldn't upload avatar: {msg}",
-    authErrProfileLoad: "Couldn't load profile, try again",
-    authConfirmEmailSent: "We sent a confirmation email — follow the link, then log in",
   },
 };
 function t(key) {
@@ -741,7 +657,6 @@ const FACET = "polygon(18% 0%, 100% 0%, 100% 82%, 82% 100%, 0% 100%, 0% 18%)";
    (prices, addresses, hashes) keeps a monospace face, which is the one
    place a "technical" register is appropriate and expected. */
 const displayFont = "'Futura XP', 'Futura', 'Century Gothic', 'Segoe UI', sans-serif";
-const logoFont = "'Futura XP', 'Futura', 'Century Gothic', 'Segoe UI', sans-serif";
 const bodyFont = "'Futura XP', 'Futura', 'Century Gothic', -apple-system, sans-serif";
 const monoFont = "'Futura XP', 'Futura', 'Century Gothic', 'Courier New', monospace";
 
@@ -3403,21 +3318,6 @@ function catLabel(cat) {
   return map[cat] ? t(map[cat]) : cat;
 }
 
-const FILTERS = [
-  { id: "gems", label: "💎 Gems" },
-  { id: "trending", label: "Trending" },
-  { id: "pumping", label: "Pumping" },
-  { id: "whale", label: "🐋 Whale Activity" },
-  { id: "volume", label: "💰 High Volume" },
-  { id: "gainers", label: "📈 Top Gainers" },
-  { id: "losers", label: "📉 Top Losers" },
-  { id: "new", label: "🆕 New Listings" },
-  { id: "followed", label: "❤️ Most Followed" },
-  { id: "verified", label: "🛡 Verified" },
-  { id: "community", label: "⭐ Community Picks" },
-  { id: "recent", label: "⚡ Recently Launched" },
-];
-
 /* MOCK DATA — profile */
 
 /* New-user state: nothing bought, nothing launched, no history yet. */
@@ -3561,51 +3461,6 @@ const HoldersBadge = React.memo(function HoldersBadge({ tokenAddress, testnet = 
     </span>
   );
 });
-
-function TokenCard({ t, onOpen, index }) {
-  const up = t.change >= 0;
-  return (
-    <button onClick={() => onOpen(t)} className="fx-tap w-full text-left" style={{ padding: "12px 2px", borderBottom: `1px solid ${T.line}`, animationDelay: `${index * 55}ms` }}>
-      <div className="flex items-center gap-2.5">
-        <TokenAvatar size={42} tone={up ? "up" : "down"} src={t.logoUrl}>{t.emoji}</TokenAvatar>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600 }}>{t.name}</span>
-            {t.verified && <ShieldCheck size={11} color={T.electric} />}
-            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 9.5 }}>${t.ticker} · {catLabel(t.cat)}</span>
-          </div>
-          <div className="flex items-baseline gap-2 mt-0.5">
-            <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 17, color: T.ice, opacity: 0.92 }}>{fmtUSD(t.mcapNum)}</span>
-            <ChangeBadge value={t.change} />
-          </div>
-        </div>
-        <MiniChart base={t.mcapNum} seed={t.seed} poolAddress={t.poolAddress} curveAddress={t.curveAddress} tokenAddress={t.tokenAddress} positive={up} id={t.id} width={62} height={30} />
-      </div>
-      <div className="flex items-center gap-3 mt-2" style={{ paddingLeft: 52 }}>
-        <HoldersBadge tokenAddress={t.tokenAddress} testnet={!!t.curveAddress && TON_TESTNET_NETWORK} />
-        <CardStat icon={Flame}>${t.vol}</CardStat>
-      </div>
-    </button>
-  );
-}
-
-function TokenCardSkeleton({ index }) {
-  return (
-    <div className="w-full" style={{ padding: "12px 2px", borderBottom: `1px solid ${T.line}`, animationDelay: `${index * 55}ms` }}>
-      <div className="flex items-center gap-2.5">
-        <div className="fx-skeleton" style={{ width: 42, height: 42, borderRadius: "50%" }} />
-        <div className="flex-1 flex flex-col gap-2">
-          <div className="fx-skeleton" style={{ width: "40%", height: 11, borderRadius: 4 }} />
-          <div className="fx-skeleton" style={{ width: "60%", height: 16, borderRadius: 4 }} />
-        </div>
-        <div className="fx-skeleton" style={{ width: 62, height: 30, borderRadius: 6 }} />
-      </div>
-      <div className="flex items-center gap-3 mt-2" style={{ paddingLeft: 52 }}>
-        <div className="fx-skeleton" style={{ width: "40%", height: 10, borderRadius: 4 }} />
-      </div>
-    </div>
-  );
-}
 
 // Real tokens only — no bundled/demo list. The feed starts empty and
 // fills in as soon as the first live GeckoTerminal fetch resolves.
@@ -6122,12 +5977,6 @@ function ImageCropModal({ file, shape = "circle", onCancel, onConfirm }) {
    baked into the simulated result. */
 const TOKEN_FIXED_SUPPLY = 1_000_000_000;
 const TOKEN_FIXED_SUPPLY_LABEL = TOKEN_FIXED_SUPPLY.toLocaleString("ru-RU");
-/* Simple fixed conversion so the "how much do I buy" field can show a live
-   token count / % of supply. Modeled loosely like a pump.fun-style bonding
-   curve where the whole supply is notionally worth 1000 TON at launch —
-   so 1 TON ≈ 0.1% of supply. Purely cosmetic (see note on TokenLaunchOverlay
-   above): nothing here reflects a real price feed or on-chain curve. */
-const TOKENS_PER_TON = TOKEN_FIXED_SUPPLY / 1000;
 // Сколько токенов даст стартовая покупка. Считается ровно той же
 // формулой, что и в контракте, по свежей кривой: до этого здесь стояла
 // линейная прикидка «столько-то токенов за TON», и она обещала втрое
@@ -6871,7 +6720,6 @@ function SettingsRow({ label, sub, children }) {
    same placeholder for every item. */
 function SettingsPanel({
   item, onClose, appSettings, onUpdateSetting,
-  connected, onConnectWallet, onDisconnectWallet, onCopyAddress,
   onOpenEditProfile, profile, showToast,
   onTogglePin, onChangePin, insetBottom = 0, insetTop = 0,
   accountCreated, onDeleteAccount, userId, inviteCount = 0,
@@ -8851,7 +8699,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     return () => { cancelled = true; };
   }, [tradeModal, token?.tokenAddress, walletAddress, balanceRefreshTick]);
   const [appSettings, setAppSettings] = useState(() => {
-    const base = { pushNotif: true, emailNotif: false, twoFA: false, language: "RU", theme: "Dark", pinEnabled: false };
+    const base = { language: "RU", theme: "Dark", pinEnabled: false };
     try {
       if (typeof window !== "undefined") {
         const savedTheme = window.localStorage.getItem("mintly_theme");
@@ -9612,15 +9460,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         onClose={() => setSettingsItem(null)}
         appSettings={appSettings}
         onUpdateSetting={updateAppSetting}
-        connected={connected}
         insetBottom={insetBottom}
         insetTop={insetTop}
-        onConnectWallet={() => tonConnectUI.openModal()}
-        onDisconnectWallet={() => tonConnectUI.disconnect()}
-        onCopyAddress={() => {
-          if (typeof navigator !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(walletAddress).catch(() => {});
-          showToast(t("addressCopied"));
-        }}
         onOpenEditProfile={openEditProfile}
         profile={profile}
         showToast={showToast}
