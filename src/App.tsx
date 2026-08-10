@@ -926,12 +926,18 @@ function GlobalStyle() {
         100% { transform: translate3d(var(--dx), 104vh, 0) rotate(var(--r1)); opacity: 0; }
       }
       @keyframes islandGlow { 0%,100%{ opacity:0.75; } 50%{ opacity:1; } }
-      /* Венок создателя: листья чуть покачиваются от черенка, звезда
-         медленно разгорается. Углы намеренно крошечные — знак висит
-         рядом с ником, и заметное движение там раздражало бы. */
+      /* Венок создателя: листья колышутся, как от ветра. Не маятник из
+         двух положений — тот читается как подёргивание, — а неровная
+         волна: сильный порыв, откат, слабое качание, снова порыв. Углы
+         остаются небольшими: знак висит рядом с ником, и заметное
+         движение там раздражало бы. */
       @keyframes wreathSway {
-        0%, 100% { transform: rotate(-2.5deg); }
-        50%      { transform: rotate(2.5deg); }
+        0%   { transform: rotate(-1.8deg); }
+        22%  { transform: rotate(1.9deg); }
+        41%  { transform: rotate(-0.6deg); }
+        58%  { transform: rotate(1.1deg); }
+        76%  { transform: rotate(-2.1deg); }
+        100% { transform: rotate(-1.8deg); }
       }
       @keyframes wreathStar {
         0%, 100% { opacity: 0.75; transform: scale(0.94); }
@@ -4218,6 +4224,16 @@ function wreathLeafPositions() {
 }
 const WREATH_POS = wreathLeafPositions();
 
+/* Ветер не дует по расписанию: у каждого листа своя длительность и своя
+   фаза. Задержка отрицательная — иначе первые секунды все листья стоят
+   ровно и трогаются разом, что и выглядит как рывок. */
+function wreathSwayTime(p) {
+  return `${(4.9 + p.i * 0.63 + (p.side > 0 ? 0.42 : 0)).toFixed(2)}s`;
+}
+function wreathSwayDelay(p) {
+  return `${-(p.i * 1.37 + (p.side > 0 ? 0.81 : 0)).toFixed(2)}s`;
+}
+
 // Дуга самой ветки — от первого листика к последнему.
 function wreathBranchPath(side) {
   const cx = 30, cy = 32, r = 17;
@@ -4265,7 +4281,7 @@ const CreatorWreath = React.memo(function CreatorWreath({ tier = 0, size = 20, a
         <g key={idx} transform={`rotate(${p.deg} 30 32) translate(30 15) rotate(${p.side * -26})`}>
           <g style={animate ? {
             transformBox: "fill-box", transformOrigin: "50% 100%",
-            animation: `wreathSway 3.4s ease-in-out ${(p.i * 0.12 + (p.side > 0 ? 0.2 : 0)).toFixed(2)}s infinite`,
+            animation: `wreathSway ${wreathSwayTime(p)} ease-in-out ${wreathSwayDelay(p)} infinite`,
           } : undefined}>
             <g transform={`scale(${p.scale})`}>
               <path
@@ -4345,7 +4361,7 @@ const AvatarWreathArt = React.memo(function AvatarWreathArt({ tier = 0, kindId =
           <g key={idx} transform={`rotate(${p.deg} 100 100) translate(100 ${100 - WREATH_BIG_R})`}>
             <g style={animate ? {
               transformBox: "fill-box", transformOrigin: "50% 100%",
-              animation: `wreathSway 3.4s ease-in-out ${(p.i * 0.12 + (p.side > 0 ? 0.2 : 0)).toFixed(2)}s infinite`,
+              animation: `wreathSway ${wreathSwayTime(p)} ease-in-out ${wreathSwayDelay(p)} infinite`,
             } : undefined}>
               <g transform={`rotate(${p.side * -14}) scale(${(1.12 * p.scale).toFixed(3)})`}>
                 <path d={kind.outline} fill={filled ? T.electric : "none"} stroke={T.electric} strokeWidth={filled ? 0.8 : 1.5} strokeLinejoin="round" />
