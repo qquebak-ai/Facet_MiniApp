@@ -883,6 +883,16 @@ function GlobalStyle() {
       /* Обрамление проявляется, а не возникает рывком: его показывают
          после заставки, и резкое появление читалось бы как подёргивание. */
       @keyframes frameFadeIn { from { opacity: 0; } to { opacity: 1; } }
+      /* Пролёт ракеты по кнопке запуска: справа налево, с паузой между
+         заходами. Поворот на 135 градусов — картинка нарисована носом
+         вверх-вправо, а лететь она должна носом вперёд, то есть влево. */
+      @keyframes buttonRocketFly {
+        0%   { transform: translateX(220px) rotate(-135deg); opacity: 0; }
+        6%   { opacity: 1; }
+        34%  { opacity: 1; }
+        40%  { transform: translateX(-40px) rotate(-135deg); opacity: 0; }
+        100% { transform: translateX(-40px) rotate(-135deg); opacity: 0; }
+      }
       /* Реакция острова на прилёт ракеты: две искры бегут от середины
          нижней грани в разные стороны, встречаются наверху, и после
          этого вспыхивает и плавно гаснет весь контур. Смещение штриха
@@ -4376,9 +4386,10 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
     <div className="flex flex-col gap-5" style={{ paddingBottom: 12 }}>
       <div className="flex items-center justify-between">
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("navMempad")}</span>
-        <button onClick={onLaunch} className="fx-tap flex items-center gap-1.5 rounded-full px-3.5 py-2" style={{ background: "rgba(49,208,123,0.14)", border: `1px solid rgba(49,208,123,0.35)` }}>
+        <button onClick={onLaunch} className="fx-tap flex items-center gap-1.5 rounded-full px-3.5 py-2" style={{ background: "rgba(49,208,123,0.14)", border: `1px solid rgba(49,208,123,0.35)`, position: "relative", overflow: "hidden" }}>
+          <ButtonRocketFlyby size={34} />
           <LeafIcon size={16} color={T.up} />
-          <span style={{ fontFamily: bodyFont, color: T.up, fontSize: 12.5, fontWeight: 600 }}>{t("mempadLaunchToken")}</span>
+          <span style={{ fontFamily: bodyFont, color: T.up, fontSize: 12.5, fontWeight: 600, position: "relative", zIndex: 1 }}>{t("mempadLaunchToken")}</span>
         </button>
       </div>
 
@@ -7279,6 +7290,56 @@ function DynamicIslandFrame({ topOffset = 0, hitKey = 0 }) {
           </g>
         )}
       </svg>
+    </div>
+  );
+}
+
+/* Ракета, пролетающая на фоне кнопки запуска.
+
+   Та же анимация Telegram, что и при самом запуске, только маленькая и
+   по горизонтали: справа налево. Картинка нарисована носом вверх-вправо,
+   поэтому доворачивается так, чтобы нос смотрел по ходу движения.
+   Проигрыватель и данные подгружаются один раз на всё приложение — те
+   же самые, что для большой ракеты. */
+function ButtonRocketFlyby({ size = 26 }) {
+  const holderRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let anim = null;
+    (async () => {
+      const [{ default: lottie }, data] = await Promise.all([
+        import("lottie-web/build/player/lottie_light"),
+        loadRocketAnimation(),
+      ]);
+      if (cancelled || !data || !holderRef.current) return;
+      anim = lottie.loadAnimation({
+        container: holderRef.current,
+        renderer: "svg",
+        loop: true,
+        autoplay: true,
+        animationData: data,
+      });
+    })();
+    return () => { cancelled = true; if (anim) anim.destroy(); };
+  }, []);
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none",
+        borderRadius: "inherit", opacity: 0.8,
+      }}
+    >
+      <div
+        ref={holderRef}
+        style={{
+          position: "absolute", top: "50%", left: 0,
+          width: size, height: size, marginTop: -size / 2,
+          animation: "buttonRocketFly 9s linear infinite",
+        }}
+      />
     </div>
   );
 }
