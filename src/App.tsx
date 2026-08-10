@@ -1752,26 +1752,59 @@ function useJettonHolders(tokenAddress, testnet = false) {
 // как «данных нет». Раньше именно так пропадал список транзакций.
 // gtFetch держит минимальный промежуток между запросами и один раз
 // повторяет попытку после 429, дождавшись Retry-After.
-let gtLastRequestAt = 0;
-const GT_MIN_GAP_MS = 260;
+const GT_MIN_GAP_MS = 320;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function gtFetch(url, { retryOn429 = true } = {}) {
-  const wait = gtLastRequestAt + GT_MIN_GAP_MS - Date.now();
-  if (wait > 0) await sleep(wait);
-  gtLastRequestAt = Date.now();
+/* Очередь запросов к GeckoTerminal.
 
-  const res = await fetch(url);
-  if (res.status === 429 && retryOn429) {
-    const retryAfter = Number(res.headers.get("Retry-After")) || 0;
-    await sleep(Math.min(8000, retryAfter ? retryAfter * 1000 : 2500));
-    gtLastRequestAt = Date.now();
-    return fetch(url);
+   Лимит там общий на адрес, а желающих много: свечи открытого токена,
+   мини-графики карточек, лента сделок. Раньше они соревновались между
+   собой, и первым под 429 попадал как раз график — самое важное на
+   экране. Теперь запросы выстраиваются в одну очередь с приоритетом:
+   открытый график идёт вперёд ленты и превью, а между запросами
+   держится пауза. На 429 попытка повторяется с нарастающей задержкой —
+   молча отдавать «данных нет» из-за лимита нельзя. */
+const GT_PRIORITY = { chart: 3, trades: 2, spark: 1, feed: 0 };
+const gtQueue = [];
+let gtBusy = false;
+let gtLastRequestAt = 0;
+
+async function gtPump() {
+  if (gtBusy) return;
+  gtBusy = true;
+  try {
+    while (gtQueue.length) {
+      gtQueue.sort((a, b) => b.priority - a.priority || a.seq - b.seq);
+      const job = gtQueue.shift();
+      const wait = gtLastRequestAt + GT_MIN_GAP_MS - Date.now();
+      if (wait > 0) await sleep(wait);
+      gtLastRequestAt = Date.now();
+      try {
+        let res = await fetch(job.url);
+        for (let attempt = 0; res.status === 429 && job.retries > attempt; attempt++) {
+          const retryAfter = Number(res.headers.get("Retry-After")) || 0;
+          await sleep(Math.min(9000, retryAfter ? retryAfter * 1000 : 1200 * (attempt + 1) ** 2));
+          gtLastRequestAt = Date.now();
+          res = await fetch(job.url);
+        }
+        job.resolve(res);
+      } catch (err) {
+        job.reject(err);
+      }
+    }
+  } finally {
+    gtBusy = false;
   }
-  return res;
+}
+
+function gtFetch(url, { retries = 2, priority = GT_PRIORITY.feed } = {}) {
+  return new Promise((resolve, reject) => {
+    gtQueue.push({ url, retries, priority, resolve, reject, seq: gtQueue.length });
+    gtPump();
+  });
 }
 
 // Последний удачный ответ по каждому пулу. Нужен, чтобы при повторном
@@ -1782,10 +1815,10 @@ function cachedPoolTrades(poolAddress) {
   return (poolAddress && tradesCache.get(poolAddress)) || null;
 }
 
-async function fetchPoolTrades(poolAddress, limit = 25) {
+async function fetchPoolTrades(poolAddress, limit = 25, priority = GT_PRIORITY.trades) {
   if (!poolAddress) return null;
   try {
-    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/trades`);
+    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/trades`, { priority });
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const rows = json?.data || [];
@@ -1814,12 +1847,19 @@ async function fetchPoolTrades(poolAddress, limit = 25) {
   }
 }
 
-async function fetchPoolOHLCV(poolAddress, tf) {
+// Последние удачные свечи по паре «пул + таймфрейм». Если очередной
+// запрос не прошёл, показываем их, а не пустой экран: свечи
+// пятиминутной давности честнее надписи «истории нет» у токена, который
+// торгуется прямо сейчас.
+const ohlcvCache = new Map();
+
+async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart) {
   const cfg = GT_TF[tf] || GT_TF.H1;
   const fetchLimit = Math.min(1000, 200 * (cfg.resample || 1));
   const url = `${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/ohlcv/${cfg.timeframe}?aggregate=${cfg.aggregate}&limit=${fetchLimit}&currency=usd&token=base`;
+  const cacheKey = `${poolAddress}:${tf}`;
   try {
-    const res = await gtFetch(url);
+    const res = await gtFetch(url, { priority, retries: priority >= GT_PRIORITY.chart ? 3 : 1 });
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const list = json?.data?.attributes?.ohlcv_list || [];
@@ -1828,13 +1868,16 @@ async function fetchPoolOHLCV(poolAddress, tf) {
       .filter(c => [c.time, c.open, c.high, c.low, c.close].every(v => typeof v === "number" && Number.isFinite(v)))
       .sort((a, b) => a.time - b.time);
     if (cfg.resample) candles = resampleCandles(candles, cfg.resample);
-    if (!candles.length) return null;
-    return {
+    if (!candles.length) throw new Error("empty ohlcv");
+    const result = {
       candles: candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })),
       volume: candles.map(c => ({ time: c.time, value: Number.isFinite(c.volume) ? c.volume : 0, color: c.close >= c.open ? hexA(T.up, 0.32) : hexA(T.down, 0.32) })),
     };
+    ohlcvCache.set(cacheKey, result);
+    return result;
   } catch (err) {
-    return null; // caller falls back to a synthetic random-walk chart
+    // Не вышло — отдаём прошлый удачный ответ, если он есть.
+    return ohlcvCache.get(cacheKey) || null;
   }
 }
 
@@ -2132,7 +2175,7 @@ async function fetchSparkCloses(poolAddress, n = 24) {
   if (cached && Date.now() - cached.ts < SPARK_TTL_MS) return cached.closes;
   if (sparkInflight.has(poolAddress)) return sparkInflight.get(poolAddress);
   const p = (async () => {
-    const result = await fetchPoolOHLCV(poolAddress, "M15");
+    const result = await fetchPoolOHLCV(poolAddress, "M15", GT_PRIORITY.spark);
     const closes = result?.candles?.length ? result.candles.slice(-n).map(c => c.close) : null;
     if (closes && closes.length > 1) sparkCache.set(poolAddress, { closes, ts: Date.now() });
     sparkInflight.delete(poolAddress);
@@ -2806,10 +2849,11 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
       if (!cancelled) setBuys(collectedRef.current);
     }
 
-    // Сколько пулов берём за один заход. Пять запросов раз в двадцать
-    // секунд — это пятнадцать в минуту, вдвое ниже лимита.
-    const BATCH = 5;
-    const INTERVAL_MS = 20000;
+    // Сколько пулов берём за один заход. Около десяти запросов в минуту:
+    // остальной лимит оставлен графику открытого токена, он идёт вперёд
+    // ленты по приоритету очереди.
+    const BATCH = 4;
+    const INTERVAL_MS = 25000;
 
     async function load(first) {
       if (first) {
@@ -2826,7 +2870,7 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
 
       await Promise.all(
         slice.map(async (p) => {
-          const rows = await fetchPoolTrades(p.poolAddress, 12);
+          const rows = await fetchPoolTrades(p.poolAddress, 12, GT_PRIORITY.feed);
           if (cancelled || !rows) return;
           mergeIn(rows, p);
         })
@@ -4426,51 +4470,27 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     // смене курса его нужно пересобрать, иначе он повиснет на старом.
   }, [tf, token.id, token.poolAddress, token.curveAddress, token.price > 0, tonPriceUsd]);
 
-  // Live tick: for real pools, refetch the latest candles every few
-  // seconds. For the synthetic fallback, wiggle the last candle locally
-  // like a simulated feed. Deliberately NOT depending on token.price here:
-  // the root now syncs the open token's price/mcap every 2.5s, and if
-  // this effect depended on token.price it would tear down and recreate the
-  // interval every 2.5s too — meaning the 8000ms timer would never
-  // actually survive long enough to fire, and the chart would never
-  // refetch. priceRef always holds the latest price for the fallback
-  // branch without needing to be a dependency.
-  const priceRef = useRef(token.price);
-  useEffect(() => { priceRef.current = token.price; }, [token.price]);
-
+  // Обновление открытого графика. Крутится и тогда, когда данных ещё
+  // нет: первый запрос мог не пройти из-за лимита, и без повторов на
+  // экране навсегда оставалась бы надпись «истории нет». Дорисовывать
+  // дрожание последней свече, как раньше, больше не нужно — выдуманных
+  // движений на графике нет вовсе.
   useEffect(() => {
-    if (!chartData) return;
-    const iv = setInterval(async () => {
-      if (token.poolAddress) {
-        const fresh = await fetchPoolOHLCV(token.poolAddress, tf);
-        if (fresh?.candles?.length) {
-          setChartData(prev => prev && ({ ...prev, candles: fresh.candles, volume: fresh.volume }));
-        }
-      } else if (curveChart) {
-        // Кривая обновляется своей же историей: дорисовывать выдуманное
-        // дрожание поверх настоящей цены нельзя.
-        const fresh = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
-        if (fresh?.candles?.length) {
-          setChartData(prev => prev && ({ ...prev, candles: fresh.candles, volume: fresh.volume }));
-        }
-      } else if (!token.curveAddress) {
-        setChartData(prev => {
-          if (!prev?.candles?.length) return prev;
-          const candles = [...prev.candles];
-          const volume = [...prev.volume];
-          const last = { ...candles[candles.length - 1] };
-          const price = priceRef.current;
-          const wig = price * 0.006;
-          last.close = Math.max(price * 0.3, last.close + (Math.random() - 0.5) * wig);
-          last.high = Math.max(last.high, last.close);
-          last.low = Math.min(last.low, last.close);
-          candles[candles.length - 1] = last;
-          return { ...prev, candles, volume };
-        });
-      }
-    }, token.poolAddress ? 8000 : curveChart ? 15000 : 1000);
-    return () => clearInterval(iv);
-  }, [token.id, token.poolAddress, token.curveAddress, curveChart, tf, !!chartData]);
+    if (!token.poolAddress && !curveChart) return;
+    let cancelled = false;
+    async function refresh() {
+      const fresh = token.poolAddress
+        ? await fetchPoolOHLCV(token.poolAddress, tf)
+        : await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
+      if (cancelled || !fresh?.candles?.length) return;
+      setChartData((prev) => (prev
+        ? { ...prev, candles: fresh.candles, volume: fresh.volume }
+        : { ...fresh, isLive: true }));
+      setChartLoading(false);
+    }
+    const iv = setInterval(refresh, 15000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [token.id, token.poolAddress, token.curveAddress, curveChart, tf, tonPriceUsd]);
 
   // Real supply estimate (mcap / price) derived from the same live data —
   // used only to scale the chart between "price" and "market cap" display,
