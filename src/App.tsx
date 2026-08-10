@@ -932,6 +932,22 @@ function GlobalStyle() {
         100% { transform: translate3d(var(--dx), 104vh, 0) rotate(var(--r1)); opacity: 0; }
       }
       @keyframes islandGlow { 0%,100%{ opacity:0.75; } 50%{ opacity:1; } }
+      /* Окно знака: сам венок медленно вырастает, и только потом
+         проявляется подпись — сначала показываем награду, потом
+         объясняем её. Лист поднимается снизу вместе со шторкой. */
+      @keyframes wreathSheetUp {
+        from { opacity: 0; transform: translateY(28px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes wreathGrowIn {
+        0%   { opacity: 0; transform: scale(0.34); }
+        60%  { opacity: 1; }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      @keyframes wreathCaptionIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
       /* Венок создателя: листья колышутся, как от ветра. Не маятник из
          двух положений — тот читается как подёргивание, — а неровная
          волна: сильный порыв, откат, слабое качание, снова порыв. Углы
@@ -4483,39 +4499,52 @@ function CreatorWreathBadge({ tier = 0, kindId = "mix", size = 19 }) {
           onClick={close}
           style={{
             position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.8)",
-            backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
-            justifyContent: "center", padding: 24,
+            backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end",
+            justifyContent: "center",
           }}
         >
+          {/* Шторка снизу, а не окно посередине: сюда же выезжают все
+              остальные подробности в приложении. */}
           <div
-            className="fx-modal-card"
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: "100%", maxWidth: 300, background: T.surface,
-              border: `1px solid ${T.lineHi}`, borderRadius: 24, padding: "26px 22px 22px",
+              width: "100%", background: T.surface,
+              borderTop: `1px solid ${T.lineHi}`, borderRadius: "26px 26px 0 0",
+              padding: "26px 22px calc(22px + env(safe-area-inset-bottom))",
               display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+              animation: "wreathSheetUp 340ms cubic-bezier(0.16,1,0.3,1) both",
             }}
           >
-            {/* Венок показываем без аватарки внутри: окно про сам знак. */}
-            <div style={{ width: 150, height: 150, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <AvatarWreathArt tier={tier} kindId={kindId} size={150} />
+            {/* Венок показываем без аватарки внутри: окно про сам знак.
+                Он не возникает готовым, а медленно вырастает — награду
+                сначала показывают, и только потом объясняют. */}
+            <div style={{
+              width: 160, height: 160, display: "flex", alignItems: "center", justifyContent: "center",
+              animation: "wreathGrowIn 1100ms cubic-bezier(0.22,1,0.28,1) 120ms both",
+            }}>
+              <AvatarWreathArt tier={tier} kindId={kindId} size={160} />
             </div>
-            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 700, marginTop: 10 }}>
-              {tr("wreathBadgeTitle")}
-            </span>
-            <span style={{ fontFamily: displayFont, color: T.electric, fontSize: 13, fontWeight: 700, marginTop: 2 }}>
-              {tr(`wreathTier${tier}`)}
-            </span>
-            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 8 }}>
-              {trf("wreathBadgeBody", { sum: WREATH_TIER_SUM[tier] || "" })}
-            </p>
-            <button
-              onClick={close}
-              className="fx-tap w-full rounded-[20px] py-2.5"
-              style={{ marginTop: 16, background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
-            >
-              {tr("doneClose")}
-            </button>
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "center", width: "100%",
+              animation: "wreathCaptionIn 420ms ease-out 900ms both",
+            }}>
+              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700, marginTop: 12 }}>
+                {tr("wreathBadgeTitle")}
+              </span>
+              <span style={{ fontFamily: displayFont, color: T.electric, fontSize: 13, fontWeight: 700, marginTop: 2 }}>
+                {tr(`wreathTier${tier}`)}
+              </span>
+              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 8, maxWidth: 280 }}>
+                {trf("wreathBadgeBody", { sum: WREATH_TIER_SUM[tier] || "" })}
+              </p>
+              <button
+                onClick={close}
+                className="fx-tap w-full rounded-[20px] py-3"
+                style={{ marginTop: 18, maxWidth: 320, background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
+              >
+                {tr("doneClose")}
+              </button>
+            </div>
           </div>
         </div>,
         document.body,
