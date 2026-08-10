@@ -8123,7 +8123,7 @@ const SCREEN_FRAME_INSET = 3;
 const SCREEN_FRAME_RADIUS = 44;
 const ROCKET_TOUCH_TOP_SCREEN = SCREEN_FRAME_INSET + ROCKET_NOSE_OFFSET;
 
-function ScreenFrame({ hitKey = 0 }) {
+function ScreenFrame({ hitKey = 0, phase = "in" }) {
   const [size, setSize] = useState(() => (typeof window === "undefined"
     ? { w: 0, h: 0 }
     : { w: window.innerWidth, h: window.innerHeight }));
@@ -8157,7 +8157,9 @@ function ScreenFrame({ hitKey = 0 }) {
       style={{
         position: "fixed", left: inset, top: inset, width: w, height: h,
         pointerEvents: "none", zIndex: 2000,
-        animation: "frameFadeIn 420ms ease-out both",
+        animation: phase === "out"
+          ? "frameFadeOut 500ms ease-in both"
+          : "frameFadeIn 420ms ease-out both",
       }}
     >
       <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ overflow: "visible" }}>
@@ -8328,10 +8330,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // момент, когда она в него влетает.
   const [rocketFlying, setRocketFlying] = useState(false);
   const [islandHitKey, setIslandHitKey] = useState(0);
-  // Рамка вокруг острова живёт только во время запуска токена.
-  // Постоянно висеть она не может: остров умеет раскрываться под музыку,
-  // звонок, таймер — и тогда он становится больше нашей рамки, а
-  // веб-странице его форма недоступна, узнать о раскрытии неоткуда.
+  // Обрамление живёт только во время запуска токена — и вокруг острова,
+  // и по краю экрана там, где острова нет. Постоянно висеть оно не
+  // может: остров умеет раскрываться под музыку, звонок, таймер — и
+  // тогда он становится больше нашей рамки, а веб-странице его форма
+  // недоступна, узнать о раскрытии неоткуда. Контур экрана, висевший
+  // всё время, просто мешал смотреть на приложение.
   // null — не показываем, "in" — проявляется и держится, "out" — гаснет.
   const [islandFramePhase, setIslandFramePhase] = useState(null);
   const rocketTimers = useRef([]);
@@ -9571,9 +9575,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           пришли, приложение считало, что острова нет, — а потом рамка
           прыгала на своё место. Вне Telegram отступов не будет вовсе,
           там ждать нечего. */}
-      {framesReady && (showIsland
-        ? (islandFramePhase && <DynamicIslandFrame hitKey={islandHitKey} phase={islandFramePhase} />)
-        : <ScreenFrame hitKey={islandHitKey} />)}
+      {/* Обрамление — часть запуска токена, а не постоянная деталь
+          интерфейса: раньше на телефонах без острова контур экрана висел
+          всё время и мешал. Теперь и остров, и рамка экрана появляются
+          только на время полёта ракеты и гаснут вместе с ней. */}
+      {framesReady && islandFramePhase && (showIsland
+        ? <DynamicIslandFrame hitKey={islandHitKey} phase={islandFramePhase} />
+        : <ScreenFrame hitKey={islandHitKey} phase={islandFramePhase} />)}
       {rocketFlying && <LaunchRocket targetTop={showIsland ? ROCKET_TOUCH_TOP : ROCKET_TOUCH_TOP_SCREEN} variant={rocketVariant} />}
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
