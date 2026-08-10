@@ -4512,16 +4512,17 @@ function CreatorWreathBadge({ tier = 0, kindId = "mix", size = 19 }) {
             position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.8)",
             backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end",
             justifyContent: "center",
+            padding: "0 12px calc(12px + env(safe-area-inset-bottom))",
           }}
         >
-          {/* Шторка снизу, а не окно посередине: сюда же выезжают все
-              остальные подробности в приложении. */}
+          {/* Карточка снизу, но не впритык к краям: иначе она выглядит
+              обрезанной экраном, а не отдельным окном. */}
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: "100%", background: T.surface,
-              borderTop: `1px solid ${T.lineHi}`, borderRadius: "26px 26px 0 0",
-              padding: "26px 22px calc(22px + env(safe-area-inset-bottom))",
+              width: "100%", maxWidth: 420, background: T.surface,
+              border: `1px solid ${T.lineHi}`, borderRadius: 26,
+              padding: "26px 22px 22px",
               display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
               animation: "wreathSheetUp 340ms cubic-bezier(0.16,1,0.3,1) both",
             }}
