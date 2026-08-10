@@ -4459,10 +4459,21 @@ function CreatorWreathBadge({ tier = 0, kindId = "mix", size = 19 }) {
   const close = (e) => { if (e) { e.stopPropagation(); e.preventDefault(); } setOpen(false); };
   return (
     <>
+      {/* Палец толще значка: сам венок 16–19px, а попасть по нему надо
+          уверенно. Поэтому область нажатия расширена отступом и тут же
+          убрана отрицательным полем — на раскладку это не влияет.
+          zIndex поднят: венок вокруг аватарки заходит своим слоем на
+          строку с ником, и хотя он нажатия не ловит, лучше лежать выше. */}
       <span
         role="button" tabIndex={0} aria-label={tr("wreathBadgeTitle")}
         onClick={(e) => { e.stopPropagation(); e.preventDefault(); setOpen(true); }}
-        style={{ display: "inline-flex", cursor: "pointer", lineHeight: 0 }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
+        style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", lineHeight: 0, padding: 13, margin: -13, borderRadius: 999,
+          position: "relative", zIndex: 3, pointerEvents: "auto", touchAction: "manipulation",
+          WebkitTapHighlightColor: "transparent",
+        }}
       >
         <CreatorWreath tier={tier} size={size} />
       </span>
