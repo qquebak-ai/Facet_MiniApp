@@ -1182,7 +1182,7 @@ function ChangeBadge({ value, size = "sm" }) {
 // in a scrolling list, that overhead was a real contributor to the scroll
 // stutter. This is a plain SVG path — same look, a fraction of the cost —
 // matching the approach already used for the main candlestick chart.
-const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, curveAddress, positive, id, width = 78, height = 36, length = 22 }) {
+const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, curveAddress, tokenAddress, positive, id, width = 78, height = 36, length = 22 }) {
   const [closes, setCloses] = useState(null);
   // Источник настоящей истории: пул на DEX или своя кривая. Если нет ни
   // того ни другого, рисовать нечего — раньше здесь начиналась
@@ -1210,7 +1210,7 @@ const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, curve
     let cancelled = false;
     function load() {
       const p = poolAddress
-        ? fetchSparkCloses(poolAddress, length)
+        ? fetchSparkCloses(poolAddress, length, tokenAddress)
         : fetchCurveSparkCloses(curveAddress, length);
       p.then((res) => {
         if (!cancelled && res) setCloses(res);
@@ -1853,6 +1853,59 @@ async function fetchPoolTrades(poolAddress, limit = 25, priority = GT_PRIORITY.t
 // торгуется прямо сейчас.
 const ohlcvCache = new Map();
 
+/* Запасной источник истории цены — tonapi.
+
+   Свечи у GeckoTerminal лучше: там настоящие open/high/low/close и
+   объём. Но лимит у него общий на адрес и легко выбирается лентой и
+   превью, а тогда на экране оставалась надпись «истории нет». tonapi —
+   отдельный сервис со своим лимитом, и он отдаёт историю курса жетона
+   точками. Из точек собираются свечи: открытие — предыдущая цена,
+   закрытие — текущая, тени по ним же. Это честная история, просто без
+   внутренних колебаний свечи; объём оттуда не приходит вовсе.
+
+   Берётся только когда основной источник не ответил. */
+const TF_WINDOW_SEC = {
+  M1: 3 * 3600, M5: 12 * 3600, M15: 36 * 3600, M30: 3 * 86400,
+  H1: 7 * 86400, H4: 21 * 86400, D1: 120 * 86400, W1: 400 * 86400, MN1: 900 * 86400,
+};
+
+async function fetchTonapiChart(jettonAddress, tf, testnet = false) {
+  if (!jettonAddress) return null;
+  const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
+  const now = Math.floor(Date.now() / 1000);
+  const start = now - (TF_WINDOW_SEC[tf] || TF_WINDOW_SEC.H1);
+  try {
+    const res = await tonFetch(
+      `${host}/v2/rates/chart?token=${encodeURIComponent(jettonAddress)}&currency=usd&start_date=${start}&end_date=${now}&points_count=200`,
+    );
+    if (!res.ok) throw new Error(`tonapi ${res.status}`);
+    const json = await res.json();
+    const points = (json && json.points ? json.points : [])
+      .map((pt) => ({ time: Math.floor(Number(pt[0])), price: Number(pt[1]) }))
+      .filter((pt) => Number.isFinite(pt.time) && Number.isFinite(pt.price) && pt.price > 0)
+      .sort((a, b) => a.time - b.time);
+    if (points.length < 2) return null;
+
+    const candles = [];
+    const volume = [];
+    for (let i = 1; i < points.length; i++) {
+      const open = points[i - 1].price;
+      const close = points[i].price;
+      candles.push({
+        time: points[i].time,
+        open,
+        close,
+        high: Math.max(open, close),
+        low: Math.min(open, close),
+      });
+      volume.push({ time: points[i].time, value: 0, color: close >= open ? hexA(T.up, 0.32) : hexA(T.down, 0.32) });
+    }
+    return { candles, volume };
+  } catch (err) {
+    return null;
+  }
+}
+
 async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart) {
   const cfg = GT_TF[tf] || GT_TF.H1;
   const fetchLimit = Math.min(1000, 200 * (cfg.resample || 1));
@@ -2169,13 +2222,14 @@ async function fetchCurveOHLCV(curveAddress, timeframe, testnet, rate = tonUsd()
 const SPARK_TTL_MS = 45_000;
 const sparkCache = new Map(); // poolAddress -> { closes, ts }
 const sparkInflight = new Map(); // poolAddress -> Promise, to de-dupe concurrent callers
-async function fetchSparkCloses(poolAddress, n = 24) {
+async function fetchSparkCloses(poolAddress, n = 24, jettonAddress = null) {
   if (!poolAddress) return null;
   const cached = sparkCache.get(poolAddress);
   if (cached && Date.now() - cached.ts < SPARK_TTL_MS) return cached.closes;
   if (sparkInflight.has(poolAddress)) return sparkInflight.get(poolAddress);
   const p = (async () => {
-    const result = await fetchPoolOHLCV(poolAddress, "M15", GT_PRIORITY.spark);
+    const result = (await fetchPoolOHLCV(poolAddress, "M15", GT_PRIORITY.spark))
+      || (jettonAddress ? await fetchTonapiChart(jettonAddress, "M15") : null);
     const closes = result?.candles?.length ? result.candles.slice(-n).map(c => c.close) : null;
     if (closes && closes.length > 1) sparkCache.set(poolAddress, { closes, ts: Date.now() });
     sparkInflight.delete(poolAddress);
@@ -3289,7 +3343,7 @@ function TokenCard({ t, onOpen, index }) {
             <ChangeBadge value={t.change} />
           </div>
         </div>
-        <MiniChart base={t.mcapNum} seed={t.seed} poolAddress={t.poolAddress} curveAddress={t.curveAddress} positive={up} id={t.id} width={62} height={30} />
+        <MiniChart base={t.mcapNum} seed={t.seed} poolAddress={t.poolAddress} curveAddress={t.curveAddress} tokenAddress={t.tokenAddress} positive={up} id={t.id} width={62} height={30} />
       </div>
       <div className="flex items-center gap-3 mt-2" style={{ paddingLeft: 52 }}>
         <HoldersBadge tokenAddress={t.tokenAddress} testnet={!!t.curveAddress && TON_TESTNET_NETWORK} />
@@ -4448,6 +4502,8 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     (async () => {
       let result = null;
       if (token.poolAddress) result = await fetchPoolOHLCV(token.poolAddress, tf);
+      // Основной источник не ответил — берём историю курса у tonapi.
+      if (!result && token.tokenAddress && !token.curveAddress) result = await fetchTonapiChart(token.tokenAddress, tf);
       // Курс передаём тот же, по которому посчитана цена в шапке. Раньше
       // график брал его сам, и пока настоящий курс не приехал, строился
       // по запасному — цифры на графике и над ним расходились в разы.
@@ -4480,7 +4536,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     let cancelled = false;
     async function refresh() {
       const fresh = token.poolAddress
-        ? await fetchPoolOHLCV(token.poolAddress, tf)
+        ? (await fetchPoolOHLCV(token.poolAddress, tf)) || (token.tokenAddress ? await fetchTonapiChart(token.tokenAddress, tf) : null)
         : await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
       if (cancelled || !fresh?.candles?.length) return;
       setChartData((prev) => (prev
@@ -5720,7 +5776,7 @@ function PortfolioTokenCard({ t, onOpen }) {
         </div>
         <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, marginTop: 2 }}>{t.balance} {t.ticker} · MCAP {fmtUSD(t.mcapNum)}</div>
       </div>
-      <div style={{ position: "relative", zIndex: 1 }}><MiniChart base={t.mcapNum} seed={t.seed} poolAddress={t.poolAddress} curveAddress={t.curveAddress} positive={up} id={`pf-${t.id}`} length={18} /></div>
+      <div style={{ position: "relative", zIndex: 1 }}><MiniChart base={t.mcapNum} seed={t.seed} poolAddress={t.poolAddress} curveAddress={t.curveAddress} tokenAddress={t.tokenAddress} positive={up} id={`pf-${t.id}`} length={18} /></div>
     </button>
   );
 }
