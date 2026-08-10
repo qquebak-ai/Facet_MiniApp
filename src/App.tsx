@@ -180,7 +180,7 @@ const STR = {
     reportSent: "Жалоба отправлена на проверку",
     back: "Назад",
     perToken: "/ токен",
-    chartLoading: "загрузка графика…",
+    chartLoading: "загрузка графика…", chartNoData: "Истории торгов пока нет",
     fakeChartBadge: "Фейковый график",
     ohlcOpen: "О", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
     statPrice: "Цена", statLiquidity: "Ликвидность", statHolders: "Держателей", statVolume24h: "Объём 24ч",
@@ -450,7 +450,7 @@ const STR = {
     reportSent: "Report sent for review",
     back: "Back",
     perToken: "/ token",
-    chartLoading: "loading chart…",
+    chartLoading: "loading chart…", chartNoData: "No trading history yet",
     fakeChartBadge: "Fake chart",
     ohlcOpen: "O", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
     statPrice: "Price", statLiquidity: "Liquidity", statHolders: "Holders", statVolume24h: "24h Volume",
@@ -734,18 +734,6 @@ function fmtCountdown(ms) {
   const s = total % 60;
   const pad = (v) => String(v).padStart(2, "0");
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
-}
-function mcapSeries(base, seed, n = 22, offset = 0) {
-  let v = base;
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    const idx = i + offset;
-    const drift = Math.sin(idx * 0.55 + seed) * base * 0.02;
-    const noise = (Math.random() - 0.5) * base * 0.015;
-    v = Math.max(base * 0.6, v + drift * 0.3 + noise);
-    out.push({ i, mcap: v });
-  }
-  return out;
 }
 
 /* ---------------------------------------------------------
@@ -1195,10 +1183,10 @@ function ChangeBadge({ value, size = "sm" }) {
 // stutter. This is a plain SVG path — same look, a fraction of the cost —
 // matching the approach already used for the main candlestick chart.
 const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, curveAddress, positive, id, width = 78, height = 36, length = 22 }) {
-  const tick = useLiveTick();
   const [closes, setCloses] = useState(null);
   // Источник настоящей истории: пул на DEX или своя кривая. Если нет ни
-  // того ни другого (демо-токен) — рисуется синтетика ниже.
+  // того ни другого, рисовать нечего — раньше здесь начиналась
+  // синтетика, теперь остаётся пустое место.
   const source = poolAddress || curveAddress || null;
   const [visible, setVisible] = useState(!source);
   const elRef = useRef(null);
@@ -1253,20 +1241,28 @@ const MiniChart = React.memo(function MiniChart({ base, seed, poolAddress, curve
   }, [closes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const data = useMemo(() => {
+    // Только настоящие точки. Раньше поверх них подмешивалось
+    // синусоидальное дрожание «чтобы линия жила», а при отсутствии
+    // ответа рисовался целиком выдуманный ряд — по такому графику
+    // человек принимал решение о покупке.
     if (closes && closes.length > 1) {
       const fetchBase = fetchBaseRef.current || base || 1;
       const ratio = fetchBase ? (base || fetchBase) / fetchBase : 1;
-      const anchor = closes[closes.length - 1] || 1;
-      return closes.map((v, i) => ({ i, mcap: v * ratio + Math.sin((i + tick) * 0.7 + seed) * anchor * 0.0015 }));
+      return closes.map((v, i) => ({ i, mcap: v * ratio }));
     }
-    // У токена на кривой история есть всегда — если она ещё не приехала,
-    // рисуем ровную линию, а не выдуманное движение.
-    if (curveAddress) {
-      const flat = base || 0;
-      return Array.from({ length }, (_, i) => ({ i, mcap: flat }));
+    // У токена на кривой между сделками цена и правда стоит на месте,
+    // поэтому ровная линия — это правда, а не заглушка.
+    if (curveAddress && base > 0) {
+      return Array.from({ length }, (_, i) => ({ i, mcap: base }));
     }
-    return mcapSeries(base, seed, length, tick);
-  }, [closes, base, seed, length, tick, curveAddress]);
+    return null;
+  }, [closes, base, seed, length, curveAddress]);
+
+  // Настоящих точек нет — не рисуем ничего, только держим место, чтобы
+  // строка карточки не прыгала.
+  if (!data) {
+    return <div ref={elRef} style={{ width, height }} />;
+  }
 
   const color = positive ? T.up : T.down;
   const padX = 2, padTop = 4, padBottom = 2;
@@ -2146,31 +2142,6 @@ async function fetchSparkCloses(poolAddress, n = 24) {
   return p;
 }
 
-// Synthetic fallback generator — only used when a real pool/candle fetch
-// isn't available (offline, rate-limited, or a bundled demo token with no
-// on-chain pool). Keeps the app functional even without network access.
-function genSyntheticCandles(basePrice, seed, timeframe, n = 140) {
-  const volMap = { M1: 0.006, M5: 0.012, M15: 0.018, M30: 0.022, H1: 0.026, H4: 0.036, D1: 0.05, W1: 0.07, MN1: 0.09 };
-  const stepSec = TF_SECONDS[timeframe] || 3600;
-  const vol = basePrice * (volMap[timeframe] || 0.03);
-  const tfSeed = seed + TIMEFRAMES.indexOf(timeframe) * 3.1;
-  const anchor = Math.floor(Date.now() / 1000);
-  let price = basePrice * 0.94;
-  const candles = [], volume = [];
-  for (let i = 0; i < n; i++) {
-    const open = price;
-    const drift = Math.sin(i * 0.5 + tfSeed) * vol * 0.7;
-    const close = Math.max(basePrice * 0.4, open + drift + (Math.random() - 0.45) * vol);
-    const high = Math.max(open, close) + Math.random() * vol * 0.5;
-    const low = Math.max(basePrice * 0.3, Math.min(open, close) - Math.random() * vol * 0.5);
-    const time = anchor - (n - 1 - i) * stepSec;
-    candles.push({ time, open, high, low, close });
-    volume.push({ time, value: Math.abs(close - open) / vol * 500 + Math.random() * 300 + 80, color: close >= open ? hexA(T.up, 0.32) : hexA(T.down, 0.32) });
-    price = close;
-  }
-  return { candles, volume };
-}
-
 // TerminalChart — our own candlestick renderer on <canvas>: no external
 // chart library, no watermark, and no React-state-driven redraws during
 // gestures (everything during pan/zoom/inertia is imperative canvas work
@@ -2782,7 +2753,6 @@ function fmtSince(iso) {
    отвлекает от виджета под ней. */
 function RecentBuysTicker({ tokens, onOpen }) {
   const [buys, setBuys] = useState([]);
-  const [idx, setIdx] = useState(0);
   // Пока не пришёл первый ответ, на месте ленты стоит скелет той же
   // высоты: пустого прыгающего места на экране быть не должно.
   const [loaded, setLoaded] = useState(false);
@@ -2807,7 +2777,12 @@ function RecentBuysTicker({ tokens, onOpen }) {
     function mergeIn(rows, token, into) {
       (rows || []).forEach((r) => {
         if ((r.kind !== "buy" && r.kind !== "sell") || !r.at) return;
-        if (into.some((x) => x.id === r.id)) return;
+        // Сверяем и по идентификатору, и по самой сделке: одна и та же
+        // покупка приходит из разных ответов с разными номерами, и в
+        // ленте она мелькала дважды.
+        const same = (x) => x.id === r.id
+          || (x.txHash && r.txHash && x.txHash === r.txHash && x.kind === r.kind && x.token.id === token.id);
+        if (into.some(same)) return;
         into.push({ ...r, token });
       });
       into.sort((a, b) => new Date(b.at) - new Date(a.at));
@@ -2841,9 +2816,26 @@ function RecentBuysTicker({ tokens, onOpen }) {
     return () => { cancelled = true; clearInterval(poll); };
   }, [pools]);
 
+  // Показанные сделки запоминаются: лента должна идти вперёд, а не
+  // крутить по кругу одну и ту же покупку. Когда непоказанных не
+  // осталось, строка просто стоит на последней, пока не приедут свежие.
+  const shownRef = useRef(new Set());
+  const [current, setCurrent] = useState(null);
+
   useEffect(() => {
-    if (buys.length < 2) return;
-    const swap = setInterval(() => setIdx(i => (i + 1) % buys.length), 4000);
+    function pickNext(list, prev) {
+      const fresh = list.find((x) => !shownRef.current.has(x.id));
+      if (fresh) {
+        shownRef.current.add(fresh.id);
+        // Множество не должно расти бесконечно за долгую сессию.
+        if (shownRef.current.size > 400) shownRef.current = new Set([fresh.id]);
+        return fresh;
+      }
+      return prev && list.some((x) => x.id === prev.id) ? prev : list[0] || null;
+    }
+    setCurrent((prev) => pickNext(buys, prev));
+    if (!buys.length) return;
+    const swap = setInterval(() => setCurrent((prev) => pickNext(buys, prev)), 4000);
     return () => clearInterval(swap);
   }, [buys]);
 
@@ -2863,9 +2855,8 @@ function RecentBuysTicker({ tokens, onOpen }) {
     }
     return null;
   }
-  // Список дополняется по мере ответов и может стать короче при
-  // обновлении — заворачиваем индекс здесь, чтобы не читать пустоту.
-  const b = buys[idx % buys.length];
+  const b = current || buys[0];
+  if (!b) return null;
 
   return (
     <button
@@ -2873,7 +2864,7 @@ function RecentBuysTicker({ tokens, onOpen }) {
       className="fx-tap w-full flex items-center gap-2 rounded-[16px] px-3 py-2 overflow-hidden"
       style={{ background: hexA(b.kind === "sell" ? T.down : T.up, 0.07), border: `1px solid ${hexA(b.kind === "sell" ? T.down : T.up, 0.22)}`, textAlign: "left" }}
     >
-      <div key={idx} className="flex items-center gap-2 min-w-0" style={{ flex: 1, animation: "tickerSwap 4s ease-in-out both" }}>
+      <div key={b.id} className="flex items-center gap-2 min-w-0" style={{ flex: 1, animation: "tickerSwap 4s ease-in-out both" }}>
         <TokenAvatar size={20} tone={b.kind === "sell" ? "down" : "up"} src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
         <span className="truncate" style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>{shortAddr(b.from) || "—"}</span>
         <span style={{ fontFamily: bodyFont, color: b.kind === "sell" ? T.down : T.up, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
@@ -4384,22 +4375,16 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       // график брал его сам, и пока настоящий курс не приехал, строился
       // по запасному — цифры на графике и над ним расходились в разы.
       else if (token.curveAddress) result = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
-      // Случайный график допустим только там, где настоящих данных не
-      // существует в принципе. У токена на кривой они есть всегда, и
-      // если запрос не прошёл (у бесплатного tonapi жёсткий лимит),
-      // рисуем ровную линию по текущей цене и ждём следующего круга —
-      // подменять её выдуманным движением нельзя.
-      if (!result) {
-        result = curveChart
-          ? flatCandles(token.price, tf, CHART_TOTAL)
-          : genSyntheticCandles(token.price, token.seed, tf, CHART_TOTAL);
-      }
+      // Выдуманных свечей больше нет ни для кого. У токена на кривой
+      // история есть всегда, и если запрос не прошёл (у бесплатного
+      // tonapi жёсткий лимит), рисуется ровная линия по текущей цене —
+      // между сделками цена и правда стоит. У токена с биржи данные
+      // либо пришли, либо нет: во втором случае показываем «нет
+      // данных», а не случайное движение.
+      if (!result && curveChart) result = flatCandles(token.price, tf, CHART_TOTAL);
       if (cancelled) return;
-      if (result) { setChartData({ ...result, isLive: !!token.poolAddress || curveChart }); setChartLoading(false); }
-      // У токена на кривой пустой график не показываем: данные есть
-      // всегда, просто ещё не приехали (обычно ждём курс TON). Оставляем
-      // загрузку — попытка повторится, когда курс появится.
-      else if (!curveChart) setChartLoading(false);
+      if (result) { setChartData({ ...result, isLive: true }); setChartLoading(false); }
+      else { setChartData(null); setChartLoading(false); }
     })();
     return () => { cancelled = true; };
     // priceKnown в зависимостях намеренно: пока цена не приехала, ровную
@@ -4663,31 +4648,16 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           </div>
 
           <div className="rounded-[22px] overflow-hidden" style={{ background: "#000000", border: `1px solid ${T.line}`, padding: 2, position: "relative" }}>
-            {chartLoading || !chartData ? (
+            {chartLoading ? (
               <div className="flex items-center justify-center" style={{ height: 340, fontFamily: monoFont, fontSize: 11, color: T.muted }}>
                 {tr("chartLoading")}
               </div>
+            ) : !chartData ? (
+              <div className="flex items-center justify-center" style={{ height: 340, fontFamily: monoFont, fontSize: 11, color: T.muted, textAlign: "center", padding: "0 20px" }}>
+                {tr("chartNoData")}
+              </div>
             ) : (
               <TerminalChart key={`${token.id}-${tf}-${chartMode}`} candles={scaledCandles} height={340} themeKey={themeKey} onHover={setHovered} tf={tf} valueFmt={chartMode === "price" ? fmtPrice : fmtUSD} />
-            )}
-            {/* chartData.isLive is false whenever there's no real on-chain pool
-                behind this token, i.e. the candles are the synthetic
-                random-walk fallback (see the effect above) rather than real
-                OHLCV — flag that clearly so it can't be mistaken for a real
-                price history. */}
-            {!chartLoading && chartData && !chartData.isLive && (
-              <div style={{
-                position: "absolute", top: 10, left: 10, zIndex: 2,
-                display: "flex", alignItems: "center", gap: 5,
-                padding: "4px 9px", borderRadius: 999,
-                background: hexA(T.down, 0.16), border: `1px solid ${hexA(T.down, 0.5)}`,
-                backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
-              }}>
-                <ShieldAlert size={11} color={T.down} />
-                <span style={{ fontFamily: bodyFont, fontSize: 10.5, fontWeight: 700, color: T.down, letterSpacing: 0.2 }}>
-                  {tr("fakeChartBadge")}
-                </span>
-              </div>
             )}
           </div>
 
