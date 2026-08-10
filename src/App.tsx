@@ -351,6 +351,9 @@ const STR = {
     achAll: "Все",
     shopLocked: "Предмет откроется за достижение",
     achFirstLaunch: "Первый запуск", achFirstLaunchHint: "Запустить свой первый токен",
+    wreathBadgeTitle: "Знак создателя",
+    wreathBadgeBody: "Выдан за то, что токен этого человека дорос до капитализации {sum}.",
+    wreathTier1: "Первая тысяча", wreathTier2: "Десять тысяч", wreathTier3: "Сто тысяч",
     achMcap1k: "Первая тысяча", achMcap1kHint: "Довести свой токен до $1K капитализации",
     achMcap10k: "Десять тысяч", achMcap10kHint: "Довести свой токен до $10K капитализации",
     achMcap100k: "Сто тысяч", achMcap100kHint: "Довести свой токен до $100K капитализации",
@@ -644,6 +647,9 @@ const STR = {
     achAll: "All",
     shopLocked: "This item unlocks with an achievement",
     achFirstLaunch: "First launch", achFirstLaunchHint: "Launch your first token",
+    wreathBadgeTitle: "Creator badge",
+    wreathBadgeBody: "Awarded for taking their token to a {sum} market cap.",
+    wreathTier1: "First thousand", wreathTier2: "Ten thousand", wreathTier3: "Hundred thousand",
     achMcap1k: "First thousand", achMcap1kHint: "Take one of your tokens to a $1K market cap",
     achMcap10k: "Ten thousand", achMcap10kHint: "Take one of your tokens to a $10K market cap",
     achMcap100k: "Hundred thousand", achMcap100kHint: "Take one of your tokens to a $100K market cap",
@@ -3866,7 +3872,7 @@ function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast, onOpe
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{tr("creatorLabel")}</span>
           <div className="flex items-center gap-1 min-w-0">
             <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>{creator.nickname}</span>
-            <CreatorWreath tier={Number(creator.creator_tier) || 0} size={16} />
+            <CreatorWreathBadge tier={Number(creator.creator_tier) || 0} kindId={(WREATH_LEAF_KINDS[Number(creator.wreath_leaf) || 0] || WREATH_LEAF_KINDS[0]).id} size={16} />
             <ChevronRight size={14} color={T.muted} />
           </div>
           <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>
@@ -4067,7 +4073,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
         <div className="flex flex-col items-center gap-2" style={{ position: "relative", zIndex: 1, width: "100%" }}>
           <span className="flex items-center gap-1.5" style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, marginTop: 4 }}>
             {profile.nickname}
-            <CreatorWreath tier={creatorTier} size={19} />
+            <CreatorWreathBadge tier={creatorTier} kindId={wreathKind} size={19} />
           </span>
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
             {profile.bio || tr("bioEmptyPlaceholder")}
@@ -4436,6 +4442,74 @@ function WreathAvatar({ tier = 0, size = 128, kindId = "mix", children }) {
         <AvatarWreathArt tier={tier} kindId={kindId} size={outer} />
       </div>
     </div>
+  );
+}
+
+/* CreatorWreathBadge — знак рядом с ником, по нажатию объясняет себя.
+
+   Значок висит и на чужих профилях, где догадаться о его смысле неоткуда,
+   поэтому нажатие открывает окно с самим венком и строкой, за что он
+   выдан. Окно уходит в портал: значок нередко лежит внутри кнопки
+   перехода на профиль и внутри блоков с обрезкой. */
+const WREATH_TIER_SUM = ["", "$1K", "$10K", "$100K"];
+
+function CreatorWreathBadge({ tier = 0, kindId = "mix", size = 19 }) {
+  const [open, setOpen] = useState(false);
+  if (!tier) return null;
+  const close = (e) => { if (e) { e.stopPropagation(); e.preventDefault(); } setOpen(false); };
+  return (
+    <>
+      <span
+        role="button" tabIndex={0} aria-label={tr("wreathBadgeTitle")}
+        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setOpen(true); }}
+        style={{ display: "inline-flex", cursor: "pointer", lineHeight: 0 }}
+      >
+        <CreatorWreath tier={tier} size={size} />
+      </span>
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          className="fx-modal-back"
+          onClick={close}
+          style={{
+            position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.8)",
+            backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
+            justifyContent: "center", padding: 24,
+          }}
+        >
+          <div
+            className="fx-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 300, background: T.surface,
+              border: `1px solid ${T.lineHi}`, borderRadius: 24, padding: "26px 22px 22px",
+              display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+            }}
+          >
+            {/* Венок показываем без аватарки внутри: окно про сам знак. */}
+            <div style={{ width: 150, height: 150, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <AvatarWreathArt tier={tier} kindId={kindId} size={150} />
+            </div>
+            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 700, marginTop: 10 }}>
+              {tr("wreathBadgeTitle")}
+            </span>
+            <span style={{ fontFamily: displayFont, color: T.electric, fontSize: 13, fontWeight: 700, marginTop: 2 }}>
+              {tr(`wreathTier${tier}`)}
+            </span>
+            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 8 }}>
+              {trf("wreathBadgeBody", { sum: WREATH_TIER_SUM[tier] || "" })}
+            </p>
+            <button
+              onClick={close}
+              className="fx-tap w-full rounded-[20px] py-2.5"
+              style={{ marginTop: 16, background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
+            >
+              {tr("doneClose")}
+            </button>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
@@ -7440,7 +7514,7 @@ function ProfileView({
             <>
               <div className="flex items-center gap-1.5 mt-1">
                 <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{profile.nickname}</span>
-                <CreatorWreath tier={creatorTier} size={19} />
+                <CreatorWreathBadge tier={creatorTier} kindId={cosmetics.wreath} size={19} />
                 {verifyStatus === "verified" && <ShieldCheck size={16} color={T.electric} />}
               </div>
               <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
