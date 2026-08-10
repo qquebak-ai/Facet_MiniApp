@@ -892,6 +892,9 @@ function GlobalStyle() {
         100% { transform: translate3d(var(--dx), 104vh, 0) rotate(var(--r1)); opacity: 0; }
       }
       @keyframes islandGlow { 0%,100%{ opacity:0.75; } 50%{ opacity:1; } }
+      /* Обрамление проявляется, а не возникает рывком: его показывают
+         после заставки, и резкое появление читалось бы как подёргивание. */
+      @keyframes frameFadeIn { from { opacity: 0; } to { opacity: 1; } }
       /* Реакция острова на прилёт ракеты: две искры бегут от середины
          нижней грани в разные стороны, встречаются наверху, и после
          этого вспыхивает и плавно гаснет весь контур. Смещение штриха
@@ -7077,6 +7080,7 @@ function DynamicIslandFrame({ topOffset = 0, hitKey = 0 }) {
         // Выше всего, включая заставку и модальные окна: это обрамление
         // самого экрана телефона, а не элемент интерфейса.
         zIndex: 2000,
+        animation: "frameFadeIn 420ms ease-out both",
       }}
     >
       <svg width={w + pad * 2} height={h + pad * 2} viewBox={`${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`} style={{ overflow: "visible" }}>
@@ -7173,6 +7177,7 @@ function ScreenFrame({ hitKey = 0 }) {
       style={{
         position: "fixed", left: inset, top: inset, width: w, height: h,
         pointerEvents: "none", zIndex: 2000,
+        animation: "frameFadeIn 420ms ease-out both",
       }}
     >
       <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ overflow: "visible" }}>
@@ -7331,7 +7336,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [tab, setTab] = useState("home");
   const [token, setToken] = useState(null);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
-  const { height, insetBottom, insetTop, deviceTop, fullscreen } = useTelegramViewport();
+  const { height, insetBottom, insetTop, deviceTop, fullscreen, ready: viewportReady } = useTelegramViewport();
   const device = useDevice();
   // Рамка вокруг «острова» рисуется только там, где остров есть и где он
   // виден: в обычном режиме окно Telegram начинается ниже него, и
@@ -8423,6 +8428,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   ];
   const bootDone = bootSteps.every((s) => s.done);
   const [bootHidden, setBootHidden] = useState(false);
+  const framesReady = bootHidden && (viewportReady || !device.inTelegram);
   // Страховка: даже если какой-то запрос завис, дольше 9 секунд держать
   // человека на заставке нельзя.
   useEffect(() => {
@@ -8447,9 +8453,15 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       style={{ background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden" }}
     >
       <GlobalStyle />
-      {showIsland
+      {/* Обрамление появляется только после заставки и только когда
+          Telegram уже сообщил отступы. Раньше на телефоне с островом в
+          первые мгновения рисовался контур экрана — отступы ещё не
+          пришли, приложение считало, что острова нет, — а потом рамка
+          прыгала на своё место. Вне Telegram отступов не будет вовсе,
+          там ждать нечего. */}
+      {framesReady && (showIsland
         ? <DynamicIslandFrame hitKey={islandHitKey} />
-        : <ScreenFrame hitKey={islandHitKey} />}
+        : <ScreenFrame hitKey={islandHitKey} />)}
       {rocketFlying && <LaunchRocket targetTop={showIsland ? ROCKET_TOUCH_TOP : ROCKET_TOUCH_TOP_SCREEN} variant={rocketVariant} />}
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
