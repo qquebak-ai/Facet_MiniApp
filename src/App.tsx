@@ -1352,6 +1352,16 @@ function fmtCandleStamp(timeSec) {
   return `${pad(d.getMonth() + 1)}.${pad(d.getDate())}.${String(d.getFullYear()).slice(-2)} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Сумма в TON для ленты: крупные округляем до целых, мелкие показываем
+// с двумя-тремя знаками — «0.12 TON» информативнее, чем «0 TON».
+function fmtTon(n) {
+  if (!(n > 0)) return "0";
+  if (n >= 1000) return fmtCompact(n);
+  if (n >= 100) return n.toFixed(0);
+  if (n >= 1) return n.toFixed(2).replace(/\.?0+$/, "");
+  return n.toFixed(3).replace(/\.?0+$/, "");
+}
+
 function fmtCompact(n) {
   const v = Number(n) || 0;
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
@@ -1785,10 +1795,16 @@ async function fetchPoolTrades(poolAddress, limit = 25) {
     const rows = json?.data || [];
     const trades = rows.slice(0, limit).map(row => {
       const a = row.attributes || {};
+      const volUsd = parseFloat(a.volume_in_usd) || 0;
+      const rate = tonUsd();
       return {
         id: row.id,
         kind: a.kind, // "buy" | "sell"
-        volUsd: parseFloat(a.volume_in_usd) || 0,
+        volUsd,
+        // Сумма в TON: на бирже сделка считается в долларах, поэтому
+        // переводим по текущему курсу. У сделок на своей кривой она
+        // известна точно и подставляется без пересчёта.
+        volTon: rate > 0 ? volUsd / rate : 0,
         priceUsd: parseFloat(a.price_from_in_usd || a.price_to_in_usd) || 0,
         txHash: a.tx_hash || null,
         from: a.tx_from_address || null,
@@ -2052,6 +2068,7 @@ function curveTradesToFeed(trades, params, limit = 30) {
     .map((tr, i) => ({
       id: `curve-${tr.time}-${i}`,
       kind: tr.kind,
+      volTon: Number(tr.ton) / 1e9,
       volUsd: (Number(tr.ton) / 1e9) * rate,
       priceUsd: curvePriceFromReserve(tr.realTon, params) * rate,
       txHash: null,
@@ -2860,9 +2877,9 @@ function RecentBuysTicker({ tokens, onOpen }) {
         <TokenAvatar size={20} tone={b.kind === "sell" ? "down" : "up"} src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
         <span className="truncate" style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>{shortAddr(b.from) || "—"}</span>
         <span style={{ fontFamily: bodyFont, color: b.kind === "sell" ? T.down : T.up, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
-          {b.kind === "sell" ? t("tickerSold") : t("tickerBought")} ${fmtCompact(b.volUsd)}
+          {b.kind === "sell" ? t("tickerSold") : t("tickerBought")} {fmtTon(b.volTon != null ? b.volTon : (tonUsd() > 0 ? b.volUsd / tonUsd() : 0))} TON
         </span>
-        <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 12, fontWeight: 700 }}>{b.token.ticker}</span>
+        <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 12, fontWeight: 700 }}>${b.token.ticker}</span>
       </div>
       <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 10.5, whiteSpace: "nowrap" }}>{fmtSince(b.at)}</span>
     </button>
