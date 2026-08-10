@@ -883,6 +883,7 @@ function GlobalStyle() {
       /* Обрамление проявляется, а не возникает рывком: его показывают
          после заставки, и резкое появление читалось бы как подёргивание. */
       @keyframes frameFadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes frameFadeOut { from { opacity: 1; } to { opacity: 0; } }
       /* Пролёт ракеты по кнопке запуска: справа налево, с паузой между
          заходами. Поворот на 135 градусов — картинка нарисована носом
          вверх-вправо, а лететь она должна носом вперёд, то есть влево. */
@@ -7231,7 +7232,7 @@ const ISLAND_BOTTOM = ISLAND_TOP - ISLAND_GAP + ISLAND_HEIGHT + ISLAND_GAP * 2;
 const ROCKET_NOSE_OFFSET = 50;
 const ROCKET_TOUCH_TOP = ISLAND_BOTTOM + ROCKET_NOSE_OFFSET;
 
-function DynamicIslandFrame({ topOffset = 0, hitKey = 0 }) {
+function DynamicIslandFrame({ topOffset = 0, hitKey = 0, phase = "in" }) {
   const w = ISLAND_WIDTH + ISLAND_GAP * 2;
   const h = ISLAND_HEIGHT + ISLAND_GAP * 2;
   const r = h / 2;
@@ -7257,7 +7258,9 @@ function DynamicIslandFrame({ topOffset = 0, hitKey = 0 }) {
         // Выше всего, включая заставку и модальные окна: это обрамление
         // самого экрана телефона, а не элемент интерфейса.
         zIndex: 2000,
-        animation: "frameFadeIn 420ms ease-out both",
+        animation: phase === "out"
+          ? "frameFadeOut 500ms ease-in both"
+          : "frameFadeIn 420ms ease-out both",
       }}
     >
       <svg width={w + pad * 2} height={h + pad * 2} viewBox={`${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`} style={{ overflow: "visible" }}>
@@ -7592,14 +7595,25 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // момент, когда она в него влетает.
   const [rocketFlying, setRocketFlying] = useState(false);
   const [islandHitKey, setIslandHitKey] = useState(0);
+  // Рамка вокруг острова живёт только во время запуска токена.
+  // Постоянно висеть она не может: остров умеет раскрываться под музыку,
+  // звонок, таймер — и тогда он становится больше нашей рамки, а
+  // веб-странице его форма недоступна, узнать о раскрытии неоткуда.
+  // null — не показываем, "in" — проявляется и держится, "out" — гаснет.
+  const [islandFramePhase, setIslandFramePhase] = useState(null);
   const rocketTimers = useRef([]);
   function playLaunchRocket() {
     rocketTimers.current.forEach(clearTimeout);
     setRocketFlying(true);
+    setIslandFramePhase("in");
     rocketTimers.current = [
       // Искры трогаются в тот момент, когда ракета уже у самого острова.
       setTimeout(() => setIslandHitKey((n) => n + 1), ROCKET_FLIGHT_MS - 130),
       setTimeout(() => setRocketFlying(false), ROCKET_FLIGHT_MS + 60),
+      // Вспышка контура доигрывает около двух секунд после касания,
+      // потом рамка уходит.
+      setTimeout(() => setIslandFramePhase("out"), ROCKET_FLIGHT_MS + 2100),
+      setTimeout(() => setIslandFramePhase(null), ROCKET_FLIGHT_MS + 2600),
     ];
   }
   useEffect(() => () => rocketTimers.current.forEach(clearTimeout), []);
@@ -7613,7 +7627,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // поправить, не тратя TON.
   useEffect(() => {
     if (typeof window === "undefined" || !/[?&]rocket=1/.test(window.location.search)) return;
-    const to = setTimeout(playLaunchRocket, 1200);
+    // С запасом: до конца заставки рамка ещё не показывается, и полёт
+    // прошёл бы впустую.
+    const to = setTimeout(playLaunchRocket, 7000);
     return () => clearTimeout(to);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -8704,7 +8720,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           прыгала на своё место. Вне Telegram отступов не будет вовсе,
           там ждать нечего. */}
       {framesReady && (showIsland
-        ? <DynamicIslandFrame hitKey={islandHitKey} />
+        ? (islandFramePhase && <DynamicIslandFrame hitKey={islandHitKey} phase={islandFramePhase} />)
         : <ScreenFrame hitKey={islandHitKey} />)}
       {rocketFlying && <LaunchRocket targetTop={showIsland ? ROCKET_TOUCH_TOP : ROCKET_TOUCH_TOP_SCREEN} variant={rocketVariant} />}
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
