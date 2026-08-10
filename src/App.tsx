@@ -2294,6 +2294,9 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   // а число свечей меняется на каждом обновлении — от этого график сам
   // уезжал то влево, то вправо.
   const pinnedRef = useRef(true);
+  // Трогали ли шкалу цены руками. Пока нет — она подгоняется под данные
+  // сама при каждом обновлении.
+  const yUserRef = useRef(false);
   // Vertical (price) window — { min, max } in price units. Unlike before,
   // this is NOT recomputed from whatever candles happen to be visible;
   // it's set once (auto-fit on first draw) and from then on only changes
@@ -2540,7 +2543,12 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       v.count = Math.max(CHART_MIN_VISIBLE, Math.min(n, v.count || CHART_DEFAULT_VISIBLE));
       v.start = Math.max(0, n - v.count);
     }
-  }, [n]);
+    // Окно цены подгоняется заново. Оно задавалось один раз при первой
+    // отрисовке и дальше не менялось: приезжали новые свечи с другим
+    // размахом, и они сплющивались в узкую полосу посреди пустого поля.
+    // Если шкалу двигали руками — не трогаем, это уже выбор человека.
+    if (!yUserRef.current) yViewRef.current = null;
+  }, [n, candles]);
 
   useEffect(() => { draw(); });
 
@@ -2581,6 +2589,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   function panYByPixels(dyScreen) {
     const layout = computeLayout();
     if (!layout) return;
+    yUserRef.current = true;
     const delta = (dyScreen / layout.drawHeight) * layout.range;
     yViewRef.current = { min: layout.min + delta, max: layout.max + delta };
     draw();
@@ -2727,6 +2736,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   }
   function scaleMove(clientY) {
     if (!yScaleRef.current) return;
+    yUserRef.current = true;
     const { startY, startMin, startMax } = yScaleRef.current;
     const dy = clientY - startY;
     const center = (startMin + startMax) / 2;
