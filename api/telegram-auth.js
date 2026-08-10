@@ -146,6 +146,15 @@ const MAX_INIT_DATA_LEN = 4096;
 // существующим, а записывается связь единожды, при создании профиля.
 const REF_PREFIX = "ref_";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Пригласивший из ссылки: он должен существовать и не быть самим
+// приглашённым. Чужой или выдуманный идентификатор просто отбрасываем.
+async function validInviter(admin, startParam, userId) {
+  const invitedBy = inviterFromStartParam(startParam);
+  if (!invitedBy || invitedBy === userId) return null;
+  const { data: inviter } = await admin.from("profiles").select("id").eq("id", invitedBy).maybeSingle();
+  return inviter ? invitedBy : null;
+}
+
 function inviterFromStartParam(startParam) {
   if (typeof startParam !== "string" || !startParam.startsWith(REF_PREFIX)) return null;
   const id = startParam.slice(REF_PREFIX.length).trim();
@@ -236,7 +245,7 @@ export default async function handler(req, res) {
 
     // Профиль заводим только если его ещё нет: при повторном входе нельзя
     // затирать никнейм, описание и аватарку, которые человек поменял сам.
-    const { data: profile } = await admin.from("profiles").select("id, telegram_id").eq("id", userId).maybeSingle();
+    const { data: profile } = await admin.from("profiles").select("id, telegram_id, invited_by").eq("id", userId).maybeSingle();
     if (profile && profile.telegram_id != null && String(profile.telegram_id) !== String(tgUser.id)) {
       return fail(res, 409, "account_conflict", `profile telegram_id ${profile.telegram_id} != ${tgUser.id}`);
     }
@@ -253,12 +262,7 @@ export default async function handler(req, res) {
       // пригласивший действительно есть в базе. Сам себя пригласить
       // нельзя, переписать связь позже — тоже: здесь она ставится один
       // раз и больше не трогается.
-      let invitedBy = inviterFromStartParam(body.startParam);
-      if (invitedBy === userId) invitedBy = null;
-      if (invitedBy) {
-        const { data: inviter } = await admin.from("profiles").select("id").eq("id", invitedBy).maybeSingle();
-        if (!inviter) invitedBy = null;
-      }
+      const invitedBy = await validInviter(admin, body.startParam, userId);
 
       const { error: insertErr } = await admin.from("profiles").upsert({
         id: userId,
@@ -272,6 +276,20 @@ export default async function handler(req, res) {
       }, { onConflict: "id" });
       if (insertErr) {
         return fail(res, 500, "profile_failed", insertErr.message);
+      }
+    } else if (profile.invited_by == null) {
+      // Профиль уже был, но пригласившего у него нет. Засчитываем — иначе
+      // ссылка работала бы только для тех, кто вообще ни разу не заходил,
+      // а это почти никто. Связь ставится один раз за всю жизнь аккаунта:
+      // ниже стоит условие «ещё пусто», и переписать её нельзя.
+      const invitedBy = await validInviter(admin, body.startParam, userId);
+      if (invitedBy) {
+        const { error: linkRefErr } = await admin
+          .from("profiles")
+          .update({ invited_by: invitedBy })
+          .eq("id", userId)
+          .is("invited_by", null);
+        if (linkRefErr) console.warn("[auth] failed to link referral:", linkRefErr.message);
       }
     }
 
