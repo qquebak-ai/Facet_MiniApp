@@ -177,7 +177,9 @@ const STR = {
     gradTitle: "До листинга на бирже",
     gradLeft: "осталось {left} TON",
     gradDone: "Кривая закрыта — токен уходит на биржу",
-    gradNote: "Когда в кривой наберётся {target} TON, торговля здесь закроется, а вся ликвидность уйдёт на биржу.",
+    gradNote: "Когда в кривой наберётся {target} TON, торговля здесь закроется. Собранные TON и оставшийся выпуск уйдут на кошелёк площадки — из них заводится пара на бирже.",
+    gradClosedTitle: "Кривая закрыта",
+    gradClosedBody: "Токен набрал {target} TON. Здесь он больше не торгуется: ликвидность уходит на биржу, дальше торговля идёт там.",
     tabChart: "График", tabInfo: "Инфо", tabTx: "Транзакции", chartModePrice: "Цена",
     tokenNoAddress: "Адрес недоступен",
     txUnavailable: "Список транзакций пока недоступен для этого пула",
@@ -444,7 +446,9 @@ const STR = {
     gradTitle: "Until the exchange listing",
     gradLeft: "{left} TON to go",
     gradDone: "Curve closed — the token is heading to an exchange",
-    gradNote: "Once the curve holds {target} TON, trading here closes and all the liquidity moves to an exchange.",
+    gradNote: "Once the curve holds {target} TON, trading here closes. The collected TON and the remaining supply go to the platform wallet — the exchange pair is created from them.",
+    gradClosedTitle: "Curve closed",
+    gradClosedBody: "The token reached {target} TON. It no longer trades here: the liquidity is moving to an exchange, and trading continues there.",
     tabChart: "Chart", tabInfo: "Info", tabTx: "Transactions", chartModePrice: "Price",
     tokenNoAddress: "Address unavailable",
     txUnavailable: "Transaction list isn't available for this pool yet",
@@ -1682,6 +1686,11 @@ async function loadCurveState(curveAddress, testnet) {
       tokensForSale: num(4),
       graduationTon: num(5),
       feeBps: num(6),
+      // Восьмое поле — признак того, что кривая уже закрыта. С этого
+      // момента контракт не принимает ни покупки, ни продажи, поэтому
+      // приложение обязано об этом знать: иначе кнопка «Купить» просто
+      // молча отбивалась бы сетью.
+      graduated: stack[7] ? Number(stack[7].num) !== 0 : false,
     };
   } catch (err) {
     console.error("[mintly] не удалось прочитать состояние кривой:", err);
@@ -5577,18 +5586,30 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             onOpenProfile={onOpenProfile}
           />
 
-          {curve && (
+          {curve && curve.graduated ? (
+            // Контракт с этого момента отбивает и покупку, и продажу.
+            // Показывать кнопки, которые заведомо не сработают, — врать.
+            <div className="rounded-[22px] p-4 flex items-start gap-3" style={{ background: T.surface, border: `1px solid ${hexA(T.up, 0.4)}` }}>
+              <ShieldCheck size={18} color={T.up} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{tr("gradClosedTitle")}</div>
+                <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.5, marginTop: 4 }}>
+                  {trf("gradClosedBody", { target: fmtTon(Number(curve.graduationTon) / 1e9) })}
+                </p>
+              </div>
+            </div>
+          ) : curve ? (
             <GraduationBar
               raisedTon={Number(curve.realTon) / 1e9}
               targetTon={Number(curve.graduationTon) / 1e9}
             />
-          )}
+          ) : null}
 
           {token.curveAddress && (
             <TrustPanel token={token} testnet={TON_TESTNET_NETWORK} holders={holdersCount} />
           )}
 
-          {connected ? (
+          {curve && curve.graduated ? null : connected ? (
             <div className="flex gap-2">
               <button onClick={onBuy} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14, background: PRISM, color: PRISM_TEXT, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("buy")}</button>
               <button onClick={onSell} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14, background: "transparent", color: T.rose, border: `1px solid ${T.rose}`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("sell")}</button>
