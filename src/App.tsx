@@ -2348,6 +2348,11 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const [widthPx, setWidthPx] = useState(320);
+  // Ширина, по которой реально считается и рисуется кадр. Обновляется в
+  // начале отрисовки прямым замером элемента: наблюдатель за размером
+  // срабатывает не в тот же кадр, и по устаревшему числу холст рисуется
+  // в одном размере, а растягивается в другом.
+  const widthRef = useRef(320);
 
   const n = candles?.length || 0;
   const viewRef = useRef({ start: Math.max(0, n - CHART_DEFAULT_VISIBLE), count: Math.min(n, CHART_DEFAULT_VISIBLE) || 1 });
@@ -2391,6 +2396,21 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   // Ширина шкалы считается на весь ряд сразу, ещё до первой отрисовки:
   // см. пояснение в computeLayout. Через эффект было бы поздно — первый
   // кадр успел бы нарисоваться с другой шириной и дёрнуться.
+  // Живой замер ширины. Один источник на расчёт и на отрисовку: если
+  // они разойдутся хоть на точку, картинка поедет.
+  function chartWidth() {
+    const el = wrapRef.current;
+    // Именно дробная ширина из getBoundingClientRect, а не округлённая
+    // clientWidth: на неокруглённой ширине родителя целое число даёт
+    // растяжение холста на процент — как раз столько, чтобы подписи
+    // поплыли.
+    if (el) {
+      const w = el.getBoundingClientRect().width;
+      if (w > 0) widthRef.current = w;
+    }
+    return widthRef.current || widthPx;
+  }
+
   function clampView() {
     const v = viewRef.current;
     v.count = Math.max(CHART_MIN_VISIBLE, Math.min(n, v.count || CHART_DEFAULT_VISIBLE));
@@ -2434,7 +2454,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     // Округление до восьми пикселей добавляет запас: подпись меняется
     // на символ, а шкала стоит на месте.
     const gutter = CHART_GUTTER;
-    const plotW = Math.max(1, widthPx - gutter);
+    const plotW = Math.max(1, chartWidth() - gutter);
     const slot = plotW / count;
     const bodyW = Math.max(2, Math.min(14, slot * 0.7));
     // Clamp so a stray out-of-range price (bad tick, huge wick) draws a
@@ -2462,7 +2482,11 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     // для системы отдать буфер поменьше: тогда шкала с подписями
     // становится мыльной.
     const dpr = typeof window !== "undefined" ? (window.devicePixelRatio || 1) : 1;
-    const wantW = Math.max(1, Math.round(widthPx * dpr));
+    // Ширину спрашиваем у самого элемента прямо сейчас, а не берём из
+    // состояния: наблюдатель за размером срабатывает не в тот же кадр, и
+    // при устаревшем числе холст рисуется в одном размере, а
+    // растягивается в другом — отсюда мыло и рваные подписи на шкале.
+    const wantW = Math.max(1, Math.round(chartWidth() * dpr));
     const wantH = Math.max(1, Math.round(height * dpr));
     if (canvas.width !== wantW || canvas.height !== wantH) {
       canvas.width = wantW;
@@ -2477,8 +2501,14 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     if (canvas.style.height !== cssH) canvas.style.height = cssH;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    // Чистим весь буфер целиком, в его собственных точках. Через
+    // масштаб плотности крайний столбец мог не попасть под очистку из-за
+    // округления — а поверх него каждую секунду дорисовывались подписи
+    // шкалы, и они наслаивались друг на друга.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, widthPx, height);
+    const widthNow = chartWidth();
 
     const { startI, endI, min, max, range, yFor, xFor, bodyW, plotW, padTop, padBottom, drawHeight, gutter } = layout;
     const fmt = valueFmt || fmtPrice;
@@ -2575,7 +2605,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
         const y = yFor(price);
         if (y < padTop - 4 || y > height - padBottom + 4) continue;
         if (pillTop != null && y > pillTop - 2 && y < pillBottom + 2) continue; // don't collide with the pill
-        ctx.fillText(fmt(price), widthPx - 8, y + 3);
+        ctx.fillText(fmt(price), chartWidth() - 8, y + 3);
       }
     }
     ctx.textAlign = "left";
@@ -2592,13 +2622,13 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       const closeAtMs = (lastCandle.time + barSec) * 1000;
       const countdownLabel = fmtCountdown(closeAtMs - Date.now());
       ctx.fillStyle = lastColor;
-      ctx.fillRect(widthPx - gutter, pillTop, gutter, 32);
+      ctx.fillRect(chartWidth() - gutter, pillTop, gutter, 32);
       ctx.fillStyle = T.bg;
       ctx.textAlign = "center";
       ctx.font = "700 11px " + monoFont;
-      ctx.fillText(priceLabel, widthPx - gutter / 2, pillTop + 13);
+      ctx.fillText(priceLabel, chartWidth() - gutter / 2, pillTop + 13);
       ctx.font = "9px " + monoFont;
-      ctx.fillText(countdownLabel, widthPx - gutter / 2, pillTop + 26);
+      ctx.fillText(countdownLabel, chartWidth() - gutter / 2, pillTop + 26);
       ctx.textAlign = "left";
     }
 
@@ -2773,7 +2803,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       let newCount = pinchRef.current.startCount / scale;
       newCount = Math.max(CHART_MIN_VISIBLE, Math.min(n, newCount));
       const mx = midX(e.touches);
-      const newSlot = widthPx / newCount;
+      const newSlot = chartWidth() / newCount;
       viewRef.current = { start: pinchRef.current.anchorIdx - mx / newSlot, count: newCount };
       clampView();
       draw();
@@ -2850,7 +2880,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     const anchorIdx = viewRef.current.start + mx / layout.slot;
     const factor = e.deltaY > 0 ? 1.1 : 0.9;
     let newCount = Math.max(CHART_MIN_VISIBLE, Math.min(n, viewRef.current.count * factor));
-    const newSlot = widthPx / newCount;
+    const newSlot = chartWidth() / newCount;
     viewRef.current = { start: anchorIdx - mx / newSlot, count: newCount };
     clampView();
     draw();
