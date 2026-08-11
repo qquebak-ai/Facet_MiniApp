@@ -2390,23 +2390,32 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   // Ширина шкалы считается на весь ряд сразу, ещё до первой отрисовки:
   // см. пояснение в computeLayout. Через эффект было бы поздно — первый
   // кадр успел бы нарисоваться с другой шириной и дёрнуться.
-  const gutterWidth = useMemo(() => {
+  // Ширина шкалы вычисляется один раз — на первых же данных — и дальше
+  // не меняется до конца жизни графика. Компонент пересоздаётся при
+  // смене токена, интервала и режима (см. key у TerminalChart), так что
+  // «один раз» здесь означает «на этот график».
+  //
+  // Так жёстко потому, что от ширины шкалы зависит ширина поля свечей:
+  // стоит ей шевельнуться — и весь график дёргается вбок. Любая
+  // зависимость от текущих данных означает рывок на каждом обновлении,
+  // а выигрыш от точной подгонки — десяток точек пустоты.
+  const gutterRef = useRef(0);
+  if (!gutterRef.current && n) {
     let lo = Infinity, hi = -Infinity;
     for (const c of candles) {
       if (Number.isFinite(c.low) && c.low < lo) lo = c.low;
       if (Number.isFinite(c.high) && c.high > hi) hi = c.high;
     }
-    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return CHART_GUTTER_MIN;
-    const longest = [lo, hi]
-      .map((v) => (valueFmt ? valueFmt(v) : String(v)))
-      .reduce((a, b) => (String(b).length > String(a).length ? b : a), "");
-    const want = String(longest).length * 7.2 + 18;
-    return Math.max(CHART_GUTTER_MIN, Math.min(CHART_GUTTER_MAX, Math.ceil(want / 8) * 8));
-  }, [candles, valueFmt]);
-  // Отрисовка идёт из кадровой петли и держит старое замыкание, поэтому
-  // значение кладём в ссылку.
-  const gutterRef = useRef(CHART_GUTTER_MIN);
-  gutterRef.current = gutterWidth;
+    if (Number.isFinite(lo) && Number.isFinite(hi)) {
+      const longest = [lo, hi]
+        .map((v) => (valueFmt ? valueFmt(v) : String(v)))
+        .reduce((a, b) => (String(b).length > String(a).length ? b : a), "");
+      // Запас в два знака: цена растёт, подписи удлиняются, а ширину мы
+      // уже не пересчитываем.
+      const want = (String(longest).length + 2) * 7.2 + 18;
+      gutterRef.current = Math.max(CHART_GUTTER_MIN, Math.min(CHART_GUTTER_MAX, Math.ceil(want / 8) * 8));
+    }
+  }
 
   function clampView() {
     const v = viewRef.current;
@@ -2450,7 +2459,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     // поэтому график дёргался вбок на каждом кадре прокрутки.
     // Округление до восьми пикселей добавляет запас: подпись меняется
     // на символ, а шкала стоит на месте.
-    const gutter = gutterRef.current;
+    const gutter = gutterRef.current || CHART_GUTTER_MIN;
     const plotW = Math.max(1, widthPx - gutter);
     const slot = plotW / count;
     const bodyW = Math.max(2, Math.min(14, slot * 0.7));
