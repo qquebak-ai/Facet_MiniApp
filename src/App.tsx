@@ -2367,6 +2367,27 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     return () => ro.disconnect();
   }, []);
 
+  // Ширина шкалы считается на весь ряд сразу, ещё до первой отрисовки:
+  // см. пояснение в computeLayout. Через эффект было бы поздно — первый
+  // кадр успел бы нарисоваться с другой шириной и дёрнуться.
+  const gutterWidth = useMemo(() => {
+    let lo = Infinity, hi = -Infinity;
+    for (const c of candles) {
+      if (Number.isFinite(c.low) && c.low < lo) lo = c.low;
+      if (Number.isFinite(c.high) && c.high > hi) hi = c.high;
+    }
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return CHART_GUTTER_MIN;
+    const longest = [lo, hi]
+      .map((v) => (valueFmt ? valueFmt(v) : String(v)))
+      .reduce((a, b) => (String(b).length > String(a).length ? b : a), "");
+    const want = String(longest).length * 7.2 + 18;
+    return Math.max(CHART_GUTTER_MIN, Math.min(CHART_GUTTER_MAX, Math.ceil(want / 8) * 8));
+  }, [candles, valueFmt]);
+  // Отрисовка идёт из кадровой петли и держит старое замыкание, поэтому
+  // значение кладём в ссылку.
+  const gutterRef = useRef(CHART_GUTTER_MIN);
+  gutterRef.current = gutterWidth;
+
   function clampView() {
     const v = viewRef.current;
     v.count = Math.max(CHART_MIN_VISIBLE, Math.min(n, v.count || CHART_DEFAULT_VISIBLE));
@@ -2402,11 +2423,14 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     const range = (max - min) || (max * 0.02) || 1;
     const padTop = height * 0.08, padBottom = height * 0.1;
     const drawHeight = height - padTop - padBottom;
-    // Ширина шкалы под самую длинную подпись: берём крайние значения
-    // окна, они и дают самый длинный текст.
-    const sample = [valueFmt ? valueFmt(max) : String(max), valueFmt ? valueFmt(min) : String(min)]
-      .reduce((a, b) => (String(b).length > String(a).length ? b : a), "");
-    const gutter = Math.max(CHART_GUTTER_MIN, Math.min(CHART_GUTTER_MAX, String(sample).length * 7.2 + 18));
+    // Ширина шкалы — под самую длинную подпись. Считается по крайним
+    // значениям всего ряда, а не текущего окна: при прокрутке окно
+    // ползёт, длина подписи то «$32.9M», то «$980.00K», и ширина шкалы
+    // прыгала бы вслед за ней. А от неё зависит ширина поля свечей —
+    // поэтому график дёргался вбок на каждом кадре прокрутки.
+    // Округление до восьми пикселей добавляет запас: подпись меняется
+    // на символ, а шкала стоит на месте.
+    const gutter = gutterRef.current;
     const plotW = Math.max(1, widthPx - gutter);
     const slot = plotW / count;
     const bodyW = Math.max(2, Math.min(14, slot * 0.7));
