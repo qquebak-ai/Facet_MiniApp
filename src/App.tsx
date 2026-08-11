@@ -305,8 +305,6 @@ const STR = {
     verifyCta: "Подтверди личность для бейджа",
     deleteAccountForever: "Удалить аккаунт навсегда",
     editProfileBtn: "Редактировать профиль",
-    portfolioTitle: "Портфель",
-    portfolioConnectBody: "Подключи TON-кошелёк, чтобы видеть портфель и начать торговать.",
     activityTitle: "Активность",
     achievementsTitle: "Достижения",
     achUnlockedOf: "{done} из {total}",
@@ -567,8 +565,6 @@ const STR = {
     verifyCta: "Verify your identity for a badge",
     deleteAccountForever: "Delete account forever",
     editProfileBtn: "Edit Profile",
-    portfolioTitle: "Portfolio",
-    portfolioConnectBody: "Connect your TON Wallet to view your portfolio and start trading.",
     activityTitle: "Activity",
     achievementsTitle: "Achievements",
     achUnlockedOf: "{done} of {total}",
@@ -3451,12 +3447,6 @@ function catLabel(cat) {
   return map[cat] ? t(map[cat]) : cat;
 }
 
-/* MOCK DATA — profile */
-
-/* New-user state: nothing bought, nothing launched, no history yet. */
-const PORTFOLIO_TOKENS = [];
-const MY_TOKENS = [];
-const ACTIVITY = [];
 /* Достижения. Считаются по тому, что приложение действительно знает:
    сколько токенов человек запустил, сколько у него подписчиков и на
    скольких подписан он сам, подключён ли кошелёк, заполнен ли профиль,
@@ -6604,28 +6594,6 @@ function WalletCard({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
     </GlassCard>
   );
 }
-function PortfolioTokenCard({ t, onOpen }) {
-  const up = t.pnl >= 0;
-  return (
-    <button onClick={() => onOpen(t)} className="fx-card w-full flex items-center gap-3 rounded-[22px] text-left" style={{ background: T.surface, border: `1px solid ${up ? "rgba(49,208,123,0.28)" : "rgba(255,77,77,0.24)"}`, padding: "12px 14px", position: "relative", overflow: "hidden" }}>
-      <TrendFX up={up} seedKey={t.seed} />
-      <TokenAvatar tone={up ? "up" : "down"} src={t.logoUrl}>{t.emoji}</TokenAvatar>
-      <div className="flex-1 min-w-0" style={{ position: "relative", zIndex: 1 }}>
-        <div className="flex items-center gap-1.5">
-          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 600 }}>{t.name}</span>
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 10 }}>${t.ticker}</span>
-        </div>
-        <div className="flex items-center gap-2 mt-1">
-          <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15, color: T.ice }}>${t.value}</span>
-          <span style={{ fontFamily: monoFont, fontSize: 11, color: up ? T.up : T.down }}>{up ? "+" : ""}{t.pnl.toFixed(1)}%</span>
-        </div>
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, marginTop: 2 }}>{t.balance} {t.ticker} · MCAP {fmtUSD(t.mcapNum)}</div>
-      </div>
-      <div style={{ position: "relative", zIndex: 1 }}><MiniChart base={t.mcapNum} seed={t.seed} poolAddress={t.poolAddress} curveAddress={t.curveAddress} tokenAddress={t.tokenAddress} positive={up} id={`pf-${t.id}`} length={18} /></div>
-    </button>
-  );
-}
-
 function MyTokenCard({ t, onManage }) {
   const holdersCount = useJettonHolders(t.address);
   return (
@@ -7105,9 +7073,8 @@ function TokenManageSheet({ token, onClose, showToast, onDelete }) {
           <button onClick={copyLink} className="fx-tap w-full flex items-center gap-2 rounded-[20px] py-3 px-3.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
             <Copy size={15} color={T.muted} /><span style={{ fontFamily: bodyFont, fontSize: 13, color: T.ice }}>{t("copyLink")}</span>
           </button>
-          {/* Every token in this list now comes from Supabase (myTokens) —
-             MY_TOKENS, the old static demo array, is empty — so any token
-             here is the current user's own and safe to delete. */}
+          {/* Список приходит из базы и содержит только свои токены,
+             поэтому удаление здесь безопасно. */}
           {onDelete && (
             confirmingDelete ? (
               <div className="flex gap-2">
@@ -7630,33 +7597,6 @@ function ProfileView({
         <div className="mt-5"><WalletCard connected={connected} walletAddress={walletAddress} tonBalance={tonBalance} tonPriceUsd={tonPriceUsd} onConnect={connectWallet} onDisconnect={disconnectWallet} onCopy={copyAddress} onExplore={exploreWallet} /></div>
 
         <div className="mt-5">
-          <SectionTitle>{t("portfolioTitle")}</SectionTitle>
-          {!connected ? (
-            <GlassCard style={{ padding: 22 }} className="flex flex-col items-center text-center gap-3">
-              <MintlyFrame size={48} glow={`${T.violet}55`}><Wallet size={18} color={T.violet} /></MintlyFrame>
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5 }}>{t("portfolioConnectBody")}</p>
-              <button onClick={connectWallet} className="fx-tap rounded-[20px] px-5 py-2.5" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 13 }}>{t("connectWalletCta")}</button>
-            </GlassCard>
-          ) : loading ? (
-            <div className="flex flex-col gap-2">
-              {[0, 1].map(i => (
-                <div key={i} className="fx-card flex items-center gap-3 rounded-[22px]" style={{ background: T.surface, border: `1px solid ${T.line}`, padding: "12px 14px" }}>
-                  <div className="fx-skeleton" style={{ width: 52, height: 52, clipPath: FACET }} />
-                  <div className="flex-1 flex flex-col gap-2">
-                    <div className="fx-skeleton" style={{ width: "40%", height: 12, borderRadius: 4 }} />
-                    <div className="fx-skeleton" style={{ width: "55%", height: 16, borderRadius: 4 }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {PORTFOLIO_TOKENS.map(t => <PortfolioTokenCard key={t.id} t={t} onOpen={() => onOpenToken(t)} />)}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-5">
           <SectionTitle action={
             <div className="flex items-center gap-3">
               {onClearAllTokens && myTokens.some((tok) => tok.network === "testnet") && (
@@ -7674,36 +7614,22 @@ function ProfileView({
               <button onClick={goCreateToken} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 11.5, color: unlocked ? T.electric : T.muted }}>{unlocked ? <PlusCircle size={13} /> : <Lock size={12} />} {t("myTokensCreate")}</button>
             </div>
           }>{t("myTokensTitle")}</SectionTitle>
-          {[...myTokens, ...MY_TOKENS].length === 0 ? (
+          {myTokens.length === 0 ? (
             <GlassCard style={{ padding: 22 }} className="flex flex-col items-center text-center gap-2">
               <MintlyFrame size={40} glow={`${T.electric}44`}><Rocket size={16} color={T.electric} /></MintlyFrame>
               <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("noTokensYet")}</p>
             </GlassCard>
           ) : (
-            <div className="flex flex-col gap-2">{[...myTokens, ...MY_TOKENS].map(t => <MyTokenCard key={t.id} t={t} onManage={onManageToken} />)}</div>
+            <div className="flex flex-col gap-2">{myTokens.map(t => <MyTokenCard key={t.id} t={t} onManage={onManageToken} />)}</div>
           )}
         </div>
 
         <div className="mt-5">
           <SectionTitle>{t("activityTitle")}</SectionTitle>
-          {ACTIVITY.length === 0 ? (
-            <GlassCard style={{ padding: 22 }} className="flex flex-col items-center text-center gap-2">
-              <MintlyFrame size={40} glow={`${T.muted}33`}><Clock size={16} color={T.muted} /></MintlyFrame>
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("noActivityYet")}</p>
-            </GlassCard>
-          ) : (
-            <GlassCard style={{ padding: "6px 16px" }}>
-              {ACTIVITY.map((a, i) => (
-                <div key={i} className="fx-view flex items-center gap-3 py-3" style={{ borderBottom: i < ACTIVITY.length - 1 ? `1px solid ${T.line}` : "none", animationDelay: `${i * 50}ms` }}>
-                  <div style={{ width: 30, height: 30, borderRadius: 9, background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><a.icon size={14} color={a.color} /></div>
-                  <div className="flex-1">
-                    <div style={{ fontFamily: bodyFont, fontSize: 12.5, color: T.ice }}>{a.text}</div>
-                    <div style={{ fontFamily: monoFont, fontSize: 10, color: T.muted }}>{a.time}</div>
-                  </div>
-                </div>
-              ))}
-            </GlassCard>
-          )}
+          <GlassCard style={{ padding: 22 }} className="flex flex-col items-center text-center gap-2">
+            <MintlyFrame size={40} glow={`${T.muted}33`}><Clock size={16} color={T.muted} /></MintlyFrame>
+            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("noActivityYet")}</p>
+          </GlassCard>
         </div>
 
         <div className="mt-5">
