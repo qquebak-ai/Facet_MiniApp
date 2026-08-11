@@ -2455,11 +2455,25 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     clampView();
     const layout = computeLayout();
     if (!layout) return;
+    // Размер холста трогаем только когда он правда изменился. Присвоение
+    // canvas.width заново выделяет буфер под всю картинку, а рисуем мы и
+    // по кадру на каждое движение пальца, и раз в секунду ради обратного
+    // отсчёта. Постоянная переаллокация — это и лишняя работа, и повод
+    // для системы отдать буфер поменьше: тогда шкала с подписями
+    // становится мыльной.
     const dpr = typeof window !== "undefined" ? (window.devicePixelRatio || 1) : 1;
-    canvas.width = Math.max(1, Math.round(widthPx * dpr));
-    canvas.height = Math.max(1, Math.round(height * dpr));
-    canvas.style.width = "100%";
-    canvas.style.height = `${height}px`;
+    const wantW = Math.max(1, Math.round(widthPx * dpr));
+    const wantH = Math.max(1, Math.round(height * dpr));
+    if (canvas.width !== wantW || canvas.height !== wantH) {
+      canvas.width = wantW;
+      canvas.height = wantH;
+    }
+    // Ширину задаём точным числом, а не «во всю ширину»: при дробной
+    // ширине родителя картинку растягивало на доли точки, и текст плыл.
+    const cssW = `${widthPx}px`;
+    if (canvas.style.width !== cssW) canvas.style.width = cssW;
+    const cssH = `${height}px`;
+    if (canvas.style.height !== cssH) canvas.style.height = cssH;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2879,7 +2893,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     <div ref={wrapRef} style={{ width: "100%", height, position: "relative", touchAction: "none" }}
       onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
       onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onWheel={onWheel}>
-      <canvas ref={canvasRef} style={{ display: "block", width: "100%", height }} />
+      <canvas ref={canvasRef} style={{ display: "block", width: widthPx || "100%", height }} />
       {/* Invisible drag zone over the price axis: drag up/down to zoom the
           (now manual) vertical scale. The axis itself — labels + the live
           price pill — is drawn on the canvas, so there's no separate
