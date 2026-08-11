@@ -2355,6 +2355,11 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   // а число свечей меняется на каждом обновлении — от этого график сам
   // уезжал то влево, то вправо.
   const pinnedRef = useRef(true);
+  // Время свечи, стоящей у левого края. Окно задано номерами свечей, а
+  // ряд пересобирается на каждом обновлении — и шаг в нём зависит от
+  // длины истории, то есть номера не значат ничего постоянного. Держим
+  // якорь по времени и после обновления возвращаем окно на ту же дату.
+  const anchorTimeRef = useRef(null);
   // Трогали ли шкалу цены руками. Пока нет — она подгоняется под данные
   // сама при каждом обновлении.
   const yUserRef = useRef(false);
@@ -2623,10 +2628,21 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   // сдвигались: график будто ездил сам по себе.
   useEffect(() => {
     if (!n) return;
+    const v = viewRef.current;
     if (pinnedRef.current) {
-      const v = viewRef.current;
       v.count = Math.max(CHART_MIN_VISIBLE, Math.min(n, v.count || CHART_DEFAULT_VISIBLE));
       v.start = Math.max(0, n - v.count);
+    } else if (anchorTimeRef.current != null) {
+      // Ряд мог пересобраться с другим шагом: у свечей другие номера и
+      // даже другие границы. Возвращаем окно на ту дату, где человек его
+      // оставил, — иначе после каждого обновления график прыгал вбок.
+      let best = 0, bestD = Infinity;
+      for (let i = 0; i < n; i++) {
+        const d = Math.abs(candles[i].time - anchorTimeRef.current);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      v.start = Math.max(0, Math.min(best, Math.max(0, n - 1)));
+      clampView();
     }
     // Окно цены подгоняется заново. Оно задавалось один раз при первой
     // отрисовке и дальше не менялось: приезжали новые свечи с другим
@@ -2671,6 +2687,8 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     // Отпустили у самого правого края — снова держимся за него.
     const v = viewRef.current;
     pinnedRef.current = v.start + v.count >= n - 0.75;
+    const left = candles[Math.max(0, Math.min(n - 1, Math.floor(v.start)))];
+    anchorTimeRef.current = left && Number.isFinite(left.time) ? left.time : null;
     draw();
   }
   // Vertical pan: shifts the frozen price window up/down so the content
