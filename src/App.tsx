@@ -7458,6 +7458,7 @@ function ProfileView({
   // Счётчики подписок и достижения считаются в корне: их же показывает
   // магазин и отдельная страница достижений, дублировать запрос незачем.
   followCounts = { followers: 0, following: 0 }, achievements = [], creatorTier = 0, onVerified,
+  tradeStats = { trades: 0, tokens: 0, profitUsd: 0 },
 }) {
   const [loading, setLoading] = useState(true);
   // Подтверждение хранится в профиле, а не только на экране: иначе
@@ -7573,10 +7574,10 @@ function ProfileView({
         <div className="mt-5">
           <SectionTitle>{t("statsTitle")}</SectionTitle>
           <div className="grid grid-cols-2 gap-2">
-            <StatBlock label={t("statTotalProfit")} value={0} color={T.turquoise} suffix=" $" />
+            <StatBlock label={t("statTotalProfit")} value={Math.round(tradeStats.profitUsd)} color={tradeStats.profitUsd >= 0 ? T.up : T.down} suffix=" $" />
             <StatBlock label={t("statCreatedTokens")} value={myTokens.length} />
-            <StatBlock label={t("statTokensOwned")} value={0} />
-            <StatBlock label={t("statTotalTrades")} value={0} />
+            <StatBlock label={t("statTokensOwned")} value={tradeStats.tokens} />
+            <StatBlock label={t("statTotalTrades")} value={tradeStats.trades} />
             <StatBlock label={t("statFollowers")} value={followCounts.followers} />
             <StatBlock label={t("statFollowing")} value={followCounts.following} />
           </div>
@@ -8956,6 +8957,36 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myCurveKey, tonPriceUsd, mcapPeakKey]);
 
+  // Сводка по своим сделкам: сколько их было, на сколько токенов
+  // разных выпусков заходил и что вышло по деньгам. Прибыль считаем
+  // только по закрытым деньгам: продано минус вложено. Пока человек
+  // держит купленное, прибыль отрицательная — это честно, а не ошибка.
+  const [tradeTick, setTradeTick] = useState(0);
+  const [tradeStats, setTradeStats] = useState({ trades: 0, tokens: 0, profitUsd: 0 });
+  useEffect(() => {
+    if (!userId) { setTradeStats({ trades: 0, tokens: 0, profitUsd: 0 }); return; }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("trades")
+        .select("side, ton_amount, ton_price_usd, token_address")
+        .eq("user_id", userId)
+        .limit(1000);
+      if (error) { console.warn("[mintly] сделки недоступны:", error.message); return; }
+      if (cancelled) return;
+      const rows = data || [];
+      let profit = 0;
+      const seen = new Set();
+      for (const r of rows) {
+        const usd = (Number(r.ton_amount) || 0) * (Number(r.ton_price_usd) || 0);
+        profit += r.side === "sell" ? usd : -usd;
+        if (r.token_address) seen.add(r.token_address);
+      }
+      setTradeStats({ trades: rows.length, tokens: seen.size, profitUsd: profit });
+    })();
+    return () => { cancelled = true; };
+  }, [userId, tradeTick]);
+
   // Подтверждение аккаунта. Тоже в профиле: значок у ника должен
   // переживать перезапуск приложения и быть виден другим.
   function markProfileVerified() {
@@ -9389,6 +9420,28 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   }
   function handleBuy() { if (requireUnlockRoot()) setTradeModal({ mode: "buy" }); }
   function handleSell() { if (requireUnlockRoot()) setTradeModal({ mode: "sell" }); }
+  // Своя запись о сделке. Цепочка знает о переводе, но не знает, кто
+  // его сделал из приложения и по какому курсу — а без этого не
+  // посчитать ни портфель, ни прибыль. Пишем после того, как кошелёк
+  // подтвердил отправку; ошибку записи глотаем: сделка уже ушла в сеть,
+  // и мешать человеку из-за неудачной строки в базе незачем.
+  function recordTrade(side, tonAmount, tokenAmount) {
+    if (!userId) return;
+    supabase.from("trades").insert({
+      user_id: userId,
+      token_id: token && token.id ? token.id : null,
+      token_address: token ? token.address : null,
+      ticker: token ? token.ticker : null,
+      side,
+      ton_amount: Number(tonAmount) || 0,
+      token_amount: Number(tokenAmount) || 0,
+      ton_price_usd: tonPriceUsd || 0,
+    }).then(({ error }) => {
+      if (error) console.warn("[mintly] не удалось записать сделку:", error.message);
+      else setTradeTick((n) => n + 1);
+    });
+  }
+
   async function confirmTrade(mode, payAmount, receiveAmount, unit, rawAmount, rawEstimate) {
     if (mode === "buy") {
       // rawAmount is now the TON amount the person typed directly (the
@@ -9427,6 +9480,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           messages,
         });
         adjustHolding(token.id, rawEstimate);
+        recordTrade("buy", totalTon, rawEstimate);
         setTradeModal(null);
         showToast(tf("boughtToast", { receive: receiveAmount, ticker: token.ticker, pay: payAmount, unit }));
         // Баланс на цепочке обновится не мгновенно — даём блокчейну
@@ -9498,6 +9552,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           messages,
         });
         adjustHolding(token.id, -rawAmount);
+        // Сколько TON вернулось — это оценка из окна, точную сумму знает
+        // только сеть, а ждать её здесь нельзя.
+        recordTrade("sell", tonPriceUsd > 0 ? (rawAmount * (token.price > 0 ? token.price : 0)) / tonPriceUsd : 0, rawAmount);
         setTradeModal(null);
         showToast(tf("soldToast", { pay: payAmount, ticker: token.ticker, receive: receiveAmount, unit }));
         setTimeout(() => setBalanceRefreshTick((n) => n + 1), 4000);
@@ -9692,6 +9749,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               userId={userId}
               creatorTier={creatorTier}
               onVerified={markProfileVerified}
+              tradeStats={tradeStats}
             />
           )}
         </div>
