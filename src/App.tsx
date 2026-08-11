@@ -5415,10 +5415,26 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   // Real supply estimate (mcap / price) derived from the same live data —
   // used only to scale the chart between "price" and "market cap" display,
   // exactly like GeckoTerminal/STON.fi's own MCap/Price toggle.
-  const supplyEst = token.price > 0 ? token.mcapNum / token.price : 0;
+  // Множитель «цена → капитализация» — это выпуск токена, и он не
+  // меняется. Но считался он из цены и капитализации, которые приезжают
+  // из ленты отдельно от свечей и чуть разъезжаются на каждом
+  // обновлении. От этого множитель дрожал, и вместе с ним прыгал ВЕСЬ
+  // график: все свечи разом уезжали вверх-вниз, а за ними и шкала.
+  // Поэтому берём его один раз на токен и держим.
+  const supplyRef = useRef({ id: null, value: 0 });
+  if (supplyRef.current.id !== token.id) supplyRef.current = { id: token.id, value: 0 };
+  if (!supplyRef.current.value && token.price > 0 && token.mcapNum > 0) {
+    supplyRef.current.value = token.mcapNum / token.price;
+  }
+  const supplyEst = supplyRef.current.value;
   const scaledCandles = useMemo(() => {
     if (!chartData?.candles) return null;
-    if (chartMode === "price" || !supplyEst) return chartData.candles;
+    // Без множителя рисовать нечего: раньше в этот момент график молча
+    // показывал цену вместо капитализации — все числа менялись в
+    // тридцать миллионов раз, шкала перестраивалась, и это и был тот
+    // самый рывок. Лучше подождать, пока множитель приедет.
+    if (chartMode === "price") return chartData.candles;
+    if (!supplyEst) return null;
     return chartData.candles.map(c => ({ ...c, open: c.open * supplyEst, high: c.high * supplyEst, low: c.low * supplyEst, close: c.close * supplyEst }));
   }, [chartData, chartMode, supplyEst]);
 
