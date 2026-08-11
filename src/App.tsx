@@ -2691,24 +2691,19 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     anchorTimeRef.current = left && Number.isFinite(left.time) ? left.time : null;
     draw();
   }
-  // Vertical pan: shifts the frozen price window up/down so the content
-  // moves with your finger, exactly like the horizontal pan — this is the
-  // "you move it yourself" behavior instead of it auto-fitting.
-  function panYByPixels(dyScreen) {
-    const layout = computeLayout();
-    if (!layout) return;
-    yUserRef.current = true;
-    const delta = (dyScreen / layout.drawHeight) * layout.range;
-    yViewRef.current = { min: layout.min + delta, max: layout.max + delta };
-    draw();
-  }
-  function startInertia(vxPxPerMs, vyPxPerMs = 0) {
-    let vx = vxPxPerMs, vy = vyPxPerMs;
+  // Вертикали в перетаскивании нет намеренно. Раньше палец двигал и
+  // время, и цену сразу: провести пальцем строго горизонтально нельзя, а
+  // значит окно цены уезжало на каждом движении. Хуже того, инерция
+  // после отпускания продолжала везти его дальше — со стороны это
+  // выглядело так, будто шкала «встаёт на место», пока держишь, и
+  // разъезжается, как только отпустил. Цену теперь двигают только за
+  // саму шкалу справа, как в биржевых терминалах.
+  function startInertia(vxPxPerMs) {
+    let vx = vxPxPerMs;
     function step() {
-      if (Math.abs(vx) < 0.01 && Math.abs(vy) < 0.01) { inertiaRaf.current = null; return; }
-      if (Math.abs(vx) >= 0.01) panByPixels(vx * 16);
-      if (Math.abs(vy) >= 0.01) panYByPixels(vy * 16);
-      vx *= 0.93; vy *= 0.93;
+      if (Math.abs(vx) < 0.01) { inertiaRaf.current = null; return; }
+      panByPixels(vx * 16);
+      vx *= 0.93;
       inertiaRaf.current = requestAnimationFrame(step);
     }
     cancelInertia();
@@ -2773,14 +2768,13 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       dragRef.current.vy = dy / dt;
       dragRef.current.lastX = x; dragRef.current.lastY = y; dragRef.current.lastT = now;
       panByPixels(dx);
-      panYByPixels(dy);
     }
   }
   function onTouchEnd(e) {
     if (pinchRef.current) { pinchRef.current = null; return; }
     if (dragRef.current) {
       if (dragRef.current.moved) {
-        startInertia(dragRef.current.vx, dragRef.current.vy);
+        startInertia(dragRef.current.vx);
       } else {
         // No meaningful movement -> treat as a tap: show the crosshair.
         reportHover(indexAtX(dragRef.current.startX));
@@ -2808,12 +2802,11 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       dragRef.current.vy = dy / dt;
       dragRef.current.lastX = e.clientX; dragRef.current.lastY = e.clientY; dragRef.current.lastT = now;
       panByPixels(dx);
-      panYByPixels(dy);
     }
   }
   function onMouseUp() {
     if (dragRef.current) {
-      if (dragRef.current.moved) startInertia(dragRef.current.vx, dragRef.current.vy);
+      if (dragRef.current.moved) startInertia(dragRef.current.vx);
       else reportHover(indexAtX(dragRef.current.startX));
       dragRef.current = null;
     }
