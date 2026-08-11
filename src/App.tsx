@@ -166,6 +166,14 @@ const STR = {
     perToken: "/ токен",
     chartLoading: "загрузка графика…", chartNoData: "Истории торгов пока нет", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
     statPrice: "Цена", statLiquidity: "Ликвидность", statHolders: "Держателей", statVolume24h: "Объём 24ч",
+    trustTitle: "Проверка токена",
+    trustCreatorHolds: "У создателя на руках",
+    trustCreatorBought: "Купил при запуске",
+    trustSold: "Создатель уже продавал",
+    trustNotSold: "Создатель ничего не продавал",
+    trustHolders: "Держателей",
+    trustUnknown: "Нет данных: токен запущен до этой проверки",
+    trustOfSupply: "% выпуска",
     gradTitle: "До листинга на бирже",
     gradLeft: "осталось {left} TON",
     gradDone: "Кривая закрыта — токен уходит на биржу",
@@ -425,6 +433,14 @@ const STR = {
     perToken: "/ token",
     chartLoading: "loading chart…", chartNoData: "No trading history yet", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
     statPrice: "Price", statLiquidity: "Liquidity", statHolders: "Holders", statVolume24h: "24h Volume",
+    trustTitle: "Token check",
+    trustCreatorHolds: "Creator still holds",
+    trustCreatorBought: "Bought at launch",
+    trustSold: "The creator has sold",
+    trustNotSold: "The creator has not sold",
+    trustHolders: "Holders",
+    trustUnknown: "No data: launched before this check existed",
+    trustOfSupply: "% of supply",
     gradTitle: "Until the exchange listing",
     gradLeft: "{left} TON to go",
     gradDone: "Curve closed — the token is heading to an exchange",
@@ -4463,6 +4479,67 @@ function creatorTierOf(mcapUsd) {
   return 0;
 }
 
+/* TrustPanel — то, на что смотрят перед покупкой: сколько выпуска
+   осталось у создателя и трогал ли он его вообще.
+
+   Всё считается по цепочке. Сколько он купил при запуске, приложение
+   знает из своей записи, сколько лежит сейчас — спрашивает у сети.
+   Разница между этими числами и есть ответ на вопрос «продавал ли».
+   У токенов, запущенных до появления этой проверки, кошелька создателя
+   в записи нет — тогда честнее сказать «нет данных», чем додумывать. */
+function TrustPanel({ token, testnet = false, holders = null }) {
+  const [held, setHeld] = useState(undefined); // undefined — ещё грузим
+  const wallet = token.creatorWallet;
+  const supply = Number(token.supply) || 0;
+  const bought = Number(token.buyTokens) || 0;
+
+  useEffect(() => {
+    if (!wallet || !token.address) { setHeld(null); return; }
+    let cancelled = false;
+    fetchJettonBalance(token.address, wallet, testnet)
+      .then((b) => { if (!cancelled) setHeld(b); })
+      .catch(() => { if (!cancelled) setHeld(null); });
+    return () => { cancelled = true; };
+  }, [wallet, token.address, testnet]);
+
+  const pct = supply > 0 && held != null ? (held / supply) * 100 : null;
+  // Порог в 1% — против пыли: остаток в несколько токенов после продажи
+  // всего мешка не должен читаться как «ничего не продавал».
+  const sold = held != null && bought > 0 && held < bought * 0.99;
+
+  const rows = [];
+  if (holders != null) rows.push([tr("trustHolders"), holders.toLocaleString("ru-RU"), T.ice]);
+  if (bought > 0) rows.push([tr("trustCreatorBought"), `${fmtCompact(bought)} ${token.ticker ? "$" + token.ticker : ""}`, T.ice]);
+  if (pct != null) rows.push([tr("trustCreatorHolds"), `${pct.toFixed(pct < 10 ? 1 : 0)}${tr("trustOfSupply")}`, pct > 20 ? T.down : T.ice]);
+
+  return (
+    <div className="rounded-[22px] p-3.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+      <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{tr("trustTitle")}</div>
+      {rows.map(([label, value, color]) => (
+        <div key={label} className="flex items-center justify-between" style={{ padding: "3px 0" }}>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{label}</span>
+          <span style={{ fontFamily: monoFont, color, fontSize: 12, fontWeight: 700 }}>{value}</span>
+        </div>
+      ))}
+      {!wallet ? (
+        <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
+          <ShieldAlert size={13} color={T.muted} />
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{tr("trustUnknown")}</span>
+        </div>
+      ) : held === undefined ? (
+        <div className="fx-skeleton" style={{ width: "60%", height: 10, borderRadius: 4, marginTop: 8 }} />
+      ) : (
+        <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
+          {sold ? <ShieldAlert size={13} color={T.down} /> : <ShieldCheck size={13} color={T.up} />}
+          <span style={{ fontFamily: bodyFont, color: sold ? T.down : T.up, fontSize: 11.5 }}>
+            {sold ? tr("trustSold") : tr("trustNotSold")}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* GraduationBar — сколько TON собрала кривая и сколько осталось до
    закрытия торгов и перехода на биржу.
 
@@ -5505,6 +5582,10 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
               raisedTon={Number(curve.realTon) / 1e9}
               targetTon={Number(curve.graduationTon) / 1e9}
             />
+          )}
+
+          {token.curveAddress && (
+            <TrustPanel token={token} testnet={TON_TESTNET_NETWORK} holders={holdersCount} />
           )}
 
           {connected ? (
@@ -8600,6 +8681,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       poolAddress: row.pool_address,
       curveAddress: row.curve_address || null,
       curveJettonWallet: row.curve_jetton_wallet || null,
+      creatorWallet: row.creator_wallet || null,
+      buyTokens: Number(row.buy_tokens) || 0,
       explorerUrl: row.explorer_url,
       supply: row.supply,
       buyAmount: row.buy_amount,
@@ -8991,6 +9074,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         pool_address: result.poolAddress || null,
         curve_address: result.curveAddress || null,
         curve_jetton_wallet: result.curveJettonWallet || null,
+        creator_wallet: result.creatorWallet || null,
         explorer_url: result.explorerUrl || null,
         category: result.category || null,
         network: result.network || (TON_TESTNET ? "testnet" : "mainnet"),
@@ -9022,6 +9106,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       poolAddress: row.pool_address,
       curveAddress: row.curve_address || null,
       curveJettonWallet: row.curve_jetton_wallet || null,
+      creatorWallet: row.creator_wallet || null,
+      buyTokens: Number(row.buy_tokens) || 0,
       explorerUrl: row.explorer_url,
       supply: row.supply,
       buyAmount: row.buy_amount,
@@ -9162,6 +9248,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           logoUrl: persistentLogoUrl,
           curveAddress: chainResult.curveAddress,
           curveJettonWallet: chainResult.curveJettonWallet,
+          creatorWallet: chainResult.creatorWallet || null,
           network: TON_TESTNET ? "testnet" : "mainnet",
           address: chainResult.jettonMasterAddress,
           poolAddress: chainResult.poolAddress,

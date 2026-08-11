@@ -929,6 +929,10 @@ export async function launchRealToken({
   onStage?.(3);
   return {
     jettonMasterAddress: jettonMasterAddress.toString(),
+    // Кошелёк запустившего. По нему приложение потом показывает, сколько
+    // выпуска осталось у создателя и продавал ли он — без адреса такую
+    // проверку не сделать, а искать его по истории ненадёжно.
+    creatorWallet: walletAddress,
     curveAddress: curveAddress ? curveAddress.toString() : null,
     curveJettonWallet: curveJettonWallet ? curveJettonWallet.toString() : null,
     // Пула на внешнем DEX у токена нет и не должно быть: пока он на

@@ -32,3 +32,10 @@ create policy "delete own token"
   on public.tokens for delete
   to authenticated
   using (auth.uid() = owner_id);
+
+-- Кошелёк создателя. По нему приложение показывает, сколько выпуска у
+-- него осталось и продавал ли он: без адреса такую проверку не сделать.
+-- У токенов, запущенных раньше, поле остаётся пустым — там честнее
+-- показать «нет данных», чем додумывать.
+alter table public.tokens
+  add column if not exists creator_wallet text;
