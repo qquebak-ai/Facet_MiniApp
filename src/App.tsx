@@ -157,7 +157,10 @@ const STR = {
     mempadLaunchToken: "Запустить токен",
     tickerBought: "купил", tickerSold: "продал",
     sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionWallet: "Кошелёк",
-    homeUpdatesComingSoon: "Здесь скоро появятся новости и обновления платформы.",
+    homeAlmostTitle: "Почти на бирже",
+    homeAlmostSub: "Ближе всех к закрытию кривой",
+    homeAlmostLeft: "осталось {left} TON",
+    homeAlmostEmpty: "Пока никто не набрал заметную часть пути. Запусти токен — будешь первым.",
     emptyFilter: "По этому фильтру пока пусто — попробуй другой или загляни позже.", catMemes: "Мемы", catUtility: "Утилиты", catGames: "Игры", catAI: "AI", catSocial: "Соц",
     linkCopied: "Ссылка скопирована",
     tokenLinkCopied: "Ссылка на токен скопирована",
@@ -416,7 +419,10 @@ const STR = {
     mempadLaunchToken: "Launch token",
     tickerBought: "bought", tickerSold: "sold",
     sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionWallet: "Wallet",
-    homeUpdatesComingSoon: "News and platform updates are coming here soon.",
+    homeAlmostTitle: "Almost listed",
+    homeAlmostSub: "Closest to closing their curve",
+    homeAlmostLeft: "{left} TON to go",
+    homeAlmostEmpty: "Nobody is far along yet. Launch a token and be the first.",
     emptyFilter: "Nothing here for this filter yet — try another or check back later.", catMemes: "Memes", catUtility: "Utility", catGames: "Games", catAI: "AI", catSocial: "Social",
     linkCopied: "Link copied",
     tokenLinkCopied: "Token link copied",
@@ -5165,17 +5171,68 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   );
 }
 
-function HomeView({ onGoTab }) {
+/* AlmostListed — кто ближе всех к закрытию кривой.
+
+   Это то, чего нет ни на одном другом экране: в мемпаде токены стоят по
+   времени и по объёму, а здесь — по тому, сколько осталось до листинга.
+   Числа те же, что и на карточке токена: собрано и цель читаются у самой
+   кривой, поэтому у токенов с разными настройками всё честно.
+
+   Уже закрывшиеся сюда не попадают: у них путь пройден, покупать нечего. */
+function AlmostListed({ tokens = [], onOpen }) {
+  const top = useMemo(() => (tokens || [])
+    .filter((tok) => tok.curveAddress && tok.graduationTon > 0 && tok.raisedTon < tok.graduationTon)
+    .map((tok) => ({ tok, pct: (tok.raisedTon / tok.graduationTon) * 100 }))
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 3), [tokens]);
+
+  return (
+    <div className="fx-view">
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 700 }}>{t("homeAlmostTitle")}</span>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>{t("homeAlmostSub")}</span>
+      </div>
+
+      {!top.length ? (
+        <div className="rounded-[22px] p-5 flex flex-col items-center text-center gap-2" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
+          <Sparkles size={20} color={T.muted} />
+          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("homeAlmostEmpty")}</div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {top.map(({ tok, pct }, i) => (
+            <button
+              key={tok.id}
+              onClick={() => onOpen && onOpen(tok)}
+              className="fx-card fx-tap w-full flex items-center gap-3 rounded-[22px] p-3 text-left"
+              style={{ background: T.surface, border: `1px solid ${T.line}`, animationDelay: `${i * 60}ms` }}
+            >
+              <TokenAvatar size={40} tone="up" src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{tok.ticker}</span>
+                  <span style={{ fontFamily: monoFont, color: T.electric, fontSize: 12, fontWeight: 700 }}>{pct.toFixed(0)}%</span>
+                </div>
+                <div style={{ height: 4, borderRadius: 2, background: T.surfaceHi, overflow: "hidden", marginTop: 6 }}>
+                  <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: T.electric }} />
+                </div>
+                <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, marginTop: 5 }}>
+                  {tf("homeAlmostLeft", { left: fmtTon(Math.max(0, tok.graduationTon - tok.raisedTon)) })}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HomeView({ onGoTab, curveTokens = [], onOpenToken }) {
   return (
     <div className="flex flex-col gap-4" style={{ paddingBottom: 12 }}>
       <HomeHero onGoTab={onGoTab} />
-
-      <div className="fx-view rounded-[22px] p-5 flex flex-col items-center text-center gap-2" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
-        <Sparkles size={20} color={T.muted} />
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5 }}>
-          {t("homeUpdatesComingSoon")}
-        </div>
-      </div>
+      <AlmostListed tokens={curveTokens} onOpen={onOpenToken} />
     </div>
   );
 }
@@ -9616,7 +9673,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             below reserves the nav's own height so the last row of content
             can still scroll clear of it. */}
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), paddingBottom: 116 + insetBottom }} key={view}>
-          {view === "home" && <HomeView onGoTab={goTab} />}
+          {view === "home" && <HomeView onGoTab={goTab} curveTokens={communityTokens} onOpenToken={openToken} />}
           {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />}
           {view === "shop" && (
             <ShopView
