@@ -2653,7 +2653,31 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     // историю, как очередная порция данных сбрасывала окно, оно
     // подгонялось под то, что сейчас на экране, и шкала на глазах
     // разъезжалась — заметнее всего сразу после того, как отпустишь.
-    if (!yUserRef.current && pinnedRef.current) yViewRef.current = null;
+    // Подгонять окно цены заново на каждом обновлении нельзя: свежая
+    // свеча чуть меняет края, окно пересчитывается, и шкала на живом
+    // графике «дышит» каждые пятнадцать секунд. Трогаем его только
+    // когда данные действительно перестали помещаться — вышли за края
+    // или, наоборот, съёжились в узкую полосу посреди пустого поля.
+    if (!yUserRef.current && pinnedRef.current && yViewRef.current) {
+      const v2 = viewRef.current;
+      const from = Math.max(0, Math.floor(v2.start));
+      const to = Math.min(n, Math.ceil(v2.start + v2.count) + 1);
+      let lo = Infinity, hi = -Infinity;
+      for (let i = from; i < to; i++) {
+        const c = candles[i];
+        if (Number.isFinite(c.low) && c.low < lo) lo = c.low;
+        if (Number.isFinite(c.high) && c.high > hi) hi = c.high;
+      }
+      if (Number.isFinite(lo) && Number.isFinite(hi)) {
+        const win = yViewRef.current;
+        const winRange = (win.max - win.min) || 1;
+        const outside = lo < win.min || hi > win.max;
+        const tooSmall = (hi - lo) / winRange < 0.35;
+        if (outside || tooSmall) yViewRef.current = null;
+      }
+    } else if (!yUserRef.current && pinnedRef.current) {
+      yViewRef.current = null;
+    }
   }, [n, candles]);
 
   useEffect(() => { draw(); });
