@@ -2468,10 +2468,11 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       canvas.width = wantW;
       canvas.height = wantH;
     }
-    // Ширину задаём точным числом, а не «во всю ширину»: при дробной
-    // ширине родителя картинку растягивало на доли точки, и текст плыл.
-    const cssW = `${widthPx}px`;
-    if (canvas.style.width !== cssW) canvas.style.width = cssW;
+    // Ширина — «во всю ширину родителя». Точное число в точках я уже
+    // пробовал: если замер ширины хоть немного отстаёт от настоящей,
+    // холст перестаёт доставать до края и справа остаётся чёрная
+    // полоса. Растяжение на доли точки — меньшее зло.
+    if (canvas.style.width !== "100%") canvas.style.width = "100%";
     const cssH = `${height}px`;
     if (canvas.style.height !== cssH) canvas.style.height = cssH;
     const ctx = canvas.getContext("2d");
@@ -2893,7 +2894,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     <div ref={wrapRef} style={{ width: "100%", height, position: "relative", touchAction: "none" }}
       onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
       onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onWheel={onWheel}>
-      <canvas ref={canvasRef} style={{ display: "block", width: widthPx || "100%", height }} />
+      <canvas ref={canvasRef} style={{ display: "block", width: "100%", height }} />
       {/* Invisible drag zone over the price axis: drag up/down to zoom the
           (now manual) vertical scale. The axis itself — labels + the live
           price pill — is drawn on the canvas, so there's no separate
