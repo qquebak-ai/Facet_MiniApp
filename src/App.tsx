@@ -166,8 +166,7 @@ const STR = {
     tokenLinkCopied: "Ссылка на токен скопирована",
     reportSent: "Жалоба отправлена на проверку",
     back: "Назад",
-    perToken: "/ токен",
-    chartLoading: "загрузка графика…", chartNoData: "Истории торгов пока нет", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
+    perToken: "/ токен", chartNoData: "Истории торгов пока нет", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
     statPrice: "Цена", statLiquidity: "Ликвидность", statHolders: "Держателей", statVolume24h: "Объём 24ч",
     trustTitle: "Проверка токена",
     trustCreatorHolds: "У создателя на руках",
@@ -426,8 +425,7 @@ const STR = {
     tokenLinkCopied: "Token link copied",
     reportSent: "Report sent for review",
     back: "Back",
-    perToken: "/ token",
-    chartLoading: "loading chart…", chartNoData: "No trading history yet", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
+    perToken: "/ token", chartNoData: "No trading history yet", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
     statPrice: "Price", statLiquidity: "Liquidity", statHolders: "Holders", statVolume24h: "24h Volume",
     trustTitle: "Token check",
     trustCreatorHolds: "Creator still holds",
@@ -874,6 +872,17 @@ function GlobalStyle() {
         100% { transform: translate3d(var(--dx), 104vh, 0) rotate(var(--r1)); opacity: 0; }
       }
       @keyframes islandGlow { 0%,100%{ opacity:0.75; } 50%{ opacity:1; } }
+      /* Заливка листа в индикаторе загрузки: бежит снизу вверх и уходит
+         за верхний край, потом начинается заново. */
+      @keyframes leafLoaderFill {
+        0%   { transform: translateY(34px); }
+        70%  { transform: translateY(0); }
+        100% { transform: translateY(-4px); }
+      }
+      @keyframes leafLoaderBar {
+        0%   { transform: translateX(-100%); }
+        100% { transform: translateX(250%); }
+      }
       /* Окно знака: сам венок медленно вырастает, и только потом
          проявляется подпись — сначала показываем награду, потом
          объясняем её. Лист поднимается снизу вместе со шторкой. */
@@ -3844,12 +3853,8 @@ function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast, onOpe
   if (!ownerId) return null;
   if (loading && !creator) {
     return (
-      <div className="rounded-[22px] p-4 flex items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-        <div className="fx-skeleton" style={{ width: 44, height: 44, borderRadius: "50%" }} />
-        <div className="flex-1 flex flex-col gap-2">
-          <div className="fx-skeleton" style={{ width: "45%", height: 12, borderRadius: 4 }} />
-          <div className="fx-skeleton" style={{ width: "70%", height: 10, borderRadius: 4 }} />
-        </div>
+      <div className="rounded-[22px] p-4 flex items-center justify-center" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+        <LeafLoader size={34} />
       </div>
     );
   }
@@ -3908,15 +3913,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
     return () => { cancelled = true; };
   }, [ownerId]);
 
-  if (loading && !profile) {
-    return (
-      <div className="fx-view flex flex-col items-center gap-3" style={{ marginTop: 24 }}>
-        <div className="fx-skeleton" style={{ width: 128, height: 128, borderRadius: "50%" }} />
-        <div className="fx-skeleton" style={{ width: 120, height: 14, borderRadius: 4 }} />
-        <div className="fx-skeleton" style={{ width: 200, height: 10, borderRadius: 4 }} />
-      </div>
-    );
-  }
+  if (loading && !profile) return <PageLoader minHeight={320} />;
   if (!profile) {
     return (
       <div className="fx-view flex flex-col gap-4">
@@ -4734,15 +4731,72 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
 /* BootSplash — стартовая заставка. Перекрывает весь интерфейс, пока идут
    первые запросы, и показывает, что именно ещё грузится: так пустые
    экраны не мелькают до прихода данных. */
+/* LeafLoader — фирменный индикатор: лист заливается снизу вверх.
+
+   Два режима. С числом — заливка стоит ровно на нём: так показывается
+   готовность запуска, где шаги известны наперёд. Без числа — заливка
+   бежит по кругу: у экрана нет предсказуемого прогресса, и врать
+   полоской, которая якобы что-то знает, незачем.
+
+   Отдельной картинки нет: контур и прожилки берутся из того же описания
+   листьев, что падают на фоне. */
+const LEAF_LOADER_TOP = -31;
+const LEAF_LOADER_SPAN = 34;
+
+function LeafLoader({ progress = null, size = 104 }) {
+  const leaf = LEAF_KINDS[2];
+  const clipId = React.useId();
+  const running = progress == null;
+  return (
+    <svg width={size} height={size * 1.115} viewBox="-17 -33 34 38" style={{ overflow: "visible", display: "block" }} aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}>
+          {/* Прямоугольник закрывает лист целиком и уезжает вниз, а по
+              мере готовности возвращается наверх. Двигаем сдвигом, а не
+              координатой: координату браузер меняет скачком. */}
+          <rect
+            x="-17" y={LEAF_LOADER_TOP} width="34" height={LEAF_LOADER_SPAN}
+            style={running ? {
+              animation: "leafLoaderFill 1.6s cubic-bezier(0.4,0,0.2,1) infinite",
+            } : {
+              transform: `translateY(${(1 - progress) * LEAF_LOADER_SPAN}px)`,
+              transition: "transform 520ms cubic-bezier(0.16,1,0.3,1)",
+            }}
+          />
+        </clipPath>
+      </defs>
+      <path d={leaf.outline} fill="none" stroke={hexA(T.electric, 0.45)} strokeWidth={1.1} strokeLinejoin="round" />
+      {leaf.veins.map((v, i) => (
+        <path key={i} d={v} fill="none" stroke={hexA(T.electric, 0.28)} strokeWidth={0.6} strokeLinecap="round" />
+      ))}
+      <g clipPath={`url(#${clipId})`}>
+        <path d={leaf.outline} fill={T.electric} />
+        {leaf.veins.map((v, i) => (
+          <path key={i} d={v} fill="none" stroke={T.bg} strokeWidth={0.6} opacity={0.35} strokeLinecap="round" />
+        ))}
+      </g>
+      <path d={leaf.stem} fill="none" stroke={hexA(T.electric, 0.5)} strokeWidth={0.9} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* PageLoader — тот же лист, но поверх страницы, пока её данные не
+   приехали. Занимает место контента, а не весь экран: шапка и нижнее
+   меню остаются на местах, и переход не выглядит как перезапуск. */
+function PageLoader({ minHeight = 260 }) {
+  return (
+    <div className="fx-view" style={{ minHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
+      <LeafLoader size={76} />
+      <div style={{ width: 96, height: 3, borderRadius: 999, background: T.surfaceHi, overflow: "hidden" }}>
+        <div style={{ width: "40%", height: "100%", borderRadius: 999, background: T.electric, animation: "leafLoaderBar 1.6s ease-in-out infinite" }} />
+      </div>
+    </div>
+  );
+}
+
 function BootSplash({ steps, done, insetTop = 0 }) {
   const readyCount = steps.filter((s) => s.done).length;
   const progress = steps.length ? readyCount / steps.length : 1;
-  // Лист заливается снизу вверх по мере готовности. Координаты — из
-  // общего описания листьев, тех же, что падают на фоне: отдельной
-  // картинки для заставки нет и не нужно.
-  const leaf = LEAF_KINDS[2];
-  const TOP = -31, BOTTOM = 3;               // границы листа в его координатах
-  const SPAN = BOTTOM - TOP;
 
   return (
     <div
@@ -4758,37 +4812,7 @@ function BootSplash({ steps, done, insetTop = 0 }) {
       <CyberGrid />
 
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-        <svg width={104} height={116} viewBox="-17 -33 34 38" style={{ overflow: "visible" }}>
-          <defs>
-            <clipPath id="bootFill">
-              {/* Прямоугольник закрывает лист целиком и уезжает вниз, а
-                  по мере готовности возвращается наверх. Двигаем именно
-                  сдвигом, а не координатой: координату браузер меняет
-                  скачком, а сдвиг умеет плавно. */}
-              <rect
-                x="-17" y={TOP} width="34" height={SPAN}
-                style={{
-                  transform: `translateY(${(1 - progress) * SPAN}px)`,
-                  transition: "transform 520ms cubic-bezier(0.16,1,0.3,1)",
-                }}
-              />
-            </clipPath>
-          </defs>
-          {/* контур — всегда виден */}
-          <path d={leaf.outline} fill="none" stroke={hexA(T.electric, 0.45)} strokeWidth={1.1} strokeLinejoin="round" />
-          {leaf.veins.map((v, i) => (
-            <path key={i} d={v} fill="none" stroke={hexA(T.electric, 0.28)} strokeWidth={0.6} strokeLinecap="round" />
-          ))}
-          {/* залитая часть */}
-          <g clipPath="url(#bootFill)" style={{ transition: "none" }}>
-            <path d={leaf.outline} fill={T.electric} />
-            {leaf.veins.map((v, i) => (
-              <path key={i} d={v} fill="none" stroke={T.bg} strokeWidth={0.6} opacity={0.35} strokeLinecap="round" />
-            ))}
-          </g>
-          <path d={leaf.stem} fill="none" stroke={hexA(T.electric, 0.5)} strokeWidth={0.9} strokeLinecap="round" />
-        </svg>
-
+        <LeafLoader progress={progress} size={104} />
         <div style={{ width: 132, height: 3, borderRadius: 999, background: T.surfaceHi, overflow: "hidden" }}>
           <div style={{
             width: `${Math.round(progress * 100)}%`, height: "100%", borderRadius: 999,
@@ -5166,9 +5190,11 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
       </div>
 
       <div className="flex flex-col gap-2" key={filter}>
-        {loading
-          ? Array.from({ length: 4 }).map((_, i) => <MempadRowSkeleton key={i} index={i} />)
-          : list.map((tok, i) => <MempadRow key={tok.id} t={tok} onOpen={onOpen} index={i} />)}
+        {loading && !list.length
+          ? <PageLoader minHeight={220} />
+          : loading
+            ? Array.from({ length: 4 }).map((_, i) => <MempadRowSkeleton key={i} index={i} />)
+            : list.map((tok, i) => <MempadRow key={tok.id} t={tok} onOpen={onOpen} index={i} />)}
         {!loading && list.length === 0 && (
           <div className="fx-view" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>
             {t("emptyFilter")}
@@ -5607,8 +5633,8 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
               экрана. */}
           <div style={{ position: "relative", marginLeft: -16, marginRight: -16, background: T.bg, borderTop: `1px solid ${T.line}`, borderBottom: `1px solid ${T.line}` }}>
             {chartLoading ? (
-              <div className="flex items-center justify-center" style={{ height: 340, fontFamily: monoFont, fontSize: 11, color: T.muted }}>
-                {tr("chartLoading")}
+              <div className="flex items-center justify-center" style={{ height: 340 }}>
+                <LeafLoader size={64} />
               </div>
             ) : !chartData ? (
               <div className="flex items-center justify-center" style={{ height: 340, fontFamily: monoFont, fontSize: 11, color: T.muted, textAlign: "center", padding: "0 20px" }}>
@@ -5727,7 +5753,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
               <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("txUnavailable")}</span>
             </div>
           ) : tradesLoading && !trades ? (
-            <div className="flex items-center justify-center" style={{ height: 120, fontFamily: monoFont, fontSize: 11, color: T.muted }}>{tr("chartLoading")}</div>
+            <div className="flex items-center justify-center" style={{ height: 120 }}><LeafLoader size={40} /></div>
           ) : !trades ? (
             <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
               <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("txLoadFailed")}</span>
@@ -7503,7 +7529,6 @@ function ProfileView({
   // магазин и отдельная страница достижений, дублировать запрос незачем.
   achievements = [], creatorTier = 0, onVerified,
 }) {
-  const [loading, setLoading] = useState(true);
   // Подтверждение хранится в профиле, а не только на экране: иначе
   // значок пропадал при первом же обновлении страницы.
   const [verifyStatus, setVerifyStatus] = useState(profile.verified ? "verified" : "none");
@@ -7512,8 +7537,6 @@ function ProfileView({
   }, [profile.verified]);
   const [confirmingClearAll, setConfirmingClearAll] = useState(false);
 
-
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 650); return () => clearTimeout(t); }, []);
 
 
   const unlocked = accountCreated && connected;
