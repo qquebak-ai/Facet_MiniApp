@@ -2698,13 +2698,20 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     anchorTimeRef.current = left && Number.isFinite(left.time) ? left.time : null;
     draw();
   }
-  // Вертикали в перетаскивании нет намеренно. Раньше палец двигал и
-  // время, и цену сразу: провести пальцем строго горизонтально нельзя, а
-  // значит окно цены уезжало на каждом движении. Хуже того, инерция
-  // после отпускания продолжала везти его дальше — со стороны это
-  // выглядело так, будто шкала «встаёт на место», пока держишь, и
-  // разъезжается, как только отпустил. Цену теперь двигают только за
-  // саму шкалу справа, как в биржевых терминалах.
+  // Вертикальный сдвиг: окно цены едет за пальцем так же, как время по
+  // горизонтали. График должен двигаться свободно во все стороны.
+  function panYByPixels(dyScreen) {
+    const layout = computeLayout();
+    if (!layout) return;
+    yUserRef.current = true;
+    const delta = (dyScreen / layout.drawHeight) * layout.range;
+    yViewRef.current = { min: layout.min + delta, max: layout.max + delta };
+    draw();
+  }
+  // Инерция — только по горизонтали. По вертикали она после отпускания
+  // продолжала везти окно цены сама, и это читалось как «шкала стоит,
+  // пока держишь, и разъезжается, как только отпустил». Пока палец на
+  // экране, цена по-прежнему двигается вместе с ним.
   function startInertia(vxPxPerMs) {
     let vx = vxPxPerMs;
     function step() {
@@ -2775,6 +2782,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       dragRef.current.vy = dy / dt;
       dragRef.current.lastX = x; dragRef.current.lastY = y; dragRef.current.lastT = now;
       panByPixels(dx);
+      panYByPixels(dy);
     }
   }
   function onTouchEnd(e) {
@@ -2809,6 +2817,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       dragRef.current.vy = dy / dt;
       dragRef.current.lastX = e.clientX; dragRef.current.lastY = e.clientY; dragRef.current.lastT = now;
       panByPixels(dx);
+      panYByPixels(dy);
     }
   }
   function onMouseUp() {
