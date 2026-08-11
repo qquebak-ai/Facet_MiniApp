@@ -273,6 +273,62 @@ describe("BondingCurve", () => {
     expect(done.tokensSold).toBe(TOTAL_SUPPLY);
   });
 
+  it("снова открывает торговлю, если порог набрала покупка, которая потом отменилась", async () => {
+    await bindWallet();
+    await deliverSupply();
+
+    for (let i = 0; i < 15; i++) {
+      await buy("100");
+    }
+    const before = await curve.getData();
+    expect(before.graduated).toBe(false);
+
+    // Эта покупка добирает порог и закрывает кривую.
+    const res = await buy("25");
+    const transfer = jettonTransferFrom(res)!;
+    expect((await curve.getData()).graduated).toBe(true);
+
+    // Но выдать жетоны не вышло, и покупка отменяется. Раз её денег в
+    // резерве больше нет, порог не набран — торговля обязана открыться
+    // обратно, иначе токен застрянет: и торговать нельзя, и на биржу
+    // выводить нечего.
+    await blockchain.sendMessage(
+      internal({
+        from: jettonWallet.address,
+        to: curve.address,
+        value: toNano("0.05"),
+        bounced: true,
+        body: beginCell()
+          .storeUint(0xffffffff, 32)
+          .storeUint(0xf8a7ea5, 32)
+          .storeUint(transfer.queryId, 64)
+          .storeCoins(transfer.amount)
+          .endCell(),
+      }),
+    );
+
+    const after = await curve.getData();
+    expect(after.graduated).toBe(false);
+    expect(after.realTon).toBe(before.realTon);
+    // И покупать снова можно.
+    expect((await buy("1")).transactions).toHaveTransaction({ to: curve.address, success: true });
+  });
+
+  it("не отдаёт ликвидность дважды", async () => {
+    await bindWallet();
+    await deliverSupply();
+    for (let i = 0; i < 15; i++) {
+      await buy("100");
+    }
+    await buy("25");
+
+    const first = await curve.send(deployer.getSender(), { value: toNano("0.3") }, { $$type: "Graduate", queryId: 0n });
+    expect(first.transactions).toHaveTransaction({ to: curve.address, success: true });
+
+    const second = await curve.send(deployer.getSender(), { value: toNano("0.3") }, { $$type: "Graduate", queryId: 1n });
+    expect(second.transactions).toHaveTransaction({ to: curve.address, success: false });
+  });
+
   it("возвращает деньги, если жетоны выдать не удалось", async () => {
     await bindWallet();
     // Запас уже пришёл: значит неудача выдачи — это настоящая ошибка, а

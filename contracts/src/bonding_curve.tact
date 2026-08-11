@@ -119,6 +119,10 @@ contract BondingCurve with Deployable {
     realTon: Int as coins = 0;
     tokensSold: Int as coins = 0;
     graduated: Bool = false;
+    // Ликвидность уже переведена. Нужен отдельно от graduated: пока
+    // деньги на месте, порог можно и потерять обратно (см. возврат
+    // неудачной покупки ниже), а после перевода пути назад нет.
+    liquidityMoved: Bool = false;
     // Покупки, по которым жетоны отправлены, но исход ещё неизвестен.
     // Ключ — свой сквозной номер: на него ссылаются и подтверждение, и
     // возврат, а внешние queryId могли бы совпасть между покупателями.
@@ -493,6 +497,15 @@ contract BondingCurve with Deployable {
         self.realTon = self.realTon - buy.ton;
         self.tokensSold = self.tokensSold - buy.tokens;
 
+        // Именно эта покупка могла закрыть кривую. Раз она отменена,
+        // порог больше не набран — иначе торговля осталась бы закрытой
+        // навсегда при резерве меньше цели, и токен застрял бы ни там ни
+        // тут. Открываем обратно только пока ликвидность не ушла: после
+        // перевода на кривой нет денег, и продавать было бы не из чего.
+        if (!self.liquidityMoved && self.realTon < self.graduationTon) {
+            self.graduated = false;
+        }
+
         send(SendParameters{
             to: buy.buyer,
             value: buy.ton,
@@ -513,7 +526,9 @@ contract BondingCurve with Deployable {
 
     receive(msg: Graduate) {
         require(self.graduated, "threshold not reached");
+        require(!self.liquidityMoved, "already moved");
         let wallet: Address = self.requireWallet();
+        self.liquidityMoved = true;
 
         // Непроданный остаток уходит вместе с деньгами — из него на
         // стороне DEX собирается пара.
