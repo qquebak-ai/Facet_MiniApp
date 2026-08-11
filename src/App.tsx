@@ -166,6 +166,10 @@ const STR = {
     perToken: "/ токен",
     chartLoading: "загрузка графика…", chartNoData: "Истории торгов пока нет", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
     statPrice: "Цена", statLiquidity: "Ликвидность", statHolders: "Держателей", statVolume24h: "Объём 24ч",
+    gradTitle: "До листинга на бирже",
+    gradLeft: "осталось {left} TON",
+    gradDone: "Кривая закрыта — токен уходит на биржу",
+    gradNote: "Когда в кривой наберётся {target} TON, торговля здесь закроется, а вся ликвидность уйдёт на биржу.",
     tabChart: "График", tabInfo: "Инфо", tabTx: "Транзакции", chartModePrice: "Цена",
     tokenNoAddress: "Адрес недоступен",
     txUnavailable: "Список транзакций пока недоступен для этого пула",
@@ -421,6 +425,10 @@ const STR = {
     perToken: "/ token",
     chartLoading: "loading chart…", chartNoData: "No trading history yet", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
     statPrice: "Price", statLiquidity: "Liquidity", statHolders: "Holders", statVolume24h: "24h Volume",
+    gradTitle: "Until the exchange listing",
+    gradLeft: "{left} TON to go",
+    gradDone: "Curve closed — the token is heading to an exchange",
+    gradNote: "Once the curve holds {target} TON, trading here closes and all the liquidity moves to an exchange.",
     tabChart: "Chart", tabInfo: "Info", tabTx: "Transactions", chartModePrice: "Price",
     tokenNoAddress: "Address unavailable",
     txUnavailable: "Transaction list isn't available for this pool yet",
@@ -3603,6 +3611,9 @@ function MempadRow({ t: tok, onOpen, index }) {
           <HoldersBadge tokenAddress={tok.tokenAddress} testnet={!!tok.curveAddress && TON_TESTNET_NETWORK} />
           <CardStat icon={Flame}>${tok.vol}</CardStat>
         </div>
+        {/* Насколько токен близок к листингу — видно прямо в списке, не
+            открывая карточку. Ради этого числа уже едут вместе с ценой. */}
+        <GraduationBar raisedTon={tok.raisedTon} targetTon={tok.graduationTon} compact />
       </div>
       <div className="text-right flex-shrink-0">
         <div style={{ fontFamily: displayFont, color: T.up, fontSize: 13, fontWeight: 700 }}>{fmtUSD(tok.mcapNum)}</div>
@@ -4452,6 +4463,50 @@ function creatorTierOf(mcapUsd) {
   return 0;
 }
 
+/* GraduationBar — сколько TON собрала кривая и сколько осталось до
+   закрытия торгов и перехода на биржу.
+
+   Оба числа берутся у самой кривой: цель зашита в контракт при запуске,
+   и у токенов, созданных до смены настроек, она своя. Считать по
+   настройкам приложения нельзя — покажем чужую цель. */
+function GraduationBar({ raisedTon = 0, targetTon = 0, compact = false }) {
+  if (!(targetTon > 0)) return null;
+  const pct = Math.max(0, Math.min(100, (raisedTon / targetTon) * 100));
+  const left = Math.max(0, targetTon - raisedTon);
+  const done = left <= 0;
+  if (compact) {
+    return (
+      <div style={{ height: 3, borderRadius: 2, background: T.surfaceHi, overflow: "hidden", marginTop: 6 }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: done ? T.up : T.electric }} />
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-[22px] p-3.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+      <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{tr("gradTitle")}</span>
+        <span style={{ fontFamily: monoFont, color: done ? T.up : T.ice, fontSize: 12, fontWeight: 700 }}>
+          {done ? tr("gradDone") : `${pct.toFixed(0)}%`}
+        </span>
+      </div>
+      <div style={{ height: 6, borderRadius: 3, background: T.surfaceHi, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: done ? T.up : T.electric, transition: `width ${EASE}` }} />
+      </div>
+      <div className="flex items-center justify-between" style={{ marginTop: 7 }}>
+        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>
+          {fmtTon(raisedTon)} / {fmtTon(targetTon)} TON
+        </span>
+        {!done && (
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>{trf("gradLeft", { left: fmtTon(left) })}</span>
+        )}
+      </div>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>
+        {trf("gradNote", { target: fmtTon(targetTon) })}
+      </p>
+    </div>
+  );
+}
+
 /* AvatarFrame — круглая рамка вокруг аватарки. Толщина считается от
    размера, чтобы предмет одинаково смотрелся и на 120px в профиле, и на
    64px в превью магазина. */
@@ -5092,6 +5147,20 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   // У токена на кривой жетон живёт в той же сети, что и приложение.
   const holdersCount = useJettonHolders(token.tokenAddress, !!token.curveAddress && TON_TESTNET_NETWORK);
 
+  // Состояние кривой нужно ради шкалы до листинга: сколько TON уже
+  // собрано и сколько зашито целью в самом контракте.
+  const [curve, setCurve] = useState(null);
+  useEffect(() => {
+    if (!token.curveAddress) { setCurve(null); return; }
+    let cancelled = false;
+    const load = () => fetchCurveState(token.curveAddress, TON_TESTNET_NETWORK).then((st) => {
+      if (!cancelled && st) setCurve(st);
+    });
+    load();
+    const iv = setInterval(load, 20000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [token.curveAddress]);
+
   // Real OHLCV (via GeckoTerminal's data API — no iframe, no branding) when
   // the token is backed by a live on-chain pool; a synthetic random-walk
   // chart otherwise (bundled demo tokens, or if the fetch fails) so the
@@ -5430,6 +5499,13 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             showToast={showToast}
             onOpenProfile={onOpenProfile}
           />
+
+          {curve && (
+            <GraduationBar
+              raisedTon={Number(curve.realTon) / 1e9}
+              targetTon={Number(curve.graduationTon) / 1e9}
+            />
+          )}
 
           {connected ? (
             <div className="flex gap-2">
@@ -8582,6 +8658,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         liq: fmtCompact(m.liqUsd),
         change: m.change24,
         tx24h: m.tx24,
+        // Для тонкой шкалы в ленте: сколько собрано и сколько нужно.
+        raisedTon: Number(m.state.realTon) / 1e9,
+        graduationTon: Number(m.state.graduationTon) / 1e9,
       });
     });
     if (!priced.size) return;
