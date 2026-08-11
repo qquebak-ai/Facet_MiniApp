@@ -4737,6 +4737,12 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
 function BootSplash({ steps, done, insetTop = 0 }) {
   const readyCount = steps.filter((s) => s.done).length;
   const progress = steps.length ? readyCount / steps.length : 1;
+  // Лист заливается снизу вверх по мере готовности. Координаты — из
+  // общего описания листьев, тех же, что падают на фоне: отдельной
+  // картинки для заставки нет и не нужно.
+  const leaf = LEAF_KINDS[2];
+  const TOP = -31, BOTTOM = 3;               // границы листа в его координатах
+  const SPAN = BOTTOM - TOP;
 
   return (
     <div
@@ -4744,38 +4750,50 @@ function BootSplash({ steps, done, insetTop = 0 }) {
         position: "absolute", inset: 0, zIndex: 900,
         background: T.bg,
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        gap: 22, paddingTop: insetTop,
+        gap: 18, paddingTop: insetTop,
         opacity: done ? 0 : 1,
         transition: "opacity 420ms ease-out",
       }}
     >
       <CyberGrid />
 
-      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 22, width: "100%", padding: "0 32px" }}>
-        {/* логотип в фирменной вращающейся рамке */}
-        <AvatarFrame frameId="ember" size={112}>
-          <div style={{ width: "100%", height: "100%", background: `center/cover no-repeat url(/icon.PNG)` }} />
-        </AvatarFrame>
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+        <svg width={104} height={116} viewBox="-17 -33 34 38" style={{ overflow: "visible" }}>
+          <defs>
+            <clipPath id="bootFill">
+              {/* Прямоугольник закрывает лист целиком и уезжает вниз, а
+                  по мере готовности возвращается наверх. Двигаем именно
+                  сдвигом, а не координатой: координату браузер меняет
+                  скачком, а сдвиг умеет плавно. */}
+              <rect
+                x="-17" y={TOP} width="34" height={SPAN}
+                style={{
+                  transform: `translateY(${(1 - progress) * SPAN}px)`,
+                  transition: "transform 520ms cubic-bezier(0.16,1,0.3,1)",
+                }}
+              />
+            </clipPath>
+          </defs>
+          {/* контур — всегда виден */}
+          <path d={leaf.outline} fill="none" stroke={hexA(T.electric, 0.45)} strokeWidth={1.1} strokeLinejoin="round" />
+          {leaf.veins.map((v, i) => (
+            <path key={i} d={v} fill="none" stroke={hexA(T.electric, 0.28)} strokeWidth={0.6} strokeLinecap="round" />
+          ))}
+          {/* залитая часть */}
+          <g clipPath="url(#bootFill)" style={{ transition: "none" }}>
+            <path d={leaf.outline} fill={T.electric} />
+            {leaf.veins.map((v, i) => (
+              <path key={i} d={v} fill="none" stroke={T.bg} strokeWidth={0.6} opacity={0.35} strokeLinecap="round" />
+            ))}
+          </g>
+          <path d={leaf.stem} fill="none" stroke={hexA(T.electric, 0.5)} strokeWidth={0.9} strokeLinecap="round" />
+        </svg>
 
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em" }}>Mintly</span>
-
-        {/* полоса прогресса — заполняется по мере готовности шагов */}
-        <div style={{ width: "100%", maxWidth: 240, height: 4, borderRadius: 999, background: T.surfaceHi, overflow: "hidden" }}>
+        <div style={{ width: 132, height: 3, borderRadius: 999, background: T.surfaceHi, overflow: "hidden" }}>
           <div style={{
             width: `${Math.round(progress * 100)}%`, height: "100%", borderRadius: 999,
             background: T.electric, transition: "width 420ms cubic-bezier(0.16,1,0.3,1)",
           }} />
-        </div>
-
-        <div className="flex flex-col gap-1.5" style={{ minWidth: 200 }}>
-          {steps.map((s) => (
-            <div key={s.key} className="flex items-center gap-2">
-              {s.done
-                ? <CheckCircle2 size={14} color={T.up} />
-                : <RefreshCw size={14} color={T.muted} style={{ animation: "spin360 1.1s linear infinite" }} />}
-              <span style={{ fontFamily: bodyFont, fontSize: 12.5, color: s.done ? T.paper : T.muted }}>{t(s.key)}</span>
-            </div>
-          ))}
         </div>
       </div>
     </div>
