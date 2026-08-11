@@ -187,12 +187,9 @@ const STR = {
     balanceLoading: "Баланс ещё загружается — секунду",
     infoEmpty: "У этого токена пока нет описания и ссылок",
     launchBuyCta: "Купить свой токен",
-    creatorLabel: "Создатель", creatorYou: "Это ты",
+    creatorLabel: "Создатель",
     creatorTokens: "Его токены", creatorNoTokens: "Пока не запускал токены",
     profileNotFound: "Профиль не найден",
-    followCta: "Подписаться", unfollowCta: "Вы подписаны",
-    followedToast: "Подписка оформлена", unfollowedToast: "Подписка отменена",
-    followFailed: "Не получилось — попробуй ещё раз",
     txLoadFailed: "Не удалось загрузить сделки — обновим через несколько секунд",
     aboutToken: "О токене",
     youPay: "Вы платите", youSell: "Вы продаёте", youReceive: "Вы получите",
@@ -305,13 +302,6 @@ const STR = {
     verifyCta: "Подтверди личность для бейджа",
     deleteAccountForever: "Удалить аккаунт навсегда",
     editProfileBtn: "Редактировать профиль",
-    statsTitle: "Статистика",
-    statTotalProfit: "Общая прибыль",
-    statCreatedTokens: "Создано токенов",
-    statTokensOwned: "Токенов в портфеле",
-    statTotalTrades: "Всего сделок",
-    statFollowers: "Подписчики",
-    statFollowing: "Подписки",
     portfolioTitle: "Портфель",
     portfolioConnectBody: "Подключи TON-кошелёк, чтобы видеть портфель и начать торговать.",
     activityTitle: "Активность",
@@ -456,12 +446,9 @@ const STR = {
     balanceLoading: "Still loading your balance — one moment",
     infoEmpty: "This token has no description or links yet",
     launchBuyCta: "Buy your token",
-    creatorLabel: "Creator", creatorYou: "That's you",
+    creatorLabel: "Creator",
     creatorTokens: "Their tokens", creatorNoTokens: "No tokens launched yet",
     profileNotFound: "Profile not found",
-    followCta: "Follow", unfollowCta: "Following",
-    followedToast: "Followed", unfollowedToast: "Unfollowed",
-    followFailed: "Didn't work — try again",
     txLoadFailed: "Couldn't load trades — retrying in a few seconds",
     aboutToken: "About the token",
     youPay: "You pay", youSell: "You sell", youReceive: "You receive",
@@ -574,13 +561,6 @@ const STR = {
     verifyCta: "Verify your identity for a badge",
     deleteAccountForever: "Delete account forever",
     editProfileBtn: "Edit Profile",
-    statsTitle: "Statistics",
-    statTotalProfit: "Total Profit",
-    statCreatedTokens: "Created Tokens",
-    statTokensOwned: "Tokens Owned",
-    statTotalTrades: "Total Trades",
-    statFollowers: "Followers",
-    statFollowing: "Following",
     portfolioTitle: "Portfolio",
     portfolioConnectBody: "Connect your TON Wallet to view your portfolio and start trading.",
     activityTitle: "Activity",
@@ -3830,15 +3810,6 @@ function localTokenToFeedShape(entry) {
 
 // «1 подписчик», «2 подписчика», «5 подписчиков» — в русском без
 // склонения по числу выглядит неряшливо.
-function followersWord(n) {
-  if (lang === "EN") return n === 1 ? "follower" : "followers";
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return "подписчик";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "подписчика";
-  return "подписчиков";
-}
-
 // Профиль по id пользователя. Кэшируем: одна и та же карточка
 // открывается по многу раз, а профиль меняется редко.
 const creatorCache = new Map(); // userId -> profile | null
@@ -3861,7 +3832,6 @@ async function fetchCreatorProfile(userId) {
 function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast, onOpenProfile }) {
   const [creator, setCreator] = useState(null);
   const [loading, setLoading] = useState(true);
-  const follow = useFollow(ownerId, currentUserId, showToast);
 
   useEffect(() => {
     let cancelled = false;
@@ -3907,110 +3877,9 @@ function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast, onOpe
             <CreatorWreathBadge tier={Number(creator.creator_tier) || 0} size={16} />
             <ChevronRight size={14} color={T.muted} />
           </div>
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>
-            {follow.followers} {followersWord(follow.followers)}
-          </span>
         </div>
       </button>
-
-      <FollowButton follow={follow} onNeedAuth={onNeedAuth} />
     </div>
-  );
-}
-
-/* useFollow — подписка на одного человека: сколько у него подписчиков,
-   подписан ли текущий пользователь, и переключатель. Логика одинаковая
-   и в блоке создателя на карточке токена, и на его публичном профиле,
-   поэтому живёт в одном месте. */
-function useFollow(ownerId, currentUserId, showToast) {
-  const [followers, setFollowers] = useState(0);
-  const [following, setFollowing] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const isSelf = !!currentUserId && currentUserId === ownerId;
-
-  useEffect(() => {
-    if (!ownerId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const { count } = await supabase
-          .from("follows")
-          .select("follower_id", { count: "exact", head: true })
-          .eq("following_id", ownerId);
-        if (cancelled) return;
-        setFollowers(count || 0);
-
-        if (currentUserId && currentUserId !== ownerId) {
-          const { data: mine } = await supabase
-            .from("follows")
-            .select("follower_id")
-            .eq("following_id", ownerId)
-            .eq("follower_id", currentUserId)
-            .maybeSingle();
-          if (!cancelled) setFollowing(!!mine);
-        } else if (!cancelled) {
-          setFollowing(false);
-        }
-      } catch (err) {
-        // Таблицы follows может ещё не быть — это не повод ломать экран.
-        console.warn("[mintly] follows unavailable:", err && err.message);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [ownerId, currentUserId]);
-
-  async function toggle(onNeedAuth) {
-    if (!currentUserId) { onNeedAuth && onNeedAuth(); return; }
-    if (isSelf || busy) return;
-    setBusy(true);
-
-    // Счётчик двигаем сразу, а при ошибке возвращаем назад: сеть тут
-    // медленнее, чем ожидание от нажатия.
-    const next = !following;
-    setFollowing(next);
-    setFollowers((n) => Math.max(0, n + (next ? 1 : -1)));
-
-    const query = next
-      ? supabase.from("follows").insert({ follower_id: currentUserId, following_id: ownerId })
-      : supabase.from("follows").delete().eq("follower_id", currentUserId).eq("following_id", ownerId);
-    const { error } = await query;
-
-    if (error) {
-      setFollowing(!next);
-      setFollowers((n) => Math.max(0, n + (next ? -1 : 1)));
-      showToast && showToast(tr("followFailed"));
-    } else {
-      showToast && showToast(next ? tr("followedToast") : tr("unfollowedToast"));
-    }
-    setBusy(false);
-  }
-
-  return { followers, following, busy, isSelf, toggle };
-}
-
-/* FollowButton — одна кнопка на оба экрана. */
-function FollowButton({ follow, onNeedAuth, size = "sm" }) {
-  const pad = size === "lg" ? "12px 26px" : "8px 16px";
-  const font = size === "lg" ? 13.5 : 12;
-  if (follow.isSelf) {
-    return <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{tr("creatorYou")}</span>;
-  }
-  return (
-    <button
-      onClick={() => follow.toggle(onNeedAuth)}
-      disabled={follow.busy}
-      className="fx-tap rounded-full flex-shrink-0"
-      style={{
-        padding: pad,
-        background: follow.following ? "transparent" : PRISM,
-        color: follow.following ? T.muted : PRISM_TEXT,
-        border: follow.following ? `1px solid ${T.lineHi}` : "none",
-        fontFamily: displayFont, fontWeight: 700, fontSize: font,
-        opacity: follow.busy ? 0.6 : 1,
-      }}
-    >
-      {follow.following ? tr("unfollowCta") : tr("followCta")}
-    </button>
   );
 }
 
@@ -4021,7 +3890,6 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
   const [profile, setProfile] = useState(null);
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
-  const follow = useFollow(ownerId, currentUserId, showToast);
 
   useEffect(() => {
     let cancelled = false;
@@ -4108,12 +3976,6 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
             {profile.bio || tr("bioEmptyPlaceholder")}
           </p>
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>
-            {follow.followers} {followersWord(follow.followers)}
-          </span>
-          <div style={{ marginTop: 4 }}>
-            <FollowButton follow={follow} onNeedAuth={onNeedAuth} size="lg" />
-          </div>
         </div>
       </div>
 
@@ -6685,19 +6547,6 @@ function WalletCard({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
     </GlassCard>
   );
 }
-
-function StatBlock({ label, value, suffix = "", color = T.ice, decimals = 0 }) {
-  const v = useCountUp(value, 900);
-  return (
-    <GlassCard style={{ padding: "14px 14px" }}>
-      <div style={{ fontFamily: displayFont, fontSize: 19, fontWeight: 700, color }}>
-        {decimals ? v.toFixed(decimals) : Math.round(v).toLocaleString("ru-RU")}{suffix}
-      </div>
-      <div style={{ fontFamily: bodyFont, fontSize: 11, color: T.muted, marginTop: 2 }}>{label}</div>
-    </GlassCard>
-  );
-}
-
 function PortfolioTokenCard({ t, onOpen }) {
   const up = t.pnl >= 0;
   return (
@@ -7610,8 +7459,7 @@ function ProfileView({
   cosmetics = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
   // Счётчики подписок и достижения считаются в корне: их же показывает
   // магазин и отдельная страница достижений, дублировать запрос незачем.
-  followCounts = { followers: 0, following: 0 }, achievements = [], creatorTier = 0, onVerified,
-  tradeStats = { trades: 0, tokens: 0, profitUsd: 0 },
+  achievements = [], creatorTier = 0, onVerified,
 }) {
   const [loading, setLoading] = useState(true);
   // Подтверждение хранится в профиле, а не только на экране: иначе
@@ -7723,18 +7571,6 @@ function ProfileView({
         <div style={{ position: "relative", zIndex: 1 }}>
 
         <div className="mt-5"><WalletCard connected={connected} walletAddress={walletAddress} tonBalance={tonBalance} tonPriceUsd={tonPriceUsd} onConnect={connectWallet} onDisconnect={disconnectWallet} onCopy={copyAddress} onExplore={exploreWallet} /></div>
-
-        <div className="mt-5">
-          <SectionTitle>{t("statsTitle")}</SectionTitle>
-          <div className="grid grid-cols-2 gap-2">
-            <StatBlock label={t("statTotalProfit")} value={Math.round(tradeStats.profitUsd)} color={tradeStats.profitUsd >= 0 ? T.up : T.down} suffix=" $" />
-            <StatBlock label={t("statCreatedTokens")} value={myTokens.length} />
-            <StatBlock label={t("statTokensOwned")} value={tradeStats.tokens} />
-            <StatBlock label={t("statTotalTrades")} value={tradeStats.trades} />
-            <StatBlock label={t("statFollowers")} value={followCounts.followers} />
-            <StatBlock label={t("statFollowing")} value={followCounts.following} />
-          </div>
-        </div>
 
         <div className="mt-5">
           <SectionTitle>{t("portfolioTitle")}</SectionTitle>
@@ -8732,10 +8568,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [authChecked, setAuthChecked] = useState(false);
   const [userId, setUserId] = useState(null);
 
-  // Подписчики и подписки текущего человека. Считаем на стороне базы
-  // (head + exact count): сами строки здесь не нужны. Живут в корне,
-  // потому что от них зависят и профиль, и достижения, и магазин.
-  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
   // Сколько человек пришло по своей ссылке. Считается по профилям, где
   // стоит связь с этим пользователем: то есть по тем, кто действительно
   // зашёл и завёл аккаунт, а не по кликам.
@@ -8757,25 +8589,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     })();
     return () => { cancelled = true; };
   }, [userId]);
-  useEffect(() => {
-    if (!userId) { setFollowCounts({ followers: 0, following: 0 }); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const [followers, following] = await Promise.all([
-          supabase.from("follows").select("follower_id", { count: "exact", head: true }).eq("following_id", userId),
-          supabase.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", userId),
-        ]);
-        if (cancelled) return;
-        setFollowCounts({ followers: followers.count || 0, following: following.count || 0 });
-      } catch (err) {
-        console.warn("[mintly] follow counts unavailable:", err && err.message);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [userId]);
-
-
   async function loadProfileForUser(user) {
     setUserId(user ? user.id : null);
     if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
@@ -9109,36 +8922,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myCurveKey, tonPriceUsd, mcapPeakKey]);
-
-  // Сводка по своим сделкам: сколько их было, на сколько токенов
-  // разных выпусков заходил и что вышло по деньгам. Прибыль считаем
-  // только по закрытым деньгам: продано минус вложено. Пока человек
-  // держит купленное, прибыль отрицательная — это честно, а не ошибка.
-  const [tradeTick, setTradeTick] = useState(0);
-  const [tradeStats, setTradeStats] = useState({ trades: 0, tokens: 0, profitUsd: 0 });
-  useEffect(() => {
-    if (!userId) { setTradeStats({ trades: 0, tokens: 0, profitUsd: 0 }); return; }
-    let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase
-        .from("trades")
-        .select("side, ton_amount, ton_price_usd, token_address")
-        .eq("user_id", userId)
-        .limit(1000);
-      if (error) { console.warn("[mintly] сделки недоступны:", error.message); return; }
-      if (cancelled) return;
-      const rows = data || [];
-      let profit = 0;
-      const seen = new Set();
-      for (const r of rows) {
-        const usd = (Number(r.ton_amount) || 0) * (Number(r.ton_price_usd) || 0);
-        profit += r.side === "sell" ? usd : -usd;
-        if (r.token_address) seen.add(r.token_address);
-      }
-      setTradeStats({ trades: rows.length, tokens: seen.size, profitUsd: profit });
-    })();
-    return () => { cancelled = true; };
-  }, [userId, tradeTick]);
 
   // Подтверждение аккаунта. Тоже в профиле: значок у ника должен
   // переживать перезапуск приложения и быть виден другим.
@@ -9591,7 +9374,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       ton_price_usd: tonPriceUsd || 0,
     }).then(({ error }) => {
       if (error) console.warn("[mintly] не удалось записать сделку:", error.message);
-      else setTradeTick((n) => n + 1);
     });
   }
 
@@ -9896,13 +9678,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               cosmetics={cosmetics}
               onGoShop={() => goTab("shop")}
               onOpenAchievements={() => setView("achievements")}
-              followCounts={followCounts}
               achievements={achievements}
               insetTop={insetTop}
               userId={userId}
               creatorTier={creatorTier}
               onVerified={markProfileVerified}
-              tradeStats={tradeStats}
             />
           )}
         </div>
