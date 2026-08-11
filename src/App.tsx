@@ -767,10 +767,25 @@ function useLiveTick() {
   }, []);
   return tick;
 }
-function haptic() {
-  if (typeof navigator !== "undefined" && navigator.vibrate) {
-    try { navigator.vibrate(12); } catch (e) { /* unsupported */ }
-  }
+/* Отклик на нажатие. Внутри Telegram просим у него — это родная
+   вибрация клиента, и на iPhone работает только она: navigator.vibrate
+   там не поддерживается вовсе, поэтому раньше на айфоне отклика не было
+   нигде. Снаружи Telegram остаётся обычный вибромотор. */
+function haptic(kind = "light") {
+  if (typeof window === "undefined") return;
+  const h = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback;
+  try {
+    if (h) {
+      if ((kind === "error" || kind === "success" || kind === "warning") && h.notificationOccurred) {
+        h.notificationOccurred(kind);
+        return;
+      }
+      if (h.impactOccurred) { h.impactOccurred(kind); return; }
+    }
+  } catch (e) { /* старый клиент Telegram — метода может не быть */ }
+  try {
+    if (navigator.vibrate) navigator.vibrate(kind === "error" ? 40 : 12);
+  } catch (e) { /* вибрация запрещена настройками */ }
 }
 
 // Local, per-device reaction counters (⭐/🔥/💔 on the token screen).
@@ -2617,7 +2632,12 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     // отрисовке и дальше не менялось: приезжали новые свечи с другим
     // размахом, и они сплющивались в узкую полосу посреди пустого поля.
     // Если шкалу двигали руками — не трогаем, это уже выбор человека.
-    if (!yUserRef.current) yViewRef.current = null;
+    //
+    // И только пока график держится за правый край. Стоило отлистать в
+    // историю, как очередная порция данных сбрасывала окно, оно
+    // подгонялось под то, что сейчас на экране, и шкала на глазах
+    // разъезжалась — заметнее всего сразу после того, как отпустишь.
+    if (!yUserRef.current && pinnedRef.current) yViewRef.current = null;
   }, [n, candles]);
 
   useEffect(() => { draw(); });
@@ -6666,7 +6686,7 @@ function PinKeypad({ onDigit, onBackspace }) {
         if (k === "") return <div key={idx} />;
         if (k === "back") {
           return (
-            <button key={idx} onClick={onBackspace} className="fx-tap flex items-center justify-center" style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: "50%", background: "transparent" }}>
+            <button key={idx} onClick={() => { haptic("soft"); onBackspace(); }} className="fx-tap flex items-center justify-center" style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: "50%", background: "transparent" }}>
               <span style={{ fontFamily: bodyFont, fontSize: 19, color: T.muted }}>⌫</span>
             </button>
           );
@@ -6674,7 +6694,7 @@ function PinKeypad({ onDigit, onBackspace }) {
         return (
           <button
             key={idx}
-            onClick={() => onDigit(k)}
+            onClick={() => { haptic("light"); onDigit(k); }}
             className="fx-tap flex items-center justify-center"
             style={{
               width: "100%",
@@ -6708,7 +6728,7 @@ function PinSetupModal({ mode, currentPin, onClose, onComplete, onDisable, showT
   if (!mode) return null;
 
   function shakeAnd(after) {
-    haptic();
+    haptic("error");
     setError(true);
     setTimeout(() => { setError(false); setEntry(""); after && after(); }, 340);
   }
@@ -6783,7 +6803,7 @@ function PinLockScreen({ pin, profile, onUnlock, onForgot }) {
       setTimeout(() => {
         if (next === pin) { onUnlock(); }
         else {
-          haptic();
+          haptic("error");
           setError(true);
           setTimeout(() => { setError(false); setEntry(""); }, 340);
         }
