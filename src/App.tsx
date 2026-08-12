@@ -123,6 +123,8 @@ const STR = {
     tgAuthTitle: "Вход через Telegram",
     tgAuthCta: "Войти через Telegram",
     tgAuthHint: "Аккаунт создастся из твоего профиля Telegram — почта и пароль не нужны.",
+    tgAuthCreateCta: "Создать аккаунт",
+    tgAuthNickHint: "Выбери никнейм — под ним тебя увидят остальные. Поменять его можно потом в профиле.",
     tgAuthOutside: "Открой приложение внутри Telegram, чтобы войти.",
     tgAuthFailed: "Не удалось войти через Telegram. Попробуй ещё раз.",
     tgAuthNotConfigured: "Вход через Telegram пока не настроен на сервере.",
@@ -382,6 +384,8 @@ const STR = {
     tgAuthTitle: "Sign in with Telegram",
     tgAuthCta: "Sign in with Telegram",
     tgAuthHint: "Your account is created from your Telegram profile — no email, no password.",
+    tgAuthCreateCta: "Create account",
+    tgAuthNickHint: "Pick a nickname — that's how everyone else sees you. You can change it later in your profile.",
     tgAuthOutside: "Open the app inside Telegram to sign in.",
     tgAuthFailed: "Telegram sign-in failed. Try again.",
     tgAuthNotConfigured: "Telegram sign-in is not configured on the server yet.",
@@ -7235,8 +7239,25 @@ function referralLink(userId) {
   return `https://t.me/${TG_BOT}${TG_APP ? "/" + TG_APP : ""}?startapp=${code}`;
 }
 
+/* Заводится ли аккаунт впервые. Спрашиваем до входа: если профиля ещё
+   нет, на экране появляется поле ника, и человек выбирает имя сам, а не
+   получает выдуманное из профиля Telegram. Сервер на этот вызов ничего
+   не создаёт и не меняет — только смотрит и предлагает свободный ник. */
+async function probeTelegramAccount() {
+  const initData = telegramInitData();
+  if (!initData) throw new Error("no_telegram");
+  const res = await fetch("/api/telegram-auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ initData, probe: true }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `probe_failed_${res.status}`);
+  return { exists: !!json.exists, nickname: json.nickname || "" };
+}
+
 // Бросает ошибку с понятным кодом — вызывающая сторона показывает текст.
-async function signInWithTelegram() {
+async function signInWithTelegram(nickname) {
   const initData = telegramInitData();
   if (!initData) throw new Error("no_telegram");
 
@@ -7250,7 +7271,7 @@ async function signInWithTelegram() {
   const res = await fetch("/api/telegram-auth", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ initData, startParam }),
+    body: JSON.stringify({ initData, startParam, nickname: nickname || undefined }),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -7289,6 +7310,30 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
   const [avatarCropFile, setAvatarCropFile] = useState(null);
   const avatarInputRef = useRef(null);
   const isLogin = !isEdit && authTab === "login";
+  // Что известно об аккаунте до входа: null — ещё спрашиваем,
+  // { exists, nickname } — ответ сервера. Пока не знаем, поле ника не
+  // показываем: у тех, кто уже заходил, его нет вовсе.
+  const [tgProbe, setTgProbe] = useState(null);
+  const [tgNick, setTgNick] = useState("");
+  const [tgNickTouched, setTgNickTouched] = useState(false);
+
+  useEffect(() => {
+    if (!open || isEdit || !telegramInitData()) return;
+    let alive = true;
+    setTgProbe(null);
+    setTgNick("");
+    setTgNickTouched(false);
+    probeTelegramAccount()
+      .then((info) => {
+        if (!alive) return;
+        setTgProbe(info);
+        if (!info.exists) setTgNick(info.nickname);
+      })
+      // Не достучались до сервера — не запираем вход: покажем обычную
+      // кнопку, а ник тогда возьмётся из профиля Telegram, как раньше.
+      .catch(() => { if (alive) setTgProbe({ exists: true, nickname: "" }); });
+    return () => { alive = false; };
+  }, [open, isEdit]);
 
   useEffect(() => {
     if (open) {
@@ -7317,17 +7362,29 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
     const tgUser = telegramUser();
     const insideTelegram = !!telegramInitData();
 
+    // Первый вход: профиля с таким telegram_id ещё нет, значит аккаунт
+    // сейчас создастся — и ник человек выбирает сам.
+    const probing = insideTelegram && !tgProbe;
+    const isNew = insideTelegram && !!tgProbe && !tgProbe.exists;
+    const tgNickTrimmed = tgNick.trim();
+    const tgNickValid = NICKNAME_RE.test(tgNickTrimmed);
+    const canEnter = insideTelegram && !probing && !tgBusy && (!isNew || tgNickValid);
+
     async function handleTelegramLogin() {
+      if (isNew && !tgNickValid) { setTgNickTouched(true); return; }
       setTgError("");
       setTgBusy(true);
       try {
-        await signInWithTelegram();
+        await signInWithTelegram(isNew ? tgNickTrimmed : "");
         onClose();
       } catch (err) {
         const code = (err && err.message) || "";
         const detail = (err && err.detail) ? ` — ${String(err.detail).slice(0, 220)}` : "";
         setTgError(code === "no_telegram" ? t("tgAuthOutside")
           : code === "server_not_configured" ? t("tgAuthNotConfigured")
+          // Имя увели между проверкой и созданием — человек остаётся на
+          // том же экране и выбирает другое.
+          : code === "nickname_taken" ? tf("authErrNicknameTaken", { name: tgNickTrimmed })
           : `${t("tgAuthFailed")} (${code || "?"})${detail}`);
       } finally {
         setTgBusy(false);
@@ -7360,26 +7417,44 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
             )}
 
             <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, maxWidth: 280 }}>
-              {insideTelegram ? t("tgAuthHint") : t("tgAuthOutside")}
+              {!insideTelegram ? t("tgAuthOutside") : isNew ? t("tgAuthNickHint") : t("tgAuthHint")}
             </p>
+
+            {/* Поле ника — только при первом входе. Имя из профиля
+                Telegram подставлено заранее: чаще всего его и оставляют,
+                но теперь это выбор, а не назначение. */}
+            {isNew && (
+              <div className="w-full flex flex-col text-left" style={{ gap: 4 }}>
+                <Field
+                  label={t("nicknameLabel")}
+                  placeholder="leo_builds"
+                  value={tgNick}
+                  onChange={(e) => { setTgNick(e.target.value); setTgNickTouched(true); }}
+                  error={tgNickTouched && !tgNickValid}
+                />
+                {tgNickTouched && !tgNickValid && (
+                  <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 11 }}>{t("nicknameError")}</span>
+                )}
+              </div>
+            )}
 
             {tgError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12 }}>{tgError}</span>}
 
             <button
               onClick={handleTelegramLogin}
-              disabled={tgBusy || !insideTelegram}
+              disabled={!canEnter}
               className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3.5 mt-1"
               style={{
-                background: insideTelegram ? PRISM : T.surfaceHi,
-                color: insideTelegram ? PRISM_TEXT : T.muted,
+                background: canEnter ? PRISM : T.surfaceHi,
+                color: canEnter ? PRISM_TEXT : T.muted,
                 fontFamily: displayFont, fontWeight: 700, fontSize: 14,
-                boxShadow: insideTelegram ? `0 0 22px ${glow(0.28)}` : "none",
+                boxShadow: canEnter ? `0 0 22px ${glow(0.28)}` : "none",
                 opacity: tgBusy ? 0.6 : 1,
               }}
             >
-              {tgBusy
+              {tgBusy || probing
                 ? <><RefreshCw size={15} style={{ animation: "spin360 1.1s linear infinite" }} /> {t("submittingText")}</>
-                : <><Send size={15} /> {t("tgAuthCta")}</>}
+                : <><Send size={15} /> {isNew ? t("tgAuthCreateCta") : t("tgAuthCta")}</>}
             </button>
           </div>
         </div>
@@ -8788,13 +8863,21 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     let active = true;
     (async () => {
       let { data: { session } } = await supabase.auth.getSession();
-      // Внутри Telegram вход происходит сам: подпись initData уже есть,
-      // спрашивать человека не о чем. Если не вышло — просто открываем
-      // приложение без аккаунта, кнопка входа остаётся в профиле.
+      // Внутри Telegram повторный вход происходит сам: подпись initData
+      // уже есть, спрашивать человека не о чем. А вот первый — нет: там
+      // заводится аккаунт, и ник для него человек выбирает сам, поэтому
+      // вместо тихого входа открываем окно. Если не вышло — просто
+      // открываем приложение без аккаунта, кнопка входа остаётся в профиле.
+      let needsSignup = false;
       if (!session && telegramInitData()) {
         try {
-          await signInWithTelegram();
-          session = (await supabase.auth.getSession()).data.session;
+          const info = await probeTelegramAccount();
+          if (info.exists) {
+            await signInWithTelegram();
+            session = (await supabase.auth.getSession()).data.session;
+          } else {
+            needsSignup = true;
+          }
         } catch (err) {
           console.warn("[mintly] telegram auto sign-in failed:", err && err.message);
         }
@@ -8802,6 +8885,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       if (!active) return;
       await loadProfileForUser(session?.user || null);
       setAuthChecked(true);
+      if (needsSignup) {
+        setProfileModalMode("create");
+        setProfileModalOpen(true);
+      }
     })();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       loadProfileForUser(session?.user || null);

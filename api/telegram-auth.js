@@ -95,15 +95,30 @@ function nicknameFromTelegram(user) {
   return cleaned.length >= 3 ? cleaned : `user${user.id}`.slice(0, 20);
 }
 
-async function freeNickname(admin, base) {
+// Занят ли ник. Сравнение без учёта регистра: два «Leo» и «leo» рядом
+// путали бы людей сильнее, чем отказ при регистрации.
+async function nicknameTaken(admin, nickname) {
   // Подчёркивание — подстановочный знак ILIKE, а в никнеймах оно
   // разрешено: без экранирования «user_1» совпадал бы с «userA1».
-  const pattern = base.replace(/[%_\\]/g, "\\$&");
+  const pattern = nickname.replace(/[%_\\]/g, "\\$&");
   const { data } = await admin.from("profiles").select("nickname").ilike("nickname", pattern).maybeSingle();
-  if (!data) return base;
+  return !!data;
+}
+
+async function freeNickname(admin, base) {
+  if (!(await nicknameTaken(admin, base))) return base;
   // Занят — добавляем короткий суффикс, не выходя за 20 символов.
   const suffix = `_${Math.random().toString(36).slice(2, 6)}`;
   return `${base.slice(0, 20 - suffix.length)}${suffix}`;
+}
+
+// Ник, выбранный человеком на экране входа. Правило то же, что и в
+// приложении: латиница, цифры, точка и подчёркивание, 2–20 знаков,
+// первая буква. Проверяем и здесь — форма в браузере ничего не гарантирует.
+const NICKNAME_RE = /^[A-Za-z][A-Za-z0-9_.]{1,19}$/;
+function wantedNickname(body) {
+  const raw = typeof body.nickname === "string" ? body.nickname.trim() : "";
+  return NICKNAME_RE.test(raw) ? raw : null;
 }
 
 // Простое ограничение частоты. Каждый вызов ходит в админский API
@@ -203,6 +218,22 @@ export default async function handler(req, res) {
   // на него не уходят — вход идёт только по подписи Telegram.
   const email = `tg${tgUser.id}@telegram.local`;
 
+  // Разведка перед входом: приложение спрашивает, заводится ли аккаунт
+  // впервые. Если да — на экране входа появляется поле ника, и человек
+  // выбирает его сам, а не получает выдуманный из профиля Telegram.
+  // Ничего не создаём и не меняем: только смотрим, есть ли профиль с этим
+  // telegram_id, и предлагаем свободный ник.
+  if (body.probe === true) {
+    const { data: existing, error: probeErr } = await admin
+      .from("profiles")
+      .select("nickname")
+      .eq("telegram_id", tgUser.id)
+      .maybeSingle();
+    if (probeErr) return fail(res, 500, "probe_failed", probeErr.message);
+    if (existing) return res.status(200).json({ exists: true, nickname: existing.nickname });
+    return res.status(200).json({ exists: false, nickname: await freeNickname(admin, nicknameFromTelegram(tgUser)) });
+  }
+
   try {
     // Первый вход — заводим пользователя. Если он уже есть, Supabase
     // ответит ошибкой «already registered», и это нормальный путь.
@@ -211,7 +242,7 @@ export default async function handler(req, res) {
       email_confirm: true,
       user_metadata: {
         telegram_id: tgUser.id,
-        nickname: nicknameFromTelegram(tgUser),
+        nickname: wantedNickname(body) || nicknameFromTelegram(tgUser),
         bio: "",
         avatar_url: tgUser.photo_url || null,
         emoji: tgUser.photo_url ? null : "🚀",
@@ -256,7 +287,14 @@ export default async function handler(req, res) {
       return fail(res, 409, "account_conflict", "existing account without telegram binding");
     }
     if (!profile) {
-      const nickname = await freeNickname(admin, nicknameFromTelegram(tgUser));
+      // Ник, выбранный на экране входа, — главнее выдуманного из профиля
+      // Telegram. Занятый не подменяем тихим «leo_a4f1»: человек только
+      // что его напечатал и должен узнать, что имя не досталось.
+      const chosen = wantedNickname(body);
+      if (chosen && (await nicknameTaken(admin, chosen))) {
+        return res.status(409).json({ error: "nickname_taken" });
+      }
+      const nickname = chosen || (await freeNickname(admin, nicknameFromTelegram(tgUser)));
 
       // Приглашение засчитывается только при первом входе и только если
       // пригласивший действительно есть в базе. Сам себя пригласить
@@ -275,6 +313,11 @@ export default async function handler(req, res) {
         invited_by: invitedBy,
       }, { onConflict: "id" });
       if (insertErr) {
+        // Между проверкой и записью ник мог занять кто-то другой: тогда
+        // падает уникальный ключ, и это не сбой сервера, а «имя ушло».
+        if (/duplicate|unique|nickname/i.test(insertErr.message || "")) {
+          return res.status(409).json({ error: "nickname_taken" });
+        }
         return fail(res, 500, "profile_failed", insertErr.message);
       }
     } else if (profile.invited_by == null) {
