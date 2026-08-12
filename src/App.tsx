@@ -4731,6 +4731,29 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
 /* BootSplash — стартовая заставка. Перекрывает весь интерфейс, пока идут
    первые запросы, и показывает, что именно ещё грузится: так пустые
    экраны не мелькают до прихода данных. */
+/* KeepAlive — вкладка остаётся собранной, даже когда её не видно.
+
+   Раньше каждая вкладка выбрасывалась при переходе и собиралась заново:
+   лента перезапрашивалась, витрина заново решала, что заперто, тикер
+   покупок начинал с нуля. Из-за этого при возврате на секунду
+   показывалось «ещё ничего не загружено», хотя всё уже было загружено
+   минуту назад.
+
+   Скрываем показом, а не размонтированием: состояние, прокрутка и
+   загруженные данные остаются на месте. Скрытая вкладка не ловит
+   нажатия и не читается голосовыми программами. */
+function KeepAlive({ show, children }) {
+  // Вкладки собираются сразу, все, ещё под заставкой запуска: к моменту
+  // первого перехода данные уже на месте. Раньше вкладка начинала
+  // грузиться в тот момент, когда на неё переходили, и первые полсекунды
+  // человек смотрел на пустоту.
+  return (
+    <div style={show ? undefined : { display: "none" }} aria-hidden={show ? undefined : true} inert={show ? undefined : ""}>
+      {children}
+    </div>
+  );
+}
+
 /* LeafLoader — фирменный индикатор: лист заливается снизу вверх.
 
    Два режима. С числом — заливка стоит ровно на нём: так показывается
@@ -4975,7 +4998,7 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
 /* ShopView — витрина косметики: рамки для аватарки и карточки профиля.
    Предметы применяются мгновенно и запоминаются на устройстве, поэтому
    «купить» здесь — это «надеть»: отдельного баланса у магазина нет. */
-function ShopView({ cosmetics, onEquip, achievements = [], onOpenAchievements, showToast }) {
+function ShopView({ cosmetics, onEquip, achievements = [], achievementsReady = true, onOpenAchievements, showToast }) {
   const [tab, setTab] = useState("frames");
   // Нажатие отмечается сразу здесь, не дожидаясь, пока выбор дойдёт до
   // состояния всего приложения и вернётся обратно пропсом. Рамка при
@@ -5019,6 +5042,11 @@ function ShopView({ cosmetics, onEquip, achievements = [], onOpenAchievements, s
         })}
       </div>
 
+      {!achievementsReady ? (
+        // Пока неизвестно, что открыто, витрину не показываем: мелькание
+        // замков на секунду хуже, чем секунда ожидания.
+        <PageLoader minHeight={260} />
+      ) : (
       <div className="grid grid-cols-2 gap-2.5" key={tab}>
         {items.map((item) => {
           const unlocked = cosmeticUnlocked(kind, item.id, achievements);
@@ -5041,6 +5069,7 @@ function ShopView({ cosmetics, onEquip, achievements = [], onOpenAchievements, s
           );
         })}
       </div>
+      )}
     </div>
   );
 }
@@ -8596,8 +8625,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // стоит связь с этим пользователем: то есть по тем, кто действительно
   // зашёл и завёл аккаунт, а не по кликам.
   const [inviteCount, setInviteCount] = useState(0);
+  const [invitesReady, setInvitesReady] = useState(false);
   useEffect(() => {
-    if (!userId) { setInviteCount(0); return; }
+    if (!userId) { setInviteCount(0); setInvitesReady(false); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -8609,6 +8639,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       } catch (err) {
         // Колонки ещё нет — показываем ноль, а не ломаем экран.
         console.warn("[mintly] invite count unavailable:", err && err.message);
+      } finally {
+        if (!cancelled) setInvitesReady(true);
       }
     })();
     return () => { cancelled = true; };
@@ -8917,6 +8949,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // уже полученную рамку из-за просадки. Рекорд лежит рядом с
   // пользователем в браузере — на цепочке его хранить негде.
   const [bestMcapUsd, setBestMcapUsd] = useState(0);
+  const [bestMcapReady, setBestMcapReady] = useState(false);
   const mcapPeakKey = userId ? `mintly:mcapPeak:${userId}` : "";
   useEffect(() => {
     if (!mcapPeakKey) { setBestMcapUsd(0); return; }
@@ -8927,7 +8960,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   }, [mcapPeakKey]);
   const myCurveKey = myTokens.map((tok) => tok.curveAddress || "").filter(Boolean).join(",");
   useEffect(() => {
-    if (!myCurveKey || !tonPriceUsd) return;
+    // Своих токенов на кривой нет — считать нечего, рекорд равен тому,
+    // что уже лежит на устройстве.
+    if (!myCurveKey) { setBestMcapReady(true); return; }
+    if (!tonPriceUsd) return;
     let cancelled = false;
     (async () => {
       const list = myTokens.filter((tok) => tok.curveAddress).slice(0, 8);
@@ -8935,6 +8971,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         list.map((tok) => fetchCurveMarket(tok.curveAddress, tok.address || tok.tokenAddress, TON_TESTNET, tonPriceUsd).catch(() => null)),
       );
       if (cancelled) return;
+      setBestMcapReady(true);
       const top = markets.reduce((max, m) => (m && m.mcapUsd > max ? m.mcapUsd : max), 0);
       if (top <= 0) return;
       setBestMcapUsd((prev) => {
@@ -8971,6 +9008,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
 
   // Достижения. Считаются здесь, потому что нужны сразу трём экранам:
   // профилю, отдельной странице и магазину — он по ним запирает предметы.
+  // Достижения решают, что заперто в магазине. Пока их слагаемые ещё
+  // едут — рекорд капитализации и число приглашённых, — витрину лучше не
+  // показывать вовсе: иначе на секунду видно не то состояние замков.
+  // Гостю ждать нечего: у него ничего и не может быть открыто.
+  const achievementsReady = !userId || (bestMcapReady && invitesReady);
+
   const achievements = useMemo(
     () => buildAchievements({
       tokensCount: myTokens.length,
@@ -9640,17 +9683,22 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             below reserves the nav's own height so the last row of content
             can still scroll clear of it. */}
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), paddingBottom: 116 + insetBottom }} key={view}>
-          {view === "home" && <HomeView onGoTab={goTab} curveTokens={communityTokens} onOpenToken={openToken} />}
-          {view === "mempad" && <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />}
-          {view === "shop" && (
+          <KeepAlive show={view === "home"}>
+            <HomeView onGoTab={goTab} curveTokens={communityTokens} onOpenToken={openToken} />
+          </KeepAlive>
+          <KeepAlive show={view === "mempad"}>
+            <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />
+          </KeepAlive>
+          <KeepAlive show={view === "shop"}>
             <ShopView
               cosmetics={cosmetics}
               onEquip={equipCosmetic}
               achievements={achievements}
+              achievementsReady={achievementsReady}
               onOpenAchievements={() => setView("achievements")}
               showToast={showToast}
             />
-          )}
+          </KeepAlive>
           {view === "achievements" && (
             <AchievementsView achievements={achievements} onGoShop={() => goTab("shop")} onBack={() => setView("profile")} />
           )}
@@ -9677,7 +9725,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onLaunch={handleLaunchRequest}
             />
           )}
-          {view === "profile" && (
+          <KeepAlive show={view === "profile"}>
             <ProfileView
               connected={connected}
               walletAddress={walletAddress}
@@ -9708,7 +9756,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               creatorTier={creatorTier}
               onVerified={markProfileVerified}
             />
-          )}
+          </KeepAlive>
         </div>
 
         <div
