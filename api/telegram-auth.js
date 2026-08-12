@@ -86,15 +86,6 @@ function verifyInitData(initData) {
   }
 }
 
-// Никнейм из профиля Telegram: сначала @username, иначе имя с фамилией,
-// иначе просто user<id>. Приводим к тому же виду, что и в форме
-// регистрации (латиница, цифры, подчёркивание, 3–20 символов).
-function nicknameFromTelegram(user) {
-  const raw = user.username || [user.first_name, user.last_name].filter(Boolean).join("_") || `user${user.id}`;
-  const cleaned = raw.replace(/[^A-Za-z0-9_]/g, "").slice(0, 20);
-  return cleaned.length >= 3 ? cleaned : `user${user.id}`.slice(0, 20);
-}
-
 // Занят ли ник. Сравнение без учёта регистра: два «Leo» и «leo» рядом
 // путали бы людей сильнее, чем отказ при регистрации.
 async function nicknameTaken(admin, nickname) {
@@ -105,14 +96,9 @@ async function nicknameTaken(admin, nickname) {
   return !!data;
 }
 
-async function freeNickname(admin, base) {
-  if (!(await nicknameTaken(admin, base))) return base;
-  // Занят — добавляем короткий суффикс, не выходя за 20 символов.
-  const suffix = `_${Math.random().toString(36).slice(2, 6)}`;
-  return `${base.slice(0, 20 - suffix.length)}${suffix}`;
-}
-
-// Ник, выбранный человеком на экране входа. Правило то же, что и в
+// Ник, выбранный человеком на экране входа. Своего варианта сервер не
+// предлагает: имя из профиля Telegram досталось бы человеку без его
+// участия, а поменять его потом нельзя. Правило то же, что и в
 // приложении: латиница, цифры, точка и подчёркивание, 2–20 знаков,
 // первая буква. Проверяем и здесь — форма в браузере ничего не гарантирует.
 const NICKNAME_RE = /^[A-Za-z][A-Za-z0-9_.]{1,19}$/;
@@ -219,19 +205,17 @@ export default async function handler(req, res) {
   const email = `tg${tgUser.id}@telegram.local`;
 
   // Разведка перед входом: приложение спрашивает, заводится ли аккаунт
-  // впервые. Если да — на экране входа появляется поле ника, и человек
-  // выбирает его сам, а не получает выдуманный из профиля Telegram.
-  // Ничего не создаём и не меняем: только смотрим, есть ли профиль с этим
-  // telegram_id, и предлагаем свободный ник.
+  // впервые. Если да — на экране входа появляется пустое поле ника, и
+  // человек придумывает имя сам. Ничего не создаём и не меняем: только
+  // смотрим, есть ли профиль с этим telegram_id.
   if (body.probe === true) {
     const { data: existing, error: probeErr } = await admin
       .from("profiles")
-      .select("nickname")
+      .select("id")
       .eq("telegram_id", tgUser.id)
       .maybeSingle();
     if (probeErr) return fail(res, 500, "probe_failed", probeErr.message);
-    if (existing) return res.status(200).json({ exists: true, nickname: existing.nickname });
-    return res.status(200).json({ exists: false, nickname: await freeNickname(admin, nicknameFromTelegram(tgUser)) });
+    return res.status(200).json({ exists: !!existing });
   }
 
   try {
@@ -242,7 +226,7 @@ export default async function handler(req, res) {
       email_confirm: true,
       user_metadata: {
         telegram_id: tgUser.id,
-        nickname: wantedNickname(body) || nicknameFromTelegram(tgUser),
+        nickname: wantedNickname(body) || "",
         bio: "",
         avatar_url: tgUser.photo_url || null,
         emoji: tgUser.photo_url ? null : "🚀",
@@ -287,14 +271,16 @@ export default async function handler(req, res) {
       return fail(res, 409, "account_conflict", "existing account without telegram binding");
     }
     if (!profile) {
-      // Ник, выбранный на экране входа, — главнее выдуманного из профиля
-      // Telegram. Занятый не подменяем тихим «leo_a4f1»: человек только
-      // что его напечатал и должен узнать, что имя не досталось.
-      const chosen = wantedNickname(body);
-      if (chosen && (await nicknameTaken(admin, chosen))) {
+      // Ник обязателен и берётся только с экрана входа. Своего варианта
+      // сервер не придумывает: имя выбирается один раз на всю жизнь
+      // аккаунта, и назначать его за человека нельзя. Занятый не
+      // подменяем тихим «leo_a4f1» — он только что его напечатал и должен
+      // узнать, что имя не досталось.
+      const nickname = wantedNickname(body);
+      if (!nickname) return res.status(400).json({ error: "nickname_required" });
+      if (await nicknameTaken(admin, nickname)) {
         return res.status(409).json({ error: "nickname_taken" });
       }
-      const nickname = chosen || (await freeNickname(admin, nicknameFromTelegram(tgUser)));
 
       // Приглашение засчитывается только при первом входе и только если
       // пригласивший действительно есть в базе. Сам себя пригласить

@@ -124,7 +124,8 @@ const STR = {
     tgAuthCta: "Войти через Telegram",
     tgAuthHint: "Аккаунт создастся из твоего профиля Telegram — почта и пароль не нужны.",
     tgAuthCreateCta: "Создать аккаунт",
-    tgAuthNickHint: "Выбери никнейм — под ним тебя увидят остальные. Поменять его можно потом в профиле.",
+    tgAuthNickHint: "Придумай никнейм — под ним тебя увидят остальные. Он выбирается один раз и потом не меняется.",
+    nicknameLocked: "Никнейм выбирается один раз при создании аккаунта и не меняется.",
     tgAuthOutside: "Открой приложение внутри Telegram, чтобы войти.",
     tgAuthFailed: "Не удалось войти через Telegram. Попробуй ещё раз.",
     tgAuthNotConfigured: "Вход через Telegram пока не настроен на сервере.",
@@ -385,7 +386,8 @@ const STR = {
     tgAuthCta: "Sign in with Telegram",
     tgAuthHint: "Your account is created from your Telegram profile — no email, no password.",
     tgAuthCreateCta: "Create account",
-    tgAuthNickHint: "Pick a nickname — that's how everyone else sees you. You can change it later in your profile.",
+    tgAuthNickHint: "Pick a nickname — that's how everyone else sees you. It's chosen once and can't be changed later.",
+    nicknameLocked: "A nickname is chosen once, when the account is created, and can't be changed.",
     tgAuthOutside: "Open the app inside Telegram to sign in.",
     tgAuthFailed: "Telegram sign-in failed. Try again.",
     tgAuthNotConfigured: "Telegram sign-in is not configured on the server yet.",
@@ -7305,14 +7307,13 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [previewEmoji, setPreviewEmoji] = useState(() => randomProfileEmoji());
-  const [touched, setTouched] = useState(false);
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarCropFile, setAvatarCropFile] = useState(null);
   const avatarInputRef = useRef(null);
   const isLogin = !isEdit && authTab === "login";
   // Что известно об аккаунте до входа: null — ещё спрашиваем,
-  // { exists, nickname } — ответ сервера. Пока не знаем, поле ника не
-  // показываем: у тех, кто уже заходил, его нет вовсе.
+  // { exists } — ответ сервера. Пока не знаем, поле ника не показываем:
+  // у тех, кто уже заходил, его нет вовсе.
   const [tgProbe, setTgProbe] = useState(null);
   const [tgNick, setTgNick] = useState("");
   const [tgNickTouched, setTgNickTouched] = useState(false);
@@ -7324,14 +7325,11 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
     setTgNick("");
     setTgNickTouched(false);
     probeTelegramAccount()
-      .then((info) => {
-        if (!alive) return;
-        setTgProbe(info);
-        if (!info.exists) setTgNick(info.nickname);
-      })
-      // Не достучались до сервера — не запираем вход: покажем обычную
-      // кнопку, а ник тогда возьмётся из профиля Telegram, как раньше.
-      .catch(() => { if (alive) setTgProbe({ exists: true, nickname: "" }); });
+      .then((info) => { if (alive) setTgProbe(info); })
+      // Не достучались до сервера — считаем, что аккаунт новый: спросить
+      // ник лишний раз безобиднее, чем завести аккаунт с чужим именем,
+      // ведь поменять его потом нельзя.
+      .catch(() => { if (alive) setTgProbe({ exists: false }); });
     return () => { alive = false; };
   }, [open, isEdit]);
 
@@ -7346,7 +7344,6 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
       setAvatarFile(null);
       setAvatarCropFile(null);
       setPreviewEmoji(initial && initial.emoji ? initial.emoji : randomProfileEmoji());
-      setTouched(false);
       setServerError("");
       setTgError("");
       setTgBusy(false);
@@ -7463,10 +7460,11 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
   }
 
   const nicknameTrimmed = nickname.trim();
-  // Почта и пароль в профиле больше не редактируются: аккаунт заводится
-  // Telegram-ом, адрес технический. Остаётся только ник.
-  const nicknameValid = NICKNAME_RE.test(nicknameTrimmed);
-  const canSubmit = nicknameValid;
+  // В профиле не правятся ни почта с паролем (аккаунт заводится
+  // Telegram-ом, адрес технический), ни ник — он выбирается один раз при
+  // создании аккаунта. Остаются описание и аватарка, а им проверять
+  // нечего.
+  const canSubmit = true;
 
   function onPickAvatar(e) {
   const file = e.target.files && e.target.files[0];
@@ -7519,7 +7517,6 @@ async function uploadAvatarIfNeeded(userId) {
   }
 
   async function handleSubmit() {
-    setTouched(true);
     setServerError("");
     if (!canSubmit) return;
     setSubmitting(true);
@@ -7537,7 +7534,8 @@ async function uploadAvatarIfNeeded(userId) {
         const { error: updateError } = await supabase
           .from("profiles")
           .update({
-            nickname: nicknameTrimmed,
+            // Ник не трогаем: он неизменяем, и в базе на это стоит
+            // отдельный запрет (supabase_nickname_lock.sql).
             bio: bio.trim(),
             avatar_url: uploadedUrl,
             emoji: uploadedUrl ? null : previewEmoji,
@@ -7584,7 +7582,7 @@ async function uploadAvatarIfNeeded(userId) {
               return (
                 <button
                   key={id}
-                  onClick={() => { setAuthTab(id); setServerError(""); setTouched(false); }}
+                  onClick={() => { setAuthTab(id); setServerError(""); }}
                   className="fx-tap tf-btn flex-1 flex items-center justify-center gap-1.5 rounded-[16px] py-2"
                   style={{
                     background: active ? PRISM : "transparent",
@@ -7614,11 +7612,18 @@ async function uploadAvatarIfNeeded(userId) {
         )}
 
         <div className="flex flex-col gap-3.5">
+          {/* Ник здесь только показан. Менять его нельзя: под ним человека
+              знают в ленте, в чужих профилях и в ссылках, и подмена имени
+              задним числом ломает всё это разом. */}
           {!isLogin && (
-            <>
-              <Field label={t("nicknameLabel")} placeholder="leo_builds" value={nickname} onChange={(e) => setNickname(e.target.value)} />
-              {touched && !nicknameValid && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 11, marginTop: -10 }}>{t("nicknameError")}</span>}
-            </>
+            <div className="flex flex-col gap-1.5">
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("nicknameLabel")}</span>
+              <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-2.5" style={{ background: T.bg, border: `1px solid ${T.line}` }}>
+                <Lock size={13} color={T.muted} />
+                <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{nickname}</span>
+              </div>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>{t("nicknameLocked")}</span>
+            </div>
           )}
           {!isLogin && <Field label={t("bioLabel")} placeholder={t("bioPlaceholder")} area value={bio} onChange={(e) => setBio(e.target.value)} />}
         </div>
