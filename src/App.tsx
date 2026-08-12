@@ -1531,6 +1531,62 @@ function bucketCandles(candles, stepSec) {
   return out;
 }
 
+/* Раскладывает свечи по ровной сетке времени.
+
+   Источник отдаёт только те корзины, в которых были сделки: у неактивной
+   пары минутные свечи идут с разрывами в двадцать, тридцать, пятьдесят
+   минут. Приложение рисовало их подряд, будто они соседние, — и минутный
+   график на самом деле охватывал двое суток, пятиминутный — недели, а
+   соседние интервалы показывали совсем разные картинки. Отсюда и
+   «непохожий на правду график, который меняется от переключения».
+
+   Пустые промежутки заполняются ровными свечами по последней цене: между
+   сделками цена и правда не меняется. Хвост до текущего момента
+   дорисовывается, но не больше четверти экрана — иначе у редко торгуемой
+   пары вся история уехала бы за левый край. */
+function fillCandleGaps(candles, stepSec, limit = CHART_TOTAL, nowSec = Math.floor(Date.now() / 1000)) {
+  if (!stepSec || !candles || candles.length < 2) return candles;
+  const bucketOf = (t) => Math.floor(t / stepSec) * stepSec;
+
+  const real = new Map();
+  for (const c of candles) {
+    const b = bucketOf(c.time);
+    const cur = real.get(b);
+    if (!cur) real.set(b, { ...c, time: b });
+    else {
+      cur.high = Math.max(cur.high, c.high);
+      cur.low = Math.min(cur.low, c.low);
+      cur.close = c.close;
+      cur.volume = (cur.volume || 0) + (c.volume || 0);
+    }
+  }
+  const times = [...real.keys()].sort((a, b) => a - b);
+  const firstReal = times[0];
+  const lastReal = times[times.length - 1];
+  const tailMax = Math.max(2, Math.round(limit * 0.25));
+  const end = Math.min(bucketOf(nowSec), lastReal + stepSec * tailMax);
+  const start = Math.max(firstReal, end - stepSec * (limit - 1));
+
+  // Цена на входе в окно — закрытие последней сделки левее него.
+  let prevClose = real.get(firstReal).open;
+  for (const t of times) {
+    if (t > start) break;
+    prevClose = real.get(t).close;
+  }
+
+  const out = [];
+  for (let t = start; t <= end; t += stepSec) {
+    const hit = real.get(t);
+    if (hit) {
+      out.push(hit);
+      prevClose = hit.close;
+    } else {
+      out.push({ time: t, open: prevClose, high: prevClose, low: prevClose, close: prevClose, volume: 0 });
+    }
+  }
+  return out;
+}
+
 // Fetches real trending TON meme pools. Returns tokens shaped to match
 // the app's existing token model so every screen (cards, detail, stats)
 // keeps working unchanged. Falls back to null on any failure so callers
@@ -2081,7 +2137,7 @@ async function fetchTonapiChart(jettonAddress, tf, testnet = false) {
         volume: 0,
       });
     }
-    const candles = bucketCandles(raw, step);
+    const candles = fillCandleGaps(bucketCandles(raw, step), step, CHART_TOTAL);
     if (!candles.length) return null;
     return {
       candles: candles.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })),
@@ -2108,6 +2164,8 @@ async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart, sig
       .sort((a, b) => a.time - b.time);
     if (cfg.resample) candles = bucketCandles(candles, TF_SECONDS[tf] || 3600);
     if (!candles.length) throw new Error("empty ohlcv");
+    // Пустые промежутки — это часы без сделок, а не соседние минуты.
+    candles = fillCandleGaps(candles, TF_SECONDS[tf] || 3600, CHART_TOTAL);
     const result = {
       candles: candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })),
       volume: candles.map(c => ({ time: c.time, value: Number.isFinite(c.volume) ? c.volume : 0, color: c.close >= c.open ? hexA(T.up, 0.32) : hexA(T.down, 0.32) })),
