@@ -4717,8 +4717,13 @@ function GraduationBar({ raisedTon = 0, targetTon = 0, compact = false }) {
 const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, children }) {
   const f = FRAME_BY_ID[frameId] || FRAME_BY_ID.none;
   const ring = Math.max(2, Math.round(size * 0.035));
+  // Чёрная середина лежит выше кольца явным этажом, а не просто следом
+  // за ним в разметке. Кольцо крутится и из-за этого уезжает на
+  // отдельный слой отрисовки, а такой слой в WebKit (в том числе внутри
+  // Telegram) поднимается над соседями, у которых своего этажа нет: на
+  // телефоне градиент затекал в середину, и рамка выглядела заливкой.
   const inner = (
-    <div style={{ position: "absolute", inset: ring, borderRadius: "50%", overflow: "hidden", background: T.bg }}>
+    <div style={{ position: "absolute", inset: ring, borderRadius: "50%", overflow: "hidden", background: T.bg, zIndex: 2 }}>
       {children}
     </div>
   );
@@ -4738,14 +4743,14 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         boxShadow: f.halo
           ? `0 0 ${size * 0.34}px ${ring * 2.4}px ${hexA(f.glow, 0.42)}`
           : `0 0 ${size * 0.18}px ${ring}px ${hexA(f.glow, 0.35)}`,
-        animation: "glowPulse 3.2s ease-in-out infinite",
+        animation: "glowPulse 3.2s ease-in-out infinite", zIndex: 0,
       }} />
       {/* само кольцо — вращающийся конический градиент */}
       <div style={{
         position: "absolute", inset: 0, borderRadius: "50%",
         background: `conic-gradient(from 0deg, ${f.colors.join(", ")})`,
         animation: `spin360 ${f.spin}s linear infinite`,
-        willChange: "transform",
+        willChange: "transform", zIndex: 1,
       }} />
 
       {/* хвост кометы: к голове разгорается, за ней сходит на нет */}
@@ -4754,7 +4759,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
           position: "absolute", inset: 0, borderRadius: "50%",
           background: `conic-gradient(from 0deg, ${hexA(f.comet.color, 0)} 0deg, ${hexA(f.comet.color, 0)} 235deg, ${hexA(f.comet.color, 0.5)} 330deg, ${f.comet.color} 357deg, ${hexA(f.comet.color, 0)} 360deg)`,
           animation: `spin360 ${f.comet.dur}s linear infinite`,
-          willChange: "transform",
+          willChange: "transform", zIndex: 1,
         }} />
       )}
 
@@ -4762,7 +4767,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
       {f.dashes && (
         <svg width={size} height={size} style={{
           position: "absolute", inset: 0,
-          animation: `spin360 ${f.dashes.dur}s linear infinite`, willChange: "transform",
+          animation: `spin360 ${f.dashes.dur}s linear infinite`, willChange: "transform", zIndex: 1,
         }} aria-hidden>
           <circle
             cx={size / 2} cy={size / 2} r={size / 2 - ring / 2}
@@ -4775,7 +4780,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
 
       {/* белый блик, проходящий по радуге */}
       {f.sweep && (
-        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden", zIndex: 1 }}>
           <div style={{
             position: "absolute", top: "-30%", bottom: "-30%", width: "36%", left: 0,
             background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0) 100%)",
@@ -4797,7 +4802,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
           borderRadius: "50%", background: "#FFFFFF",
           boxShadow: `0 0 ${ring * 4}px ${ring}px ${hexA(f.comet.color, 0.75)}`,
           ["--orbit-r"]: `${size / 2 - ring / 2}px`,
-          animation: `spotlightOrbit ${f.comet.dur}s linear ${-f.comet.dur * 0.75}s infinite`,
+          animation: `spotlightOrbit ${f.comet.dur}s linear ${-f.comet.dur * 0.75}s infinite`, zIndex: 3,
         }} />
       )}
 
@@ -4806,7 +4811,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         <span key={`w${i}`} style={{
           position: "absolute", inset: 0, borderRadius: "50%",
           border: `${Math.max(1, ring * 0.5)}px solid ${hexA(f.glow, 0.55)}`,
-          animation: `frameWave 3s ease-out ${-i * 1}s infinite`,
+          animation: `frameWave 3s ease-out ${-i * 1}s infinite`, zIndex: 3,
         }} />
       ))}
 
@@ -4818,7 +4823,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
             position: "absolute", left: "50%", top: "50%",
             width: s, height: s, marginLeft: -s / 2, marginTop: -s / 2,
             ["--orbit-r"]: `${orbitR}px`,
-            animation: `spotlightOrbit ${15 + i * 3}s linear ${-i * 5}s infinite`,
+            animation: `spotlightOrbit ${15 + i * 3}s linear ${-i * 5}s infinite`, zIndex: 3,
           }}>
             <span style={{ display: "block", animation: `wreathSway ${5.2 + i * 0.7}s ease-in-out infinite` }}>
               <LeafIcon size={s} kind={i % 3} color={f.leafColor} />
@@ -4834,7 +4839,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
           borderRadius: "50%", background: f.orbitColor,
           boxShadow: `0 0 ${ring * 3}px ${ring * 0.6}px ${hexA(f.orbitColor, 0.6)}`,
           ["--orbit-r"]: `${orbitR}px`,
-          animation: `spotlightOrbit ${9 + i * 2}s linear ${-i * 3}s infinite`,
+          animation: `spotlightOrbit ${9 + i * 2}s linear ${-i * 3}s infinite`, zIndex: 3,
         }} />
       ))}
       {/* мерцающие звёздочки по краю */}
@@ -4848,7 +4853,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
             position: "absolute", left: "50%", top: "50%",
             transform: `translate(${px - s / 2}px, ${py - s / 2}px)`,
             ["--o"]: 0.9,
-            opacity: 0,
+            opacity: 0, zIndex: 3,
             animation: `starPulse ${2.6 + i * 0.3}s ease-in-out ${-i * 0.4}s infinite`,
           }}>
             <path d="M5 0 C5.4 3.2 6.8 4.6 10 5 C6.8 5.4 5.4 6.8 5 10 C4.6 6.8 3.2 5.4 0 5 C3.2 4.6 4.6 3.2 5 0 Z" fill="#FFFFFF" />
