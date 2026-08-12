@@ -685,6 +685,20 @@ function fmtUSD(n) {
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
   return `$${n.toFixed(0)}`;
 }
+
+/* Подпись шкалы графика. Обычного округления тут мало: когда весь
+   видимый разброс — полторы сотни долларов, соседние деления
+   складываются в «$1.1K, $1.1K, $1.1K», и шкала выглядит нарисованной.
+   Знаков после запятой берём ровно столько, чтобы соседние подписи
+   отличались. */
+function fmtAxisUSD(value, step) {
+  const abs = Math.abs(value);
+  const unit = abs >= 1_000_000 ? 1_000_000 : abs >= 1_000 ? 1_000 : 1;
+  const suffix = unit === 1_000_000 ? "M" : unit === 1_000 ? "K" : "";
+  const perUnit = step / unit;
+  const digits = perUnit > 0 ? Math.max(0, Math.min(4, Math.ceil(-Math.log10(perUnit)))) : 0;
+  return `$${(value / unit).toFixed(digits)}${suffix}`;
+}
 /* generateFakeContractAddress — purely cosmetic, client-side only.
    Produces a string shaped like a real TON address (EQ-prefixed,
    base64url alphabet, 48 chars) so the mock "success" screen looks
@@ -2155,14 +2169,38 @@ async function loadCurveTrades(curveAddress, testnet, feeBps) {
 // не меняется, поэтому это не выдумка, а честное отображение.
 function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL, rate = tonUsd()) {
   const params = curveParamsOf(state);
-  const startPrice = curvePriceFromReserve(0n, params) * rate;
   const now = Math.floor(Date.now() / 1000);
 
-  const points = (trades || []).map((tr) => ({
+  // История считается по сделкам, но резерв в ней набирается с нуля от
+  // самой старой прочитанной транзакции — а читается их только двести.
+  // У токена с более длинной историей начало обрезано, и весь ряд
+  // оказывался ниже настоящего: график шёл лесенкой куда-то не туда и
+  // заканчивался одной огромной свечой до настоящей цены. Поэтому цепочка
+  // привязывается к резерву из контракта: он и есть истина на сейчас, а
+  // приращения каждой сделки известны. Сдвигаем весь ряд на разницу —
+  // тогда последняя точка совпадает с состоянием, а прошлые становятся
+  // на своё место относительно неё.
+  const list = trades || [];
+  let shift = 0n;
+  if (state?.realTon != null && list.length) {
+    shift = state.realTon - list[list.length - 1].realTon;
+  }
+  const reserveAt = (v) => {
+    const r = v + shift;
+    return r > 0n ? r : 0n;
+  };
+  const points = list.map((tr) => ({
     time: tr.time,
-    price: curvePriceFromReserve(tr.realTon, params) * rate,
+    price: curvePriceFromReserve(reserveAt(tr.realTon), params) * rate,
     volume: Number(tr.ton) / 1e9 * rate,
   }));
+  // Цена до первой известной сделки — резерв, который был перед ней, а не
+  // ноль: у обрезанной истории до неё кривая уже стояла не в начале.
+  const first = list[0];
+  const beforeFirst = first
+    ? (first.kind === "sell" ? first.realTon + first.ton : first.realTon - first.ton)
+    : 0n;
+  const startPrice = curvePriceFromReserve(reserveAt(beforeFirst), params) * rate;
 
   // Шаг ровно тот, что выбран кнопкой. Раньше он укрупнялся сам, чтобы
   // вся история влезла в отведённое число свечей, — и у токена
@@ -2677,7 +2715,10 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
         const y = yFor(price);
         if (y < padTop - 4 || y > height - padBottom + 4) continue;
         if (pillTop != null && y > pillTop - 2 && y < pillBottom + 2) continue; // don't collide with the pill
-        ctx.fillText(fmt(price), chartWidth() - 8, y + 3);
+        // Капитализация — числа от единицы и выше, у них подпись
+        // подбирается по шагу шкалы. Цена за токен — доли цента, там
+        // работает свой формат с длинным хвостом нулей.
+        ctx.fillText(Math.abs(price) >= 1 ? fmtAxisUSD(price, step) : fmt(price), chartWidth() - 8, y + 3);
       }
     }
     ctx.textAlign = "left";
