@@ -5127,7 +5127,9 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("navMempad")}</span>
         {/* Кнопка в цвете приложения: зелёный здесь был из набора
             «рост цены», к запуску токена отношения не имеющего. Фирменный
-            оранжевый, лист тем же цветом. */}
+            оранжевый, лист тем же цветом. Лист мятный: его силуэт цельный
+            и на такой величине читается ровнее кленового, у которого
+            лопасти сливаются. */}
         <button
           onClick={onLaunch}
           className="fx-tap flex items-center gap-1.5 rounded-full px-3.5 py-2"
@@ -5139,7 +5141,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
           }}
         >
           <ButtonRocketFlyby size={34} />
-          <LeafIcon size={17} color={T.electric} />
+          <LeafIcon size={17} color={T.electric} kind={2} />
           <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 12.5, fontWeight: 700, position: "relative", zIndex: 1 }}>{t("mempadLaunchToken")}</span>
         </button>
       </div>
@@ -8109,10 +8111,16 @@ function ButtonRocketFlyby({ size = 26 }) {
 // Кленовый по умолчанию: из трёх фоновых пород он единственный, чей
 // силуэт остаётся узнаваемым листом на шестнадцати точках. Дубовый на
 // такой величине рассыпается в зубчики, мятный читается как капля.
+// Рамка у каждой породы своя: у клёна лист широкий, у мяты вдвое уже.
+// Общая рамка оставляла бы мяте пустые поля по бокам, и рядом с текстом
+// она выглядела бы мельче остальных значков того же размера.
+const LEAF_ICON_BOX = ["-15 -32 30 38", "-11 -30 22 35", "-9 -29 21 34"];
 function LeafIcon({ size = 14, color = T.electric, kind = 0 }) {
-  const leaf = LEAF_KINDS[kind % LEAF_KINDS.length];
+  const idx = kind % LEAF_KINDS.length;
+  const leaf = LEAF_KINDS[idx];
+  const box = LEAF_ICON_BOX[idx].split(" ").map(Number);
   return (
-    <svg width={size * (30 / 38)} height={size} viewBox="-15 -32 30 38" style={{ flexShrink: 0 }} aria-hidden>
+    <svg width={size * (box[2] / box[3])} height={size} viewBox={LEAF_ICON_BOX[idx]} style={{ flexShrink: 0 }} aria-hidden>
       <path d={leaf.stem} stroke={color} strokeWidth={1.6} strokeLinecap="round" fill="none" />
       <path d={leaf.outline} fill={color} />
     </svg>
