@@ -968,6 +968,36 @@ function GlobalStyle() {
         88%  { transform: translate(-50%, calc(var(--fly-to) + 46px)) rotate(-45deg); opacity: 1; }
         100% { transform: translate(-50%, var(--fly-to)) rotate(-45deg); opacity: 0; }
       }
+      /* Косметика: рамки аватарки и карточки профиля.
+
+         Всё движение здесь — только сдвиг, поворот и прозрачность:
+         предметов на витрине больше десятка, и они анимируются все
+         разом. Любое правило, заставляющее браузер заново считать
+         раскладку, превратило бы прокрутку магазина в кашу. */
+      @keyframes frameWave { 0%{ transform: scale(1); opacity: 0.6; } 100%{ transform: scale(1.5); opacity: 0; } }
+      @keyframes cardWave { from{ transform: translateX(-12%); } to{ transform: translateX(12%); } }
+      @keyframes cardStreak {
+        0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+        12%  { opacity: var(--o); }
+        88%  { opacity: var(--o); }
+        100% { transform: translate3d(-40px, var(--fall), 0); opacity: 0; }
+      }
+      @keyframes cardRise {
+        0%   { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+        18%  { opacity: var(--o); }
+        100% { transform: translate3d(0, var(--rise), 0) scale(1); opacity: 0; }
+      }
+      @keyframes cardLeafFall {
+        0%   { transform: translate3d(0, 0, 0) rotate(var(--r0)); opacity: 0; }
+        12%  { opacity: var(--o); }
+        84%  { opacity: var(--o); }
+        100% { transform: translate3d(var(--dx), var(--fall), 0) rotate(var(--r1)); opacity: 0; }
+      }
+      @keyframes cardBeam {
+        from { opacity: 0.3; transform: translate3d(-26px, 0, 0) skewX(-14deg); }
+        to   { opacity: 0.85; transform: translate3d(26px, 0, 0) skewX(-14deg); }
+      }
+      @keyframes holoShift { from{ background-position: 0% 0; } to{ background-position: 320% 0; } }
       @keyframes toastIn { from{opacity:0; transform:translateX(-50%) scale(0.94);} to{opacity:1; transform:translateX(-50%) scale(1);} }
       @keyframes toastOut { from{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} to{opacity:0; transform:translateX(-50%) translateY(-22px) scale(0.98);} }
       @keyframes rocketUp { 0%{ transform:translateY(0) scale(0.75); opacity:0; } 18%{ opacity:0.9; } 100%{ transform:translateY(-70px) scale(1); opacity:0; } }
@@ -4056,6 +4086,49 @@ const AVATAR_FRAMES = [
     id: "toxic", label: { RU: "Токсик", EN: "Toxic" },
     colors: ["#0F3D2A", "#5BFF9F", "#0F3D2A", "#B6FF3D", "#0F3D2A"], spin: 6, glow: "#5BFF9F",
   },
+  // Дальше — рамки со своим устройством, а не просто с другим набором
+  // цветов: у каждой добавлен слой, которого нет у остальных.
+  {
+    // Голова с хвостом бежит по кольцу. Хвост — конический градиент,
+    // который к голове разгорается; сама голова отдельной точкой, иначе
+    // на тонком кольце она не читается.
+    id: "comet", label: { RU: "Комета", EN: "Comet" },
+    colors: ["rgba(255,255,255,0.04)", "rgba(255,255,255,0.16)", "rgba(255,255,255,0.04)"],
+    spin: 28, glow: "#7CE3FF", comet: { color: "#7CE3FF", dur: 3.4 },
+  },
+  {
+    // Пунктирная дуга поверх кольца: короткие штрихи бегут быстрее
+    // самого кольца, и получается разряд, а не вращение.
+    id: "plasma", label: { RU: "Плазма", EN: "Plasma" },
+    colors: ["#2A0A3D", "#B14CFF", "#2A0A3D", "#2E6BFF", "#2A0A3D"], spin: 9, glow: "#B14CFF",
+    dashes: { color: "#E6C8FF", dur: 2.8 },
+  },
+  {
+    // Листья с фона приложения, только облетают аватарку по кругу и
+    // покачиваются на ходу.
+    id: "leafring", label: { RU: "Листопад", EN: "Leaf fall" },
+    colors: ["rgba(56,211,159,0.10)", "rgba(56,211,159,0.44)", "rgba(56,211,159,0.10)"],
+    spin: 22, glow: "#38D39F", leaves: 3, leafColor: "#5BFF9F",
+  },
+  {
+    // Радуга по кольцу и белый блик, который проходит по ней насквозь.
+    id: "prism", label: { RU: "Призма", EN: "Prism" },
+    colors: ["#FF3D6E", "#FFC46B", "#5BFF9F", "#2E6BFF", "#B14CFF", "#FF3D6E"],
+    spin: 15, glow: "#B14CFF", sweep: true,
+  },
+  {
+    // Кольца расходятся наружу, как круги по воде.
+    id: "pulse", label: { RU: "Пульс", EN: "Pulse" },
+    colors: ["rgba(56,211,159,0.14)", "#38D39F", "rgba(56,211,159,0.14)"],
+    spin: 18, glow: "#38D39F", waves: 3,
+  },
+  {
+    // Почти чёрное кольцо с одной раскалённой дугой и широким ореолом:
+    // видно только край, будто из-за него что-то светит.
+    id: "eclipse", label: { RU: "Затмение", EN: "Eclipse" },
+    colors: ["#08080C", "#08080C", "#FFE9A8", "#FF6B35", "#08080C", "#08080C"],
+    spin: 24, glow: "#FF9A3D", halo: true,
+  },
 ];
 
 const PROFILE_CARDS = [
@@ -4089,6 +4162,36 @@ const PROFILE_CARDS = [
     id: "sunset", label: { RU: "Закат", EN: "Sunset" },
     base: "linear-gradient(180deg, #FF6B35 0%, #B14CFF 45%, rgba(0,0,0,0) 100%)",
     floor: true, grid: "rgba(255,255,255,0.16)",
+  },
+  {
+    id: "meteor", label: { RU: "Метеоры", EN: "Meteors" },
+    base: "linear-gradient(180deg, #12163A 0%, #0A0A14 68%, rgba(0,0,0,0) 100%)",
+    streaks: 7, streakColor: "#9FD8FF", stars: 16,
+  },
+  {
+    id: "wave", label: { RU: "Волны", EN: "Waves" },
+    base: "linear-gradient(180deg, rgba(12,26,48,0.92) 0%, rgba(0,0,0,0) 100%)",
+    waves: [["#2E6BFF", 0.36], ["#38D39F", 0.26], ["#B14CFF", 0.22]],
+  },
+  {
+    id: "sparkCard", label: { RU: "Искры", EN: "Sparks" },
+    base: "linear-gradient(180deg, rgba(255,107,53,0.24) 0%, rgba(255,61,0,0.06) 60%, rgba(0,0,0,0) 100%)",
+    rise: 16, riseColor: "#FFB35C",
+  },
+  {
+    id: "leafCard", label: { RU: "Листопад", EN: "Leaf fall" },
+    base: "linear-gradient(180deg, rgba(56,211,159,0.20) 0%, rgba(255,107,53,0.07) 55%, rgba(0,0,0,0) 100%)",
+    cardLeaves: 9, leafColor: "#5BFF9F",
+  },
+  {
+    id: "beam", label: { RU: "Лучи", EN: "Beams" },
+    base: "linear-gradient(180deg, rgba(177,76,255,0.22) 0%, rgba(0,0,0,0) 75%)",
+    beams: 4, beamColor: "#C9A0FF", grid: "rgba(177,76,255,0.14)",
+  },
+  {
+    id: "holoCard", label: { RU: "Голограмма", EN: "Hologram" },
+    base: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0) 70%)",
+    holo: true,
   },
 ];
 
@@ -4595,10 +4698,13 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
 
   return (
     <div style={{ position: "relative", width: size, height: size }}>
-      {/* дышащее свечение под рамкой */}
+      {/* дышащее свечение под рамкой; у «затмения» оно шире и ярче —
+          в этом вся рамка, кольцо там почти чёрное */}
       <div style={{
         position: "absolute", inset: -ring, borderRadius: "50%",
-        boxShadow: `0 0 ${size * 0.18}px ${ring}px ${hexA(f.glow, 0.35)}`,
+        boxShadow: f.halo
+          ? `0 0 ${size * 0.34}px ${ring * 2.4}px ${hexA(f.glow, 0.42)}`
+          : `0 0 ${size * 0.18}px ${ring}px ${hexA(f.glow, 0.35)}`,
         animation: "glowPulse 3.2s ease-in-out infinite",
       }} />
       {/* само кольцо — вращающийся конический градиент */}
@@ -4608,7 +4714,85 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         animation: `spin360 ${f.spin}s linear infinite`,
         willChange: "transform",
       }} />
+
+      {/* хвост кометы: к голове разгорается, за ней сходит на нет */}
+      {f.comet && (
+        <div style={{
+          position: "absolute", inset: 0, borderRadius: "50%",
+          background: `conic-gradient(from 0deg, ${hexA(f.comet.color, 0)} 0deg, ${hexA(f.comet.color, 0)} 235deg, ${hexA(f.comet.color, 0.5)} 330deg, ${f.comet.color} 357deg, ${hexA(f.comet.color, 0)} 360deg)`,
+          animation: `spin360 ${f.comet.dur}s linear infinite`,
+          willChange: "transform",
+        }} />
+      )}
+
+      {/* пунктирный разряд поверх кольца */}
+      {f.dashes && (
+        <svg width={size} height={size} style={{
+          position: "absolute", inset: 0,
+          animation: `spin360 ${f.dashes.dur}s linear infinite`, willChange: "transform",
+        }} aria-hidden>
+          <circle
+            cx={size / 2} cy={size / 2} r={size / 2 - ring / 2}
+            fill="none" stroke={f.dashes.color} strokeWidth={ring * 0.55} strokeLinecap="round"
+            strokeDasharray={`${ring * 0.9} ${ring * 2.4}`} opacity={0.9}
+            style={{ filter: `drop-shadow(0 0 ${ring * 1.6}px ${f.dashes.color})` }}
+          />
+        </svg>
+      )}
+
+      {/* белый блик, проходящий по радуге */}
+      {f.sweep && (
+        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden" }}>
+          <div style={{
+            position: "absolute", top: "-30%", bottom: "-30%", width: "36%", left: 0,
+            background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0) 100%)",
+            filter: "blur(2px)",
+            animation: "spotlightSweep 3.8s ease-in-out infinite",
+          }} />
+        </div>
+      )}
+
       {inner}
+
+      {/* голова кометы: та же длительность, что и у хвоста, но сдвинутая
+          на три четверти круга — так она попадает ровно в его светлый
+          конец и не убегает вперёд */}
+      {f.comet && (
+        <span style={{
+          position: "absolute", left: "50%", top: "50%",
+          width: ring * 1.8, height: ring * 1.8, marginLeft: -ring * 0.9, marginTop: -ring * 0.9,
+          borderRadius: "50%", background: "#FFFFFF",
+          boxShadow: `0 0 ${ring * 4}px ${ring}px ${hexA(f.comet.color, 0.75)}`,
+          ["--orbit-r"]: `${size / 2 - ring / 2}px`,
+          animation: `spotlightOrbit ${f.comet.dur}s linear ${-f.comet.dur * 0.75}s infinite`,
+        }} />
+      )}
+
+      {/* круги, расходящиеся наружу */}
+      {Array.from({ length: f.waves || 0 }).map((_, i) => (
+        <span key={`w${i}`} style={{
+          position: "absolute", inset: 0, borderRadius: "50%",
+          border: `${Math.max(1, ring * 0.5)}px solid ${hexA(f.glow, 0.55)}`,
+          animation: `frameWave 3s ease-out ${-i * 1}s infinite`,
+        }} />
+      ))}
+
+      {/* листья, облетающие аватарку */}
+      {Array.from({ length: f.leaves || 0 }).map((_, i) => {
+        const s = Math.max(9, Math.round(size * 0.17));
+        return (
+          <span key={`l${i}`} style={{
+            position: "absolute", left: "50%", top: "50%",
+            width: s, height: s, marginLeft: -s / 2, marginTop: -s / 2,
+            ["--orbit-r"]: `${orbitR}px`,
+            animation: `spotlightOrbit ${15 + i * 3}s linear ${-i * 5}s infinite`,
+          }}>
+            <span style={{ display: "block", animation: `wreathSway ${5.2 + i * 0.7}s ease-in-out infinite` }}>
+              <LeafIcon size={s} kind={i % 3} color={f.leafColor} />
+            </span>
+          </span>
+        );
+      })}
       {/* точки, вращающиеся по орбите вокруг рамки */}
       {Array.from({ length: f.orbiters || 0 }).map((_, i) => (
         <span key={`o${i}`} style={{
@@ -4663,6 +4847,38 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
     return Array.from({ length: c.stars || 0 }, () => ({
       left: rnd() * 100, top: rnd() * 100, size: 4 + rnd() * 4,
       opacity: 0.35 + rnd() * 0.5, dur: 3 + rnd() * 4, delay: -rnd() * 6,
+    }));
+  }, [cardId]);
+  // Метеоры, искры и листья расставлены случайно, но не заново при каждой
+  // перерисовке: разброс считается один раз от самого предмета, иначе
+  // рисунок прыгал бы при любом обновлении экрана.
+  const streaks = useMemo(() => {
+    const rnd = seededRand(hashSeed(`${cardId}-streaks`));
+    return Array.from({ length: c.streaks || 0 }, () => ({
+      left: rnd() * 110 - 5, top: -10 - rnd() * 30, len: 46 + rnd() * 54,
+      opacity: 0.3 + rnd() * 0.5, dur: 2.6 + rnd() * 3.4, delay: -rnd() * 8,
+    }));
+  }, [cardId]);
+  const rises = useMemo(() => {
+    const rnd = seededRand(hashSeed(`${cardId}-rise`));
+    return Array.from({ length: c.rise || 0 }, () => ({
+      left: rnd() * 100, size: 2 + rnd() * 3,
+      opacity: 0.35 + rnd() * 0.5, dur: 4 + rnd() * 5, delay: -rnd() * 9,
+    }));
+  }, [cardId]);
+  const cardLeaves = useMemo(() => {
+    const rnd = seededRand(hashSeed(`${cardId}-leaves`));
+    return Array.from({ length: c.cardLeaves || 0 }, () => ({
+      left: rnd() * 100, size: 12 + rnd() * 13, kind: Math.floor(rnd() * 3),
+      dx: `${(rnd() - 0.5) * 70}px`, r0: `${rnd() * 360}deg`, r1: `${rnd() * 360 + 180}deg`,
+      opacity: 0.45 + rnd() * 0.45, dur: 9 + rnd() * 9, delay: -rnd() * 14,
+    }));
+  }, [cardId]);
+  const beams = useMemo(() => {
+    const rnd = seededRand(hashSeed(`${cardId}-beams`));
+    return Array.from({ length: c.beams || 0 }, (_, i) => ({
+      left: 8 + i * 24 + rnd() * 8, width: 18 + rnd() * 22,
+      dur: 9 + rnd() * 6, delay: -rnd() * 8,
     }));
   }, [cardId]);
 
@@ -4722,6 +4938,92 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
           <path d="M5 0 C5.4 3.2 6.8 4.6 10 5 C6.8 5.4 5.4 6.8 5 10 C4.6 6.8 3.2 5.4 0 5 C3.2 4.6 4.6 3.2 5 0 Z" fill="#FFFFFF" />
         </svg>
       ))}
+
+      {/* Волны: широкие размытые полосы ходят вдоль карточки. Каждая со
+          своим сроком, поэтому они то расходятся, то накладываются. */}
+      {(c.waves || []).map(([color, opacity], i) => (
+        <div key={`v${i}`} style={{
+          position: "absolute", left: "-60%", right: "-60%", top: `${6 + i * 16}%`, height: Math.max(70, height * 0.32),
+          background: `radial-gradient(60% 100% at 50% 50%, ${hexA(color, opacity)} 0%, ${hexA(color, 0)} 70%)`,
+          filter: "blur(16px)",
+          animation: `cardWave ${15 + i * 5}s ease-in-out ${-i * 4}s infinite alternate`,
+          willChange: "transform",
+        }} />
+      ))}
+
+      {/* Метеоры: сама полоса наклонена, а движение задано снаружи —
+          иначе поворот из стиля стёрся бы кадрами анимации. */}
+      {streaks.map((s, i) => (
+        <span key={`m${i}`} style={{
+          position: "absolute", left: `${s.left}%`, top: s.top,
+          ["--o"]: s.opacity, ["--fall"]: `${height + 60}px`, opacity: 0,
+          animation: `cardStreak ${s.dur}s linear ${s.delay}s infinite`,
+        }}>
+          <span style={{
+            display: "block", width: 1.6, height: s.len, transform: "rotate(18deg)",
+            background: `linear-gradient(180deg, ${hexA(c.streakColor || "#FFFFFF", 0)} 0%, ${c.streakColor || "#FFFFFF"} 85%, #FFFFFF 100%)`,
+            borderRadius: 999,
+          }} />
+        </span>
+      ))}
+
+      {/* Искры поднимаются от нижнего края и гаснут на полпути. */}
+      {rises.map((s, i) => (
+        <span key={`r${i}`} style={{
+          position: "absolute", left: `${s.left}%`, bottom: -6,
+          width: s.size, height: s.size, borderRadius: "50%",
+          background: c.riseColor || "#FFFFFF",
+          boxShadow: `0 0 8px 1px ${hexA(c.riseColor || "#FFFFFF", 0.7)}`,
+          ["--o"]: s.opacity, ["--rise"]: `${-(height * 0.75)}px`, opacity: 0,
+          animation: `cardRise ${s.dur}s linear ${s.delay}s infinite`,
+        }} />
+      ))}
+
+      {/* Листья падают внутри карточки — те же, что и на фоне приложения. */}
+      {cardLeaves.map((l, i) => (
+        <span key={`cl${i}`} style={{
+          position: "absolute", left: `${l.left}%`, top: -22,
+          ["--o"]: l.opacity, ["--dx"]: l.dx, ["--r0"]: l.r0, ["--r1"]: l.r1,
+          ["--fall"]: `${height + 30}px`, opacity: 0,
+          animation: `cardLeafFall ${l.dur}s linear ${l.delay}s infinite`,
+        }}>
+          <LeafIcon size={l.size} kind={l.kind} color={c.leafColor || "#FFFFFF"} />
+        </span>
+      ))}
+
+      {/* Лучи: наклонные световые столбы, качающиеся вдоль карточки. */}
+      {beams.map((b, i) => (
+        <div key={`b${i}`} style={{
+          position: "absolute", top: -20, bottom: -20, left: `${b.left}%`, width: b.width,
+          background: `linear-gradient(180deg, ${hexA(c.beamColor || "#FFFFFF", 0)} 0%, ${hexA(c.beamColor || "#FFFFFF", 0.4)} 45%, ${hexA(c.beamColor || "#FFFFFF", 0)} 100%)`,
+          filter: "blur(7px)",
+          animation: `cardBeam ${b.dur}s ease-in-out ${b.delay}s infinite alternate`,
+          willChange: "transform",
+        }} />
+      ))}
+
+      {/* Голограмма: радуга медленно течёт поперёк, поверх неё изредка
+          проходит белый блик. */}
+      {c.holo && (
+        <>
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "linear-gradient(115deg, rgba(255,61,110,0.42), rgba(255,196,107,0.36), rgba(91,255,159,0.36), rgba(46,107,255,0.42), rgba(177,76,255,0.44), rgba(255,61,110,0.42))",
+            backgroundSize: "320% 100%",
+            animation: "holoShift 13s linear infinite",
+            WebkitMaskImage: "linear-gradient(to bottom, #000 0%, transparent 86%)",
+            maskImage: "linear-gradient(to bottom, #000 0%, transparent 86%)",
+          }} />
+          <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+            <div style={{
+              position: "absolute", top: "-40%", bottom: "-40%", width: "13%", left: 0,
+              background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.34) 50%, rgba(255,255,255,0) 100%)",
+              transform: "skewX(-14deg)", filter: "blur(4px)",
+              animation: "spotlightSweep 6s ease-in-out infinite",
+            }} />
+          </div>
+        </>
+      )}
 
       {/* низ подложки растворяется в фоне приложения, чтобы она читалась
           как фон экрана, а не как обрезанный прямоугольник; по бокам
