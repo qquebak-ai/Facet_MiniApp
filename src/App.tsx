@@ -1489,23 +1489,30 @@ function hashSeed(str) {
   return (h % 9) + 1;
 }
 
-// Groups consecutive real candles into coarser buckets (e.g. 2×15m -> 30m,
-// 7×1d -> 1w) so every timeframe button is backed by real trade data even
-// where GeckoTerminal doesn't offer that exact granularity natively.
-function resampleCandles(candles, groupSize) {
-  if (!groupSize || groupSize <= 1) return candles;
+/* Укрупняет настоящие свечи до нужного шага там, где источник такого
+   шага не отдаёт (полчаса, неделя, месяц).
+
+   Границы считаются от начала эпохи, а не от первой пришедшей свечи.
+   Раньше группировка шла подряд от начала списка — и стоило появиться
+   одной новой свече, как все границы уезжали на шаг: недельные свечи
+   перекраивались при каждом обновлении, и график каждые пятнадцать
+   секунд менял форму. Теперь свеча привязана ко времени, а не к своему
+   номеру в ответе, и обновление её не сдвигает. */
+function bucketCandles(candles, stepSec) {
+  if (!stepSec || !candles.length) return candles;
   const out = [];
-  for (let i = 0; i < candles.length; i += groupSize) {
-    const group = candles.slice(i, i + groupSize);
-    if (!group.length) continue;
-    out.push({
-      time: group[0].time,
-      open: group[0].open,
-      close: group[group.length - 1].close,
-      high: Math.max(...group.map(c => c.high)),
-      low: Math.min(...group.map(c => c.low)),
-      volume: group.reduce((s, c) => s + c.volume, 0),
-    });
+  let cur = null;
+  for (const c of candles) {
+    const bucket = Math.floor(c.time / stepSec) * stepSec;
+    if (!cur || cur.time !== bucket) {
+      cur = { time: bucket, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume || 0 };
+      out.push(cur);
+      continue;
+    }
+    cur.high = Math.max(cur.high, c.high);
+    cur.low = Math.min(cur.low, c.low);
+    cur.close = c.close;
+    cur.volume += c.volume || 0;
   }
   return out;
 }
@@ -1989,21 +1996,29 @@ async function fetchTonapiChart(jettonAddress, tf, testnet = false) {
       .sort((a, b) => a.time - b.time);
     if (points.length < 2) return null;
 
-    const candles = [];
-    const volume = [];
+    // Точки приходят с произвольным шагом: двести штук на всё окно, каким
+    // бы оно ни было. Оставлять их как есть нельзя — свеча тогда не
+    // соответствует выбранному интервалу, и отсчёт до её закрытия врёт.
+    // Поэтому точки раскладываются по тем же корзинам, что и везде.
+    const step = TF_SECONDS[tf] || 3600;
+    const raw = [];
     for (let i = 1; i < points.length; i++) {
       const open = points[i - 1].price;
       const close = points[i].price;
-      candles.push({
+      raw.push({
         time: points[i].time,
-        open,
-        close,
+        open, close,
         high: Math.max(open, close),
         low: Math.min(open, close),
+        volume: 0,
       });
-      volume.push({ time: points[i].time, value: 0, color: close >= open ? hexA(T.up, 0.32) : hexA(T.down, 0.32) });
     }
-    return { candles, volume };
+    const candles = bucketCandles(raw, step);
+    if (!candles.length) return null;
+    return {
+      candles: candles.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })),
+      volume: candles.map((c) => ({ time: c.time, value: 0, color: c.close >= c.open ? hexA(T.up, 0.32) : hexA(T.down, 0.32) })),
+    };
   } catch (err) {
     return null;
   }
@@ -2023,7 +2038,7 @@ async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart) {
       .map(([time, open, high, low, close, volume]) => ({ time, open, high, low, close, volume }))
       .filter(c => [c.time, c.open, c.high, c.low, c.close].every(v => typeof v === "number" && Number.isFinite(v)))
       .sort((a, b) => a.time - b.time);
-    if (cfg.resample) candles = resampleCandles(candles, cfg.resample);
+    if (cfg.resample) candles = bucketCandles(candles, TF_SECONDS[tf] || 3600);
     if (!candles.length) throw new Error("empty ohlcv");
     const result = {
       candles: candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })),
@@ -2131,7 +2146,6 @@ async function loadCurveTrades(curveAddress, testnet, feeBps) {
 // не меняется, поэтому это не выдумка, а честное отображение.
 function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL, rate = tonUsd()) {
   const params = curveParamsOf(state);
-  const baseStep = TF_SECONDS[timeframe] || 3600;
   const startPrice = curvePriceFromReserve(0n, params) * rate;
   const now = Math.floor(Date.now() / 1000);
 
@@ -2141,16 +2155,13 @@ function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL,
     volume: Number(tr.ton) / 1e9 * rate,
   }));
 
-  // Вся история должна попасть на экран. У токена, запущенного пару
-  // часов назад, все сделки старше минутного окна, и на графике
-  // оставалась одна ровная линия — «ничего не показывает». Поэтому если
-  // история не помещается в отведённое число свечей, интервал
-  // укрупняется до ближайшего кратного: данные остаются настоящими,
-  // грубеет только шаг.
-  const spanFrom = points.length ? points[0].time : now;
-  const needed = Math.ceil((now - spanFrom) / baseStep) + 12;
-  const group = Math.max(1, Math.ceil(needed / limit));
-  const step = baseStep * group;
+  // Шаг ровно тот, что выбран кнопкой. Раньше он укрупнялся сам, чтобы
+  // вся история влезла в отведённое число свечей, — и у токена
+  // недельной давности минута, пять минут, четверть часа и полчаса
+  // давали один и тот же график: переключение кнопок ничего не меняло, а
+  // отсчёт до закрытия свечи считался по выбранному интервалу и не
+  // сходился с её настоящей шириной.
+  const step = TF_SECONDS[timeframe] || 3600;
   const bucketOf = (t) => Math.floor(t / step) * step;
   // Последняя точка — состояние прямо из контракта, если оно прочитано:
   // так конец графика совпадает с ценой, по которой идёт сделка.
@@ -2159,10 +2170,24 @@ function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL,
     : (points.length ? points[points.length - 1].price : startPrice);
 
   const firstTime = points.length ? points[0].time : now;
-  const lastBucket = bucketOf(now);
+  const nowBucket = bucketOf(now);
+  // Обычно окно кончается сейчас. Но если в него не попала ни одна
+  // сделка, а история есть, окно сдвигается к последним сделкам: пустая
+  // прямая на месте живого графика читается как поломка, хотя цена и
+  // правда стоит — просто торги были раньше. Ничего не выдумываем,
+  // время под осью подписано, и видно, что показан прошлый участок.
+  let lastBucket = nowBucket;
+  if (points.length) {
+    const lastTrade = points[points.length - 1].time;
+    if (lastTrade < nowBucket - step * (limit - 1)) {
+      const tail = Math.max(2, Math.round(limit * 0.15));
+      lastBucket = Math.min(nowBucket, bucketOf(lastTrade) + step * tail);
+    }
+  }
   // Окно — последние limit интервалов, но не раньше начала торгов.
-  // Без верхней границы на мелком таймфрейме пришлось бы перебирать
-  // десятки тысяч пустых интервалов, а на экран попали бы самые старые.
+  // Без нижней границы на мелком таймфрейме пришлось бы перебирать
+  // десятки тысяч пустых интервалов, а на экране была бы прямая линия
+  // из времён, когда токена ещё не существовало.
   let bucket = Math.max(
     bucketOf(firstTime) - step * Math.min(limit - 1, 12),
     lastBucket - step * (limit - 1),
@@ -2187,7 +2212,10 @@ function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL,
       vol += points[i].volume;
       i++;
     }
-    if (bucket === lastBucket) {
+    // Цену из контракта дописываем только в свечу, которая идёт прямо
+    // сейчас. Если окно сдвинуто в прошлое, сегодняшняя цена в старой
+    // свече была бы подделкой истории.
+    if (bucket === lastBucket && lastBucket === nowBucket) {
       close = lastPrice;
       high = Math.max(high, close);
       low = Math.min(low, close);
@@ -2646,16 +2674,21 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       const lastColor = lastUp ? T.up : T.down;
       const priceLabel = fmt(lastCandle.close);
       const barSec = TF_SECONDS[tf] || 3600;
-      const closeAtMs = (lastCandle.time + barSec) * 1000;
-      const countdownLabel = fmtCountdown(closeAtMs - Date.now());
+      const leftMs = (lastCandle.time + barSec) * 1000 - Date.now();
+      // Отсчёт показывается, только пока свеча и правда открыта. Когда
+      // график показывает прошлый участок (сделок в текущем окне не
+      // было), вечный «0:00» под ценой выглядел бы как зависший таймер.
+      const live = leftMs > 0;
       ctx.fillStyle = lastColor;
-      ctx.fillRect(chartWidth() - gutter, pillTop, gutter, 32);
+      ctx.fillRect(chartWidth() - gutter, pillTop, gutter, live ? 32 : 20);
       ctx.fillStyle = T.bg;
       ctx.textAlign = "center";
       ctx.font = "700 11px " + monoFont;
-      ctx.fillText(priceLabel, chartWidth() - gutter / 2, pillTop + 13);
-      ctx.font = "9px " + monoFont;
-      ctx.fillText(countdownLabel, chartWidth() - gutter / 2, pillTop + 26);
+      ctx.fillText(priceLabel, chartWidth() - gutter / 2, pillTop + (live ? 13 : 10));
+      if (live) {
+        ctx.font = "9px " + monoFont;
+        ctx.fillText(fmtCountdown(leftMs), chartWidth() - gutter / 2, pillTop + 26);
+      }
       ctx.textAlign = "left";
     }
 
