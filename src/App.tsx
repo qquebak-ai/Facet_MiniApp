@@ -1679,18 +1679,61 @@ const TON_TESTNET_NETWORK = true;
 // уже на паре запросов подряд, а их тут много — состояние кривой, её
 // сделки, метаданные жетона, балансы. Ошибка выглядела как «данных
 // нет», и график молча подменялся случайным.
+// Промежуток между запросами держался отметкой времени последнего, и на
+// одном запросе за другим это работало. Но при открытии приложения они
+// уходят пачкой: лента считает рынок у дюжины кривых — состояние, сделки
+// и метаданные у каждой, — и все они читают отметку до того, как хоть
+// один успел отправиться. Промежуток получался общий, а не между ними:
+// три десятка запросов уходили одновременно и упирались в 429. Дальше
+// начиналось самое неприятное: открытый в этот момент график ничего не
+// получал и рисовал ровную линию по последней известной цене, а через
+// несколько переключений интервала — когда пачка уже прошла — вставал
+// настоящий. Со стороны это и выглядит как «сначала липовый график,
+// потом нормальный».
+//
+// Теперь запросы стоят в очереди по одному, а не соревнуются. У очереди
+// есть приоритет: то, что человек видит прямо сейчас (график и состояние
+// открытого токена), идёт вперёд ленты.
 const TONAPI_MIN_GAP_MS = 180;
+const TON_PRIORITY = { chart: 3, token: 2, feed: 1, background: 0 };
 let tonapiLastRequestAt = 0;
-async function tonFetch(url, init) {
-  const wait = tonapiLastRequestAt + TONAPI_MIN_GAP_MS - Date.now();
-  if (wait > 0) await sleep(wait);
-  tonapiLastRequestAt = Date.now();
-  const res = await fetch(url, init);
-  if (res.status !== 429) return res;
-  const retryAfter = Number(res.headers.get("Retry-After")) || 0;
-  await sleep(Math.min(6000, retryAfter ? retryAfter * 1000 : 1500));
-  tonapiLastRequestAt = Date.now();
-  return fetch(url, init);
+const tonQueue = [];
+let tonBusy = false;
+let tonSeq = 0;
+
+async function tonPump() {
+  if (tonBusy) return;
+  tonBusy = true;
+  try {
+    while (tonQueue.length) {
+      tonQueue.sort((a, b) => b.priority - a.priority || a.seq - b.seq);
+      const job = tonQueue.shift();
+      const wait = tonapiLastRequestAt + TONAPI_MIN_GAP_MS - Date.now();
+      if (wait > 0) await sleep(wait);
+      tonapiLastRequestAt = Date.now();
+      try {
+        let res = await fetch(job.url, job.init);
+        if (res.status === 429) {
+          const retryAfter = Number(res.headers.get("Retry-After")) || 0;
+          await sleep(Math.min(6000, retryAfter ? retryAfter * 1000 : 1500));
+          tonapiLastRequestAt = Date.now();
+          res = await fetch(job.url, job.init);
+        }
+        job.resolve(res);
+      } catch (err) {
+        job.reject(err);
+      }
+    }
+  } finally {
+    tonBusy = false;
+  }
+}
+
+function tonFetch(url, init, priority = TON_PRIORITY.feed) {
+  return new Promise((resolve, reject) => {
+    tonQueue.push({ url, init, priority, resolve, reject, seq: tonSeq++ });
+    tonPump();
+  });
 }
 
 // Один и тот же ответ нужен графику, ленте и окну сделки. Без общего
@@ -1722,15 +1765,15 @@ function cachedFetcher(ttlMs) {
 const curveStateCached = cachedFetcher(8000);
 const curveTradesCached = cachedFetcher(12000);
 
-async function fetchCurveState(curveAddress, testnet) {
+async function fetchCurveState(curveAddress, testnet, priority = TON_PRIORITY.feed) {
   if (!curveAddress) return null;
-  return curveStateCached(`${testnet ? "t" : "m"}:${curveAddress}`, () => loadCurveState(curveAddress, testnet));
+  return curveStateCached(`${testnet ? "t" : "m"}:${curveAddress}`, () => loadCurveState(curveAddress, testnet, priority));
 }
 
-async function loadCurveState(curveAddress, testnet) {
+async function loadCurveState(curveAddress, testnet, priority = TON_PRIORITY.feed) {
   const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
   try {
-    const res = await tonFetch(`${host}/v2/blockchain/accounts/${curveAddress}/methods/data`, { method: "POST" });
+    const res = await tonFetch(`${host}/v2/blockchain/accounts/${curveAddress}/methods/data`, { method: "POST" }, priority);
     if (!res.ok) throw new Error(`tonapi ${res.status}`);
     const json = await res.json();
     const stack = json?.stack || [];
@@ -2010,6 +2053,8 @@ async function fetchTonapiChart(jettonAddress, tf, testnet = false) {
   try {
     const res = await tonFetch(
       `${host}/v2/rates/chart?token=${encodeURIComponent(jettonAddress)}&currency=usd&start_date=${start}&end_date=${now}&points_count=200`,
+      undefined,
+      TON_PRIORITY.chart,
     );
     if (!res.ok) throw new Error(`tonapi ${res.status}`);
     const json = await res.json();
@@ -2112,18 +2157,18 @@ function curvePriceFromReserve(realTon, params) {
 // Сделки кривой по возрастанию времени. У покупки берём приложенную
 // сумму за вычетом газа, у продажи — сколько TON ушло продавцу: обе
 // величины видны в транзакции и не требуют разбора тела сообщения.
-async function fetchCurveTrades(curveAddress, testnet, feeBps = 0n) {
+async function fetchCurveTrades(curveAddress, testnet, feeBps = 0n, priority = TON_PRIORITY.feed) {
   if (!curveAddress) return null;
   return curveTradesCached(
     `${testnet ? "t" : "m"}:${curveAddress}:${feeBps}`,
-    () => loadCurveTrades(curveAddress, testnet, feeBps),
+    () => loadCurveTrades(curveAddress, testnet, feeBps, priority),
   );
 }
 
-async function loadCurveTrades(curveAddress, testnet, feeBps) {
+async function loadCurveTrades(curveAddress, testnet, feeBps, priority = TON_PRIORITY.feed) {
   const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
   try {
-    const res = await tonFetch(`${host}/v2/blockchain/accounts/${curveAddress}/transactions?limit=200`);
+    const res = await tonFetch(`${host}/v2/blockchain/accounts/${curveAddress}/transactions?limit=200`, undefined, priority);
     if (!res.ok) throw new Error(`tonapi ${res.status}`);
     const json = await res.json();
     const txs = (json?.transactions || []).slice().sort((a, b) => (a.utime || 0) - (b.utime || 0));
@@ -2389,9 +2434,9 @@ async function fetchCurveOHLCV(curveAddress, timeframe, testnet, rate = tonUsd()
   // это приезжало настоящее состояние. Нет состояния — нет графика;
   // вместо него рисуется ровная линия по известной цене, а попытка
   // повторяется.
-  const state = await fetchCurveState(curveAddress, testnet);
+  const state = await fetchCurveState(curveAddress, testnet, TON_PRIORITY.chart);
   if (!state) return null;
-  const trades = await fetchCurveTrades(curveAddress, testnet, curveParamsOf(state).feeBps);
+  const trades = await fetchCurveTrades(curveAddress, testnet, curveParamsOf(state).feeBps, TON_PRIORITY.chart);
   if (trades == null) return null;
   return buildCurveCandles(trades, timeframe, state, CHART_TOTAL, rate);
 }
@@ -5798,7 +5843,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   useEffect(() => {
     if (!token.curveAddress) { setCurve(null); return; }
     let cancelled = false;
-    const load = () => fetchCurveState(token.curveAddress, TON_TESTNET_NETWORK).then((st) => {
+    const load = () => fetchCurveState(token.curveAddress, TON_TESTNET_NETWORK, TON_PRIORITY.token).then((st) => {
       if (!cancelled && st) setCurve(st);
     });
     load();
@@ -5829,7 +5874,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     // выбранного ждут, пока отработают все, что нажали до него.
     const abort = typeof AbortController !== "undefined" ? new AbortController() : null;
     setChartLoading(true);
-    async function attempt() {
+    async function attempt(allowFlat) {
       let result = null;
       let src = null;
       if (token.poolAddress) {
@@ -5858,7 +5903,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       // либо пришли, либо нет: во втором случае показываем «нет
       // данных», а не случайное движение.
       let flat = false;
-      if (!result && curveChart) { result = flatCandles(token.price, tf, CHART_TOTAL); src = "curve"; flat = true; }
+      if (!result && allowFlat && curveChart) { result = flatCandles(token.price, tf, CHART_TOTAL); src = "curve"; flat = true; }
       if (cancelled || reqTf !== tfRef.current) return false;
       // Источник запоминается: обновлять график надо из того же места.
       // Иначе свечи биржи и точки tonapi сменяли друг друга — сетка
@@ -5874,19 +5919,23 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       return false;
     }
     (async () => {
-      const first = await attempt();
-      if (first === "real") return;
-      // Не вышло с первого раза — почти всегда это лимит запросов, в
-      // который упирается частое переключение кнопок. Ждать пятнадцать
-      // секунд до следующего круга обновления незачем: повторяем сразу.
-      // Ровная линия по текущей цене — тоже повод повторить: истории у
-      // кривой она не показывает, просто честно держит место.
-      await new Promise((r) => setTimeout(r, 2500));
-      if (cancelled || reqTf !== tfRef.current) return;
-      const second = await attempt();
-      if (cancelled || reqTf !== tfRef.current) return;
-      // «Нет данных» пишем, только если показать нечего вовсе.
-      if (second || first) return;
+      // Не вышло с первого раза — почти всегда это лимит запросов у
+      // бесплатного tonapi, в который упирается пачка запросов при
+      // открытии приложения. Повторяем сами, не дожидаясь общего круга
+      // обновления в пятнадцать секунд.
+      //
+      // Первые попытки идут без запасной ровной линии: показать прямую по
+      // последней известной цене вместо истории — это и есть тот самый
+      // «липовый график», который потом сам собой сменяется настоящим.
+      // Лучше подержать загрузку на пару секунд дольше.
+      for (const [pause, allowFlat] of [[0, false], [2000, false], [4500, true]]) {
+        if (pause) await new Promise((r) => setTimeout(r, pause));
+        if (cancelled || reqTf !== tfRef.current) return;
+        const got = await attempt(allowFlat);
+        if (cancelled || reqTf !== tfRef.current) return;
+        if (got === "real") return;
+        if (got === "flat") return;
+      }
       setChartData(null);
       setChartLoading(false);
     })();
@@ -9389,7 +9438,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const jetton = token?.tokenAddress;
     if (!tradeModal || !jetton || !walletAddress) { setChainHolding(null); setChainJettonWallet(null); setTradeCurveState(null); return; }
     if (token?.curveAddress) {
-      fetchCurveState(token.curveAddress, TON_TESTNET).then((state) => {
+      fetchCurveState(token.curveAddress, TON_TESTNET, TON_PRIORITY.token).then((state) => {
         if (!cancelled && state) setTradeCurveState(state);
       });
     }
