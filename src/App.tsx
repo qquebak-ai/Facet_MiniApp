@@ -115,7 +115,9 @@ function setLang(v) { lang = v === "EN" ? "EN" : "RU"; }
 const STR = {
   RU: {
     navHome: "Главная", navMempad: "Мемпад", navCreate: "Создать", navProfile: "Профиль", navShop: "Магазин", navWallet: "Кошелёк",
-    walletViewSub: "Баланс, адрес и подключение",
+    walletBalanceLabel: "Баланс",
+    walletEmptyTitle: "Кошелёк не подключён",
+    walletEmptyBody: "Подключи TON-кошелёк, чтобы покупать, продавать и запускать токены.",
     shopTitle: "Магазин", shopComingSoon: "Магазин скоро откроется. Загляни позже — здесь появится что-то интересное.",
     shopIntro: "Рамки для аватарки и карточки профиля. Нажми, чтобы примерить — применится сразу.",
     tgAuthTitle: "Вход через Telegram",
@@ -128,12 +130,12 @@ const STR = {
     bootStepTokens: "Токены сообщества", bootStepRate: "Курс TON",
     shopTabFrames: "Рамки", shopTabCards: "Карточки",
     shopEquip: "Надеть", shopEquipped: "Надето",
-    cosmeticApplied: "Применено", cosmeticRemoved: "Снято", connected: "Подключён",
+    cosmeticApplied: "Применено", cosmeticRemoved: "Снято",
     settingsSaved: "Настройки сохранены",
     langTitle: "Язык", themeTitle: "Оформление", themeWhite: "Светлая",
     langFullNote: "Интерфейс переведён на выбранный язык.",
-    buy: "Купить", sell: "Продать", cancel: "Отмена", confirm: "Подтвердить", following: "Вы подписаны", share: "Поделиться", disconnectWallet: "Отключить кошелёк",
-    disconnectShort: "Отключить", tonExplorerBtn: "Обозреватель TON", walletProvider: "Кошелёк",
+    buy: "Купить", sell: "Продать", cancel: "Отмена", confirm: "Подтвердить", following: "Вы подписаны", share: "Поделиться",
+    disconnectShort: "Отключить",
     connectWallet: "Подключить TON-кошелёк",
     editProfile: "Редактировать профиль", deleteAccount: "Удалить аккаунт",
     settings: "Настройки", security: "Безопасность",
@@ -243,7 +245,6 @@ const STR = {
     supplyShare: "выпуска",
     connectToConfirm: "Подключи кошелёк TON, чтобы подтвердить эмиссию",
     launchTokenCta: "Запустить токен",
-    connectWalletNote: "Подключи TON-кошелёк, чтобы видеть портфель и торговать. Поддерживаются Tonkeeper, MyTonWallet, Tonhub, OpenMask и другие TON Connect-кошельки.",
     liqShort: "Ликв", volShort: "Об.", holdersShort: "держателей", maxLabel: "МАКС",
     wrongCurrentPin: "Неверный текущий PIN-код",
     pinMismatch: "PIN-коды не совпадают, начни заново",
@@ -284,8 +285,6 @@ const STR = {
     createAccountShort: "Создать",
     firstAccountFirst: "Сначала создай аккаунт",
     connectWalletContinue: "Подключи TON-кошелёк, чтобы продолжить",
-    walletConnectedToast: "Кошелёк подключён",
-    walletDisconnectedToast: "Кошелёк отключён",
     addressCopied: "Адрес скопирован",
     verifyRequestSent: "Заявка отправлена на проверку",
     profileVerified: "Профиль верифицирован",
@@ -375,7 +374,9 @@ const STR = {
   },
   EN: {
     navHome: "Home", navMempad: "Mempad", navCreate: "Create", navProfile: "Profile", navShop: "Shop", navWallet: "Wallet",
-    walletViewSub: "Balance, address and connection",
+    walletBalanceLabel: "Balance",
+    walletEmptyTitle: "No wallet connected",
+    walletEmptyBody: "Connect a TON wallet to buy, sell and launch tokens.",
     shopTitle: "Shop", shopComingSoon: "The shop is coming soon. Check back later — something interesting will show up here.",
     shopIntro: "Avatar frames and profile cards. Tap one to try it — it applies right away.",
     tgAuthTitle: "Sign in with Telegram",
@@ -388,12 +389,12 @@ const STR = {
     bootStepTokens: "Community tokens", bootStepRate: "TON rate",
     shopTabFrames: "Frames", shopTabCards: "Cards",
     shopEquip: "Equip", shopEquipped: "Equipped",
-    cosmeticApplied: "Applied", cosmeticRemoved: "Removed", connected: "Connected",
+    cosmeticApplied: "Applied", cosmeticRemoved: "Removed",
     settingsSaved: "Settings saved",
     langTitle: "Language", themeTitle: "Appearance", themeWhite: "White",
     langFullNote: "The interface is translated into the selected language.",
-    buy: "Buy", sell: "Sell", cancel: "Cancel", confirm: "Confirm", following: "Following", share: "Share", disconnectWallet: "Disconnect wallet",
-    disconnectShort: "Disconnect", tonExplorerBtn: "TON Explorer", walletProvider: "Wallet",
+    buy: "Buy", sell: "Sell", cancel: "Cancel", confirm: "Confirm", following: "Following", share: "Share",
+    disconnectShort: "Disconnect",
     connectWallet: "Connect TON Wallet",
     editProfile: "Edit profile", deleteAccount: "Delete account",
     settings: "Settings", security: "Security",
@@ -503,7 +504,6 @@ const STR = {
     supplyShare: "of supply",
     connectToConfirm: "Connect a TON wallet to confirm the mint",
     launchTokenCta: "Launch token",
-    connectWalletNote: "Connect a TON wallet to see your portfolio and trade. Tonkeeper, MyTonWallet, Tonhub, OpenMask and other TON Connect wallets are supported.",
     liqShort: "Liq", volShort: "Vol", holdersShort: "holders", maxLabel: "MAX",
     wrongCurrentPin: "Wrong current PIN",
     pinMismatch: "PINs don't match, try again",
@@ -544,8 +544,6 @@ const STR = {
     createAccountShort: "Create",
     firstAccountFirst: "Create an account first",
     connectWalletContinue: "Connect a TON wallet to continue",
-    walletConnectedToast: "Wallet connected",
-    walletDisconnectedToast: "Wallet disconnected",
     addressCopied: "Address copied",
     verifyRequestSent: "Request sent for review",
     profileVerified: "Profile verified",
@@ -5305,14 +5303,55 @@ function HomeView({ onGoTab, curveTokens = [], onOpenToken }) {
 /* WalletView — кошелёк отдельным разделом. Раньше он лежал карточкой
    посреди профиля, между аватаркой и своими токенами: чтобы посмотреть
    баланс, приходилось идти в личные настройки. */
-function WalletView(props) {
-  return (
-    <div className="flex flex-col gap-4 pt-2">
-      <div>
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("navWallet")}</span>
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 4 }}>{t("walletViewSub")}</p>
+function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0, onConnect, onDisconnect, onCopy }) {
+  const [copied, setCopied] = useState(false);
+  const balance = useCountUp(connected ? tonBalance : 0, 900, connected);
+  const usd = useCountUp(connected ? tonBalance * tonPriceUsd : 0, 900, connected);
+  const short = walletAddress ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-6)}` : "";
+
+  if (!connected) {
+    return (
+      <div className="fx-view flex flex-col items-center justify-center text-center" style={{ minHeight: 420, gap: 18, padding: "0 8px" }}>
+        <LeafIcon size={44} color={hexA(T.electric, 0.7)} />
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 20, fontWeight: 700 }}>{t("walletEmptyTitle")}</div>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, maxWidth: 260 }}>{t("walletEmptyBody")}</p>
+        <button
+          onClick={onConnect}
+          className="fx-tap w-full rounded-[22px] py-3.5 flex items-center justify-center gap-2"
+          style={{ maxWidth: 300, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14.5 }}
+        >
+          <Wallet size={16} /> {t("connectWallet")}
+        </button>
       </div>
-      <WalletCard {...props} />
+    );
+  }
+
+  return (
+    <div className="fx-view flex flex-col items-center" style={{ paddingTop: 26, gap: 6 }}>
+      {/* Баланс — главное и единственное крупное на экране. */}
+      <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("walletBalanceLabel")}</span>
+      <div className="flex items-end gap-2">
+        <span style={{ fontFamily: displayFont, fontSize: 46, fontWeight: 800, color: T.ice, lineHeight: 1, letterSpacing: "-0.02em" }}>{balance.toFixed(2)}</span>
+        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 15, marginBottom: 6 }}>TON</span>
+      </div>
+      <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>≈ ${usd.toFixed(2)}</span>
+
+      <button
+        onClick={() => { onCopy(); setCopied(true); setTimeout(() => setCopied(false), 1400); }}
+        className="fx-tap flex items-center gap-2 rounded-full"
+        style={{ marginTop: 18, padding: "8px 14px", background: T.surface, border: `1px solid ${T.line}` }}
+      >
+        <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12 }}>{short}</span>
+        {copied ? <CheckCircle2 size={13} color={T.up} /> : <Copy size={13} color={T.muted} />}
+      </button>
+
+      <button
+        onClick={onDisconnect}
+        className="fx-tap flex items-center gap-1.5"
+        style={{ marginTop: 22, background: "transparent", border: "none", fontFamily: bodyFont, fontSize: 12.5, color: T.rose }}
+      >
+        <LogOut size={13} /> {t("disconnectShort")}
+      </button>
     </div>
   );
 }
@@ -6636,53 +6675,6 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
    PROFILE VIEW
 --------------------------------------------------------- */
 
-function WalletCard({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0, onConnect, onDisconnect, onCopy, onExplore }) {
-  const [copied, setCopied] = useState(false);
-  const balance = useCountUp(connected ? tonBalance : 0, 900, connected);
-  const usd = useCountUp(connected ? tonBalance * tonPriceUsd : 0, 900, connected);
-  const addressShort = walletAddress ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : "";
-
-  if (!connected) {
-    return (
-      <GlassCard style={{ padding: 20 }}>
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 }}>
-          {t("connectWalletNote")}
-        </p>
-        <button onClick={onConnect} className="fx-tap w-full rounded-[20px] py-3 flex items-center justify-center gap-2" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
-          <Wallet size={16} /> {t("connectWallet")}
-        </button>
-      </GlassCard>
-    );
-  }
-
-  return (
-    <GlassCard style={{ padding: 20 }} className="fx-view">
-      <div className="flex items-center justify-between mb-2.5">
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em" }}>{t("walletProvider")}</span>
-        <span style={{ fontFamily: monoFont, fontSize: 10, color: T.turquoise, display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: T.turquoise, animation: "ringPulse 1.8s ease-out infinite" }} /> {t("connected")}</span>
-      </div>
-      <div className="flex items-end gap-2">
-        <span style={{ fontFamily: displayFont, fontSize: 28, fontWeight: 700, color: T.ice, lineHeight: 1 }}>{balance.toFixed(1)}</span>
-        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13, marginBottom: 3 }}>TON</span>
-      </div>
-      <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12, marginTop: 2 }}>≈ ${usd.toFixed(0)}</div>
-      <div className="flex items-center gap-2 mt-3 rounded-[20px] px-3 py-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-        <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12, flex: 1 }}>{addressShort}</span>
-        <button className="fx-tap" onClick={() => { onCopy(); setCopied(true); setTimeout(() => setCopied(false), 1400); }}>
-          {copied ? <CheckCircle2 size={14} color={T.turquoise} /> : <Copy size={14} color={T.muted} />}
-        </button>
-      </div>
-      <div className="grid grid-cols-2 gap-2 mt-3">
-        <button onClick={onExplore} className="fx-tap flex items-center justify-center gap-1.5 rounded-[20px] py-2.5" style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 12, color: T.ice }}>
-          <ExternalLink size={13} color={T.muted} /> {t("tonExplorerBtn")}
-        </button>
-        <button onClick={onDisconnect} className="fx-tap flex items-center justify-center gap-1.5 rounded-[20px] py-2.5" style={{ background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, fontFamily: bodyFont, fontSize: 12, color: T.rose }}>
-          <LogOut size={13} /> {t("disconnectShort")}
-        </button>
-      </div>
-    </GlassCard>
-  );
-}
 function MyTokenCard({ t, onManage }) {
   const holdersCount = useJettonHolders(t.address);
   return (
@@ -9708,7 +9700,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
                 if (typeof navigator !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(walletAddress).catch(() => {});
                 showToast(t("addressCopied"));
               }}
-              onExplore={() => { if (typeof window !== "undefined") window.open("https://tonviewer.com", "_blank", "noopener,noreferrer"); }}
             />
           </KeepAlive>
           <KeepAlive show={view === "shop"}>
