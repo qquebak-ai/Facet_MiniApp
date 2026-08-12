@@ -1885,6 +1885,12 @@ async function gtPump() {
     while (gtQueue.length) {
       gtQueue.sort((a, b) => b.priority - a.priority || a.seq - b.seq);
       const job = gtQueue.shift();
+      // Запрос, который уже никому не нужен, не выполняем вовсе.
+      // Переключение интервалов оставляло в очереди по запросу на каждое
+      // нажатие: свечи выбранного интервала ждали, пока отработают
+      // брошенные, а один 429 среди них тормозил очередь на секунды. При
+      // быстром переключении это и выглядело как «график путается».
+      if (job.signal && job.signal.aborted) { job.reject(new Error("aborted")); continue; }
       const wait = gtLastRequestAt + GT_MIN_GAP_MS - Date.now();
       if (wait > 0) await sleep(wait);
       gtLastRequestAt = Date.now();
@@ -1893,10 +1899,13 @@ async function gtPump() {
         for (let attempt = 0; res.status === 429 && job.retries > attempt; attempt++) {
           const retryAfter = Number(res.headers.get("Retry-After")) || 0;
           await sleep(Math.min(9000, retryAfter ? retryAfter * 1000 : 1200 * (attempt + 1) ** 2));
+          // Пока ждали повтора, интервал могли переключить — тогда и
+          // повторять незачем.
+          if (job.signal && job.signal.aborted) { job.reject(new Error("aborted")); res = null; break; }
           gtLastRequestAt = Date.now();
           res = await fetch(job.url);
         }
-        job.resolve(res);
+        if (res) job.resolve(res);
       } catch (err) {
         job.reject(err);
       }
@@ -1906,9 +1915,9 @@ async function gtPump() {
   }
 }
 
-function gtFetch(url, { retries = 2, priority = GT_PRIORITY.feed } = {}) {
+function gtFetch(url, { retries = 2, priority = GT_PRIORITY.feed, signal } = {}) {
   return new Promise((resolve, reject) => {
-    gtQueue.push({ url, retries, priority, resolve, reject, seq: gtQueue.length });
+    gtQueue.push({ url, retries, priority, signal, resolve, reject, seq: gtQueue.length });
     gtPump();
   });
 }
@@ -2024,13 +2033,13 @@ async function fetchTonapiChart(jettonAddress, tf, testnet = false) {
   }
 }
 
-async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart) {
+async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart, signal = undefined) {
   const cfg = GT_TF[tf] || GT_TF.H1;
   const fetchLimit = Math.min(1000, 200 * (cfg.resample || 1));
   const url = `${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/ohlcv/${cfg.timeframe}?aggregate=${cfg.aggregate}&limit=${fetchLimit}&currency=usd&token=base`;
   const cacheKey = `${poolAddress}:${tf}`;
   try {
-    const res = await gtFetch(url, { priority, retries: priority >= GT_PRIORITY.chart ? 3 : 1 });
+    const res = await gtFetch(url, { priority, retries: priority >= GT_PRIORITY.chart ? 3 : 1, signal });
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const list = json?.data?.attributes?.ohlcv_list || [];
@@ -5757,14 +5766,25 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   // для него история берётся прямо из транзакций контракта. Случайный
   // график остаётся только там, где реальных данных нет вовсе.
   const curveChart = !token.poolAddress && !!token.curveAddress;
+  // Какой интервал выбран прямо сейчас. Ответы приходят не в том
+  // порядке, в каком их спрашивали: пока идёт запрос на пять минут,
+  // человек успевает нажать час, и медленный ответ на пятиминутку
+  // ложится поверх часового. Отсюда и путаница — кнопка одна, свечи
+  // другие. Поэтому у каждого ответа спрашиваем, за свой ли он интервал.
+  const tfRef = useRef(tf);
+  tfRef.current = tf;
   useEffect(() => {
     let cancelled = false;
+    const reqTf = tf;
+    // Запросы брошенного интервала снимаются с очереди: иначе свечи
+    // выбранного ждут, пока отработают все, что нажали до него.
+    const abort = typeof AbortController !== "undefined" ? new AbortController() : null;
     setChartLoading(true);
-    (async () => {
+    async function attempt() {
       let result = null;
       let src = null;
       if (token.poolAddress) {
-        result = await fetchPoolOHLCV(token.poolAddress, tf);
+        result = await fetchPoolOHLCV(token.poolAddress, tf, GT_PRIORITY.chart, abort ? abort.signal : undefined);
         if (result) src = "pool";
       }
       // Основной источник не ответил — берём историю курса у tonapi.
@@ -5783,15 +5803,30 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       // либо пришли, либо нет: во втором случае показываем «нет
       // данных», а не случайное движение.
       if (!result && curveChart) { result = flatCandles(token.price, tf, CHART_TOTAL); src = "curve"; }
-      if (cancelled) return;
+      if (cancelled || reqTf !== tfRef.current) return false;
       // Источник запоминается: обновлять график надо из того же места.
       // Иначе свечи биржи и точки tonapi сменяли друг друга — сетка
       // времени у них разная, и картинка дёргалась вбок.
       chartSrcRef.current = src;
-      if (result) { setChartData({ ...result, isLive: true }); setChartLoading(false); }
-      else { setChartData(null); setChartLoading(false); }
+      // Интервал едет вместе со свечами: экран рисует их, только когда
+      // они и вправду за выбранный интервал, а не «какие пришли».
+      if (result) { setChartData({ ...result, tf: reqTf, isLive: true }); setChartLoading(false); return true; }
+      return false;
+    }
+    (async () => {
+      if (await attempt()) return;
+      // Не вышло с первого раза — почти всегда это лимит запросов, в
+      // который упирается частое переключение кнопок. Ждать пятнадцать
+      // секунд до следующего круга обновления незачем: повторяем сразу и
+      // только тогда пишем «нет данных».
+      await new Promise((r) => setTimeout(r, 2500));
+      if (cancelled || reqTf !== tfRef.current) return;
+      if (await attempt()) return;
+      if (cancelled || reqTf !== tfRef.current) return;
+      setChartData(null);
+      setChartLoading(false);
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (abort) abort.abort(); };
     // priceKnown в зависимостях намеренно: пока цена не приехала, ровную
     // линию строить не из чего, и попытку нужно повторить.
     // tonPriceUsd в зависимостях: график считается в долларах, и при
@@ -5806,6 +5841,8 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   useEffect(() => {
     if (!token.poolAddress && !curveChart) return;
     let cancelled = false;
+    const reqTf = tf;
+    const abort = typeof AbortController !== "undefined" ? new AbortController() : null;
     async function refresh() {
       const src = chartSrcRef.current;
       let fresh = null;
@@ -5814,7 +5851,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       } else if (src === "tonapi") {
         fresh = token.tokenAddress ? await fetchTonapiChart(token.tokenAddress, tf) : null;
       } else {
-        fresh = token.poolAddress ? await fetchPoolOHLCV(token.poolAddress, tf) : null;
+        fresh = token.poolAddress ? await fetchPoolOHLCV(token.poolAddress, tf, GT_PRIORITY.chart, abort ? abort.signal : undefined) : null;
         // Ни разу не получилось — пробуем запасной источник и с этого
         // момента держимся его.
         if (!fresh && !src && token.tokenAddress) {
@@ -5824,14 +5861,14 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           chartSrcRef.current = "pool";
         }
       }
-      if (cancelled || !fresh?.candles?.length) return;
+      if (cancelled || reqTf !== tfRef.current || !fresh?.candles?.length) return;
       setChartData((prev) => (prev
-        ? { ...prev, candles: fresh.candles, volume: fresh.volume }
-        : { ...fresh, isLive: true }));
+        ? { ...prev, candles: fresh.candles, volume: fresh.volume, tf: reqTf }
+        : { ...fresh, tf: reqTf, isLive: true }));
       setChartLoading(false);
     }
     const iv = setInterval(refresh, 15000);
-    return () => { cancelled = true; clearInterval(iv); };
+    return () => { cancelled = true; clearInterval(iv); if (abort) abort.abort(); };
   }, [token.id, token.poolAddress, token.curveAddress, curveChart, tf, tonPriceUsd]);
 
   // Real supply estimate (mcap / price) derived from the same live data —
@@ -5859,6 +5896,13 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     if (!supplyEst) return null;
     return chartData.candles.map(c => ({ ...c, open: c.open * supplyEst, high: c.high * supplyEst, low: c.low * supplyEst, close: c.close * supplyEst }));
   }, [chartData, chartMode, supplyEst]);
+  // Свечи годятся к показу, только если они за выбранный сейчас интервал.
+  // Пока их нет — крутится загрузка; «нет данных» пишем лишь тогда, когда
+  // запрос отработал и не принёс ничего.
+  const chartReady = !!(chartData && chartData.tf === tf && scaledCandles && scaledCandles.length);
+  // Множитель «цена → капитализация» приезжает отдельно от свечей: пока
+  // его нет, показывать нечего, но и «нет данных» неправда.
+  const chartPending = chartLoading || (!!chartData && chartData.tf === tf && !scaledCandles);
 
   function handleShare() {
     const url = `https://mintly.app/token/${token.id}`;
@@ -6046,7 +6090,17 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
         <>
           <div className="flex items-center justify-end gap-2 flex-wrap">
             <div className="no-scrollbar flex gap-1.5 overflow-x-auto" style={{ flex: 1, justifyContent: "flex-end" }}>
-              {(tfExpanded ? TIMEFRAMES : TIMEFRAMES.slice(0, 4)).map(f => (
+              {/* В свёрнутом виде видны первые четыре кнопки — но если
+                  выбран интервал из спрятанных, он занимает место
+                  последней. Иначе после выбора, скажем, четырёх часов
+                  список сворачивался и ни одна кнопка не подсвечивалась:
+                  выглядело так, будто выбор слетел. */}
+              {(tfExpanded
+                ? TIMEFRAMES
+                : TIMEFRAMES.slice(0, 4).includes(tf)
+                  ? TIMEFRAMES.slice(0, 4)
+                  : [...TIMEFRAMES.slice(0, 3), tf]
+              ).map(f => (
                 <button key={f} onClick={() => changeTf(f)} className="tf-btn fx-tap rounded-[16px] px-2.5 py-1 flex-shrink-0"
                   style={{ fontFamily: monoFont, fontSize: 11, background: tf === f ? T.ice : T.surface, color: tf === f ? T.bg : T.muted, border: `1px solid ${tf === f ? T.ice : T.line}` }}>
                   {f}
@@ -6064,11 +6118,15 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
               поля ровно на отступ страницы — так он доходит до краёв
               экрана. */}
           <div style={{ position: "relative", marginLeft: -16, marginRight: -16, background: T.bg, borderTop: `1px solid ${T.line}`, borderBottom: `1px solid ${T.line}` }}>
-            {chartLoading ? (
+            {/* Пока свечи не за выбранный интервал — крутим загрузку, а не
+                показываем чужие. Зато обновление уже показанного графика
+                (раз в пятнадцать секунд, при смене курса TON) идёт молча:
+                данные на месте, мигать нечем. */}
+            {!chartReady && chartPending ? (
               <div className="flex items-center justify-center" style={{ height: 340 }}>
                 <LeafLoader size={64} />
               </div>
-            ) : !chartData ? (
+            ) : !chartReady ? (
               <div className="flex items-center justify-center" style={{ height: 340, fontFamily: monoFont, fontSize: 11, color: T.muted, textAlign: "center", padding: "0 20px" }}>
                 {tr("chartNoData")}
               </div>
