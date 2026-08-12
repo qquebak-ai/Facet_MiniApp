@@ -5874,7 +5874,15 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     // выбранного ждут, пока отработают все, что нажали до него.
     const abort = typeof AbortController !== "undefined" ? new AbortController() : null;
     setChartLoading(true);
-    async function attempt(allowFlat) {
+    // allowBackup — можно ли на этой попытке брать запасной источник.
+    // Первые попытки идут только по основному: у биржевого токена это
+    // свечи самой биржи, а запасная история курса у tonapi — другой ряд,
+    // с другой сеткой и другой последней ценой. Когда биржа не ответила
+    // сразу (лимит запросов при открытии приложения), на экране
+    // оказывался именно он, а через пару переключений его сменяли
+    // настоящие свечи. Это и есть «сначала липовый график, потом
+    // нормальный».
+    async function attempt(allowBackup, allowFlat) {
       let result = null;
       let src = null;
       if (token.poolAddress) {
@@ -5892,7 +5900,9 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
         if (result) src = "curve";
       }
       // Ни то ни другое не ответило — берём историю курса у tonapi.
-      if (!result && token.tokenAddress && !token.curveAddress) {
+      // Только последней попыткой: ряд там свой, и подменять им биржевые
+      // свечи при первой же заминке нельзя.
+      if (!result && allowBackup && token.tokenAddress && !token.curveAddress) {
         result = await fetchTonapiChart(token.tokenAddress, tf);
         if (result) src = "tonapi";
       }
@@ -5928,10 +5938,10 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       // последней известной цене вместо истории — это и есть тот самый
       // «липовый график», который потом сам собой сменяется настоящим.
       // Лучше подержать загрузку на пару секунд дольше.
-      for (const [pause, allowFlat] of [[0, false], [2000, false], [4500, true]]) {
+      for (const [pause, allowBackup, allowFlat] of [[0, false, false], [2000, false, false], [4500, true, true]]) {
         if (pause) await new Promise((r) => setTimeout(r, pause));
         if (cancelled || reqTf !== tfRef.current) return;
-        const got = await attempt(allowFlat);
+        const got = await attempt(allowBackup, allowFlat);
         if (cancelled || reqTf !== tfRef.current) return;
         if (got === "real") return;
         if (got === "flat") return;
@@ -5957,21 +5967,20 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     const reqTf = tf;
     const abort = typeof AbortController !== "undefined" ? new AbortController() : null;
     async function refresh() {
-      const src = chartSrcRef.current;
       let fresh = null;
       if (curveChart) {
         fresh = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
-      } else if (src === "tonapi") {
-        fresh = token.tokenAddress ? await fetchTonapiChart(token.tokenAddress, tf) : null;
       } else {
+        // Биржу спрашиваем всегда, даже если сейчас на экране запасной
+        // ряд: раньше приложение «держалось» источника, с которого
+        // получилось в первый раз, и один отказ биржи при открытии
+        // оставлял на графике историю курса от tonapi до конца жизни
+        // экрана. Как только биржа отвечает — возвращаемся к её свечам.
         fresh = token.poolAddress ? await fetchPoolOHLCV(token.poolAddress, tf, GT_PRIORITY.chart, abort ? abort.signal : undefined) : null;
-        // Ни разу не получилось — пробуем запасной источник и с этого
-        // момента держимся его.
-        if (!fresh && !src && token.tokenAddress) {
+        if (fresh) chartSrcRef.current = "pool";
+        else if (token.tokenAddress) {
           fresh = await fetchTonapiChart(token.tokenAddress, tf);
           if (fresh) chartSrcRef.current = "tonapi";
-        } else if (fresh && !src) {
-          chartSrcRef.current = "pool";
         }
       }
       if (cancelled || reqTf !== tfRef.current || !fresh?.candles?.length) return;
