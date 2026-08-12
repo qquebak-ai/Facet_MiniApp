@@ -2343,8 +2343,16 @@ function flatCandles(price, timeframe, limit = CHART_TOTAL) {
 async function fetchCurveOHLCV(curveAddress, timeframe, testnet, rate = tonUsd()) {
   if (!(rate > 0)) return null;
   // Состояние нужно не только ради последней точки: в нём лежат
-  // параметры, с которыми развёрнута именно эта кривая.
+  // параметры, с которыми развёрнута именно эта кривая. Без него
+  // подставлялись сегодняшние настройки площадки — и если у токена они
+  // другие (а так и бывает: параметры зашиты при запуске), цены
+  // получались чужими. На экране это выглядело как случайный график,
+  // который через пару переключений сам собой становился правильным —
+  // это приезжало настоящее состояние. Нет состояния — нет графика;
+  // вместо него рисуется ровная линия по известной цене, а попытка
+  // повторяется.
   const state = await fetchCurveState(curveAddress, testnet);
+  if (!state) return null;
   const trades = await fetchCurveTrades(curveAddress, testnet, curveParamsOf(state).feeBps);
   if (trades == null) return null;
   return buildCurveCandles(trades, timeframe, state, CHART_TOTAL, rate);
@@ -5787,22 +5795,29 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
         result = await fetchPoolOHLCV(token.poolAddress, tf, GT_PRIORITY.chart, abort ? abort.signal : undefined);
         if (result) src = "pool";
       }
-      // Основной источник не ответил — берём историю курса у tonapi.
+      // Курс передаём тот же, по которому посчитана цена в шапке. Раньше
+      // график брал его сам, и пока настоящий курс не приехал, строился
+      // по запасному — цифры на графике и над ним расходились в разы.
+      // Ветка идёт после биржевой и только если та ничего не дала: у
+      // токена, вышедшего на биржу, есть оба адреса, и раньше свежий
+      // биржевой график тут же затирался историей кривой.
+      if (!result && token.curveAddress) {
+        result = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
+        if (result) src = "curve";
+      }
+      // Ни то ни другое не ответило — берём историю курса у tonapi.
       if (!result && token.tokenAddress && !token.curveAddress) {
         result = await fetchTonapiChart(token.tokenAddress, tf);
         if (result) src = "tonapi";
       }
-      // Курс передаём тот же, по которому посчитана цена в шапке. Раньше
-      // график брал его сам, и пока настоящий курс не приехал, строился
-      // по запасному — цифры на графике и над ним расходились в разы.
-      else if (token.curveAddress) result = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
       // Выдуманных свечей больше нет ни для кого. У токена на кривой
       // история есть всегда, и если запрос не прошёл (у бесплатного
       // tonapi жёсткий лимит), рисуется ровная линия по текущей цене —
       // между сделками цена и правда стоит. У токена с биржи данные
       // либо пришли, либо нет: во втором случае показываем «нет
       // данных», а не случайное движение.
-      if (!result && curveChart) { result = flatCandles(token.price, tf, CHART_TOTAL); src = "curve"; }
+      let flat = false;
+      if (!result && curveChart) { result = flatCandles(token.price, tf, CHART_TOTAL); src = "curve"; flat = true; }
       if (cancelled || reqTf !== tfRef.current) return false;
       // Источник запоминается: обновлять график надо из того же места.
       // Иначе свечи биржи и точки tonapi сменяли друг друга — сетка
@@ -5810,19 +5825,27 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       chartSrcRef.current = src;
       // Интервал едет вместе со свечами: экран рисует их, только когда
       // они и вправду за выбранный интервал, а не «какие пришли».
-      if (result) { setChartData({ ...result, tf: reqTf, isLive: true }); setChartLoading(false); return true; }
+      if (result) {
+        setChartData({ ...result, tf: reqTf, isLive: true });
+        setChartLoading(false);
+        return flat ? "flat" : "real";
+      }
       return false;
     }
     (async () => {
-      if (await attempt()) return;
+      const first = await attempt();
+      if (first === "real") return;
       // Не вышло с первого раза — почти всегда это лимит запросов, в
       // который упирается частое переключение кнопок. Ждать пятнадцать
-      // секунд до следующего круга обновления незачем: повторяем сразу и
-      // только тогда пишем «нет данных».
+      // секунд до следующего круга обновления незачем: повторяем сразу.
+      // Ровная линия по текущей цене — тоже повод повторить: истории у
+      // кривой она не показывает, просто честно держит место.
       await new Promise((r) => setTimeout(r, 2500));
       if (cancelled || reqTf !== tfRef.current) return;
-      if (await attempt()) return;
+      const second = await attempt();
       if (cancelled || reqTf !== tfRef.current) return;
+      // «Нет данных» пишем, только если показать нечего вовсе.
+      if (second || first) return;
       setChartData(null);
       setChartLoading(false);
     })();
