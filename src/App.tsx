@@ -5312,7 +5312,6 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
   if (!connected) {
     return (
       <div className="fx-view flex flex-col items-center justify-center text-center" style={{ minHeight: 420, gap: 18, padding: "0 8px" }}>
-        <LeafIcon size={44} color={hexA(T.electric, 0.7)} />
         <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 20, fontWeight: 700 }}>{t("walletEmptyTitle")}</div>
         <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, maxWidth: 260 }}>{t("walletEmptyBody")}</p>
         <button
