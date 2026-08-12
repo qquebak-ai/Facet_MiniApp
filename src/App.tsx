@@ -2010,8 +2010,11 @@ async function gtPump() {
       try {
         let res = await fetch(job.url);
         for (let attempt = 0; res.status === 429 && job.retries > attempt; attempt++) {
+          // Очередь одна на всё приложение, и пока эта попытка спит, ждут
+          // все остальные. Поэтому пауза короткая: повторить ещё раз
+          // сверху дешевле, чем держать очередь запертой.
           const retryAfter = Number(res.headers.get("Retry-After")) || 0;
-          await sleep(Math.min(9000, retryAfter ? retryAfter * 1000 : 1200 * (attempt + 1) ** 2));
+          await sleep(Math.min(4000, retryAfter ? retryAfter * 1000 : 900 * (attempt + 1)));
           // Пока ждали повтора, интервал могли переключить — тогда и
           // повторять незачем.
           if (job.signal && job.signal.aborted) { job.reject(new Error("aborted")); res = null; break; }
@@ -2148,11 +2151,30 @@ async function fetchTonapiChart(jettonAddress, tf, testnet = false) {
   }
 }
 
+// Свечи по паре и интервалу живут в памяти полминуты. Без этого каждое
+// нажатие кнопки интервала — новый запрос к источнику, а лимит там общий
+// на всё приложение: несколько переключений подряд выбирали его целиком,
+// и в ответ на график приходил отказ. Теперь возврат к уже показанному
+// интервалу рисуется мгновенно и не тратит запрос.
+const OHLCV_TTL_MS = 30_000;
+const ohlcvInflight = new Map();
+
 async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart, signal = undefined) {
+  const cacheKey = `${poolAddress}:${tf}`;
+  const hit = ohlcvCache.get(cacheKey);
+  if (hit && Date.now() - hit.ts < OHLCV_TTL_MS) return hit.value;
+  // Тот же запрос уже идёт — ждём его, а не шлём второй: обновление раз в
+  // пятнадцать секунд и первая загрузка легко совпадают.
+  if (ohlcvInflight.has(cacheKey)) return ohlcvInflight.get(cacheKey);
+  const run = loadPoolOHLCV(poolAddress, tf, priority, signal, cacheKey, hit);
+  ohlcvInflight.set(cacheKey, run);
+  try { return await run; } finally { ohlcvInflight.delete(cacheKey); }
+}
+
+async function loadPoolOHLCV(poolAddress, tf, priority, signal, cacheKey, hit) {
   const cfg = GT_TF[tf] || GT_TF.H1;
   const fetchLimit = Math.min(1000, 200 * (cfg.resample || 1));
   const url = `${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/ohlcv/${cfg.timeframe}?aggregate=${cfg.aggregate}&limit=${fetchLimit}&currency=usd&token=base`;
-  const cacheKey = `${poolAddress}:${tf}`;
   try {
     const res = await gtFetch(url, { priority, retries: priority >= GT_PRIORITY.chart ? 3 : 1, signal });
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
@@ -2170,11 +2192,12 @@ async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart, sig
       candles: candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })),
       volume: candles.map(c => ({ time: c.time, value: Number.isFinite(c.volume) ? c.volume : 0, color: c.close >= c.open ? hexA(T.up, 0.32) : hexA(T.down, 0.32) })),
     };
-    ohlcvCache.set(cacheKey, result);
+    ohlcvCache.set(cacheKey, { value: result, ts: Date.now() });
     return result;
   } catch (err) {
-    // Не вышло — отдаём прошлый удачный ответ, если он есть.
-    return ohlcvCache.get(cacheKey) || null;
+    // Не вышло — отдаём прошлый удачный ответ, даже если он старше срока:
+    // свечи получасовой давности честнее пустого экрана.
+    return hit ? hit.value : null;
   }
 }
 
@@ -2508,7 +2531,7 @@ async function fetchCurveOHLCV(curveAddress, timeframe, testnet, rate = tonUsd()
 // network, but the shape itself still periodically refreshes instead of
 // staying frozen on the very first fetch forever (the live "wiggle" +
 // base-ratio scaling in MiniChart covers the seconds in between).
-const SPARK_TTL_MS = 45_000;
+const SPARK_TTL_MS = 90_000;
 const sparkCache = new Map(); // poolAddress -> { closes, ts }
 const sparkInflight = new Map(); // poolAddress -> Promise, to de-dupe concurrent callers
 async function fetchSparkCloses(poolAddress, n = 24, jettonAddress = null) {
@@ -3349,11 +3372,12 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
       if (!cancelled) setBuys(collectedRef.current);
     }
 
-    // Сколько пулов берём за один заход. Около десяти запросов в минуту:
-    // остальной лимит оставлен графику открытого токена, он идёт вперёд
-    // ленты по приоритету очереди.
-    const BATCH = 4;
-    const INTERVAL_MS = 25000;
+    // Сколько пулов берём за один заход. Лимит источника общий на всё
+    // приложение, и лента не должна его выбирать: главное на экране —
+    // график открытого токена. Пять запросов в минуту фону, остальное
+    // ему; по приоритету очереди он к тому же идёт вперёд.
+    const BATCH = 3;
+    const INTERVAL_MS = 35000;
 
     async function load(first) {
       if (first) {
