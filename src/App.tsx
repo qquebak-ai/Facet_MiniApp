@@ -114,7 +114,8 @@ function setLang(v) { lang = v === "EN" ? "EN" : "RU"; }
 
 const STR = {
   RU: {
-    navHome: "Главная", navMempad: "Мемпад", navCreate: "Создать", navProfile: "Профиль", navShop: "Магазин",
+    navHome: "Главная", navMempad: "Мемпад", navCreate: "Создать", navProfile: "Профиль", navShop: "Магазин", navWallet: "Кошелёк",
+    walletViewSub: "Баланс, адрес и подключение",
     shopTitle: "Магазин", shopComingSoon: "Магазин скоро откроется. Загляни позже — здесь появится что-то интересное.",
     shopIntro: "Рамки для аватарки и карточки профиля. Нажми, чтобы примерить — применится сразу.",
     tgAuthTitle: "Вход через Telegram",
@@ -373,7 +374,8 @@ const STR = {
     authErrAvatarUpload: "Не удалось загрузить аватар: {msg}",
   },
   EN: {
-    navHome: "Home", navMempad: "Mempad", navCreate: "Create", navProfile: "Profile", navShop: "Shop",
+    navHome: "Home", navMempad: "Mempad", navCreate: "Create", navProfile: "Profile", navShop: "Shop", navWallet: "Wallet",
+    walletViewSub: "Balance, address and connection",
     shopTitle: "Shop", shopComingSoon: "The shop is coming soon. Check back later — something interesting will show up here.",
     shopIntro: "Avatar frames and profile cards. Tap one to try it — it applies right away.",
     tgAuthTitle: "Sign in with Telegram",
@@ -3665,7 +3667,7 @@ function HomeHero({ onGoTab }) {
   const actions = [
     { icon: Rocket, key: "homeActionLaunch", onClick: () => onGoTab("create") },
     { icon: Flame, key: "homeActionMempad", onClick: () => onGoTab("mempad") },
-    { icon: Wallet, key: "homeActionWallet", onClick: () => onGoTab("profile") },
+    { icon: Wallet, key: "homeActionWallet", onClick: () => onGoTab("wallet") },
   ];
 
   return (
@@ -5300,6 +5302,21 @@ function HomeView({ onGoTab, curveTokens = [], onOpenToken }) {
   );
 }
 
+/* WalletView — кошелёк отдельным разделом. Раньше он лежал карточкой
+   посреди профиля, между аватаркой и своими токенами: чтобы посмотреть
+   баланс, приходилось идти в личные настройки. */
+function WalletView(props) {
+  return (
+    <div className="flex flex-col gap-4 pt-2">
+      <div>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("navWallet")}</span>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 4 }}>{t("walletViewSub")}</p>
+      </div>
+      <WalletCard {...props} />
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------
    TOKEN DETAIL VIEW
 --------------------------------------------------------- */
@@ -6628,7 +6645,6 @@ function WalletCard({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
   if (!connected) {
     return (
       <GlassCard style={{ padding: 20 }}>
-        <SectionTitle>{t("wallet")}</SectionTitle>
         <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 }}>
           {t("connectWalletNote")}
         </p>
@@ -7550,12 +7566,12 @@ async function uploadAvatarIfNeeded(userId) {
 }
 
 function ProfileView({
-  connected, walletAddress, tonBalance, tonPriceUsd, onConnect, onDisconnect, onOpenConnectModal, showToast,
+  connected, onOpenConnectModal, showToast,
   accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut,
   onOpenSetting, onManageToken, onGoCreate, onOpenToken, myTokens = [], onClearAllTokens,
   cosmetics = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
-  // Счётчики подписок и достижения считаются в корне: их же показывает
-  // магазин и отдельная страница достижений, дублировать запрос незачем.
+  // Достижения считаются в корне: их же показывает магазин и отдельная
+  // страница достижений, дублировать запрос незачем.
   achievements = [], creatorTier = 0, onVerified,
 }) {
   // Подтверждение хранится в профиле, а не только на экране: иначе
@@ -7574,12 +7590,6 @@ function ProfileView({
     if (!connected) { onOpenConnectModal(); showToast(t("connectWalletContinue")); return false; }
     return true;
   }
-  function connectWallet() { onConnect(); showToast(t("walletConnectedToast")); }
-  function disconnectWallet() { onDisconnect(); showToast(t("walletDisconnectedToast")); }
-  function copyAddress() {
-    if (typeof navigator !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(walletAddress).catch(() => {});
-    showToast(t("addressCopied"));
-  }
   function startVerify() {
     if (!requireUnlock()) return;
     setVerifyStatus("pending");
@@ -7597,7 +7607,6 @@ function ProfileView({
   function openSettingItem(item) {
     onOpenSetting(item);
   }
-  function exploreWallet() { if (typeof window !== "undefined") window.open("https://tonviewer.com", "_blank", "noopener,noreferrer"); }
   function logOut() {
     setVerifyStatus("none");
     onLogOut();
@@ -7663,8 +7672,6 @@ function ProfileView({
             рисуется поверх фонов обычных блоков, и эта растушёвка
             срезала верх виджета кошелька. */}
         <div style={{ position: "relative", zIndex: 1 }}>
-
-        <div className="mt-5"><WalletCard connected={connected} walletAddress={walletAddress} tonBalance={tonBalance} tonPriceUsd={tonPriceUsd} onConnect={connectWallet} onDisconnect={disconnectWallet} onCopy={copyAddress} onExplore={exploreWallet} /></div>
 
         <div className="mt-5">
           <SectionTitle action={
@@ -9689,6 +9696,21 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           <KeepAlive show={view === "mempad"}>
             <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />
           </KeepAlive>
+          <KeepAlive show={view === "wallet"}>
+            <WalletView
+              connected={connected}
+              walletAddress={walletAddress}
+              tonBalance={tonBalance}
+              tonPriceUsd={tonPriceUsd}
+              onConnect={() => { tonConnectUI.openModal(); }}
+              onDisconnect={() => { tonConnectUI.disconnect(); }}
+              onCopy={() => {
+                if (typeof navigator !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(walletAddress).catch(() => {});
+                showToast(t("addressCopied"));
+              }}
+              onExplore={() => { if (typeof window !== "undefined") window.open("https://tonviewer.com", "_blank", "noopener,noreferrer"); }}
+            />
+          </KeepAlive>
           <KeepAlive show={view === "shop"}>
             <ShopView
               cosmetics={cosmetics}
@@ -9728,11 +9750,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           <KeepAlive show={view === "profile"}>
             <ProfileView
               connected={connected}
-              walletAddress={walletAddress}
-              tonBalance={tonBalance}
-              tonPriceUsd={tonPriceUsd}
-              onConnect={() => tonConnectUI.openModal()}
-              onDisconnect={() => tonConnectUI.disconnect()}
               onOpenConnectModal={() => setConnectModalOpen(true)}
               showToast={showToast}
               accountCreated={accountCreated}
@@ -9774,6 +9791,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           {[
             { id: "home", label: t("navHome"), icon: HomeIcon },
             { id: "mempad", label: t("navMempad"), icon: Rocket },
+            { id: "wallet", label: t("navWallet"), icon: Wallet },
             { id: "shop", label: t("navShop"), icon: ShoppingBag },
             { id: "profile", label: t("navProfile"), icon: User },
           ].map(({ id, label, icon: Icon, locked }) => {
