@@ -1083,6 +1083,22 @@ function GlobalStyle() {
       .fx-picked { border-color: ${T.electric} !important; box-shadow: 0 0 0 1.5px ${T.electric}; }
       .fx-tap { transition: transform ${SPRING}; }
       .fx-tap:active { transform: scale(0.96); transition: transform ${PRESS}; }
+      /* Нажатие внутри виджета не должно вдавливать виджет целиком.
+         Браузер считает нажатым не только то, на что нажали, но и всё,
+         что вокруг: карточку, её обёртку, экран. Поэтому у внешнего
+         блока отклик снимаем, как только внутри нажали что-то своё —
+         кнопку, ссылку или поле. Сама кнопка-карточка при этом
+         отзывается по-прежнему: она нажата не «внутри себя», а сама. */
+      .fx-card:has(:is(button, a, input, select, textarea, [role="button"]):active),
+      .fx-tap:has(:is(button, a, input, select, textarea, [role="button"]):active),
+      .fx-chip:has(:is(button, a, input, select, textarea, [role="button"]):active) {
+        transform: none;
+      }
+      /* Оформление внутри кнопки, а не кнопка. Такой блок берёт вид
+         карточки — появление, рамку — но на нажатие не отзывается сам:
+         иначе он вдавливался бы отдельно от кнопки, внутри которой
+         лежит, и нажатие двоилось. */
+      .fx-inert:active { transform: none; }
       .fx-view { animation: fadeInUp 320ms cubic-bezier(0.16,1,0.3,1) backwards; }
       .fx-skeleton { background: linear-gradient(90deg, ${T.surface} 25%, ${T.surfaceHi} 37%, ${T.surface} 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; }
       .fx-chip { transition: border-color ${EASE}, background ${EASE}, color ${EASE}, transform ${SPRING}; }
@@ -4036,7 +4052,7 @@ function HomeHero({ onGoTab }) {
               style={{ background: "transparent", border: "none" }}
             >
               <div
-                className="fx-card"
+                className="fx-card fx-inert"
                 style={{
                   width: 60, height: 60, borderRadius: "50%",
                   background: "#000000", border: `1px solid ${T.line}`,
