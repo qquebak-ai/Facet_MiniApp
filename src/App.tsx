@@ -6266,7 +6266,10 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-4" style={{ borderBottom: `1px solid ${T.line}` }}>
+      {/* Полоски под вкладками нет: выбранную и так видно по оранжевой
+          черте под ней, а серая линия во всю ширину только делит экран
+          пополам. */}
+      <div className="flex items-center gap-4">
         {[["chart", tr("tabChart")], ["info", tr("tabInfo")], ["tx", tr("tabTx")]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="fx-tap" style={{
             fontFamily: displayFont, fontSize: 13.5, fontWeight: 700, padding: "0 0 9px",
@@ -6306,7 +6309,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
               а места под сам график оставалось меньше. Отрицательные
               поля ровно на отступ страницы — так он доходит до краёв
               экрана. */}
-          <div style={{ position: "relative", marginLeft: -16, marginRight: -16, background: T.bg, borderTop: `1px solid ${T.line}`, borderBottom: `1px solid ${T.line}` }}>
+          <div style={{ position: "relative", marginLeft: -16, marginRight: -16, background: T.bg }}>
             {/* Пока свечи не за выбранный интервал — крутим загрузку, а не
                 показываем чужие. Зато обновление уже показанного графика
                 (раз в пятнадцать секунд, при смене курса TON) идёт молча:
