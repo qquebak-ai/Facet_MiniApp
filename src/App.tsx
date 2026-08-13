@@ -8869,30 +8869,30 @@ function ButtonRocketFlyby({ size = 26 }) {
 // Кленовый по умолчанию: из трёх фоновых пород он единственный, чей
 // силуэт остаётся узнаваемым листом на шестнадцати точках. Дубовый на
 // такой величине рассыпается в зубчики, мятный читается как капля.
-/* Монеты магазина — стопка из трёх, в фирменном оранжевом. Одна плоская
-   монета читалась как непонятный овал, а жёлтый в приложении не
-   встречается больше нигде и выглядел деталью из чужого набора. У каждой
-   монеты есть боковая стенка: без неё три овала друг над другом читаются
-   как полоски, а не как деньги. Листа тут нет намеренно — не всё в
-   приложении обязано быть листом. */
-const COIN_RX = 6.2;
-const COIN_RY = 2.2;
-const COIN_GAP = 3.6;
-const COIN_WALL = 2.25;
+/* Монеты магазина — горка: две лежат внизу, третья сверху между ними.
+   Именно лежат, а не стоят на ребре: у каждой видно бортик, поэтому
+   кружки читаются как монеты, а не как пузырьки. Цвет фирменный
+   оранжевый — жёлтого в приложении нет больше нигде. Листа тут нет
+   намеренно: не всё в приложении обязано быть листом. */
+const COIN_RX = 4.8;
+const COIN_RY = 2;
+const COIN_WALL = 1.5;
+// Верхняя монета лежит ровно на нижних: её бортик кончается там, где
+// начинаются их крышки, — тогда ничего не перекрывается и не нужно
+// подкладывать под неё цвет фона, который на разных плашках разный.
+const COIN_SPOTS = [[5.1, 13.2], [14.9, 13.2], [10, 7.7]];
 function CoinIcon({ size = 14, dim = false }) {
   const color = dim ? T.muted : T.electric;
-  const wall = `M${10 - COIN_RX} CY v${COIN_WALL} a${COIN_RX} ${COIN_RY} 0 0 0 ${COIN_RX * 2} 0 v${-COIN_WALL}`;
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" style={{ flexShrink: 0 }} aria-hidden>
-      {[2, 1, 0].map((i) => {
-        const cy = 5 + i * COIN_GAP;
-        const side = wall.replace("CY", String(cy));
+      {COIN_SPOTS.map(([cx, cy], i) => {
+        const side = `M${cx - COIN_RX} ${cy} v${COIN_WALL} a${COIN_RX} ${COIN_RY} 0 0 0 ${COIN_RX * 2} 0 v${-COIN_WALL}`;
         return (
           <g key={i}>
             <path d={side} fill={color} opacity={dim ? 0.08 : 0.16} />
-            <path d={side} fill="none" stroke={color} strokeWidth="1.2" />
-            <ellipse cx="10" cy={cy} rx={COIN_RX} ry={COIN_RY} fill={color} opacity={dim ? 0.1 : 0.2} />
-            <ellipse cx="10" cy={cy} rx={COIN_RX} ry={COIN_RY} fill="none" stroke={color} strokeWidth="1.2" />
+            <path d={side} fill="none" stroke={color} strokeWidth="1.3" />
+            <ellipse cx={cx} cy={cy} rx={COIN_RX} ry={COIN_RY} fill={color} opacity={dim ? 0.1 : 0.22} />
+            <ellipse cx={cx} cy={cy} rx={COIN_RX} ry={COIN_RY} fill="none" stroke={color} strokeWidth="1.3" />
           </g>
         );
       })}
