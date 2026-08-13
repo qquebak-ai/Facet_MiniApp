@@ -674,14 +674,15 @@ const FACET = "polygon(18% 0%, 100% 0%, 100% 82%, 82% 100%, 0% 100%, 0% 18%)";
    controls. Loaded via GlobalStyle's @import below. Numeric/on-chain data
    (prices, addresses, hashes) keeps a monospace face, which is the one
    place a "technical" register is appropriate and expected. */
-/* Три роли, два шрифта (объявлены в index.css, файлы лежат в проекте).
-   Заголовки — Unbounded, всё остальное — Manrope. Цифры отдельного
-   шрифта не получают: моноширинный посреди мягкого гротеска выглядел бы
-   заплаткой, а ровные столбцы даёт табличная разметка цифр — она
-   включена глобально ниже, в GlobalStyle. */
-const displayFont = "'Unbounded', 'Futura', 'Century Gothic', 'Segoe UI', sans-serif";
-const bodyFont = "'Manrope', -apple-system, 'Segoe UI', sans-serif";
-const monoFont = "'Manrope', -apple-system, 'Segoe UI', sans-serif";
+/* Три роли, один шрифт — как и было задумано с самого начала. Jost
+   объявлен в index.css, файлы лежат в проекте; запасные варианты те же,
+   что стояли раньше, на случай если файл почему-то не доехал.
+   Отдельного моноширинного нет намеренно: он выглядел бы заплаткой
+   посреди геометрического гротеска, а ровные столбцы цифр даёт
+   табличная разметка — она включена глобально ниже, в GlobalStyle. */
+const displayFont = "'Jost', 'Futura', 'Century Gothic', 'Segoe UI', sans-serif";
+const bodyFont = "'Jost', 'Futura', 'Century Gothic', -apple-system, sans-serif";
+const monoFont = "'Jost', 'Futura', 'Century Gothic', 'Courier New', monospace";
 
 /* Motion stays quiet: no overshoot/bounce, 200–300ms, ease-out. */
 const SPRING = "240ms cubic-bezier(0.16, 1, 0.3, 1)";
