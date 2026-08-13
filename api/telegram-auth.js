@@ -218,6 +218,31 @@ export default async function handler(req, res) {
     return res.status(200).json({ exists: !!existing });
   }
 
+  // Только привязать приглашение. Нужно тому, кто уже вошёл и открыл
+  // приложение по чужой ссылке: входить ему незачем, сессия есть, а
+  // метка из ссылки иначе никуда бы не ушла — раньше её отправлял только
+  // вход, и приглашение засчитывалось лишь тем, кто заходил впервые.
+  // Ничего не создаём: находим профиль по telegram_id из подписанных
+  // данных и ставим связь, если её ещё нет.
+  if (body.linkReferralOnly === true) {
+    const { data: prof, error: profErr } = await admin
+      .from("profiles")
+      .select("id, invited_by")
+      .eq("telegram_id", tgUser.id)
+      .maybeSingle();
+    if (profErr) return fail(res, 500, "link_lookup_failed", profErr.message);
+    if (!prof || prof.invited_by != null) return res.status(200).json({ linked: false });
+    const invitedBy = await validInviter(admin, body.startParam, prof.id);
+    if (!invitedBy) return res.status(200).json({ linked: false });
+    const { error: linkErr } = await admin
+      .from("profiles")
+      .update({ invited_by: invitedBy })
+      .eq("id", prof.id)
+      .is("invited_by", null);
+    if (linkErr) return fail(res, 500, "link_referral_failed", linkErr.message);
+    return res.status(200).json({ linked: true });
+  }
+
   try {
     // Первый вход — заводим пользователя. Если он уже есть, Supabase
     // ответит ошибкой «already registered», и это нормальный путь.

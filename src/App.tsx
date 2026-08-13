@@ -8173,17 +8173,41 @@ async function probeTelegramAccount() {
   return { exists: !!json.exists, nickname: json.nickname || "" };
 }
 
+/* Кто пригласил. Telegram кладёт сюда то, что стояло после startapp= в
+   ссылке приглашения. Значение только передаём — доверять ему нельзя,
+   сервер сам проверит, что такой пользователь есть, что это не сам
+   приглашённый, и запишет связь единожды. */
+function telegramStartParam() {
+  const tg = typeof window !== "undefined" ? window.Telegram && window.Telegram.WebApp : null;
+  return (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || "";
+}
+
+/* Засчитать приглашение тому, кто уже вошёл. Метку из ссылки отправлял
+   только вход, поэтому человек с готовой сессией переходил по чужой
+   ссылке впустую: входить ему незачем, а больше её никто не отправлял.
+   Ошибки глотаем — это фоновое дело, мешать открытию приложения ему
+   нечем. */
+async function linkReferralIfAny() {
+  const initData = telegramInitData();
+  const startParam = telegramStartParam();
+  if (!initData || !startParam.startsWith("ref_")) return;
+  try {
+    await fetch("/api/telegram-auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initData, startParam, linkReferralOnly: true }),
+    });
+  } catch (err) {
+    console.warn("[mintly] referral link failed:", err && err.message);
+  }
+}
+
 // Бросает ошибку с понятным кодом — вызывающая сторона показывает текст.
 async function signInWithTelegram(nickname) {
   const initData = telegramInitData();
   if (!initData) throw new Error("no_telegram");
 
-  // Кто пригласил. Telegram кладёт сюда то, что стояло после startapp= в
-  // ссылке приглашения. Значение только передаём — доверять ему нельзя,
-  // сервер сам проверит, что такой пользователь есть и что это не сам
-  // приглашённый, и запишет связь единожды, при создании профиля.
-  const tg = typeof window !== "undefined" ? window.Telegram && window.Telegram.WebApp : null;
-  const startParam = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || "";
+  const startParam = telegramStartParam();
 
   const res = await fetch("/api/telegram-auth", {
     method: "POST",
@@ -9874,7 +9898,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         try { await supabase.auth.signOut(); } catch (e) { /* уже не важно */ }
         session = null;
       }
-      if (session) markSeenSession();
+      if (session) {
+        markSeenSession();
+        // Пришли по чужой ссылке приглашения, будучи уже внутри —
+        // засчитываем её отдельно: вход, который обычно передаёт метку,
+        // здесь не понадобится. Не ждём ответа, приложению это не мешает.
+        linkReferralIfAny();
+      }
       // Молчаливый вход — только при первом знакомстве с приложением на
       // этом телефоне. Дальше сессия живёт сама; если её нет, значит из
       // аккаунта вышли или её срок истёк, и правильно показать кнопку
