@@ -5586,10 +5586,15 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
    монеты — а они конечные, и промахнуться по соседней карточке проще
    простого. Теперь сначала показываем сам предмет крупно, цену и сколько
    останется после покупки. */
-function BuySheet({ item, kind, coins, onBuy, onClose }) {
+function BuySheet({ item, kind, coins, cosmetics, onBuy, onClose }) {
   if (!item || typeof document === "undefined") return null;
   const price = item.price || 0;
   const left = coins - price;
+  // Предмет показываем не сам по себе, а вместе с надетым: покупают
+  // рамку — она стоит на своей карточке, покупают карточку — на ней
+  // надетая рамка. Так сразу видно, подходят они друг к другу или нет.
+  const previewCard = kind === "card" ? item.id : (cosmetics ? cosmetics.card : "none");
+  const previewFrame = kind === "frame" ? item.id : (cosmetics ? cosmetics.frame : "none");
   return createPortal(
     <div
       className="fx-modal-back"
@@ -5611,9 +5616,9 @@ function BuySheet({ item, kind, coins, onBuy, onClose }) {
       >
         {/* Предмет крупно: покупают глазами, а не по названию. */}
         <div style={{ position: "relative", width: "100%", height: 132, borderRadius: 18, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {kind === "card" && <ProfileCardBg cardId={item.id} height={132} radius={18} />}
+          <ProfileCardBg cardId={previewCard} height={132} radius={18} />
           <div style={{ position: "relative", zIndex: 1 }}>
-            <AvatarFrame frameId={kind === "frame" ? item.id : "none"} size={84}>
+            <AvatarFrame frameId={previewFrame} size={84}>
               <div style={{ width: "100%", height: "100%", background: T.bg }} />
             </AvatarFrame>
           </div>
@@ -5762,6 +5767,7 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
           item={(confirming.kind === "frame" ? FRAME_BY_ID : CARD_BY_ID)[confirming.id]}
           kind={confirming.kind}
           coins={coins}
+          cosmetics={cosmetics}
           onBuy={confirmBuy}
           onClose={() => setConfirming(null)}
         />
