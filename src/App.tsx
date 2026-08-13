@@ -8762,15 +8762,28 @@ function ProfileView({
 
         <div className="mt-5">
           <SectionTitle>{t("settings")}</SectionTitle>
-          <GlassCard style={{ padding: "4px 16px" }}>
+          {/* Каждый пункт — своя плашка, а не строка внутри общей.
+              Раньше список лежал в одной карточке, и нажатие вдавливало
+              её целиком: в CSS состояние «нажато» достаётся не только
+              самой кнопке, но и всем блокам вокруг неё. Теперь вдавливается
+              ровно то, на что нажали. */}
+          <div className="flex flex-col gap-2">
             {SETTINGS_ITEMS.map((s, i) => (
-              <button key={s.key} onClick={() => openSettingItem(s)} className="fx-tap w-full flex items-center gap-3 py-3" style={{ borderBottom: i < SETTINGS_ITEMS.length - 1 ? `1px solid ${T.line}` : "none", opacity: 1 }}>
+              <button
+                key={s.key}
+                onClick={() => openSettingItem(s)}
+                className="fx-card fx-tap w-full flex items-center gap-3 rounded-[20px]"
+                style={{
+                  background: T.surface, border: `1px solid ${T.line}`,
+                  padding: "13px 16px", animationDelay: `${i * 40}ms`,
+                }}
+              >
                 <s.icon size={16} color={T.muted} />
                 <span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice, flex: 1, textAlign: "left" }}>{t(s.tKey)}</span>
                 <ChevronRight size={14} color={T.muted} />
               </button>
             ))}
-          </GlassCard>
+          </div>
         </div>
 
         </div>
