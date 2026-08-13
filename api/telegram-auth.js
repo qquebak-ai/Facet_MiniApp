@@ -162,6 +162,41 @@ function inviterFromStartParam(startParam) {
   return UUID_RE.test(id) ? id : null;
 }
 
+// Метка, оставленная ботом. Ссылку часто открывают не приложением, а
+// чатом с ботом — переслали, ткнули с компьютера, нажали «Start». Тогда
+// метка достаётся боту (api/telegram-bot.js), он кладёт её сюда, и
+// приложение забирает при первом же входе. Метка одноразовая: забрали —
+// стёрли, иначе она сработала бы ещё раз после удаления аккаунта.
+async function pendingInviter(admin, telegramId, userId) {
+  const { data } = await admin
+    .from("pending_referrals")
+    .select("inviter")
+    .eq("telegram_id", telegramId)
+    .maybeSingle();
+  if (!data || !data.inviter || data.inviter === userId) return null;
+  const { data: inviter } = await admin.from("profiles").select("id").eq("id", data.inviter).maybeSingle();
+  return inviter ? data.inviter : null;
+}
+
+async function dropPendingInviter(admin, telegramId) {
+  const { error } = await admin.from("pending_referrals").delete().eq("telegram_id", telegramId);
+  if (error) console.warn("[auth] failed to drop pending referral:", error.message);
+}
+
+// Пригласивший из двух источников сразу: сначала метка прямой ссылки на
+// приложение, потом отложенная от бота. Отсутствие таблицы не должно
+// ронять вход — тогда просто работает первый путь.
+async function resolveInviter(admin, startParam, telegramId, userId) {
+  const direct = await validInviter(admin, startParam, userId);
+  if (direct) return direct;
+  try {
+    return await pendingInviter(admin, telegramId, userId);
+  } catch (err) {
+    console.warn("[auth] pending referrals unavailable:", err && err.message);
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -232,7 +267,7 @@ export default async function handler(req, res) {
       .maybeSingle();
     if (profErr) return fail(res, 500, "link_lookup_failed", profErr.message);
     if (!prof || prof.invited_by != null) return res.status(200).json({ linked: false });
-    const invitedBy = await validInviter(admin, body.startParam, prof.id);
+    const invitedBy = await resolveInviter(admin, body.startParam, tgUser.id, prof.id);
     if (!invitedBy) return res.status(200).json({ linked: false });
     const { error: linkErr } = await admin
       .from("profiles")
@@ -240,6 +275,7 @@ export default async function handler(req, res) {
       .eq("id", prof.id)
       .is("invited_by", null);
     if (linkErr) return fail(res, 500, "link_referral_failed", linkErr.message);
+    await dropPendingInviter(admin, tgUser.id);
     return res.status(200).json({ linked: true });
   }
 
@@ -311,7 +347,7 @@ export default async function handler(req, res) {
       // пригласивший действительно есть в базе. Сам себя пригласить
       // нельзя, переписать связь позже — тоже: здесь она ставится один
       // раз и больше не трогается.
-      const invitedBy = await validInviter(admin, body.startParam, userId);
+      const invitedBy = await resolveInviter(admin, body.startParam, tgUser.id, userId);
 
       const { error: insertErr } = await admin.from("profiles").upsert({
         id: userId,
@@ -331,12 +367,15 @@ export default async function handler(req, res) {
         }
         return fail(res, 500, "profile_failed", insertErr.message);
       }
+      // Метка одноразовая: сработала — убираем, иначе она досталась бы и
+      // следующему аккаунту с этим же телеграмом.
+      if (invitedBy) await dropPendingInviter(admin, tgUser.id);
     } else if (profile.invited_by == null) {
       // Профиль уже был, но пригласившего у него нет. Засчитываем — иначе
       // ссылка работала бы только для тех, кто вообще ни разу не заходил,
       // а это почти никто. Связь ставится один раз за всю жизнь аккаунта:
       // ниже стоит условие «ещё пусто», и переписать её нельзя.
-      const invitedBy = await validInviter(admin, body.startParam, userId);
+      const invitedBy = await resolveInviter(admin, body.startParam, tgUser.id, userId);
       if (invitedBy) {
         const { error: linkRefErr } = await admin
           .from("profiles")
@@ -344,6 +383,7 @@ export default async function handler(req, res) {
           .eq("id", userId)
           .is("invited_by", null);
         if (linkRefErr) console.warn("[auth] failed to link referral:", linkRefErr.message);
+        else await dropPendingInviter(admin, tgUser.id);
       }
     }
 
