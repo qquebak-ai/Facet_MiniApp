@@ -118,8 +118,7 @@ const STR = {
     walletBalanceLabel: "Баланс",
     walletEmptyTitle: "Кошелёк не подключён",
     walletEmptyBody: "Подключи TON-кошелёк, чтобы покупать, продавать и запускать токены.",
-    shopTitle: "Магазин", shopComingSoon: "Магазин скоро откроется. Загляни позже — здесь появится что-то интересное.",
-    shopIntro: "Рамки для аватарки и карточки профиля. Нажми, чтобы примерить — применится сразу.",
+    shopTitle: "Магазин",
     tgAuthTitle: "Вход через Telegram",
     tgAuthCta: "Войти через Telegram",
     tgAuthHint: "Аккаунт создастся из твоего профиля Telegram — почта и пароль не нужны.",
@@ -133,6 +132,9 @@ const STR = {
     bootStepTokens: "Токены сообщества", bootStepRate: "Курс TON",
     shopTabFrames: "Рамки", shopTabCards: "Карточки",
     shopEquip: "Надеть", shopEquipped: "Надето",
+    shopNotEnough: "Не хватает {n} монет — закрой достижение",
+    shopBought: "{name} — куплено и надето",
+    shopCoinsHint: "Монеты приходят за достижения. Тратить их можно только здесь.",
     cosmeticApplied: "Применено", cosmeticRemoved: "Снято",
     settingsSaved: "Настройки сохранены",
     langTitle: "Язык", themeTitle: "Оформление", themeWhite: "Светлая",
@@ -310,13 +312,10 @@ const STR = {
     activityTitle: "Активность",
     achievementsTitle: "Достижения",
     achUnlockedOf: "{done} из {total}",
-    achievementsIntro: "За простые достижения открываются рамки и карточки из магазина.",
+    achievementsIntro: "За достижения дают монеты. На них в магазине берут рамки и карточки — любые, какие нравятся.",
     achProgress: "Прогресс",
-    achRewardOpened: "Открыто",
-    achRewardLocked: "Награда",
     achGoShop: "Открыть магазин",
     achAll: "Все",
-    shopLocked: "Предмет откроется за достижение",
     achFirstLaunch: "Первый запуск", achFirstLaunchHint: "Запустить свой первый токен",
     wreathBadgeTitle: "Знак создателя", wreathClose: "Закрыть",
     verifiedBadgeTitle: "Подтверждённый аккаунт",
@@ -380,8 +379,7 @@ const STR = {
     walletBalanceLabel: "Balance",
     walletEmptyTitle: "No wallet connected",
     walletEmptyBody: "Connect a TON wallet to buy, sell and launch tokens.",
-    shopTitle: "Shop", shopComingSoon: "The shop is coming soon. Check back later — something interesting will show up here.",
-    shopIntro: "Avatar frames and profile cards. Tap one to try it — it applies right away.",
+    shopTitle: "Shop",
     tgAuthTitle: "Sign in with Telegram",
     tgAuthCta: "Sign in with Telegram",
     tgAuthHint: "Your account is created from your Telegram profile — no email, no password.",
@@ -395,6 +393,9 @@ const STR = {
     bootStepTokens: "Community tokens", bootStepRate: "TON rate",
     shopTabFrames: "Frames", shopTabCards: "Cards",
     shopEquip: "Equip", shopEquipped: "Equipped",
+    shopNotEnough: "{n} coins short — close an achievement",
+    shopBought: "{name} — bought and equipped",
+    shopCoinsHint: "Coins come from achievements. They're only spent here.",
     cosmeticApplied: "Applied", cosmeticRemoved: "Removed",
     settingsSaved: "Settings saved",
     langTitle: "Language", themeTitle: "Appearance", themeWhite: "White",
@@ -572,13 +573,10 @@ const STR = {
     activityTitle: "Activity",
     achievementsTitle: "Achievements",
     achUnlockedOf: "{done} of {total}",
-    achievementsIntro: "Simple achievements unlock frames and cards from the shop.",
+    achievementsIntro: "Achievements pay in coins. Spend them in the shop on any frames and cards you like.",
     achProgress: "Progress",
-    achRewardOpened: "Unlocked",
-    achRewardLocked: "Reward",
     achGoShop: "Open shop",
     achAll: "All",
-    shopLocked: "This item unlocks with an achievement",
     achFirstLaunch: "First launch", achFirstLaunchHint: "Launch your first token",
     wreathBadgeTitle: "Creator badge", wreathClose: "Close",
     verifiedBadgeTitle: "Verified account",
@@ -3754,29 +3752,25 @@ function catLabel(cat) {
 
    Каждое достижение возвращает текущее значение и цель, поэтому у
    незакрытых виден прогресс, а не просто замок. */
-/* Что открывается за достижение. Часть предметов магазина не выдаётся
-   просто так: рамка «Уголёк» приходит за первый запуск, карточка «Жар» —
-   за подключённый кошелёк и так далее. Список общий для обоих экранов:
-   магазин по нему запирает предметы, страница достижений — показывает
-   награду. */
-const ACH_REWARDS = {
-  firstLaunch: { kind: "frame", id: "ember" },
-  wallet: { kind: "card", id: "emberCard" },
-  face: { kind: "frame", id: "ice" },
-  mcap1k: { kind: "frame", id: "gold" },
-  mcap10k: { kind: "frame", id: "toxic" },
-  mcap100k: { kind: "frame", id: "spark" },
-  invite1: { kind: "card", id: "night" },
-  invite5: { kind: "card", id: "mint" },
-  invite10: { kind: "frame", id: "orbit" },
-  invite25: { kind: "card", id: "sunset" },
+/* Монеты за достижения. Раньше каждое достижение открывало один
+   определённый предмет, и половина витрины стояла под замком без всякого
+   выбора: закрыл «первый запуск» — получил «Уголёк», хочешь ты его или
+   нет. Теперь достижение приносит монеты, а что на них взять — дело
+   вкуса. Предметов дороже, чем монет за все достижения, поэтому выбирать
+   и правда приходится. */
+const ACH_COINS = {
+  firstLaunch: 120,
+  mcap1k: 150,
+  mcap10k: 300,
+  mcap100k: 600,
+  wallet: 60,
+  face: 60,
+  style: 60,
+  invite1: 60,
+  invite5: 150,
+  invite10: 300,
+  invite25: 600,
 };
-
-// Обратная таблица: по предмету — какое достижение его открывает.
-const COSMETIC_LOCKS = Object.entries(ACH_REWARDS).reduce((acc, [achId, reward]) => {
-  acc[`${reward.kind}:${reward.id}`] = achId;
-  return acc;
-}, {});
 
 function buildAchievements({ tokensCount = 0, bestMcapUsd = 0, invites = 0, connected = false, profile = {}, cosmetics = {} }) {
   const bioLen = (profile.bio || "").trim().length;
@@ -3805,7 +3799,7 @@ function buildAchievements({ tokensCount = 0, bestMcapUsd = 0, invites = 0, conn
     done: a.value >= a.target,
     label: t(`ach${a.id.charAt(0).toUpperCase()}${a.id.slice(1)}`),
     hint: t(`ach${a.id.charAt(0).toUpperCase()}${a.id.slice(1)}Hint`),
-    reward: ACH_REWARDS[a.id] || null,
+    coins: ACH_COINS[a.id] || 0,
   }));
 }
 
@@ -3817,12 +3811,30 @@ function achProgressText(a) {
   return `${now}/${a.target}`;
 }
 
-// Открыт ли предмет магазина. Незапертые доступны всегда.
-function cosmeticUnlocked(kind, id, achievements) {
-  const achId = COSMETIC_LOCKS[`${kind}:${id}`];
-  if (!achId) return true;
-  const ach = (achievements || []).find((a) => a.id === achId);
-  return !!(ach && ach.done);
+// Сколько монет уже заработано и сколько потрачено. Отдельного счётчика
+// в базе нет намеренно: баланс — это разница между закрытыми
+// достижениями и купленным. Значит его нельзя рассинхронизировать, а в
+// хранении нуждается только список покупок.
+function coinsEarned(achievements) {
+  return (achievements || []).reduce((sum, a) => sum + (a.done ? (ACH_COINS[a.id] || 0) : 0), 0);
+}
+
+function cosmeticPrice(kind, id) {
+  const item = (kind === "frame" ? FRAME_BY_ID : CARD_BY_ID)[id];
+  return (item && item.price) || 0;
+}
+
+// Ключ покупки — «вид:предмет»: у рамки и карточки бывают одинаковые
+// названия («Искры», «Листопад»), и по одному имени их не различить.
+function ownedKey(kind, id) { return `${kind}:${id}`; }
+
+function coinsSpent(owned) {
+  let sum = 0;
+  for (const key of owned || []) {
+    const [kind, id] = String(key).split(":");
+    sum += cosmeticPrice(kind, id);
+  }
+  return sum;
 }
 
 const SETTINGS_ITEMS = [
@@ -4310,34 +4322,34 @@ function pickLabel(obj) {
 const AVATAR_FRAMES = [
   { id: "none", label: { RU: "Без рамки", EN: "No frame" } },
   {
-    id: "ember", label: { RU: "Уголёк", EN: "Ember" },
+    id: "ember", label: { RU: "Уголёк", EN: "Ember" }, price: 120,
     colors: ["#FF6B35", "#FFC46B", "#FF3D00", "#FF6B35"], spin: 7, glow: "#FF6B35",
   },
   {
-    id: "aurora", label: { RU: "Полярное сияние", EN: "Aurora" },
+    id: "aurora", label: { RU: "Полярное сияние", EN: "Aurora" }, price: 180,
     colors: ["#38D39F", "#2E6BFF", "#B14CFF", "#38D39F"], spin: 11, glow: "#2E6BFF",
   },
   {
-    id: "gold", label: { RU: "Золото", EN: "Gold" },
+    id: "gold", label: { RU: "Золото", EN: "Gold" }, price: 260,
     colors: ["#7A5B15", "#FFE9A8", "#C9A227", "#FFF6D5", "#7A5B15"], spin: 13, glow: "#FFD86B",
   },
   {
-    id: "ice", label: { RU: "Лёд", EN: "Ice" },
+    id: "ice", label: { RU: "Лёд", EN: "Ice" }, price: 200,
     colors: ["rgba(255,255,255,0.12)", "#FFFFFF", "rgba(255,255,255,0.12)", "#9FD8FF", "rgba(255,255,255,0.12)"],
     spin: 16, glow: "#9FD8FF",
   },
   {
-    id: "orbit", label: { RU: "Орбита", EN: "Orbit" },
+    id: "orbit", label: { RU: "Орбита", EN: "Orbit" }, price: 240,
     colors: ["rgba(255,255,255,0.06)", "rgba(255,255,255,0.28)", "rgba(255,255,255,0.06)"],
     spin: 20, glow: "#FFFFFF", orbiters: 3, orbitColor: "#FF6B35",
   },
   {
-    id: "spark", label: { RU: "Искры", EN: "Sparks" },
+    id: "spark", label: { RU: "Искры", EN: "Sparks" }, price: 300,
     colors: ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.4)", "rgba(255,255,255,0.1)"],
     spin: 24, glow: "#FFFFFF", sparks: 6,
   },
   {
-    id: "toxic", label: { RU: "Токсик", EN: "Toxic" },
+    id: "toxic", label: { RU: "Токсик", EN: "Toxic" }, price: 260,
     colors: ["#0F3D2A", "#5BFF9F", "#0F3D2A", "#B6FF3D", "#0F3D2A"], spin: 6, glow: "#5BFF9F",
   },
   // Дальше — рамки со своим устройством, а не просто с другим набором
@@ -4346,40 +4358,40 @@ const AVATAR_FRAMES = [
     // Голова с хвостом бежит по кольцу. Хвост — конический градиент,
     // который к голове разгорается; сама голова отдельной точкой, иначе
     // на тонком кольце она не читается.
-    id: "comet", label: { RU: "Комета", EN: "Comet" },
+    id: "comet", label: { RU: "Комета", EN: "Comet" }, price: 320,
     colors: ["rgba(255,255,255,0.04)", "rgba(255,255,255,0.16)", "rgba(255,255,255,0.04)"],
     spin: 28, glow: "#7CE3FF", comet: { color: "#7CE3FF", dur: 3.4 },
   },
   {
     // Пунктирная дуга поверх кольца: короткие штрихи бегут быстрее
     // самого кольца, и получается разряд, а не вращение.
-    id: "plasma", label: { RU: "Плазма", EN: "Plasma" },
+    id: "plasma", label: { RU: "Плазма", EN: "Plasma" }, price: 320,
     colors: ["#2A0A3D", "#B14CFF", "#2A0A3D", "#2E6BFF", "#2A0A3D"], spin: 9, glow: "#B14CFF",
     dashes: { color: "#E6C8FF", dur: 2.8 },
   },
   {
     // Листья с фона приложения, только облетают аватарку по кругу и
     // покачиваются на ходу.
-    id: "leafring", label: { RU: "Листопад", EN: "Leaf fall" },
+    id: "leafring", label: { RU: "Листопад", EN: "Leaf fall" }, price: 280,
     colors: ["rgba(56,211,159,0.10)", "rgba(56,211,159,0.44)", "rgba(56,211,159,0.10)"],
     spin: 22, glow: "#38D39F", leaves: 3, leafColor: "#5BFF9F",
   },
   {
     // Радуга по кольцу и белый блик, который проходит по ней насквозь.
-    id: "prism", label: { RU: "Призма", EN: "Prism" },
+    id: "prism", label: { RU: "Призма", EN: "Prism" }, price: 400,
     colors: ["#FF3D6E", "#FFC46B", "#5BFF9F", "#2E6BFF", "#B14CFF", "#FF3D6E"],
     spin: 15, glow: "#B14CFF", sweep: true,
   },
   {
     // Кольца расходятся наружу, как круги по воде.
-    id: "pulse", label: { RU: "Пульс", EN: "Pulse" },
+    id: "pulse", label: { RU: "Пульс", EN: "Pulse" }, price: 240,
     colors: ["rgba(56,211,159,0.14)", "#38D39F", "rgba(56,211,159,0.14)"],
     spin: 18, glow: "#38D39F", waves: 3,
   },
   {
     // Почти чёрное кольцо с одной раскалённой дугой и широким ореолом:
     // видно только край, будто из-за него что-то светит.
-    id: "eclipse", label: { RU: "Затмение", EN: "Eclipse" },
+    id: "eclipse", label: { RU: "Затмение", EN: "Eclipse" }, price: 360,
     colors: ["#08080C", "#08080C", "#FFE9A8", "#FF6B35", "#08080C", "#08080C"],
     spin: 24, glow: "#FF9A3D", halo: true,
   },
@@ -4388,62 +4400,62 @@ const AVATAR_FRAMES = [
 const PROFILE_CARDS = [
   { id: "none", label: { RU: "Без карточки", EN: "No card" } },
   {
-    id: "grid", label: { RU: "Сетка", EN: "Grid" },
+    id: "grid", label: { RU: "Сетка", EN: "Grid" }, price: 80,
     base: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0))",
     grid: "rgba(255,255,255,0.10)", floor: true,
   },
   {
-    id: "night", label: { RU: "Ночь", EN: "Night" },
+    id: "night", label: { RU: "Ночь", EN: "Night" }, price: 140,
     base: "linear-gradient(180deg, #101A3A 0%, #0A0A14 70%, rgba(0,0,0,0) 100%)",
     stars: 26,
   },
   {
-    id: "emberCard", label: { RU: "Жар", EN: "Heat" },
+    id: "emberCard", label: { RU: "Жар", EN: "Heat" }, price: 160,
     base: "linear-gradient(180deg, rgba(255,107,53,0.30) 0%, rgba(255,61,0,0.08) 55%, rgba(0,0,0,0) 100%)",
     blobs: [["#FF6B35", 0.35], ["#FFB35C", 0.22]],
   },
   {
-    id: "auroraCard", label: { RU: "Сияние", EN: "Aurora" },
+    id: "auroraCard", label: { RU: "Сияние", EN: "Aurora" }, price: 200,
     base: "linear-gradient(180deg, rgba(46,107,255,0.22) 0%, rgba(177,76,255,0.12) 50%, rgba(0,0,0,0) 100%)",
     blobs: [["#2E6BFF", 0.4], ["#B14CFF", 0.3], ["#38D39F", 0.22]],
   },
   {
-    id: "mint", label: { RU: "Мята", EN: "Mint" },
+    id: "mint", label: { RU: "Мята", EN: "Mint" }, price: 160,
     base: "linear-gradient(180deg, rgba(56,211,159,0.26) 0%, rgba(56,211,159,0.05) 60%, rgba(0,0,0,0) 100%)",
     grid: "rgba(56,211,159,0.16)",
   },
   {
-    id: "sunset", label: { RU: "Закат", EN: "Sunset" },
+    id: "sunset", label: { RU: "Закат", EN: "Sunset" }, price: 240,
     base: "linear-gradient(180deg, #FF6B35 0%, #B14CFF 45%, rgba(0,0,0,0) 100%)",
     floor: true, grid: "rgba(255,255,255,0.16)",
   },
   {
-    id: "meteor", label: { RU: "Метеоры", EN: "Meteors" },
+    id: "meteor", label: { RU: "Метеоры", EN: "Meteors" }, price: 220,
     base: "linear-gradient(180deg, #12163A 0%, #0A0A14 68%, rgba(0,0,0,0) 100%)",
     streaks: 7, streakColor: "#9FD8FF", stars: 16,
   },
   {
-    id: "wave", label: { RU: "Волны", EN: "Waves" },
+    id: "wave", label: { RU: "Волны", EN: "Waves" }, price: 220,
     base: "linear-gradient(180deg, rgba(12,26,48,0.92) 0%, rgba(0,0,0,0) 100%)",
     waves: [["#2E6BFF", 0.36], ["#38D39F", 0.26], ["#B14CFF", 0.22]],
   },
   {
-    id: "sparkCard", label: { RU: "Искры", EN: "Sparks" },
+    id: "sparkCard", label: { RU: "Искры", EN: "Sparks" }, price: 200,
     base: "linear-gradient(180deg, rgba(255,107,53,0.24) 0%, rgba(255,61,0,0.06) 60%, rgba(0,0,0,0) 100%)",
     rise: 16, riseColor: "#FFB35C",
   },
   {
-    id: "leafCard", label: { RU: "Листопад", EN: "Leaf fall" },
+    id: "leafCard", label: { RU: "Листопад", EN: "Leaf fall" }, price: 240,
     base: "linear-gradient(180deg, rgba(56,211,159,0.20) 0%, rgba(255,107,53,0.07) 55%, rgba(0,0,0,0) 100%)",
     cardLeaves: 9, leafColor: "#5BFF9F",
   },
   {
-    id: "beam", label: { RU: "Лучи", EN: "Beams" },
+    id: "beam", label: { RU: "Лучи", EN: "Beams" }, price: 220,
     base: "linear-gradient(180deg, rgba(177,76,255,0.22) 0%, rgba(0,0,0,0) 75%)",
     beams: 4, beamColor: "#C9A0FF", grid: "rgba(177,76,255,0.14)",
   },
   {
-    id: "holoCard", label: { RU: "Голограмма", EN: "Hologram" },
+    id: "holoCard", label: { RU: "Голограмма", EN: "Hologram" }, price: 300,
     base: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0) 70%)",
     holo: true,
   },
@@ -5426,17 +5438,20 @@ function BootSplash({ steps, done, insetTop = 0 }) {
    предмета меняются ровно две карточки из десятка, а остальные — со всеми
    своими размытиями и анимациями — вообще не перерисовываются. Раньше
    перерисовывались все, и оранжевая рамка появлялась с задержкой. */
-const ShopItem = React.memo(function ShopItem({ item, kind, equipped, locked, lockHint, onEquip, onLocked }) {
-  const handle = useCallback(
-    () => (locked ? onLocked && onLocked(lockHint) : onEquip(kind, item.id)),
-    [locked, lockHint, onLocked, onEquip, kind, item.id],
-  );
+const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, price, affordable, onEquip, onBuy, onTooPoor }) {
+  const handle = useCallback(() => {
+    if (owned) return onEquip(kind, item.id);
+    if (!affordable) return onTooPoor && onTooPoor(price);
+    return onBuy(kind, item.id);
+  }, [owned, affordable, price, onEquip, onBuy, onTooPoor, kind, item.id]);
   return (
     <button
       onClick={handle}
       className={`fx-card flex flex-col items-center gap-2.5 rounded-[22px] p-3${equipped ? " fx-picked" : ""}`}
-      style={{ background: T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden", contain: "paint", opacity: locked ? 0.55 : 1 }}
+      style={{ background: T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden", contain: "paint" }}
     >
+      {/* Некупленное не гасим прозрачностью: предмет видно целиком, на
+          то он и витрина, а что он ещё не твой — сказано ценой. */}
       <div style={{ position: "relative", width: "100%", height: 96, borderRadius: 16, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
         {kind === "card" && <ProfileCardBg cardId={item.id} height={96} radius={16} />}
         <div style={{ position: "relative", zIndex: 1 }}>
@@ -5450,11 +5465,16 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, locked, lo
       <div className="flex items-center gap-1.5">
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 12.5, fontWeight: 700 }}>{pickLabel(item.label)}</span>
         {equipped && <CheckCircle2 size={13} color={T.electric} />}
-        {locked && <Lock size={12} color={T.muted} />}
       </div>
-      <span style={{ fontFamily: bodyFont, fontSize: 11, color: equipped ? T.electric : T.muted, textAlign: "center", lineHeight: 1.3 }}>
-        {locked ? lockHint : equipped ? t("shopEquipped") : t("shopEquip")}
-      </span>
+      {owned ? (
+        <span style={{ fontFamily: bodyFont, fontSize: 11, color: equipped ? T.electric : T.muted, textAlign: "center", lineHeight: 1.3 }}>
+          {equipped ? t("shopEquipped") : t("shopEquip")}
+        </span>
+      ) : (
+        <span className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 11.5, fontWeight: 700, color: affordable ? "#FFD86B" : T.muted }}>
+          <CoinIcon size={12} dim={!affordable} /> {price}
+        </span>
+      )}
     </button>
   );
 });
@@ -5491,11 +5511,6 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
 
       <div className="flex flex-col gap-2">
         {achievements.map((a, i) => {
-          const frame = a.reward && a.reward.kind === "frame" ? a.reward.id : null;
-          const card = a.reward && a.reward.kind === "card" ? a.reward.id : null;
-          const rewardLabel = frame
-            ? pickLabel((FRAME_BY_ID[frame] || {}).label || { RU: frame, EN: frame })
-            : card ? pickLabel((CARD_BY_ID[card] || {}).label || { RU: card, EN: card }) : null;
           return (
             <div
               key={a.id}
@@ -5529,27 +5544,17 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
                     <span style={{ fontFamily: monoFont, fontSize: 10.5, color: T.muted }}>{achProgressText(a)}</span>
                   </div>
                 )}
-                {rewardLabel && (
-                  <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
-                    <Gift size={11} color={a.done ? a.color : T.muted} />
-                    <span style={{ fontFamily: bodyFont, fontSize: 10.5, color: a.done ? T.ice : T.muted }}>
-                      {a.done ? t("achRewardOpened") : t("achRewardLocked")}: {rewardLabel}
-                    </span>
-                  </div>
-                )}
               </div>
 
-              {/* Сам предмет — видно, за что стараться */}
-              {frame && (
-                <div style={{ flexShrink: 0, opacity: a.done ? 1 : 0.45 }}>
-                  <AvatarFrame frameId={frame} size={46}>
-                    <div style={{ width: "100%", height: "100%", background: T.bg }} />
-                  </AvatarFrame>
-                </div>
-              )}
-              {card && (
-                <div style={{ width: 60, height: 46, borderRadius: 12, overflow: "hidden", position: "relative", flexShrink: 0, background: T.surfaceHi, opacity: a.done ? 1 : 0.45 }}>
-                  <ProfileCardBg cardId={card} height={46} radius={12} />
+              {/* Награда — монеты для магазина. Предмет за достижение
+                  больше не закреплён: что купить, человек решает сам. */}
+              {a.coins > 0 && (
+                <div className="flex items-center gap-1 flex-shrink-0 rounded-full px-2.5 py-1"
+                  style={{ background: a.done ? hexA(T.gold || "#FFD86B", 0.14) : T.surfaceHi, border: `1px solid ${a.done ? hexA("#FFD86B", 0.4) : T.line}` }}>
+                  <CoinIcon size={12} dim={!a.done} />
+                  <span style={{ fontFamily: monoFont, fontSize: 11.5, fontWeight: 700, color: a.done ? "#FFD86B" : T.muted }}>
+                    +{a.coins}
+                  </span>
                 </div>
               )}
             </div>
@@ -5573,7 +5578,7 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
 /* ShopView — витрина косметики: рамки для аватарки и карточки профиля.
    Предметы применяются мгновенно и запоминаются на устройстве, поэтому
    «купить» здесь — это «надеть»: отдельного баланса у магазина нет. */
-function ShopView({ cosmetics, onEquip, achievements = [], achievementsReady = true, onOpenAchievements, showToast }) {
+function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady = true, onOpenAchievements, showToast }) {
   const [tab, setTab] = useState("frames");
   // Нажатие отмечается сразу здесь, не дожидаясь, пока выбор дойдёт до
   // состояния всего приложения и вернётся обратно пропсом. Рамка при
@@ -5587,6 +5592,15 @@ function ShopView({ cosmetics, onEquip, achievements = [], achievementsReady = t
     setPending({ kind, id });
     equipRef.current(kind, id);
   }, []);
+  const buyRef = useRef(onBuy);
+  useEffect(() => { buyRef.current = onBuy; });
+  const buy = useCallback((k, id) => { buyRef.current(k, id); }, []);
+  const tooPoorRef = useRef(null);
+  tooPoorRef.current = (price) => {
+    if (showToast) showToast(tf("shopNotEnough", { n: Math.max(0, price - coins) }));
+    if (onOpenAchievements) onOpenAchievements();
+  };
+  const tooPoor = useCallback((price) => tooPoorRef.current(price), []);
   const items = tab === "frames" ? AVATAR_FRAMES : PROFILE_CARDS;
   const kind = tab === "frames" ? "frame" : "card";
   const equippedId = pending && pending.kind === kind ? pending.id : cosmetics[kind];
@@ -5598,8 +5612,20 @@ function ShopView({ cosmetics, onEquip, achievements = [], achievementsReady = t
 
   return (
     <div className="flex flex-col gap-4 pt-2">
-      <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("shopTitle")}</span>
-      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("shopIntro")}</p>
+      {/* Счётчик монет живёт только здесь: тратить их больше негде, а на
+          остальных экранах он был бы просто цифрой без применения. */}
+      <div className="flex items-center justify-between gap-3">
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("shopTitle")}</span>
+        <button
+          onClick={onOpenAchievements}
+          className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5 flex-shrink-0"
+          style={{ background: hexA("#FFD86B", 0.12), border: `1px solid ${hexA("#FFD86B", 0.35)}` }}
+        >
+          <CoinIcon size={15} />
+          <span style={{ fontFamily: monoFont, fontSize: 13.5, fontWeight: 700, color: "#FFD86B" }}>{coins}</span>
+        </button>
+      </div>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("shopCoinsHint")}</p>
 
       <div className="flex items-center gap-2">
         {[["frames", t("shopTabFrames")], ["cards", t("shopTabCards")]].map(([id, label]) => {
@@ -5618,28 +5644,26 @@ function ShopView({ cosmetics, onEquip, achievements = [], achievementsReady = t
       </div>
 
       {!achievementsReady ? (
-        // Пока неизвестно, что открыто, витрину не показываем: мелькание
-        // замков на секунду хуже, чем секунда ожидания.
+        // Пока не посчитаны достижения, неизвестен и баланс: показывать
+        // цены, которых человек «не может» себе позволить, — обман.
         <PageLoader minHeight={260} />
       ) : (
       <div className="grid grid-cols-2 gap-2.5" key={tab}>
         {items.map((item) => {
-          const unlocked = cosmeticUnlocked(kind, item.id, achievements);
-          const achId = COSMETIC_LOCKS[`${kind}:${item.id}`];
-          const ach = achId ? achievements.find((a) => a.id === achId) : null;
+          const price = item.price || 0;
+          const isOwned = price === 0 || owned.has(ownedKey(kind, item.id));
           return (
             <ShopItem
               key={item.id}
               item={item}
               kind={kind}
               equipped={equippedId === item.id}
-              locked={!unlocked}
-              lockHint={ach ? ach.hint : ""}
+              owned={isOwned}
+              price={price}
+              affordable={coins >= price}
               onEquip={equip}
-              onLocked={(hint) => {
-                if (showToast) showToast(hint || t("shopLocked"));
-                if (onOpenAchievements) onOpenAchievements();
-              }}
+              onBuy={buy}
+              onTooPoor={tooPoor}
             />
           );
         })}
@@ -8845,6 +8869,23 @@ function ButtonRocketFlyby({ size = 26 }) {
 // Кленовый по умолчанию: из трёх фоновых пород он единственный, чей
 // силуэт остаётся узнаваемым листом на шестнадцати точках. Дубовый на
 // такой величине рассыпается в зубчики, мятный читается как капля.
+/* Монета магазина. Не просто кружок с цифрой: внутри тот же мятный лист,
+   что и на кнопке запуска, — валюта должна выглядеть своей, а не взятой
+   из чужого набора значков. */
+function CoinIcon({ size = 14, dim = false }) {
+  const gold = dim ? T.muted : "#FFD86B";
+  const leaf = LEAF_KINDS[2];
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" style={{ flexShrink: 0 }} aria-hidden>
+      <circle cx="10" cy="10" r="8.6" fill={gold} opacity={dim ? 0.08 : 0.16} />
+      <circle cx="10" cy="10" r="8.6" fill="none" stroke={gold} strokeWidth="1.3" />
+      <g transform="translate(10 15.2) scale(0.4)">
+        <path d={leaf.outline} fill={gold} />
+      </g>
+    </svg>
+  );
+}
+
 // Рамка у каждой породы своя: у клёна лист широкий, у мяты вдвое уже.
 // Общая рамка оставляла бы мяте пустые поля по бокам, и рядом с текстом
 // она выглядела бы мельче остальных значков того же размера.
@@ -9390,7 +9431,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
     const { data: prof, error } = await supabase
       .from("profiles")
-      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id, creator_tier, verified")
+      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id, creator_tier, verified, owned_cosmetics")
       .eq("id", user.id)
       .single();
     if (error || !prof) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
@@ -9419,6 +9460,22 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         });
       }
       return { frame, card };
+    });
+    // Покупки — так же: список с сервера и список с устройства
+    // объединяются, чтобы ничего не пропало ни при смене телефона, ни у
+    // того, кто покупал ещё до входа в аккаунт.
+    setOwned((local) => {
+      const fromServer = Array.isArray(prof.owned_cosmetics) ? prof.owned_cosmetics : [];
+      const merged = new Set([...local, ...fromServer]);
+      if (merged.size !== fromServer.length) {
+        supabase.from("profiles").update({ owned_cosmetics: [...merged] }).eq("id", user.id).then(({ error }) => {
+          if (error) console.warn("[mintly] failed to sync purchases:", error.message);
+        });
+      }
+      try {
+        if (typeof window !== "undefined") window.localStorage.setItem("mintly_owned", JSON.stringify([...merged]));
+      } catch (e) { /* localStorage unavailable */ }
+      return merged;
     });
     loadMyTokens(user.id);
   }
@@ -9637,7 +9694,38 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     return base;
   });
   const COSMETIC_STORAGE = { frame: "mintly_frame", card: "mintly_card" };
-  function equipCosmetic(kind, id) {
+
+  /* Купленные предметы. Баланс монет отдельно нигде не лежит: он
+     считается как «заработано достижениями минус потрачено на покупки».
+     Значит рассинхронизировать его нечему, а хранить нужно только список
+     покупок — на устройстве и в профиле, чтобы он не пропал при смене
+     телефона. */
+  const [owned, setOwned] = useState(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const raw = window.localStorage.getItem("mintly_owned");
+        if (raw) return new Set(JSON.parse(raw) || []);
+      }
+    } catch (e) { /* localStorage unavailable */ }
+    return new Set();
+  });
+  function persistOwned(next) {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("mintly_owned", JSON.stringify([...next]));
+      }
+    } catch (e) { /* localStorage unavailable */ }
+    if (userId) {
+      supabase
+        .from("profiles")
+        .update({ owned_cosmetics: [...next] })
+        .eq("id", userId)
+        .then(({ error }) => {
+          if (error) console.warn("[mintly] failed to save purchases:", error.message);
+        });
+    }
+  }
+  function equipCosmetic(kind, id, silent = false) {
     setCosmetics((c) => ({ ...c, [kind]: id }));
     try {
       if (typeof window !== "undefined") {
@@ -9655,7 +9743,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           if (error) console.warn("[mintly] failed to save cosmetics:", error.message);
         });
     }
-    showToast(id === "none" ? t("cosmeticRemoved") : t("cosmeticApplied"));
+    if (!silent) showToast(id === "none" ? t("cosmeticRemoved") : t("cosmeticApplied"));
   }
 
   // PIN-код при входе — код хранится только на устройстве (localStorage),
@@ -9760,10 +9848,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
 
   // Достижения. Считаются здесь, потому что нужны сразу трём экранам:
   // профилю, отдельной странице и магазину — он по ним запирает предметы.
-  // Достижения решают, что заперто в магазине. Пока их слагаемые ещё
-  // едут — рекорд капитализации и число приглашённых, — витрину лучше не
-  // показывать вовсе: иначе на секунду видно не то состояние замков.
-  // Гостю ждать нечего: у него ничего и не может быть открыто.
+  // Достижения приносят монеты, а по монетам считается баланс магазина.
+  // Пока их слагаемые ещё едут — рекорд капитализации и число
+  // приглашённых, — витрину лучше не показывать вовсе: иначе на секунду
+  // видно чужой баланс. Гостю ждать нечего: у него монет и быть не может.
   const achievementsReady = !userId || (bestMcapReady && invitesReady);
 
   const achievements = useMemo(
@@ -9777,6 +9865,27 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     }),
     [myTokens.length, bestMcapUsd, inviteCount, connected, profile, cosmetics],
   );
+
+  // Баланс: заработано достижениями минус потрачено на покупки.
+  const coins = Math.max(0, coinsEarned(achievements) - coinsSpent(owned));
+
+  function buyCosmetic(kind, id) {
+    const price = cosmeticPrice(kind, id);
+    if (price > coins) {
+      showToast(tf("shopNotEnough", { n: price - coins }));
+      return;
+    }
+    const next = new Set(owned);
+    next.add(ownedKey(kind, id));
+    setOwned(next);
+    persistOwned(next);
+    // Купленное сразу и надеваем: отдельное нажатие «а теперь примерь»
+    // ничего не решает, а лишний шаг раздражает. Своего сообщения
+    // «надето» тут не нужно — про покупку скажем одной строкой ниже.
+    equipCosmetic(kind, id, true);
+    const item = (kind === "frame" ? FRAME_BY_ID : CARD_BY_ID)[id];
+    showToast(tf("shopBought", { name: pickLabel(item ? item.label : null) || id }));
+  }
   async function deleteMyToken(id) {
     // Optimistic local removal, then the real delete — RLS (see
     // supabase_tokens_schema.sql) already guarantees a user can only
@@ -10458,8 +10567,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           <KeepAlive show={view === "shop"}>
             <ShopView
               cosmetics={cosmetics}
+              owned={owned}
+              coins={coins}
               onEquip={equipCosmetic}
-              achievements={achievements}
+              onBuy={buyCosmetic}
               achievementsReady={achievementsReady}
               onOpenAchievements={() => setView("achievements")}
               showToast={showToast}
