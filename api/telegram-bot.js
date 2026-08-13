@@ -40,13 +40,18 @@ function inviterFromPayload(payload) {
   return UUID_RE.test(id) ? id : null;
 }
 
+async function tgCall(method, body) {
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  return res.json();
+}
+
 async function tg(method, body) {
   try {
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    await tgCall(method, body);
   } catch (err) {
     console.warn("[bot] telegram call failed:", method, err && err.message);
   }
@@ -64,7 +69,53 @@ function welcome(chatId, startParam) {
   });
 }
 
+/* Подключение обработчика к боту — со стороны сервера. Ту же операцию
+   можно сделать вручную запросом к Telegram, но там приходится
+   переносить токен бота руками, а он длинный и его легко испортить при
+   копировании: лишний пробел или обрезанный хвост дают невнятное «Not
+   Found». Здесь токен уже есть в окружении, поэтому достаточно открыть
+   адрес со своим секретом:
+     https://<домен>/api/telegram-bot?setup=<TELEGRAM_WEBHOOK_SECRET>
+   В ответ приходит имя бота и текущее состояние подключения. */
+async function setup(req, res) {
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  const url = `https://${host}/api/telegram-bot`;
+  try {
+    const me = await tgCall("getMe");
+    if (!me.ok) {
+      return res.status(502).json({
+        error: "bad_bot_token",
+        подсказка: "TELEGRAM_BOT_TOKEN в переменных окружения не принят Telegram",
+        ответ: me,
+      });
+    }
+    const set = await tgCall("setWebhook", {
+      url,
+      secret_token: WEBHOOK_SECRET,
+      allowed_updates: ["message"],
+    });
+    const info = await tgCall("getWebhookInfo");
+    return res.status(set.ok ? 200 : 502).json({
+      бот: me.result && me.result.username,
+      подключено: !!set.ok,
+      адрес: url,
+      состояние: info.result || info,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: "setup_failed", detail: err && err.message });
+  }
+}
+
 export default async function handler(req, res) {
+  // Настройка идёт обычной ссылкой в браузере, поэтому GET здесь
+  // разрешён — но только со знанием секрета.
+  if (req.method === "GET") {
+    const asked = new URL(req.url, "https://x").searchParams.get("setup");
+    if (!WEBHOOK_SECRET) return res.status(500).json({ error: "no_webhook_secret" });
+    if (asked !== WEBHOOK_SECRET) return res.status(401).json({ error: "bad_secret" });
+    if (!BOT_TOKEN) return res.status(500).json({ error: "server_not_configured" });
+    return setup(req, res);
+  }
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "method_not_allowed" });

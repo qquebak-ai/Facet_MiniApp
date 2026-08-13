@@ -112,16 +112,24 @@ account_conflict` и сессию не выдаёт: иначе, зарегис�
 1. Выполнить `supabase_referral_bot.sql` и `supabase_referrals.sql` в Supabase.
 2. Задать в Vercel переменную `TELEGRAM_WEBHOOK_SECRET` — любую случайную
    строку (латиница, цифры, дефис; 1–256 знаков).
-3. Подключить обработчик к боту, подставив токен и тот же секрет:
+3. Открыть в браузере адрес со своим секретом — сервер подключит обработчик
+   сам, токен бота он берёт из окружения:
+
+   ```
+   https://mintlyapp.vercel.app/api/telegram-bot?setup=<СЕКРЕТ>
+   ```
+
+   В ответ приходит имя бота, `"подключено": true` и текущее состояние.
+   Переносить токен руками не нужно: он длинный, и при копировании легко
+   потерять хвост — Telegram отвечает на это невнятным `Not Found`.
+
+   То же самое запросом напрямую, если под рукой терминал:
 
    ```
    curl "https://api.telegram.org/bot<ТОКЕН>/setWebhook" \
      -d "url=https://mintlyapp.vercel.app/api/telegram-bot" \
      -d "secret_token=<СЕКРЕТ>"
    ```
-
-   Проверить, что подключилось: `https://api.telegram.org/bot<ТОКЕН>/getWebhookInfo`
-   — там должен быть тот же адрес и `pending_update_count: 0`.
 
 Необязательные переменные: `TELEGRAM_BOT_NAME` и `TELEGRAM_APP_NAME` — имя бота
 и короткое имя мини-приложения для кнопки «Открыть Mintly» в приветствии.
