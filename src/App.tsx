@@ -5621,7 +5621,7 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
           заголовка: сама она — отдельный блок колонки, иначе прилипать
           было бы не к чему. Подложка непрозрачная: под плашкой проезжают
           карточки. */}
-      <div style={{ position: "sticky", top: 4, zIndex: 5, alignSelf: "flex-end", marginTop: -51 }}>
+      <div style={{ position: "sticky", top: 4, zIndex: 5, alignSelf: "flex-end", marginTop: -59 }}>
         <button
           onClick={onOpenAchievements}
           className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5"
