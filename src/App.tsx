@@ -9530,10 +9530,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   }, [userId]);
   async function loadProfileForUser(user) {
     setUserId(user ? user.id : null);
-    if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
+    if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); setCoinsGranted(0); return; }
     const { data: prof, error } = await supabase
       .from("profiles")
-      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id, creator_tier, verified, owned_cosmetics")
+      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id, creator_tier, verified, owned_cosmetics, coins_granted")
       .eq("id", user.id)
       .single();
     if (error || !prof) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
@@ -9542,6 +9542,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // её должны видеть другие. Здесь только читаем, повышает её эффект
     // ниже, когда посчитается лучшая капитализация.
     setCreatorTier(Number(prof.creator_tier) || 0);
+    setCoinsGranted(Number(prof.coins_granted) || 0);
     setAccountCreated(true);
     // Косметика хранится в профиле, а не только на устройстве — иначе её
     // не увидят другие. Но если на сервере пусто, а локально что-то
@@ -9802,6 +9803,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
      Значит рассинхронизировать его нечему, а хранить нужно только список
      покупок — на устройстве и в профиле, чтобы он не пропал при смене
      телефона. */
+  /* Монеты, выданные вручную из базы (колонка coins_granted). Нужны для
+     раздач и проверок: обычный путь — достижения, но иногда монеты надо
+     просто начислить, и городить ради этого отдельный экран незачем.
+     Правится только в Supabase, приложение колонку не пишет. */
+  const [coinsGranted, setCoinsGranted] = useState(0);
   const [owned, setOwned] = useState(() => {
     try {
       if (typeof window !== "undefined") {
@@ -9968,8 +9974,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     [myTokens.length, bestMcapUsd, inviteCount, connected, profile, cosmetics],
   );
 
-  // Баланс: заработано достижениями минус потрачено на покупки.
-  const coins = Math.max(0, coinsEarned(achievements) - coinsSpent(owned));
+  // Баланс: выданное площадкой плюс заработанное достижениями минус
+  // потраченное на покупки.
+  const coins = Math.max(0, coinsGranted + coinsEarned(achievements) - coinsSpent(owned));
 
   function buyCosmetic(kind, id) {
     const price = cosmeticPrice(kind, id);
