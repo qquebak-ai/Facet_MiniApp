@@ -172,7 +172,7 @@ const STR = {
     tokenLinkCopied: "Ссылка на токен скопирована",
     reportSent: "Жалоба отправлена на проверку",
     back: "Назад",
-    perToken: "/ токен", chartNoData: "Истории торгов пока нет", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
+    perToken: "/ токен", chartNoData: "История не загрузилась — биржа не ответила", chartRetry: "Повторить", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
     statPrice: "Цена", statLiquidity: "Ликвидность", statHolders: "Держателей", statVolume24h: "Объём 24ч",
     trustTitle: "Проверка токена",
     trustCreatorHolds: "У создателя на руках",
@@ -434,7 +434,7 @@ const STR = {
     tokenLinkCopied: "Token link copied",
     reportSent: "Report sent for review",
     back: "Back",
-    perToken: "/ token", chartNoData: "No trading history yet", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
+    perToken: "/ token", chartNoData: "History didn't load — the exchange didn't answer", chartRetry: "Try again", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
     statPrice: "Price", statLiquidity: "Liquidity", statHolders: "Holders", statVolume24h: "24h Volume",
     trustTitle: "Token check",
     trustCreatorHolds: "Creator still holds",
@@ -2086,7 +2086,42 @@ async function fetchPoolTrades(poolAddress, limit = 300, priority = GT_PRIORITY.
 // запрос не прошёл, показываем их, а не пустой экран: свечи
 // пятиминутной давности честнее надписи «истории нет» у токена, который
 // торгуется прямо сейчас.
+//
+// Кэш переживает перезапуск приложения. Мини-приложение закрывают и
+// открывают по десять раз на дню, а лимит запросов у источника общий:
+// после перезапуска первый же отказ оставлял пустой экран, хотя те же
+// свечи только что были на руках. Держим их в хранилище устройства —
+// последние два десятка пар, дольше суток не показываем.
+const OHLCV_STORE_KEY = "mintly_ohlcv_v1";
+const OHLCV_STORE_MAX = 20;
+const OHLCV_STORE_TTL_MS = 24 * 60 * 60 * 1000;
 const ohlcvCache = new Map();
+
+function loadOhlcvStore() {
+  try {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(OHLCV_STORE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    const now = Date.now();
+    for (const [key, entry] of Object.entries(saved || {})) {
+      if (entry && entry.ts && now - entry.ts < OHLCV_STORE_TTL_MS && entry.value?.candles?.length) {
+        ohlcvCache.set(key, entry);
+      }
+    }
+  } catch (e) { /* хранилище недоступно или испорчено — не беда */ }
+}
+loadOhlcvStore();
+
+function saveOhlcvStore() {
+  try {
+    if (typeof window === "undefined") return;
+    const entries = [...ohlcvCache.entries()]
+      .sort((a, b) => b[1].ts - a[1].ts)
+      .slice(0, OHLCV_STORE_MAX);
+    window.localStorage.setItem(OHLCV_STORE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch (e) { /* переполнено — переживём */ }
+}
 
 /* Запасной источник истории цены — tonapi.
 
@@ -2193,6 +2228,7 @@ async function loadPoolOHLCV(poolAddress, tf, priority, signal, cacheKey, hit) {
       volume: candles.map(c => ({ time: c.time, value: Number.isFinite(c.volume) ? c.volume : 0, color: c.close >= c.open ? hexA(T.up, 0.32) : hexA(T.down, 0.32) })),
     };
     ohlcvCache.set(cacheKey, { value: result, ts: Date.now() });
+    saveOhlcvStore();
     return result;
   } catch (err) {
     // Не вышло — отдаём прошлый удачный ответ, даже если он старше срока:
@@ -5926,6 +5962,9 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   const [chartData, setChartData] = useState(null); // { candles, volume, isLive }
   const [chartLoading, setChartLoading] = useState(true);
   const chartSrcRef = useRef(null);
+  // Нажатие «Повторить» на пустом графике: меняем число — и загрузка
+  // начинается заново, не дожидаясь общего круга обновления.
+  const [chartReload, setChartReload] = useState(0);
   const [hovered, setHovered] = useState(null);
   const up = token.change >= 0;
   // У токена на кривой жетон живёт в той же сети, что и приложение.
@@ -6040,7 +6079,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     // линию строить не из чего, и попытку нужно повторить.
     // tonPriceUsd в зависимостях: график считается в долларах, и при
     // смене курса его нужно пересобрать, иначе он повиснет на старом.
-  }, [tf, token.id, token.poolAddress, token.curveAddress, token.price > 0, tonPriceUsd]);
+  }, [tf, token.id, token.poolAddress, token.curveAddress, token.price > 0, tonPriceUsd, chartReload]);
 
   // Обновление открытого графика. Крутится и тогда, когда данных ещё
   // нет: первый запрос мог не пройти из-за лимита, и без повторов на
@@ -6324,8 +6363,17 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
                 <LeafLoader size={64} />
               </div>
             ) : !chartReady ? (
-              <div className="flex items-center justify-center" style={{ height: 340, fontFamily: monoFont, fontSize: 11, color: T.muted, textAlign: "center", padding: "0 20px" }}>
-                {tr("chartNoData")}
+              <div className="flex flex-col items-center justify-center gap-3" style={{ height: 340, padding: "0 20px" }}>
+                <span style={{ fontFamily: monoFont, fontSize: 11, color: T.muted, textAlign: "center" }}>{tr("chartNoData")}</span>
+                {/* Кнопка, а не тупик: у источника общий лимит запросов, и
+                    через полминуты попытка почти всегда проходит. */}
+                <button
+                  onClick={() => setChartReload((v) => v + 1)}
+                  className="fx-tap rounded-full px-3.5 py-1.5"
+                  style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 12, color: T.ice }}
+                >
+                  {tr("chartRetry")}
+                </button>
               </div>
             ) : (
               <TerminalChart key={`${token.id}-${tf}-${chartMode}`} candles={scaledCandles} height={340} themeKey={themeKey} onHover={setHovered} tf={tf} valueFmt={chartMode === "price" ? fmtPrice : fmtUSD} />
