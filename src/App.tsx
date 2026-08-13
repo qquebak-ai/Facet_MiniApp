@@ -4,7 +4,7 @@ import {
   Search, Flame, TrendingUp, Clock, Sparkles, ArrowUpRight, ArrowDownRight,
   Wallet, Home as HomeIcon, PlusCircle, User, ChevronLeft, Share2, Star,
   ShieldCheck, ShieldAlert, Globe, Globe2, Send, Twitter, Image as ImageIcon, Upload,
-  Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, MoreHorizontal, HeartCrack,
+  Copy, ExternalLink, LogOut, ChevronRight, Rocket, MoreHorizontal, HeartCrack,
   Settings as SettingsIcon, Lock, Gift, LifeBuoy,
   FileText, CheckCircle2, RefreshCw, X,
   Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown
@@ -5906,11 +5906,23 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     } catch (e) { /* localStorage unavailable */ }
     return "H1";
   });
-  const [tfExpanded, setTfExpanded] = useState(false);
+  // Ряд интервалов прокручивается вбок; выбранный подводим в поле
+  // зрения, иначе после открытия экрана он мог оказаться за краем.
+  const tfRowRef = useRef(null);
   function changeTf(next) {
     setTf(next);
     try { if (typeof window !== "undefined") window.localStorage.setItem("mintly_chart_tf", next); } catch (e) { /* localStorage unavailable */ }
   }
+  useEffect(() => {
+    const row = tfRowRef.current;
+    if (!row) return;
+    const btn = row.querySelector(`[data-tf="${tf}"]`);
+    if (!btn) return;
+    // Прокручиваем сам ряд, а не страницу: scrollIntoView утянул бы за
+    // собой весь экран токена.
+    const left = btn.offsetLeft - (row.clientWidth - btn.offsetWidth) / 2;
+    row.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+  }, [tf, tab]);
   const [chartData, setChartData] = useState(null); // { candles, volume, isLive }
   const [chartLoading, setChartLoading] = useState(true);
   const chartSrcRef = useRef(null);
@@ -6280,28 +6292,21 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
 
       {tab === "chart" && (
         <>
-          <div className="flex items-center justify-end gap-2 flex-wrap">
-            <div className="no-scrollbar flex gap-1.5 overflow-x-auto" style={{ flex: 1, justifyContent: "flex-end" }}>
-              {/* В свёрнутом виде видны первые четыре кнопки — но если
-                  выбран интервал из спрятанных, он занимает место
-                  последней. Иначе после выбора, скажем, четырёх часов
-                  список сворачивался и ни одна кнопка не подсвечивалась:
-                  выглядело так, будто выбор слетел. */}
-              {(tfExpanded
-                ? TIMEFRAMES
-                : TIMEFRAMES.slice(0, 4).includes(tf)
-                  ? TIMEFRAMES.slice(0, 4)
-                  : [...TIMEFRAMES.slice(0, 3), tf]
-              ).map(f => (
-                <button key={f} onClick={() => changeTf(f)} className="tf-btn fx-tap rounded-[16px] px-2.5 py-1 flex-shrink-0"
-                  style={{ fontFamily: monoFont, fontSize: 11, background: tf === f ? T.ice : T.surface, color: tf === f ? T.bg : T.muted, border: `1px solid ${tf === f ? T.ice : T.line}` }}>
-                  {f}
-                </button>
-              ))}
-              <button onClick={() => setTfExpanded(v => !v)} className="fx-tap rounded-[16px] p-1 flex-shrink-0" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-                <ChevronDown size={14} color={T.muted} style={{ transform: tfExpanded ? "rotate(180deg)" : "none", transition: `transform ${EASE}` }} />
+          {/* Все интервалы сразу, без раскрывающего списка: ряд просто
+              прокручивается вбок. Выбранный подводится к видимой части
+              сам, так что после возврата на экран искать его не нужно. */}
+          <div className="no-scrollbar flex gap-1.5 overflow-x-auto" ref={tfRowRef} style={{ paddingBottom: 2 }}>
+            {TIMEFRAMES.map(f => (
+              <button
+                key={f}
+                data-tf={f}
+                onClick={() => changeTf(f)}
+                className="tf-btn fx-tap rounded-[16px] px-2.5 py-1 flex-shrink-0"
+                style={{ fontFamily: monoFont, fontSize: 11, background: tf === f ? T.ice : T.surface, color: tf === f ? T.bg : T.muted, border: `1px solid ${tf === f ? T.ice : T.line}` }}
+              >
+                {f}
               </button>
-            </div>
+            ))}
           </div>
 
           {/* График идёт во всю ширину страницы, а не лежит в карточке:
