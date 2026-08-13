@@ -7225,8 +7225,11 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
     );
   }
 
+  // Своего запаса снизу тут нет: полосу вкладок уже учитывает
+  // прокручиваемый контейнер экрана. Раньше к ней добавлялись ещё сто
+  // сорок точек, и под кнопкой запуска оставалась пустая половина экрана.
   return (
-    <div className="fx-view flex flex-col gap-7 pb-36" style={{ position: "relative" }}>
+    <div className="fx-view flex flex-col gap-7" style={{ position: "relative" }}>
       <div>
         <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{t("launchTokenTitle")}</div>
         <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, marginTop: 2 }}>{t("launchTokenSub")}</div>
