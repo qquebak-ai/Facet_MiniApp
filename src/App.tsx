@@ -133,6 +133,8 @@ const STR = {
     shopTabFrames: "Рамки", shopTabCards: "Карточки",
     shopEquip: "Надеть", shopEquipped: "Надето",
     shopNotEnough: "Не хватает {n} монет — закрой достижение",
+    shopBuyFor: "Купить за {n}",
+    shopLeftAfter: "Останется после покупки",
     shopBought: "{name} — куплено и надето",
     shopCoinsHint: "Монеты приходят за достижения. Тратить их можно только здесь.",
     cosmeticApplied: "Применено", cosmeticRemoved: "Снято",
@@ -394,6 +396,8 @@ const STR = {
     shopTabFrames: "Frames", shopTabCards: "Cards",
     shopEquip: "Equip", shopEquipped: "Equipped",
     shopNotEnough: "{n} coins short — close an achievement",
+    shopBuyFor: "Buy for {n}",
+    shopLeftAfter: "Left after this",
     shopBought: "{name} — bought and equipped",
     shopCoinsHint: "Coins come from achievements. They're only spent here.",
     cosmeticApplied: "Applied", cosmeticRemoved: "Removed",
@@ -5578,6 +5582,76 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
 /* ShopView — витрина косметики: рамки для аватарки и карточки профиля.
    Предметы применяются мгновенно и запоминаются на устройстве, поэтому
    «купить» здесь — это «надеть»: отдельного баланса у магазина нет. */
+/* Окно подтверждения покупки. Раньше нажатие на предмет сразу списывало
+   монеты — а они конечные, и промахнуться по соседней карточке проще
+   простого. Теперь сначала показываем сам предмет крупно, цену и сколько
+   останется после покупки. */
+function BuySheet({ item, kind, coins, onBuy, onClose }) {
+  if (!item || typeof document === "undefined") return null;
+  const price = item.price || 0;
+  const left = coins - price;
+  return createPortal(
+    <div
+      className="fx-modal-back"
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.8)",
+        backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center",
+        padding: "0 12px calc(12px + env(safe-area-inset-bottom))",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 420, background: T.surface,
+          border: `1px solid ${T.lineHi}`, borderRadius: 26, padding: "22px 22px 18px",
+          display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+          animation: "wreathSheetUp 340ms cubic-bezier(0.16,1,0.3,1) both",
+        }}
+      >
+        {/* Предмет крупно: покупают глазами, а не по названию. */}
+        <div style={{ position: "relative", width: "100%", height: 132, borderRadius: 18, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {kind === "card" && <ProfileCardBg cardId={item.id} height={132} radius={18} />}
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <AvatarFrame frameId={kind === "frame" ? item.id : "none"} size={84}>
+              <div style={{ width: "100%", height: "100%", background: T.bg }} />
+            </AvatarFrame>
+          </div>
+        </div>
+
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700, marginTop: 14 }}>{pickLabel(item.label)}</span>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, marginTop: 2 }}>
+          {kind === "frame" ? t("shopTabFrames") : t("shopTabCards")}
+        </span>
+
+        <div className="flex items-center justify-between w-full rounded-[18px] px-4 py-3" style={{ marginTop: 14, background: T.bg, border: `1px solid ${T.line}` }}>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("shopLeftAfter")}</span>
+          <span className="flex items-center gap-1.5">
+            <CoinIcon size={14} />
+            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>{left}</span>
+          </span>
+        </div>
+
+        <button
+          onClick={() => onBuy(kind, item.id)}
+          className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3.5"
+          style={{ marginTop: 12, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14.5 }}
+        >
+          {tf("shopBuyFor", { n: price })}
+        </button>
+        <button
+          onClick={onClose}
+          className="fx-tap w-full rounded-[20px] py-2.5"
+          style={{ marginTop: 8, background: "transparent", border: "none", fontFamily: bodyFont, fontSize: 13, color: T.muted }}
+        >
+          {t("cancel")}
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady = true, onOpenAchievements, showToast }) {
   const [tab, setTab] = useState("frames");
   // Нажатие отмечается сразу здесь, не дожидаясь, пока выбор дойдёт до
@@ -5592,9 +5666,16 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
     setPending({ kind, id });
     equipRef.current(kind, id);
   }, []);
+  // Нажатие на некупленный предмет открывает окно подтверждения, а не
+  // списывает монеты сразу.
+  const [confirming, setConfirming] = useState(null); // { kind, id }
+  const buy = useCallback((k, id) => { setConfirming({ kind: k, id }); }, []);
   const buyRef = useRef(onBuy);
   useEffect(() => { buyRef.current = onBuy; });
-  const buy = useCallback((k, id) => { buyRef.current(k, id); }, []);
+  function confirmBuy(k, id) {
+    setConfirming(null);
+    buyRef.current(k, id);
+  }
   const tooPoorRef = useRef(null);
   tooPoorRef.current = (price) => {
     if (showToast) showToast(tf("shopNotEnough", { n: Math.max(0, price - coins) }));
@@ -5674,6 +5755,16 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
           );
         })}
       </div>
+      )}
+
+      {confirming && (
+        <BuySheet
+          item={(confirming.kind === "frame" ? FRAME_BY_ID : CARD_BY_ID)[confirming.id]}
+          kind={confirming.kind}
+          coins={coins}
+          onBuy={confirmBuy}
+          onClose={() => setConfirming(null)}
+        />
       )}
     </div>
   );
