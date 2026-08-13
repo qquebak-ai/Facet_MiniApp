@@ -5613,18 +5613,22 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
   return (
     <div className="flex flex-col gap-4 pt-2">
       {/* Счётчик монет живёт только здесь: тратить их больше негде, а на
-          остальных экранах он был бы просто цифрой без применения. */}
-      <div className="flex items-center justify-between gap-3">
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("shopTitle")}</span>
+          остальных экранах он был бы просто цифрой без применения.
+          Держится у верхнего края при прокрутке — цены видно на любой
+          высоте витрины, и не надо мотать наверх, чтобы вспомнить
+          баланс. Собственный этаж и непрозрачная подложка обязательны:
+          под ним проезжают карточки. */}
+      <div style={{ position: "sticky", top: 4, zIndex: 5, alignSelf: "flex-end", marginBottom: -32 }}>
         <button
           onClick={onOpenAchievements}
-          className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5 flex-shrink-0"
-          style={{ background: hexA(T.electric, 0.12), border: `1px solid ${hexA(T.electric, 0.35)}` }}
+          className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5"
+          style={{ background: T.surface, border: `1px solid ${hexA(T.electric, 0.45)}`, boxShadow: `0 6px 18px ${hexA(T.bg, 0.85)}` }}
         >
           <CoinIcon size={15} />
           <span style={{ fontFamily: monoFont, fontSize: 13.5, fontWeight: 700, color: T.electric }}>{coins}</span>
         </button>
       </div>
+      <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("shopTitle")}</span>
       <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("shopCoinsHint")}</p>
 
       <div className="flex items-center gap-2">
