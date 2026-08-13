@@ -10245,6 +10245,46 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   function openUserProfile(id) { if (!id) return; setViewedUserId(id); setView("user"); }
   function backFromUserProfile() { setView(token ? "token" : tab); }
 
+  /* Кнопка «Назад» в шапке Telegram.
+
+     На вложенных экранах — карточка токена, создание, достижения, чужой
+     профиль — «Закрыть» не к месту: человек хочет вернуться на шаг, а не
+     выйти из приложения. Telegram умеет подменять её своей стрелкой,
+     если попросить, поэтому просим ровно там, где есть куда возвращаться.
+
+     Порядок разбора — сверху вниз по тому, что сейчас перекрывает экран:
+     сначала окна, потом страницы. Иначе стрелка увела бы с экрана,
+     оставив открытым окно поверх него. Окно ввода PIN и ход запуска
+     токена намеренно не перехватываются: из них выходить нельзя, пока
+     дело не кончится. */
+  const backAction = useMemo(() => {
+    if (pinLocked || pinModal || launchRequest) return null;
+    if (profileModalOpen) return () => setProfileModalOpen(false);
+    if (settingsItem) return () => setSettingsItem(null);
+    if (tradeModal) return () => setTradeModal(null);
+    if (manageToken_) return () => setManageToken_(null);
+    if (connectModalOpen) return () => setConnectModalOpen(false);
+    if (view === "user") return backFromUserProfile;
+    if (view === "token") return backFromToken;
+    if (view === "create") return () => setView(tab);
+    if (view === "achievements") return () => setView("profile");
+    return null;
+  }, [pinLocked, pinModal, launchRequest, profileModalOpen, settingsItem, tradeModal, manageToken_, connectModalOpen, view, tab, token]);
+
+  useEffect(() => {
+    const tg = typeof window !== "undefined" ? window.Telegram && window.Telegram.WebApp : null;
+    const btn = tg && tg.BackButton;
+    if (!btn) return;
+    if (!backAction) { btn.hide(); return; }
+    const handler = () => backAction();
+    btn.onClick(handler);
+    btn.show();
+    return () => {
+      btn.offClick(handler);
+      btn.hide();
+    };
+  }, [backAction]);
+
   function handleHeaderWalletClick() {
     if (connected) { goTab("profile"); }
     else { setConnectModalOpen(true); }
