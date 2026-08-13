@@ -4954,6 +4954,12 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
   }
 
   const orbitR = size / 2 + ring * 1.5;
+  // Кольцо вырезано маской: в середине у него просто нет пикселей.
+  // Одной чёрной серединой поверх обойтись не вышло — на телефоне у
+  // запертых предметов (там вся карточка идёт с прозрачностью) градиент
+  // всё равно оказывался виден в центре. Теперь его там нет физически, и
+  // чем бы ни кончилась возня с порядком слоёв, заливки не будет.
+  const ringMask = `radial-gradient(circle at 50% 50%, transparent ${Math.max(0, size / 2 - ring - 0.5)}px, #000 ${Math.max(0.5, size / 2 - ring)}px)`;
 
   return (
     <div style={{ position: "relative", width: size, height: size }}>
@@ -4972,6 +4978,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         background: `conic-gradient(from 0deg, ${f.colors.join(", ")})`,
         animation: `spin360 ${f.spin}s linear infinite`,
         willChange: "transform", zIndex: 1,
+        WebkitMaskImage: ringMask, maskImage: ringMask,
       }} />
 
       {/* хвост кометы: к голове разгорается, за ней сходит на нет */}
@@ -4981,6 +4988,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
           background: `conic-gradient(from 0deg, ${hexA(f.comet.color, 0)} 0deg, ${hexA(f.comet.color, 0)} 235deg, ${hexA(f.comet.color, 0.5)} 330deg, ${f.comet.color} 357deg, ${hexA(f.comet.color, 0)} 360deg)`,
           animation: `spin360 ${f.comet.dur}s linear infinite`,
           willChange: "transform", zIndex: 1,
+          WebkitMaskImage: ringMask, maskImage: ringMask,
         }} />
       )}
 
@@ -5001,7 +5009,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
 
       {/* белый блик, проходящий по радуге */}
       {f.sweep && (
-        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden", zIndex: 1 }}>
+        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden", zIndex: 1, WebkitMaskImage: ringMask, maskImage: ringMask }}>
           <div style={{
             position: "absolute", top: "-30%", bottom: "-30%", width: "36%", left: 0,
             background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0) 100%)",
