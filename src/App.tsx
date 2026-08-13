@@ -10534,8 +10534,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         >
           {[
             { id: "home", label: t("navHome"), icon: HomeIcon },
-            { id: "mempad", label: t("navMempad"), icon: Rocket },
             { id: "shop", label: t("navShop"), icon: ShoppingBag },
+            { id: "mempad", label: t("navMempad"), icon: Rocket },
             { id: "wallet", label: t("navWallet"), icon: Wallet },
             { id: "profile", label: t("navProfile"), icon: User },
           ].map(({ id, label, icon: Icon, locked }) => {
