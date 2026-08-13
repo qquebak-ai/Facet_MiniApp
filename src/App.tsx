@@ -674,9 +674,14 @@ const FACET = "polygon(18% 0%, 100% 0%, 100% 82%, 82% 100%, 0% 100%, 0% 18%)";
    controls. Loaded via GlobalStyle's @import below. Numeric/on-chain data
    (prices, addresses, hashes) keeps a monospace face, which is the one
    place a "technical" register is appropriate and expected. */
-const displayFont = "'Futura XP', 'Futura', 'Century Gothic', 'Segoe UI', sans-serif";
-const bodyFont = "'Futura XP', 'Futura', 'Century Gothic', -apple-system, sans-serif";
-const monoFont = "'Futura XP', 'Futura', 'Century Gothic', 'Courier New', monospace";
+/* Три роли, два шрифта (объявлены в index.css, файлы лежат в проекте).
+   Заголовки — Unbounded, всё остальное — Manrope. Цифры отдельного
+   шрифта не получают: моноширинный посреди мягкого гротеска выглядел бы
+   заплаткой, а ровные столбцы даёт табличная разметка цифр — она
+   включена глобально ниже, в GlobalStyle. */
+const displayFont = "'Unbounded', 'Futura', 'Century Gothic', 'Segoe UI', sans-serif";
+const bodyFont = "'Manrope', -apple-system, 'Segoe UI', sans-serif";
+const monoFont = "'Manrope', -apple-system, 'Segoe UI', sans-serif";
 
 /* Motion stays quiet: no overshoot/bounce, 200–300ms, ease-out. */
 const SPRING = "240ms cubic-bezier(0.16, 1, 0.3, 1)";
@@ -854,11 +859,12 @@ function useLocalCounter(storageKey, capAtOne = false) {
 function GlobalStyle() {
   return (
     <style>{`
-      /* Futura XP isn't a webfont available from a CDN — this relies on it
-         being installed locally (or falls back to Futura / Century Gothic,
-         the closest common system fonts) rather than fetching a Google
-         Fonts family that's no longer used anywhere in the app. */
       html, body, #root { height: 100%; margin: 0; padding: 0; background: ${T.bg}; -webkit-tap-highlight-color: transparent; }
+      /* Цифры одной ширины по всему приложению. Цена в ленте обновляется
+         раз в несколько секунд, и с обычными цифрами (единица уже нуля)
+         строка при каждом обновлении дёргалась вбок; на шкале графика от
+         этого разъезжались подписи. */
+      body { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
       /* Страница зафиксирована: сам документ не прокручивается и не
          оттягивается резинкой, иначе в Telegram из-под приложения
          вылезают чёрные поля сверху и снизу. Прокрутка живёт только
@@ -8084,6 +8090,22 @@ function referralLink(userId) {
   return `https://t.me/${TG_BOT}${TG_APP ? "/" + TG_APP : ""}?startapp=${code}`;
 }
 
+/* Вышел ли человек из аккаунта сам. Внутри Telegram подпись initData
+   лежит в окне всегда, поэтому приложение умеет входить молча при
+   запуске — и после «Выйти» тут же заводило сессию заново: обновил
+   страницу и снова внутри. Отметка о добровольном выходе живёт в
+   телефоне и снимается только при новом входе руками. */
+const SIGNED_OUT_KEY = "mintly_signed_out";
+function isSignedOutByHand() {
+  try { return localStorage.getItem(SIGNED_OUT_KEY) === "1"; } catch (e) { return false; }
+}
+function markSignedOut(on) {
+  try {
+    if (on) localStorage.setItem(SIGNED_OUT_KEY, "1");
+    else localStorage.removeItem(SIGNED_OUT_KEY);
+  } catch (e) { /* приватный режим — тогда просто не запомним */ }
+}
+
 /* Заводится ли аккаунт впервые. Спрашиваем до входа: если профиля ещё
    нет, на экране появляется поле ника, и человек выбирает имя сам, а не
    получает выдуманное из профиля Telegram. Сервер на этот вызов ничего
@@ -8129,6 +8151,8 @@ async function signInWithTelegram(nickname) {
 
   const { error } = await supabase.auth.verifyOtp({ token_hash: json.token_hash, type: "magiclink" });
   if (error) throw error;
+  // Вход состоялся — прошлый добровольный выход больше не в счёт.
+  markSignedOut(false);
 }
 
 /* AuthModal — replaces the old single-button flow. Handles three modes:
@@ -9777,7 +9801,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // вместо тихого входа открываем окно. Если не вышло — просто
       // открываем приложение без аккаунта, кнопка входа остаётся в профиле.
       let needsSignup = false;
-      if (!session && telegramInitData()) {
+      // Из аккаунта вышли сами — молча не возвращаем. Иначе выход внутри
+      // Telegram не работал вовсе: подпись в окне никуда не девается, и
+      // первое же обновление страницы заводило сессию обратно.
+      if (!session && telegramInitData() && !isSignedOutByHand()) {
         // Разведка может не ответить — сеть, лимит, перезапуск сервера.
         // Тогда пробуем войти как есть: у того, кто уже заходил, вход
         // пройдёт, а новому сервер ответит «нужен ник», и мы откроем
@@ -10503,6 +10530,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     showToast(profileModalMode === "edit" ? t("profileUpdated") : profileModalMode === "login" ? t("loggedIn") : t("accountCreatedToast"));
   }
   async function logOutProfile() {
+    markSignedOut(true);
     await supabase.auth.signOut();
     setAccountCreated(false);
     setProfile(EMPTY_PROFILE);
@@ -10519,6 +10547,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     if (userId) {
       await supabase.from("profiles").delete().eq("id", userId);
     }
+    markSignedOut(true);
     await supabase.auth.signOut();
     setAccountCreated(false);
     setProfile(EMPTY_PROFILE);
