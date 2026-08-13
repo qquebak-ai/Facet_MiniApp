@@ -362,6 +362,7 @@ const STR = {
     accountCreatedToast: "Аккаунт создан",
     loggedOut: "Вы вышли из аккаунта",
     accountDeleted: "Аккаунт удалён",
+    accountDeleteFailed: "Не удалось удалить аккаунт — база не дала. Ты остался в аккаунте.",
     connectWalletTrade: "Подключи TON-кошелёк, чтобы торговать",
     rateLoadingRetry: "Курс TON ещё загружается, попробуй через секунду",
     insufficientTon: "Недостаточно TON на кошельке для этой суммы",
@@ -627,6 +628,7 @@ const STR = {
     accountCreatedToast: "Account created",
     loggedOut: "You've logged out",
     accountDeleted: "Account deleted",
+    accountDeleteFailed: "Could not delete the account — the database refused. You are still signed in.",
     connectWalletTrade: "Connect a TON wallet to trade",
     rateLoadingRetry: "TON rate is still loading, try again in a second",
     insufficientTon: "Not enough TON in wallet for this amount",
@@ -10664,7 +10666,20 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const { data: sessionData } = await supabase.auth.getUser();
     const userId = sessionData?.user?.id;
     if (userId) {
-      await supabase.from("profiles").delete().eq("id", userId);
+      // Ответ базы проверяем. Раньше он игнорировался, и при запрете на
+      // удаление (в базе может не стоять разрешения удалять свою строку)
+      // человек видел «Аккаунт удалён», хотя из аккаунта его просто
+      // выкидывало, а профиль оставался на месте. Врать об этом нельзя:
+      // человек уходит в уверенности, что его данных больше нет.
+      const { error, count } = await supabase
+        .from("profiles")
+        .delete({ count: "exact" })
+        .eq("id", userId);
+      if (error || !count) {
+        console.warn("[mintly] delete profile failed:", error && error.message);
+        showToast(t("accountDeleteFailed"));
+        return;
+      }
     }
     markSignedOut(true);
     await supabase.auth.signOut();
