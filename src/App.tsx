@@ -8790,13 +8790,12 @@ function ProfileView({
                 onClick={() => openSettingItem(s)}
                 className="fx-card fx-tap w-full flex items-center gap-3 rounded-[20px]"
                 style={{
-                  background: T.surface, border: `1px solid ${T.line}`,
+                  background: T.surface, border: "none",
                   padding: "13px 16px", animationDelay: `${i * 40}ms`,
                 }}
               >
                 <s.icon size={16} color={T.muted} />
                 <span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice, flex: 1, textAlign: "left" }}>{t(s.tKey)}</span>
-                <ChevronRight size={14} color={T.muted} />
               </button>
             ))}
           </div>
