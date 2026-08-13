@@ -183,18 +183,59 @@ async function dropPendingInviter(admin, telegramId) {
   if (error) console.warn("[auth] failed to drop pending referral:", error.message);
 }
 
-// Пригласивший из двух источников сразу: сначала метка прямой ссылки на
-// приложение, потом отложенная от бота. Отсутствие таблицы не должно
-// ронять вход — тогда просто работает первый путь.
+// Приглашение, закреплённое за телеграм-аккаунтом навсегда. Живёт
+// отдельно от профиля и переживает его удаление — иначе приглашения
+// накручивались бы в одно действие: удалил аккаунт, прошёл по ссылке
+// заново, завёл профиль, и счётчик пригласившего вырос ещё раз.
+async function claimedInviter(admin, telegramId) {
+  const { data } = await admin
+    .from("referral_claims")
+    .select("inviter")
+    .eq("telegram_id", telegramId)
+    .maybeSingle();
+  return (data && data.inviter) || null;
+}
+
+// Закрепляем при первом же засчитанном приглашении. Повторная запись
+// молча отбрасывается: первый пригласивший остаётся навсегда.
+async function claimInviter(admin, telegramId, inviter) {
+  const { error } = await admin
+    .from("referral_claims")
+    .upsert({ telegram_id: telegramId, inviter }, { onConflict: "telegram_id", ignoreDuplicates: true });
+  if (error) console.warn("[auth] failed to claim referral:", error.message);
+}
+
+/* Кто пригласил. Порядок важен:
+   1. Уже закреплённый за этим телеграмом — он старше любой новой ссылки.
+      Заодно возвращает связь тому, кто удалил аккаунт и завёл заново:
+      пригласивший у него будет прежний, а не тот, чью ссылку он открыл
+      во второй раз.
+   2. Метка прямой ссылки на приложение.
+   3. Отложенная метка от бота.
+   Найденного в пунктах 2–3 сразу закрепляем.
+   Отсутствие таблиц не должно ронять вход — тогда работает то, что есть. */
 async function resolveInviter(admin, startParam, telegramId, userId) {
-  const direct = await validInviter(admin, startParam, userId);
-  if (direct) return direct;
   try {
-    return await pendingInviter(admin, telegramId, userId);
+    const claimed = await claimedInviter(admin, telegramId);
+    if (claimed) return claimed === userId ? null : claimed;
   } catch (err) {
-    console.warn("[auth] pending referrals unavailable:", err && err.message);
-    return null;
+    console.warn("[auth] referral claims unavailable:", err && err.message);
   }
+
+  let found = await validInviter(admin, startParam, userId);
+  if (!found) {
+    try {
+      found = await pendingInviter(admin, telegramId, userId);
+    } catch (err) {
+      console.warn("[auth] pending referrals unavailable:", err && err.message);
+    }
+  }
+  if (found) {
+    try { await claimInviter(admin, telegramId, found); } catch (err) {
+      console.warn("[auth] referral claims unavailable:", err && err.message);
+    }
+  }
+  return found;
 }
 
 export default async function handler(req, res) {
