@@ -4013,10 +4013,14 @@ function HomeHero({ onGoTab }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="relative pt-2 pb-1">
-        <div className="relative" style={{ fontFamily: displayFont, color: T.ice, fontSize: 32, fontWeight: 700, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
+        {/* Кегли крупнее прежних цифр не случайно: у нынешнего шрифта
+            строчные буквы ниже примерно на седьмую часть при той же
+            высоте прописных, и текст выглядел мельче, чем раньше.
+            Заголовку добавлено меньше — в нём почти одни прописные. */}
+        <div className="relative" style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 700, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
           {t("heroTitle")}
         </div>
-        <div className="relative" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, marginTop: 12, lineHeight: 1.6, maxWidth: 320 }}>
+        <div className="relative" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 15.5, marginTop: 12, lineHeight: 1.55, maxWidth: 330 }}>
           {t("heroBodyLead")}<span className="fx-shine-text" style={{ fontWeight: 600 }}>{t("heroFee")}</span>{t("heroBodyTail")}
         </div>
       </div>
@@ -4047,7 +4051,7 @@ function HomeHero({ onGoTab }) {
                   <a.icon size={24} strokeWidth={1.6} color={T.turquoise} style={{ position: "relative", zIndex: 1 }} />
                 )}
               </div>
-              <span style={{ fontFamily: bodyFont, fontSize: 11.5, fontWeight: 500, color: T.ice, textAlign: "center", lineHeight: 1.25, maxWidth: 76 }}>{t(a.key)}</span>
+              <span style={{ fontFamily: bodyFont, fontSize: 12.5, fontWeight: 500, color: T.ice, textAlign: "center", lineHeight: 1.25, maxWidth: 82 }}>{t(a.key)}</span>
             </button>
           );
         })}
@@ -6022,14 +6026,14 @@ function AlmostListed({ tokens = [], onOpen }) {
   return (
     <div className="fx-view">
       <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 700 }}>{t("homeAlmostTitle")}</span>
-        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>{t("homeAlmostSub")}</span>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("homeAlmostTitle")}</span>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("homeAlmostSub")}</span>
       </div>
 
       {!top.length ? (
         <div className="rounded-[22px] p-5 flex flex-col items-center text-center gap-2" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
           <Sparkles size={20} color={T.muted} />
-          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("homeAlmostEmpty")}</div>
+          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, lineHeight: 1.5 }}>{t("homeAlmostEmpty")}</div>
         </div>
       ) : (
         <div className="flex flex-col gap-2">
@@ -6043,13 +6047,13 @@ function AlmostListed({ tokens = [], onOpen }) {
               <TokenAvatar size={40} tone="up" src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{tok.ticker}</span>
-                  <span style={{ fontFamily: monoFont, color: T.electric, fontSize: 12, fontWeight: 700 }}>{pct.toFixed(0)}%</span>
+                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{tok.ticker}</span>
+                  <span style={{ fontFamily: monoFont, color: T.electric, fontSize: 13, fontWeight: 700 }}>{pct.toFixed(0)}%</span>
                 </div>
                 <div style={{ height: 4, borderRadius: 2, background: T.surfaceHi, overflow: "hidden", marginTop: 6 }}>
                   <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: T.electric }} />
                 </div>
-                <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, marginTop: 5 }}>
+                <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 5 }}>
                   {tf("homeAlmostLeft", { left: fmtTon(Math.max(0, tok.graduationTon - tok.raisedTon)) })}
                 </div>
               </div>
