@@ -8106,11 +8106,18 @@ function telegramUser() {
 const TG_BOT = String(import.meta.env.VITE_TG_BOT || "MintlyAppbot").replace(/^@/, "").trim();
 const TG_APP = String(import.meta.env.VITE_TG_APP || "Mintly").trim();
 function referralCode(userId) { return userId ? "ref_" + userId : ""; }
+/* Ссылка приглашения ведёт в чат с ботом, а не сразу в приложение.
+   Прямая ссылка (t.me/бот/приложение?startapp=…) короче и красивее, но
+   работает только пока у мини-приложения задано короткое имя в BotFather:
+   стоит имени не совпасть — Telegram молча открывает просто бота и метку
+   не передаёт никому, а приглашение теряется без единого признака ошибки.
+   Через бота надёжнее: метку он получает всегда, кладёт её себе и сам
+   открывает приложение кнопкой. */
 function referralLink(userId) {
   const code = referralCode(userId);
   if (!code) return "";
   if (!TG_BOT) return code;
-  return `https://t.me/${TG_BOT}${TG_APP ? "/" + TG_APP : ""}?startapp=${code}`;
+  return `https://t.me/${TG_BOT}?start=${code}`;
 }
 
 /* Вышел ли человек из аккаунта сам. Внутри Telegram подпись initData

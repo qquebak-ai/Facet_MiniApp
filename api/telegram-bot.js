@@ -11,10 +11,9 @@
  * пришёл от такого-то». Когда человек заведёт профиль, вход возьмёт её
  * оттуда. Метка живёт до первого использования.
  *
- * Подключение (один раз, с токеном бота):
- *   curl "https://api.telegram.org/bot<ТОКЕН>/setWebhook" \
- *     -d "url=https://mintlyapp.vercel.app/api/telegram-bot" \
- *     -d "secret_token=<ТОТ_ЖЕ_СЕКРЕТ_ЧТО_В_TELEGRAM_WEBHOOK_SECRET>"
+ * Подключение — один раз, открыв в браузере:
+ *   https://<домен>/api/telegram-bot?setup=<TELEGRAM_WEBHOOK_SECRET>
+ * Токен бота сервер берёт сам из окружения (см. функцию setup ниже).
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -27,9 +26,10 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 // того, кто просто узнал адрес.
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 
-const BOT_NAME = (process.env.TELEGRAM_BOT_NAME || "MintlyAppbot").replace(/^@/, "");
-const APP_NAME = process.env.TELEGRAM_APP_NAME || "Mintly";
-const APP_LINK = `https://t.me/${BOT_NAME}/${APP_NAME}`;
+// Адрес самого приложения. Кнопка в приветствии открывает его напрямую,
+// поэтому короткое имя мини-приложения в BotFather для приглашений уже
+// не требуется.
+const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
 
 const REF_PREFIX = "ref_";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -57,15 +57,16 @@ async function tg(method, body) {
   }
 }
 
-function welcome(chatId, startParam) {
-  // Кнопка ведёт на само приложение и уносит метку с собой. Даже если
-  // запись в базу почему-то не удалась, у приглашения остаётся второй
-  // путь — тот, что работал и раньше.
-  const url = startParam ? `${APP_LINK}?startapp=${encodeURIComponent(startParam)}` : APP_LINK;
+function welcome(chatId) {
+  // Кнопка открывает приложение прямо из чата, минуя короткое имя
+  // мини-приложения: если оно не задано в BotFather, ссылка вида
+  // t.me/бот/приложение просто открывает бота, и человек упирается в
+  // тупик. Метка ему в кнопке уже не нужна — она лежит в базе и будет
+  // взята при создании профиля.
   return tg("sendMessage", {
     chat_id: chatId,
     text: "Mintly — запуск токенов в Telegram.\n\nОткрой приложение, чтобы создать свой токен или торговать чужими.",
-    reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", url }]] },
+    reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", web_app: { url: APP_URL } }]] },
   });
 }
 
@@ -172,6 +173,6 @@ export default async function handler(req, res) {
     }
   }
 
-  await welcome(message.chat.id, inviter ? payload : "");
+  await welcome(message.chat.id);
   return res.status(200).json({ ok: true });
 }
