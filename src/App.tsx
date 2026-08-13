@@ -8107,10 +8107,12 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
     setTgNickTouched(false);
     probeTelegramAccount()
       .then((info) => { if (alive) setTgProbe(info); })
-      // Не достучались до сервера — считаем, что аккаунт новый: спросить
-      // ник лишний раз безобиднее, чем завести аккаунт с чужим именем,
-      // ведь поменять его потом нельзя.
-      .catch(() => { if (alive) setTgProbe({ exists: false }); });
+      // Не достучались до сервера — не превращаем вход в форму создания:
+      // у того, кто уже заходил, ник не спрашивают, а кнопка «Создать
+      // аккаунт» с пустым полем просто не нажимается, и войти нельзя.
+      // Пробуем войти как есть; если аккаунт всё-таки новый, сервер
+      // ответит «нужен ник», и поле появится.
+      .catch(() => { if (alive) setTgProbe({ exists: true }); });
     return () => { alive = false; };
   }, [open, isEdit]);
 
@@ -8157,12 +8159,16 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
         onClose();
       } catch (err) {
         const code = (err && err.message) || "";
+        if (code === "nickname_required") setTgProbe({ exists: false });
         const detail = (err && err.detail) ? ` — ${String(err.detail).slice(0, 220)}` : "";
         setTgError(code === "no_telegram" ? t("tgAuthOutside")
           : code === "server_not_configured" ? t("tgAuthNotConfigured")
           // Имя увели между проверкой и созданием — человек остаётся на
           // том же экране и выбирает другое.
           : code === "nickname_taken" ? tf("authErrNicknameTaken", { name: tgNickTrimmed })
+          // Сервер говорит, что аккаунт новый и без ника его не завести —
+          // показываем поле, даже если разведка сказала иначе.
+          : code === "nickname_required" ? t("tgAuthNickHint")
           : `${t("tgAuthFailed")} (${code || "?"})${detail}`);
       } finally {
         setTgBusy(false);
@@ -9531,9 +9537,15 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   async function loadProfileForUser(user) {
     setUserId(user ? user.id : null);
     if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); setCoinsGranted(0); return; }
+    // Берём строку целиком, а не список колонок. Список ломался при
+    // любом расширении: стоило добавить в приложение колонку, которой в
+    // базе ещё нет (owned_cosmetics, coins_granted), как весь запрос
+    // отвечал ошибкой — и человек оказывался «без аккаунта», хотя вход
+    // прошёл. Лишние поля строки нам не мешают, а недостающие просто
+    // приходят пустыми.
     const { data: prof, error } = await supabase
       .from("profiles")
-      .select("nickname, email, bio, avatar_url, emoji, frame_id, card_id, creator_tier, verified, owned_cosmetics, coins_granted")
+      .select("*")
       .eq("id", user.id)
       .single();
     if (error || !prof) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); return; }
@@ -9689,16 +9701,27 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // открываем приложение без аккаунта, кнопка входа остаётся в профиле.
       let needsSignup = false;
       if (!session && telegramInitData()) {
+        // Разведка может не ответить — сеть, лимит, перезапуск сервера.
+        // Тогда пробуем войти как есть: у того, кто уже заходил, вход
+        // пройдёт, а новому сервер ответит «нужен ник», и мы откроем
+        // окно. Раньше при неудачной разведке вход просто не начинался,
+        // и человек оказывался выкинутым из аккаунта на ровном месте.
+        let exists = null;
         try {
-          const info = await probeTelegramAccount();
-          if (info.exists) {
+          exists = (await probeTelegramAccount()).exists;
+        } catch (err) {
+          console.warn("[mintly] telegram probe failed:", err && err.message);
+        }
+        if (exists === false) {
+          needsSignup = true;
+        } else {
+          try {
             await signInWithTelegram();
             session = (await supabase.auth.getSession()).data.session;
-          } else {
-            needsSignup = true;
+          } catch (err) {
+            if ((err && err.message) === "nickname_required") needsSignup = true;
+            else console.warn("[mintly] telegram auto sign-in failed:", err && err.message);
           }
-        } catch (err) {
-          console.warn("[mintly] telegram auto sign-in failed:", err && err.message);
         }
       }
       if (!active) return;
