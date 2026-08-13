@@ -3541,13 +3541,13 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
     >
       <div key={b.id} className="flex items-center gap-2 min-w-0" style={{ flex: 1, animation: "tickerSwap 2.6s ease-in-out both" }}>
         <TokenAvatar size={20} tone={b.kind === "sell" ? "down" : "up"} src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
-        <span className="truncate" style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>{shortAddr(b.from) || "—"}</span>
-        <span style={{ fontFamily: bodyFont, color: b.kind === "sell" ? T.down : T.up, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
+        <span className="truncate" style={{ fontFamily: monoFont, color: T.muted, fontSize: 12.5 }}>{shortAddr(b.from) || "—"}</span>
+        <span style={{ fontFamily: bodyFont, color: b.kind === "sell" ? T.down : T.up, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}>
           {b.kind === "sell" ? t("tickerSold") : t("tickerBought")} {fmtTon(b.volTon != null ? b.volTon : (tonUsd() > 0 ? b.volUsd / tonUsd() : 0))} TON
         </span>
-        <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 12, fontWeight: 700 }}>${b.token.ticker}</span>
+        <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>${b.token.ticker}</span>
       </div>
-      <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 10.5, whiteSpace: "nowrap" }}>{fmtSince(b.at)}</span>
+      <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5, whiteSpace: "nowrap" }}>{fmtSince(b.at)}</span>
     </button>
   );
 }
@@ -3730,8 +3730,8 @@ function StatChip({ icon: Icon, label, value }) {
     <div className="fx-chip flex items-center gap-2 rounded-[20px] px-3 py-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
       <Icon size={14} color={T.muted} />
       <div>
-        <div style={{ fontFamily: monoFont, color: T.ice, fontSize: 13, lineHeight: 1.1 }}>{value}</div>
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10 }}>{label}</div>
+        <div style={{ fontFamily: monoFont, color: T.ice, fontSize: 14.5, lineHeight: 1.1 }}>{value}</div>
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>{label}</div>
       </div>
     </div>
   );
@@ -3740,7 +3740,7 @@ function StatChip({ icon: Icon, label, value }) {
 function SectionTitle({ children, action }) {
   return (
     <div className="flex items-center justify-between mb-2.5">
-      <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>{children}</span>
+      <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 23, fontWeight: 700, letterSpacing: "-0.01em" }}>{children}</span>
       {action}
     </div>
   );
@@ -3765,7 +3765,7 @@ function Toast({ toast, insetTop = 0, leaving = false }) {
           instead of flipping to (illegible) dark-on-dark under the White theme */}
       <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ background: "rgba(24,24,26,0.95)", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
         <CheckCircle2 size={14} color="#31D07B" />
-        <span style={{ fontFamily: bodyFont, fontSize: 12, color: "#F3F3F6", whiteSpace: "nowrap" }}>{toast}</span>
+        <span style={{ fontFamily: bodyFont, fontSize: 13, color: "#F3F3F6", whiteSpace: "nowrap" }}>{toast}</span>
       </div>
     </div>
   );
@@ -3892,7 +3892,7 @@ const SETTINGS_ITEMS = [
 
 function CardStat({ icon: Icon, children }) {
   return (
-    <span className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 10.5, color: T.muted }}>
+    <span className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 11.5, color: T.muted }}>
       <Icon size={11} color={T.muted} /> {children}
     </span>
   );
@@ -3927,7 +3927,7 @@ const HoldersBadge = React.memo(function HoldersBadge({ tokenAddress, testnet = 
   }, [tokenAddress, visible, testnet]);
 
   return (
-    <span ref={elRef} className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 10.5, color: T.muted }}>
+    <span ref={elRef} className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 11.5, color: T.muted }}>
       <Icon size={11} color={T.muted} />
       {count == null
         ? <span className="fx-skeleton" style={{ width: 26, height: 9, borderRadius: 3, display: "inline-block" }} />
@@ -4078,7 +4078,7 @@ function MempadRow({ t: tok, onOpen, index }) {
     <button onClick={() => onOpen(tok)} className="fx-tap w-full flex items-center gap-3 py-3 text-left" style={{ animationDelay: `${index * 55}ms` }}>
       <TokenAvatar size={44} tone={tok.change >= 0 ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
       <div className="flex-1 min-w-0">
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tok.ticker}</div>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tok.ticker}</div>
         <div className="flex items-center gap-2.5">
           <HoldersBadge tokenAddress={tok.tokenAddress} testnet={!!tok.curveAddress && TON_TESTNET_NETWORK} />
           <CardStat icon={Flame}>${tok.vol}</CardStat>
@@ -4088,9 +4088,9 @@ function MempadRow({ t: tok, onOpen, index }) {
         <GraduationBar raisedTon={tok.raisedTon} targetTon={tok.graduationTon} compact />
       </div>
       <div className="text-right flex-shrink-0">
-        <div style={{ fontFamily: displayFont, color: T.up, fontSize: 13, fontWeight: 700 }}>{fmtUSD(tok.mcapNum)}</div>
+        <div style={{ fontFamily: displayFont, color: T.up, fontSize: 14.5, fontWeight: 700 }}>{fmtUSD(tok.mcapNum)}</div>
         {fmtAge(tok.createdAt) && (
-          <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 10, marginTop: 2 }}>{fmtAge(tok.createdAt)}</div>
+          <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 11, marginTop: 2 }}>{fmtAge(tok.createdAt)}</div>
         )}
       </div>
     </button>
@@ -4218,9 +4218,9 @@ function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast, onOpe
       >
         <TokenAvatar size={44} src={creator.avatar_url}>{creator.emoji || "🚀"}</TokenAvatar>
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{tr("creatorLabel")}</span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{tr("creatorLabel")}</span>
           <div className="flex items-center gap-1 min-w-0">
-            <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>{creator.nickname}</span>
+            <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700 }}>{creator.nickname}</span>
             <CreatorWreathBadge tier={Number(creator.creator_tier) || 0} size={16} />
             <ChevronRight size={14} color={T.muted} />
           </div>
@@ -4263,11 +4263,11 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
   if (!profile) {
     return (
       <div className="fx-view flex flex-col gap-4">
-        <button onClick={onBack} className="fx-tap self-start flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 13, background: T.surface, border: `1px solid ${T.line}` }}>
+        <button onClick={onBack} className="fx-tap self-start flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 14.5, background: T.surface, border: `1px solid ${T.line}` }}>
           <ChevronLeft size={16} /> {tr("back")}
         </button>
         <div className="rounded-[22px] p-6 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("profileNotFound")}</span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("profileNotFound")}</span>
         </div>
       </div>
     );
@@ -4288,7 +4288,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
         {/* Кнопка занимает свою строку над аватаркой: раньше она висела
             абсолютом в углу и налезала на рамку. */}
         <div className="flex" style={{ position: "relative", zIndex: 2, width: "100%", justifyContent: "flex-start", marginBottom: 6 }}>
-          <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}>
+          <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}>
             <ChevronLeft size={16} /> {tr("back")}
           </button>
         </div>
@@ -4307,12 +4307,12 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
         </div>
 
         <div className="flex flex-col items-center gap-2" style={{ position: "relative", zIndex: 1, width: "100%" }}>
-          <span className="flex items-center gap-1.5" style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, marginTop: 4 }}>
+          <span className="flex items-center gap-1.5" style={{ fontFamily: displayFont, color: T.ice, fontSize: 20.5, fontWeight: 700, marginTop: 4 }}>
             {profile.nickname}
             <VerifiedBadge verified={!!profile.verified} size={16} />
             <CreatorWreathBadge tier={creatorTier} size={19} />
           </span>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, maxWidth: 260, lineHeight: 1.5 }}>
             {profile.bio || tr("bioEmptyPlaceholder")}
           </p>
         </div>
@@ -4322,7 +4322,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
         <SectionTitle>{tr("creatorTokens")}</SectionTitle>
         {tokens.length === 0 ? (
           <div className="rounded-[22px] p-5 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
-            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("creatorNoTokens")}</span>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("creatorNoTokens")}</span>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -4335,8 +4335,8 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
               >
                 <TokenAvatar size={40} src={row.logo_url}>🚀</TokenAvatar>
                 <div className="flex-1 min-w-0 flex flex-col items-start">
-                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{row.ticker}</span>
-                  <span className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{row.name}</span>
+                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{row.ticker}</span>
+                  <span className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{row.name}</span>
                 </div>
                 <ChevronRight size={16} color={T.muted} />
               </button>
@@ -4774,15 +4774,15 @@ function BadgeSheet({ onClose, art, title, subtitle, text }) {
           display: "flex", flexDirection: "column", alignItems: "center", width: "100%",
           animation: "wreathCaptionIn 520ms ease-out 160ms both",
         }}>
-          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700, marginTop: 12 }}>{title}</span>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19.5, fontWeight: 700, marginTop: 12 }}>{title}</span>
           {subtitle && (
-            <span style={{ fontFamily: displayFont, color: T.electric, fontSize: 13, fontWeight: 700, marginTop: 2 }}>{subtitle}</span>
+            <span style={{ fontFamily: displayFont, color: T.electric, fontSize: 14.5, fontWeight: 700, marginTop: 2 }}>{subtitle}</span>
           )}
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 8, maxWidth: 280 }}>{text}</p>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, marginTop: 8, maxWidth: 280 }}>{text}</p>
           <button
             onClick={onClose}
             className="fx-tap w-full rounded-[20px] py-3"
-            style={{ marginTop: 18, maxWidth: 320, background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
+            style={{ marginTop: 18, maxWidth: 320, background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}
           >
             {tr("wreathClose")}
           </button>
@@ -4915,24 +4915,24 @@ function TrustPanel({ token, testnet = false, holders = null }) {
 
   return (
     <div className="rounded-[22px] p-3.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-      <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{tr("trustTitle")}</div>
+      <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700, marginBottom: 8 }}>{tr("trustTitle")}</div>
       {rows.map(([label, value, color]) => (
         <div key={label} className="flex items-center justify-between" style={{ padding: "3px 0" }}>
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{label}</span>
-          <span style={{ fontFamily: monoFont, color, fontSize: 12, fontWeight: 700 }}>{value}</span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{label}</span>
+          <span style={{ fontFamily: monoFont, color, fontSize: 13, fontWeight: 700 }}>{value}</span>
         </div>
       ))}
       {!wallet ? (
         <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
           <ShieldAlert size={13} color={T.muted} />
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{tr("trustUnknown")}</span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("trustUnknown")}</span>
         </div>
       ) : held === undefined ? (
         <div className="fx-skeleton" style={{ width: "60%", height: 10, borderRadius: 4, marginTop: 8 }} />
       ) : (
         <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
           {sold ? <ShieldAlert size={13} color={T.down} /> : <ShieldCheck size={13} color={T.up} />}
-          <span style={{ fontFamily: bodyFont, color: sold ? T.down : T.up, fontSize: 11.5 }}>
+          <span style={{ fontFamily: bodyFont, color: sold ? T.down : T.up, fontSize: 12.5 }}>
             {sold ? tr("trustSold") : tr("trustNotSold")}
           </span>
         </div>
@@ -4962,8 +4962,8 @@ function GraduationBar({ raisedTon = 0, targetTon = 0, compact = false }) {
   return (
     <div className="rounded-[22px] p-3.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
       <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{tr("gradTitle")}</span>
-        <span style={{ fontFamily: monoFont, color: done ? T.up : T.ice, fontSize: 12, fontWeight: 700 }}>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("gradTitle")}</span>
+        <span style={{ fontFamily: monoFont, color: done ? T.up : T.ice, fontSize: 13, fontWeight: 700 }}>
           {done ? tr("gradDone") : `${pct.toFixed(0)}%`}
         </span>
       </div>
@@ -4971,14 +4971,14 @@ function GraduationBar({ raisedTon = 0, targetTon = 0, compact = false }) {
         <div style={{ width: `${pct}%`, height: "100%", background: done ? T.up : T.electric, transition: `width ${EASE}` }} />
       </div>
       <div className="flex items-center justify-between" style={{ marginTop: 7 }}>
-        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>
+        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>
           {fmtTon(raisedTon)} / {fmtTon(targetTon)} TON
         </span>
         {!done && (
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>{trf("gradLeft", { left: fmtTon(left) })}</span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{trf("gradLeft", { left: fmtTon(left) })}</span>
         )}
       </div>
-      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.45, marginTop: 8 }}>
         {trf("gradNote", { target: fmtTon(targetTon) })}
       </p>
     </div>
@@ -5509,15 +5509,15 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
         </div>
       </div>
       <div className="flex items-center gap-1.5">
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 12.5, fontWeight: 700 }}>{pickLabel(item.label)}</span>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>{pickLabel(item.label)}</span>
         {equipped && <CheckCircle2 size={13} color={T.electric} />}
       </div>
       {owned ? (
-        <span style={{ fontFamily: bodyFont, fontSize: 11, color: equipped ? T.electric : T.muted, textAlign: "center", lineHeight: 1.3 }}>
+        <span style={{ fontFamily: bodyFont, fontSize: 12, color: equipped ? T.electric : T.muted, textAlign: "center", lineHeight: 1.3 }}>
           {equipped ? t("shopEquipped") : t("shopEquip")}
         </span>
       ) : (
-        <span className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 11.5, fontWeight: 700, color: affordable ? T.electric : T.muted }}>
+        <span className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 12.5, fontWeight: 700, color: affordable ? T.electric : T.muted }}>
           <CoinIcon size={12} dim={!affordable} /> {price}
         </span>
       )}
@@ -5535,20 +5535,20 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
   return (
     <div className="fx-view flex flex-col gap-4 pt-2">
       {onBack && (
-        <button onClick={onBack} className="fx-tap flex items-center gap-1 self-start" style={{ fontFamily: bodyFont, fontSize: 13, color: T.muted }}>
+        <button onClick={onBack} className="fx-tap flex items-center gap-1 self-start" style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.muted }}>
           <ChevronLeft size={16} /> {t("back")}
         </button>
       )}
       <div>
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("achievementsTitle")}</span>
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 4 }}>{t("achievementsIntro")}</p>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, marginTop: 4 }}>{t("achievementsIntro")}</p>
       </div>
 
       {/* Общий прогресс */}
       <div className="rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("achProgress")}</span>
-          <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>{tf("achUnlockedOf", { done, total: achievements.length })}</span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("achProgress")}</span>
+          <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{tf("achUnlockedOf", { done, total: achievements.length })}</span>
         </div>
         <div style={{ height: 6, borderRadius: 3, background: T.surfaceHi, overflow: "hidden" }}>
           <div style={{ width: `${achievements.length ? (done / achievements.length) * 100 : 0}%`, height: "100%", background: T.electric, transition: `width ${EASE}` }} />
@@ -5578,16 +5578,16 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
 
               <div className="min-w-0" style={{ flex: 1 }}>
                 <div className="flex items-center gap-1.5">
-                  <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{a.label}</span>
+                  <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{a.label}</span>
                   {a.done && <CheckCircle2 size={13} color={a.color} />}
                 </div>
-                <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, lineHeight: 1.35, marginTop: 2 }}>{a.hint}</div>
+                <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.35, marginTop: 2 }}>{a.hint}</div>
                 {!a.done && a.target > 1 && (
                   <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
                     <div style={{ flex: 1, height: 4, borderRadius: 2, background: T.surfaceHi, overflow: "hidden" }}>
                       <div style={{ width: `${Math.min(100, (a.value / a.target) * 100)}%`, height: "100%", background: hexA(a.color, 0.65) }} />
                     </div>
-                    <span style={{ fontFamily: monoFont, fontSize: 10.5, color: T.muted }}>{achProgressText(a)}</span>
+                    <span style={{ fontFamily: monoFont, fontSize: 11.5, color: T.muted }}>{achProgressText(a)}</span>
                   </div>
                 )}
               </div>
@@ -5598,7 +5598,7 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
                 <div className="flex items-center gap-1 flex-shrink-0 rounded-full px-2.5 py-1"
                   style={{ background: a.done ? hexA(T.electric, 0.14) : T.surfaceHi, border: `1px solid ${a.done ? hexA(T.electric, 0.4) : T.line}` }}>
                   <CoinIcon size={12} dim={!a.done} />
-                  <span style={{ fontFamily: monoFont, fontSize: 11.5, fontWeight: 700, color: a.done ? T.electric : T.muted }}>
+                  <span style={{ fontFamily: monoFont, fontSize: 12.5, fontWeight: 700, color: a.done ? T.electric : T.muted }}>
                     +{a.coins}
                   </span>
                 </div>
@@ -5612,7 +5612,7 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
         <button
           onClick={onGoShop}
           className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3"
-          style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
+          style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}
         >
           <ShoppingBag size={15} color={T.electric} /> {t("achGoShop")}
         </button>
@@ -5668,30 +5668,30 @@ function BuySheet({ item, kind, coins, cosmetics, onBuy, onClose }) {
           </div>
         </div>
 
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700, marginTop: 14 }}>{pickLabel(item.label)}</span>
-        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, marginTop: 2 }}>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19.5, fontWeight: 700, marginTop: 14 }}>{pickLabel(item.label)}</span>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 2 }}>
           {kind === "frame" ? t("shopTabFrames") : t("shopTabCards")}
         </span>
 
         <div className="flex items-center justify-between w-full rounded-[18px] px-4 py-3" style={{ marginTop: 14, background: T.bg, border: `1px solid ${T.line}` }}>
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("shopLeftAfter")}</span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("shopLeftAfter")}</span>
           <span className="flex items-center gap-1.5">
             <CoinIcon size={14} />
-            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>{left}</span>
+            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{left}</span>
           </span>
         </div>
 
         <button
           onClick={() => onBuy(kind, item.id)}
           className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3.5"
-          style={{ marginTop: 12, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14.5 }}
+          style={{ marginTop: 12, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15.5 }}
         >
           {tf("shopBuyFor", { n: price })}
         </button>
         <button
           onClick={onClose}
           className="fx-tap w-full rounded-[20px] py-2.5"
-          style={{ marginTop: 8, background: "transparent", border: "none", fontFamily: bodyFont, fontSize: 13, color: T.muted }}
+          style={{ marginTop: 8, background: "transparent", border: "none", fontFamily: bodyFont, fontSize: 14.5, color: T.muted }}
         >
           {t("cancel")}
         </button>
@@ -5752,12 +5752,12 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
           padding: "34px 22px 26px", marginTop: 6,
         }}>
           <MintlyFrame size={58} glow={`${T.electric}44`}><Lock size={22} color={T.electric} /></MintlyFrame>
-          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 700, marginTop: 4 }}>{t("shopLockedTitle")}</div>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.55, maxWidth: 270 }}>{t("shopLockedBody")}</p>
+          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 18.5, fontWeight: 700, marginTop: 4 }}>{t("shopLockedTitle")}</div>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.55, maxWidth: 270 }}>{t("shopLockedBody")}</p>
           <button
             onClick={() => onOpenLogin && onOpenLogin()}
             className="fx-tap flex items-center justify-center gap-1.5 rounded-[20px] px-5 py-3 mt-1"
-            style={{ width: "100%", maxWidth: 280, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 13 }}
+            style={{ width: "100%", maxWidth: 280, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14.5 }}
           >
             <Send size={14} /> {t("tgAuthCta")}
           </button>
@@ -5784,10 +5784,10 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
           style={{ background: T.surface, border: `1px solid ${hexA(T.electric, 0.45)}`, boxShadow: `0 6px 18px ${hexA(T.bg, 0.85)}` }}
         >
           <CoinIcon size={15} />
-          <span style={{ fontFamily: monoFont, fontSize: 13.5, fontWeight: 700, color: T.electric }}>{coins}</span>
+          <span style={{ fontFamily: monoFont, fontSize: 14.5, fontWeight: 700, color: T.electric }}>{coins}</span>
         </button>
       </div>
-      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("shopCoinsHint")}</p>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("shopCoinsHint")}</p>
 
       <div className="flex items-center gap-2">
         {[["frames", t("shopTabFrames")], ["cards", t("shopTabCards")]].map(([id, label]) => {
@@ -5795,7 +5795,7 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
           return (
             <button key={id} onClick={() => setTab(id)} className="fx-tap fx-chip rounded-full px-3.5 py-1.5"
               style={{
-                fontFamily: bodyFont, fontSize: 12.5, fontWeight: 600,
+                fontFamily: bodyFont, fontSize: 14, fontWeight: 600,
                 background: active ? T.ice : "transparent", color: active ? T.bg : T.muted,
                 border: `1px solid ${active ? T.ice : T.line}`,
               }}>
@@ -5914,7 +5914,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         >
           <ButtonRocketFlyby size={34} />
           <LeafIcon size={17} color={T.electric} kind={2} />
-          <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 12.5, fontWeight: 700, position: "relative", zIndex: 1 }}>{t("mempadLaunchToken")}</span>
+          <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 14, fontWeight: 700, position: "relative", zIndex: 1 }}>{t("mempadLaunchToken")}</span>
         </button>
       </div>
 
@@ -5935,14 +5935,14 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
             <SpotlightGrid up={spotlight.change >= 0} seedKey={spotlight.seed} />
             <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <TokenAvatar size={92} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl}>{spotlight.emoji}</TokenAvatar>
-              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 20, fontWeight: 800 }}>{spotlight.ticker}</span>
+              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 21.5, fontWeight: 800 }}>{spotlight.ticker}</span>
               <div className="flex items-center gap-3">
                 <HoldersBadge tokenAddress={spotlight.tokenAddress} testnet={!!spotlight.curveAddress && TON_TESTNET_NETWORK} />
                 <CardStat icon={Flame}>${spotlight.vol}</CardStat>
               </div>
-              <span style={{ fontFamily: displayFont, color: T.up, fontSize: 27, fontWeight: 800, lineHeight: 1 }}>{fmtUSD(spotlight.mcapNum)}</span>
+              <span style={{ fontFamily: displayFont, color: T.up, fontSize: 28.5, fontWeight: 800, lineHeight: 1 }}>{fmtUSD(spotlight.mcapNum)}</span>
               {fmtAge(spotlight.createdAt) && (
-                <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>{fmtAge(spotlight.createdAt)}</span>
+                <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>{fmtAge(spotlight.createdAt)}</span>
               )}
             </div>
           </button>
@@ -5979,7 +5979,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
           return (
             <button key={f.id} onClick={() => setFilter(f.id)} className="fx-tap fx-chip rounded-full px-3.5 py-1.5 whitespace-nowrap flex-shrink-0"
               style={{
-                fontFamily: bodyFont, fontSize: 12.5, fontWeight: 600, background: active ? T.ice : "transparent",
+                fontFamily: bodyFont, fontSize: 14, fontWeight: 600, background: active ? T.ice : "transparent",
                 color: active ? T.bg : T.muted, border: `1px solid ${active ? T.ice : "transparent"}`,
               }}>
               {t(f.labelKey)}
@@ -5999,7 +5999,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
             ? Array.from({ length: 4 }).map((_, i) => <MempadRowSkeleton key={i} index={i} />)
             : list.map((tok, i) => <MempadRow key={tok.id} t={tok} onOpen={onOpen} index={i} />)}
         {!loading && list.length === 0 && (
-          <div className="fx-view" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>
+          <div className="fx-view" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14.5, textAlign: "center", padding: "24px 0" }}>
             {t("emptyFilter")}
           </div>
         )}
@@ -6086,12 +6086,12 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
   if (!connected) {
     return (
       <div className="fx-view flex flex-col items-center justify-center text-center" style={{ minHeight: 420, gap: 18, padding: "0 8px" }}>
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 20, fontWeight: 700 }}>{t("walletEmptyTitle")}</div>
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, maxWidth: 260 }}>{t("walletEmptyBody")}</p>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 21.5, fontWeight: 700 }}>{t("walletEmptyTitle")}</div>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, maxWidth: 260 }}>{t("walletEmptyBody")}</p>
         <button
           onClick={onConnect}
           className="fx-tap w-full rounded-[22px] py-3.5 flex items-center justify-center gap-2"
-          style={{ maxWidth: 300, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14.5 }}
+          style={{ maxWidth: 300, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15.5 }}
         >
           <Wallet size={16} /> {t("connectWallet")}
         </button>
@@ -6102,26 +6102,26 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
   return (
     <div className="fx-view flex flex-col items-center" style={{ paddingTop: 26, gap: 6 }}>
       {/* Баланс — главное и единственное крупное на экране. */}
-      <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("walletBalanceLabel")}</span>
+      <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("walletBalanceLabel")}</span>
       <div className="flex items-end gap-2">
         <span style={{ fontFamily: displayFont, fontSize: 46, fontWeight: 800, color: T.ice, lineHeight: 1, letterSpacing: "-0.02em" }}>{balance.toFixed(2)}</span>
-        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 15, marginBottom: 6 }}>TON</span>
+        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 16, marginBottom: 6 }}>TON</span>
       </div>
-      <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>≈ ${usd.toFixed(2)}</span>
+      <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 14.5 }}>≈ ${usd.toFixed(2)}</span>
 
       <button
         onClick={() => { onCopy(); setCopied(true); setTimeout(() => setCopied(false), 1400); }}
         className="fx-tap flex items-center gap-2 rounded-full"
         style={{ marginTop: 18, padding: "8px 14px", background: T.surface, border: `1px solid ${T.line}` }}
       >
-        <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12 }}>{short}</span>
+        <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13 }}>{short}</span>
         {copied ? <CheckCircle2 size={13} color={T.up} /> : <Copy size={13} color={T.muted} />}
       </button>
 
       <button
         onClick={onDisconnect}
         className="fx-tap flex items-center gap-1.5"
-        style={{ marginTop: 22, background: "transparent", border: "none", fontFamily: bodyFont, fontSize: 12.5, color: T.rose }}
+        style={{ marginTop: 22, background: "transparent", border: "none", fontFamily: bodyFont, fontSize: 14, color: T.rose }}
       >
         <LogOut size={13} /> {t("disconnectShort")}
       </button>
@@ -6469,7 +6469,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
 
       {/* Top bar: back pill + a couple of glass icon buttons on the right */}
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 13, background: T.surface, border: `1px solid ${T.line}` }}><ChevronLeft size={16} /> {tr("back")}</button>
+        <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 14.5, background: T.surface, border: `1px solid ${T.line}` }}><ChevronLeft size={16} /> {tr("back")}</button>
         <div className="flex items-center gap-2">
           <button onClick={handleShare} className="fx-tap rounded-full p-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}><Share2 size={15} color={T.muted} /></button>
           <button onClick={() => setTfExpanded(v => !v)} className="fx-tap rounded-full p-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}><MoreHorizontal size={15} color={T.muted} /></button>
@@ -6484,21 +6484,21 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           <TokenAvatar size={52} tone={up ? "up" : "down"} src={token.logoUrl}>{token.emoji}</TokenAvatar>
           <div>
             <div className="flex items-center gap-1.5">
-              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{token.name}</span>
+              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19.5, fontWeight: 700 }}>{token.name}</span>
               {token.verified && <ShieldCheck size={14} color={T.electric} />}
             </div>
-            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>
+            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12.5 }}>
               ${token.ticker} · {fmtAge(token.createdAt) ? `${fmtAge(token.createdAt)} · ` : ""}{token.dexName || catLabel(token.cat)}
             </span>
           </div>
         </div>
         {token.tokenAddress ? (
           <button onClick={copyContract} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12 }}>{shortAddr(token.tokenAddress)}</span>
+            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13 }}>{shortAddr(token.tokenAddress)}</span>
             <Copy size={12} color={T.muted} />
           </button>
         ) : (
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>{tr("tokenNoAddress")}</span>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>{tr("tokenNoAddress")}</span>
         )}
       </div>
 
@@ -6508,14 +6508,16 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           it duplicated what the Transactions tab already shows for real. */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>{t("marketCapLabel")}</div>
+          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("marketCapLabel")}</div>
           <div className="flex items-end gap-2">
-            <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 30, lineHeight: 1, color: T.ice, opacity: 0.92 }}>{fmtUSD(token.mcapNum)}</span>
+            <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 31.5, lineHeight: 1, color: T.ice, opacity: 0.92 }}>{fmtUSD(token.mcapNum)}</span>
             <div style={{ marginBottom: 4 }}><ChangeBadge value={token.change} size="md" /></div>
           </div>
-          <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12, marginTop: 2 }}>{fmtPrice(token.price)} {tr("perToken")}</div>
+          <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 13, marginTop: 2 }}>{fmtPrice(token.price)} {tr("perToken")}</div>
         </div>
-        <div className="flex flex-col items-end gap-1" style={{ fontFamily: bodyFont, fontSize: 12, paddingTop: 2 }}>
+        {/* Подписи не переносятся: «Объём 24ч» ломался на две строки и
+            уводил число на строку ниже своего названия. */}
+        <div className="flex flex-col items-end gap-1" style={{ fontFamily: bodyFont, fontSize: 13, paddingTop: 2, whiteSpace: "nowrap" }}>
           <div className="flex items-center gap-2"><span style={{ color: T.muted }}>{tr("statHolders")}</span><span style={{ fontFamily: monoFont, color: T.ice }}>{holdersCount == null ? "—" : holdersCount.toLocaleString("ru-RU")}</span></div>
           <div className="flex items-center gap-2"><span style={{ color: T.muted }}>{tr("statVolume24h")}</span><span style={{ fontFamily: monoFont, color: T.ice }}>${token.vol}</span></div>
         </div>
@@ -6528,7 +6530,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       <div className="flex items-center gap-4">
         {[["chart", tr("tabChart")], ["info", tr("tabInfo")], ["tx", tr("tabTx")]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="fx-tap" style={{
-            fontFamily: displayFont, fontSize: 13.5, fontWeight: 700, padding: "0 0 9px",
+            fontFamily: displayFont, fontSize: 14.5, fontWeight: 700, padding: "0 0 9px",
             color: tab === id ? T.ice : T.muted, borderBottom: `2px solid ${tab === id ? T.turquoise : "transparent"}`,
           }}>{label}</button>
         ))}
@@ -6546,7 +6548,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
                 data-tf={f}
                 onClick={() => changeTf(f)}
                 className="tf-btn fx-tap rounded-[16px] px-2.5 py-1 flex-shrink-0"
-                style={{ fontFamily: monoFont, fontSize: 11, background: tf === f ? T.ice : T.surface, color: tf === f ? T.bg : T.muted, border: `1px solid ${tf === f ? T.ice : T.line}` }}
+                style={{ fontFamily: monoFont, fontSize: 12, background: tf === f ? T.ice : T.surface, color: tf === f ? T.bg : T.muted, border: `1px solid ${tf === f ? T.ice : T.line}` }}
               >
                 {f}
               </button>
@@ -6569,13 +6571,13 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
               </div>
             ) : !chartReady ? (
               <div className="flex flex-col items-center justify-center gap-3" style={{ height: 340, padding: "0 20px" }}>
-                <span style={{ fontFamily: monoFont, fontSize: 11, color: T.muted, textAlign: "center" }}>{tr("chartNoData")}</span>
+                <span style={{ fontFamily: monoFont, fontSize: 12, color: T.muted, textAlign: "center" }}>{tr("chartNoData")}</span>
                 {/* Кнопка, а не тупик: у источника общий лимит запросов, и
                     через полминуты попытка почти всегда проходит. */}
                 <button
                   onClick={() => setChartReload((v) => v + 1)}
                   className="fx-tap rounded-full px-3.5 py-1.5"
-                  style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 12, color: T.ice }}
+                  style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
                 >
                   {tr("chartRetry")}
                 </button>
@@ -6589,15 +6591,15 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           <div className="flex items-center gap-2">
             <button onClick={bumpFav} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
               <Star size={14} color={favCount ? T.violet : T.muted} fill={favCount ? T.violet : "none"} />
-              <span style={{ fontFamily: monoFont, fontSize: 12, color: T.ice }}>{favCount}</span>
+              <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice }}>{favCount}</span>
             </button>
             <button onClick={bumpHype} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
               <Flame size={14} color={hypeCount ? T.turquoise : T.muted} fill={hypeCount ? T.turquoise : "none"} />
-              <span style={{ fontFamily: monoFont, fontSize: 12, color: T.ice }}>{hypeCount}</span>
+              <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice }}>{hypeCount}</span>
             </button>
             <button onClick={handleRug} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
               <HeartCrack size={14} color={rugCount ? T.rose : T.muted} />
-              <span style={{ fontFamily: monoFont, fontSize: 12, color: T.ice }}>{rugCount}</span>
+              <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice }}>{rugCount}</span>
             </button>
           </div>
 
@@ -6617,8 +6619,8 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             <div className="rounded-[22px] p-4 flex items-start gap-3" style={{ background: T.surface, border: `1px solid ${hexA(T.up, 0.4)}` }}>
               <ShieldCheck size={18} color={T.up} style={{ flexShrink: 0, marginTop: 1 }} />
               <div>
-                <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{tr("gradClosedTitle")}</div>
-                <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.5, marginTop: 4 }}>
+                <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{tr("gradClosedTitle")}</div>
+                <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
                   {trf("gradClosedBody", { target: fmtTon(Number(curve.graduationTon) / 1e9) })}
                 </p>
               </div>
@@ -6636,11 +6638,11 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
 
           {curve && curve.graduated ? null : connected ? (
             <div className="flex gap-2">
-              <button onClick={onBuy} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14, background: PRISM, color: PRISM_TEXT, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("buy")}</button>
-              <button onClick={onSell} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14, background: "transparent", color: T.rose, border: `1px solid ${T.rose}`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("sell")}</button>
+              <button onClick={onBuy} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15, background: PRISM, color: PRISM_TEXT, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("buy")}</button>
+              <button onClick={onSell} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15, background: "transparent", color: T.rose, border: `1px solid ${T.rose}`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("sell")}</button>
             </div>
           ) : (
-            <button onClick={onConnectWallet} className="fx-tap w-full rounded-[20px] py-3.5 flex items-center justify-center gap-2" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14.5, background: T.ice, color: T.bg }}>
+            <button onClick={onConnectWallet} className="fx-tap w-full rounded-[20px] py-3.5 flex items-center justify-center gap-2" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15.5, background: T.ice, color: T.bg }}>
               <Wallet size={15} /> {tr("connectWalletCta")}
             </button>
           )}
@@ -6663,9 +6665,9 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             </div>
           ) : (info?.description || info?.telegram || info?.twitter || info?.website) ? (
             <div className="rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{tr("aboutToken")}</div>
+              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600, marginBottom: 6 }}>{tr("aboutToken")}</div>
               {info.description && (
-                <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5 }}>{info.description}</p>
+                <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14.5, lineHeight: 1.5 }}>{info.description}</p>
               )}
               {(info.telegram || info.twitter || info.website) && (
                 <div className="flex items-center gap-4 mt-3">
@@ -6677,7 +6679,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             </div>
           ) : (
             <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("infoEmpty")}</span>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("infoEmpty")}</span>
             </div>
           )}
         </div>
@@ -6690,24 +6692,24 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
               нет, а где просто не достучались до API. */}
           {!token.poolAddress && !token.curveAddress ? (
             <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("txUnavailable")}</span>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("txUnavailable")}</span>
             </div>
           ) : tradesLoading && !trades ? (
             <div className="flex items-center justify-center" style={{ height: 120 }}><LeafLoader size={40} /></div>
           ) : !trades ? (
             <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("txLoadFailed")}</span>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("txLoadFailed")}</span>
             </div>
           ) : trades.length === 0 ? (
             <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{tr("txEmpty")}</span>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("txEmpty")}</span>
             </div>
           ) : (
             trades.map(tx => (
               <div key={tx.id} className="fx-chip flex items-center justify-between rounded-[20px] px-3 py-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-                <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 12.5, color: tx.kind === "buy" ? T.up : T.down, textTransform: "uppercase" }}>{tx.kind === "buy" ? tr("buy") : tr("sell")}</span>
-                <span style={{ fontFamily: monoFont, fontSize: 12, color: T.ice }}>${tx.volUsd < 1000 ? tx.volUsd.toFixed(2) : fmtCompact(tx.volUsd)}</span>
-                <span style={{ fontFamily: monoFont, fontSize: 11, color: T.muted }}>{tx.at ? fmtCandleStamp(Math.floor(new Date(tx.at).getTime() / 1000)) : ""}</span>
+                <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14, color: tx.kind === "buy" ? T.up : T.down, textTransform: "uppercase" }}>{tx.kind === "buy" ? tr("buy") : tr("sell")}</span>
+                <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice }}>${tx.volUsd < 1000 ? tx.volUsd.toFixed(2) : fmtCompact(tx.volUsd)}</span>
+                <span style={{ fontFamily: monoFont, fontSize: 12, color: T.muted }}>{tx.at ? fmtCandleStamp(Math.floor(new Date(tx.at).getTime() / 1000)) : ""}</span>
               </div>
             ))
           )}
@@ -6833,8 +6835,8 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
           <div className="flex items-center gap-2">
             <TokenAvatar size={34} src={token.logoUrl}>{token.emoji}</TokenAvatar>
             <div>
-              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>{token.name}</div>
-              <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 10.5 }}>${token.ticker} · {fmtPrice(token.price)}</div>
+              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700 }}>{token.name}</div>
+              <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>${token.ticker} · {fmtPrice(token.price)}</div>
             </div>
           </div>
           <button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button>
@@ -6846,7 +6848,7 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
             return (
               <button key={o.id} onClick={() => { setMode(o.id); setAmountStr(""); }} className="fx-tap flex-1 rounded-[16px] py-2"
                 style={{
-                  fontFamily: displayFont, fontWeight: 700, fontSize: 13,
+                  fontFamily: displayFont, fontWeight: 700, fontSize: 14.5,
                   background: active ? (o.id === "buy" ? T.turquoise : T.rose) : "transparent",
                   color: active ? PRISM_TEXT : T.muted,
                 }}>
@@ -6857,8 +6859,8 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
         </div>
 
         <div className="flex items-center justify-between" style={{ marginTop: 16 }}>
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{isBuy ? t("youPay") : t("youSell")}</span>
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{isBuy ? t("youPay") : t("youSell")}</span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>
             {t("available")}: {isBuy
               ? `${spendableTon.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON`
               : balanceKnown ? `${holdingTokens.toLocaleString("ru-RU")} ${token.ticker}` : "…"}
@@ -6870,15 +6872,15 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
             onChange={(e) => setAmountStr(e.target.value.replace(/[^0-9.,]/g, ""))}
             placeholder="0.00"
             inputMode="decimal"
-            style={{ fontFamily: displayFont, fontWeight: 700, color: T.ice, fontSize: 20, background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 0 }}
+            style={{ fontFamily: displayFont, fontWeight: 700, color: T.ice, fontSize: 21.5, background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 0 }}
           />
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>{isBuy ? "TON" : `$${token.ticker}`}</span>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 14.5 }}>{isBuy ? "TON" : `$${token.ticker}`}</span>
         </div>
-        {overMax && <div style={{ fontFamily: bodyFont, color: T.rose, fontSize: 11, marginTop: 4 }}>{t("insufficientFunds")}</div>}
+        {overMax && <div style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12, marginTop: 4 }}>{t("insufficientFunds")}</div>}
 
         <div className="grid grid-cols-4 gap-1.5" style={{ marginTop: 8 }}>
           {[0.25, 0.5, 0.75, 1].map(pct => (
-            <button key={pct} onClick={() => setPct(pct)} className="fx-tap rounded-[16px] py-1.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: monoFont, fontSize: 11.5, color: T.ice }}>
+            <button key={pct} onClick={() => setPct(pct)} className="fx-tap rounded-[16px] py-1.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: monoFont, fontSize: 12.5, color: T.ice }}>
               {pct === 1 ? t("maxLabel") : `${pct * 100}%`}
             </button>
           ))}
@@ -6886,32 +6888,32 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
 
         <div className="rounded-[20px] p-3.5 mt-3.5" style={{ background: T.bg, border: `1px solid ${T.line}` }}>
           <div className="flex items-center justify-between">
-            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("youReceive")}</span>
-            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("youReceive")}</span>
+            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700 }}>
               {amount > 0 ? (isBuy ? `≈ ${estimate.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ${token.ticker}` : `≈ $${estimate.toFixed(2)}`) : "—"}
             </span>
           </div>
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("slippage")}</span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("slippage")}</span>
           <div className="flex gap-1.5 mt-1.5">
             {SLIPPAGE_OPTIONS.map(s => (
-              <button key={s} onClick={() => setSlippage(s)} className="fx-tap rounded-[16px] px-3 py-1.5" style={{ background: slippage === s ? T.ice : T.surfaceHi, color: slippage === s ? T.bg : T.muted, border: `1px solid ${slippage === s ? T.ice : T.line}`, fontFamily: monoFont, fontSize: 11.5 }}>
+              <button key={s} onClick={() => setSlippage(s)} className="fx-tap rounded-[16px] px-3 py-1.5" style={{ background: slippage === s ? T.ice : T.surfaceHi, color: slippage === s ? T.bg : T.muted, border: `1px solid ${slippage === s ? T.ice : T.line}`, fontFamily: monoFont, fontSize: 12.5 }}>
                 {s}%
               </button>
             ))}
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5" style={{ marginTop: 14, fontFamily: monoFont, fontSize: 11, color: T.muted }}>
+        <div className="flex flex-col gap-1.5" style={{ marginTop: 14, fontFamily: monoFont, fontSize: 12, color: T.muted }}>
           <div className="flex justify-between"><span>{t("rate")}</span><span style={{ color: T.ice }}>{fmtPrice(token.price)} / {token.ticker}</span></div>
           <div className="flex justify-between"><span>{t("networkFee")}</span><span style={{ color: T.ice }}>{NETWORK_FEE_TON} TON (${feeUsd.toFixed(2)})</span></div>
           <div className="flex justify-between"><span>{t("minReceive")}</span><span style={{ color: T.ice }}>{amount > 0 ? (isBuy ? `${(estimate * (1 - slippage / 100)).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ${token.ticker}` : `$${(estimate * (1 - slippage / 100)).toFixed(2)}`) : "—"}</span></div>
         </div>
 
         <button onClick={handleConfirm} disabled={!canConfirm} className="fx-tap w-full rounded-[20px] py-3 mt-5" style={{
-          fontFamily: displayFont, fontWeight: 700, fontSize: 14,
+          fontFamily: displayFont, fontWeight: 700, fontSize: 15,
           background: canConfirm ? (isBuy ? T.turquoise : T.rose) : T.surfaceHi,
           color: canConfirm ? PRISM_TEXT : T.muted,
           opacity: canConfirm ? 1 : 0.6,
@@ -6936,7 +6938,7 @@ function Field({ label, placeholder, area, value, onChange, type = "text", icon:
   const realType = isPassword ? (reveal ? "text" : "password") : type;
   return (
     <label className="flex flex-col gap-1.5">
-      <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{label}</span>
+      <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{label}</span>
       <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
         {Icon && (
           <Icon size={14} color={T.muted} style={{ position: "absolute", left: 11, pointerEvents: "none" }} />
@@ -6952,7 +6954,7 @@ function Field({ label, placeholder, area, value, onChange, type = "text", icon:
           autoComplete={autoComplete}
           className="rounded-[20px] py-2.5 w-full"
           style={{
-            fontFamily: bodyFont, fontSize: 16, color: T.ice, background: T.surface,
+            fontFamily: bodyFont, fontSize: 17.5, color: T.ice, background: T.surface,
             border: `1px solid ${error ? T.down : focus ? T.electric : T.line}`, outline: "none",
             resize: area ? "none" : undefined,
             paddingLeft: Icon ? 32 : 12, paddingRight: isPassword ? 34 : 12,
@@ -7084,7 +7086,7 @@ function ImageCropModal({ file, shape = "circle", onCancel, onConfirm }) {
       onClick={(e) => { e.stopPropagation(); onCancel(); }}
     >
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, maxHeight: "100%", overflowY: "auto", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 24, padding: 20, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700 }}>{t("cropImageTitle")}</div>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{t("cropImageTitle")}</div>
         <div
           onMouseDown={onPointerDown} onMouseMove={onPointerMove} onMouseUp={onPointerUp} onMouseLeave={onPointerUp}
           onTouchStart={onPointerDown} onTouchMove={onPointerMove} onTouchEnd={onPointerUp} onTouchCancel={onPointerUp}
@@ -7108,17 +7110,17 @@ function ImageCropModal({ file, shape = "circle", onCancel, onConfirm }) {
           )}
         </div>
         <div className="flex items-center gap-2.5 w-full">
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>–</span>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 14.5 }}>–</span>
           <input
             type="range" min={1} max={4} step={0.01} value={zoom}
             onChange={(e) => setZoom(parseFloat(e.target.value))}
             style={{ flex: 1, accentColor: T.turquoise }}
           />
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>+</span>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 14.5 }}>+</span>
         </div>
         <div className="flex items-center gap-2 w-full">
-          <button onClick={onCancel} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: "transparent", border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.muted }}>{t("cancel")}</button>
-          <button onClick={handleConfirm} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 13 }}>{t("cropConfirm")}</button>
+          <button onClick={onCancel} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: "transparent", border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.muted }}>{t("cancel")}</button>
+          <button onClick={handleConfirm} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14.5 }}>{t("cropConfirm")}</button>
         </div>
       </div>
     </div>
@@ -7193,17 +7195,17 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
             <ShieldAlert size={26} color={T.down} />
           </div>
           <div style={{ maxHeight: 220, overflowY: "auto", width: "100%" }}>
-            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{t("launchFailedTitle")}</div>
-            <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, marginTop: 6, lineHeight: 1.5, whiteSpace: "pre-wrap", textAlign: "left" }}>{error}</div>
+            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700 }}>{t("launchFailedTitle")}</div>
+            <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 6, lineHeight: 1.5, whiteSpace: "pre-wrap", textAlign: "left" }}>{error}</div>
           </div>
           <div className="flex flex-col gap-2 w-full mt-1">
-            <button onClick={copyErrorLog} className="fx-tap w-full rounded-[20px] py-3" style={{ background: "transparent", border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <button onClick={copyErrorLog} className="fx-tap w-full rounded-[20px] py-3" style={{ background: "transparent", border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.ice, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <Copy size={14} color={T.ice} /> {logCopied ? t("linkCopied") : "Скопировать лог"}
             </button>
-            <button onClick={onRetry} className="fx-tap w-full rounded-[20px] py-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
+            <button onClick={onRetry} className="fx-tap w-full rounded-[20px] py-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}>
               {t("retry")}
             </button>
-            <button onClick={() => onClose && onClose(null)} className="fx-tap w-full rounded-[20px] py-3" style={{ background: "transparent", border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.muted }}>
+            <button onClick={() => onClose && onClose(null)} className="fx-tap w-full rounded-[20px] py-3" style={{ background: "transparent", border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.muted }}>
               {t("doneClose")}
             </button>
           </div>
@@ -7214,10 +7216,10 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
             <RefreshCw size={26} color={T.electric} style={{ animation: "spin360 1.1s linear infinite" }} />
           </div>
           <div>
-            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>
+            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700 }}>
               {form.name.trim() || "Token"} · ${(form.ticker.trim() || "TICKER").toUpperCase()}
             </div>
-            <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 6 }}>{t("launchingWait")}</div>
+            <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 6 }}>{t("launchingWait")}</div>
           </div>
           <div className="flex flex-col gap-2.5 w-full mt-1">
             {LAUNCH_STEPS.map((step, i) => {
@@ -7237,7 +7239,7 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
                   ) : (
                     <Icon size={16} color={T.muted} />
                   )}
-                  <span style={{ fontFamily: bodyFont, fontSize: 12.5, color: state === "pending" ? T.muted : T.ice, textAlign: "left" }}>{step.label()}</span>
+                  <span style={{ fontFamily: bodyFont, fontSize: 14, color: state === "pending" ? T.muted : T.ice, textAlign: "left" }}>{step.label()}</span>
                 </div>
               );
             })}
@@ -7250,32 +7252,32 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
           </div>
           <div className="flex items-center gap-1.5 rounded-full px-3 py-1" style={{ background: hexA(T.up, 0.12), border: `1px solid ${hexA(T.up, 0.35)}` }}>
             <ShieldCheck size={13} color={T.up} />
-            <span style={{ fontFamily: bodyFont, fontSize: 11, fontWeight: 600, color: T.up }}>{t("tokenCreatedStatus")}</span>
+            <span style={{ fontFamily: bodyFont, fontSize: 12, fontWeight: 600, color: T.up }}>{t("tokenCreatedStatus")}</span>
           </div>
           <div>
-            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{result.name}</div>
-            <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12, marginTop: 2 }}>${result.ticker}</div>
+            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 20.5, fontWeight: 700 }}>{result.name}</div>
+            <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 13, marginTop: 2 }}>${result.ticker}</div>
           </div>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.5, marginTop: -6 }}>{t("launchSuccessSub")}</p>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, marginTop: -6 }}>{t("launchSuccessSub")}</p>
 
           <div className="w-full flex flex-col gap-2 mt-1">
             <div className="flex items-center justify-between rounded-[20px] px-3 py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
-              <span style={{ fontFamily: bodyFont, fontSize: 11, color: T.muted }}>{t("totalSupply")}</span>
-              <span style={{ fontFamily: monoFont, fontSize: 12, color: T.ice }}>{result.supply}</span>
+              <span style={{ fontFamily: bodyFont, fontSize: 12, color: T.muted }}>{t("totalSupply")}</span>
+              <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice }}>{result.supply}</span>
             </div>
             <div className="flex items-center justify-between rounded-[20px] px-3 py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
-              <span style={{ fontFamily: bodyFont, fontSize: 11, color: T.muted }}>{t("initialBuy")}</span>
-              <span style={{ fontFamily: monoFont, fontSize: 12, color: T.ice, textAlign: "right" }}>
+              <span style={{ fontFamily: bodyFont, fontSize: 12, color: T.muted }}>{t("initialBuy")}</span>
+              <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice, textAlign: "right" }}>
                 {result.buyAmount} TON<br />
-                <span style={{ fontSize: 10.5, color: T.muted }}>
+                <span style={{ fontSize: 11.5, color: T.muted }}>
                   {result.buyTokens.toLocaleString("ru-RU")} {result.ticker} · {result.buyPct.toFixed(result.buyPct < 1 ? 3 : 1)}%
                 </span>
               </span>
             </div>
             <div className="flex items-center justify-between rounded-[20px] px-3 py-2.5 gap-2" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
               <div className="flex flex-col items-start min-w-0">
-                <span style={{ fontFamily: bodyFont, fontSize: 11, color: T.muted }}>{t("contractAddress")}</span>
-                <span style={{ fontFamily: monoFont, fontSize: 11.5, color: T.ice, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 190 }}>{result.address}</span>
+                <span style={{ fontFamily: bodyFont, fontSize: 12, color: T.muted }}>{t("contractAddress")}</span>
+                <span style={{ fontFamily: monoFont, fontSize: 12.5, color: T.ice, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 190 }}>{result.address}</span>
               </div>
               <button onClick={copyAddr} className="fx-tap flex-shrink-0">
                 {copied ? <CheckCircle2 size={15} color={T.turquoise} /> : <Copy size={15} color={T.muted} />}
@@ -7284,7 +7286,7 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
             {result.explorerUrl && (
               <a href={result.explorerUrl} target="_blank" rel="noreferrer" className="fx-tap flex items-center justify-center gap-1.5 rounded-[20px] px-3 py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, textDecoration: "none" }}>
                 <ExternalLink size={13} color={T.muted} />
-                <span style={{ fontFamily: bodyFont, fontSize: 11.5, color: T.muted }}>{t("viewOnExplorer")}</span>
+                <span style={{ fontFamily: bodyFont, fontSize: 12.5, color: T.muted }}>{t("viewOnExplorer")}</span>
               </a>
             )}
           </div>
@@ -7293,11 +7295,11 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
             <button
               onClick={() => onViewToken && onViewToken(result)}
               className="fx-tap w-full rounded-[20px] py-3"
-              style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}
+              style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}
             >
               {t("launchBuyCta")}
             </button>
-            <button onClick={() => onClose && onClose(result)} className="fx-tap w-full rounded-[20px] py-3" style={{ background: "transparent", border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.muted }}>
+            <button onClick={() => onClose && onClose(result)} className="fx-tap w-full rounded-[20px] py-3" style={{ background: "transparent", border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.muted }}>
               {t("doneClose")}
             </button>
           </div>
@@ -7403,18 +7405,18 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
     return (
       <div className="fx-view flex flex-col items-center justify-center text-center gap-3" style={{ minHeight: "70%", paddingTop: 40 }}>
         <MintlyFrame size={64} glow={`${T.violet}55`}><Lock size={26} color={T.violet} /></MintlyFrame>
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 700, marginTop: 6 }}>{t("padClosedTitle")}</div>
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, maxWidth: 280 }}>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 18.5, fontWeight: 700, marginTop: 6 }}>{t("padClosedTitle")}</div>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, maxWidth: 280 }}>
           {t("padClosedBody")}
         </p>
         <div className="flex flex-col gap-2 w-full mt-2" style={{ maxWidth: 260 }}>
           {!accountCreated && (
-            <button onClick={onOpenCreateProfile} className="fx-tap w-full rounded-[20px] py-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 13.5 }}>
+            <button onClick={onOpenCreateProfile} className="fx-tap w-full rounded-[20px] py-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14.5 }}>
               {t("createAccount")}
             </button>
           )}
           {!connected && (
-            <button onClick={onOpenConnectModal} className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3" style={{ background: accountCreated ? PRISM : T.surfaceHi, color: accountCreated ? PRISM_TEXT : T.ice, border: accountCreated ? "none" : `1px solid ${T.line}`, fontFamily: displayFont, fontWeight: 700, fontSize: 13.5 }}>
+            <button onClick={onOpenConnectModal} className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3" style={{ background: accountCreated ? PRISM : T.surfaceHi, color: accountCreated ? PRISM_TEXT : T.ice, border: accountCreated ? "none" : `1px solid ${T.line}`, fontFamily: displayFont, fontWeight: 700, fontSize: 14.5 }}>
               <Wallet size={15} /> {t("connectWalletCta")}
             </button>
           )}
@@ -7429,23 +7431,23 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
   return (
     <div className="fx-view flex flex-col gap-7" style={{ position: "relative" }}>
       <div>
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{t("launchTokenTitle")}</div>
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, marginTop: 2 }}>{t("launchTokenSub")}</div>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 20.5, fontWeight: 700 }}>{t("launchTokenTitle")}</div>
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 2 }}>{t("launchTokenSub")}</div>
       </div>
 
       <div>
-        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("logoLabel")}</span>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("logoLabel")}</span>
         <div className="flex gap-3 mt-1.5">
           <input ref={logoInputRef} type="file" accept="image/*" onChange={onPickLogo} style={{ display: "none" }} />
           <input ref={bannerInputRef} type="file" accept="image/*" onChange={onPickBanner} style={{ display: "none" }} />
           <button onClick={() => logoInputRef.current && logoInputRef.current.click()} className="fx-tap flex flex-col items-center justify-center gap-1 flex-shrink-0 overflow-hidden" style={{ width: 76, height: 76, borderRadius: "50%", background: logoUrl ? `center/cover no-repeat url(${logoUrl})` : T.surface, border: logoUrl ? `1.5px solid ${T.lineHi}` : `1px dashed ${touched && !logoUrl ? T.down : T.line}` }}>
-            {!logoUrl && (<><ImageIcon size={18} color={touched ? T.down : T.muted} /><span style={{ fontFamily: bodyFont, color: touched ? T.down : T.muted, fontSize: 9 }}>{t("logoShort")}</span></>)}
+            {!logoUrl && (<><ImageIcon size={18} color={touched ? T.down : T.muted} /><span style={{ fontFamily: bodyFont, color: touched ? T.down : T.muted, fontSize: 10 }}>{t("logoShort")}</span></>)}
           </button>
           <button onClick={() => bannerInputRef.current && bannerInputRef.current.click()} className="fx-tap flex-1 flex flex-col items-center justify-center gap-1 rounded-[22px] overflow-hidden" style={{ background: bannerUrl ? `center/cover no-repeat url(${bannerUrl})` : T.surface, border: bannerUrl ? `1.5px solid ${T.lineHi}` : `1px dashed ${T.line}` }}>
-            {!bannerUrl && (<><Upload size={18} color={T.muted} /><span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10 }}>{t("bannerOptional")}</span></>)}
+            {!bannerUrl && (<><Upload size={18} color={T.muted} /><span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>{t("bannerOptional")}</span></>)}
           </button>
         </div>
-        {touched && !logoUrl && <span style={{ fontFamily: bodyFont, color: T.down, fontSize: 11, marginTop: 4, display: "block" }}>{t("logoRequiredShort")}</span>}
+        {touched && !logoUrl && <span style={{ fontFamily: bodyFont, color: T.down, fontSize: 12, marginTop: 4, display: "block" }}>{t("logoRequiredShort")}</span>}
       </div>
 
       <Field label={t("nameLabel")} placeholder="Prism Cat" value={form.name} onChange={set("name")} />
@@ -7453,7 +7455,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
 
       <div>
         <Field label={t("descLabel")} placeholder={t("descPlaceholder")} area value={form.desc} onChange={set("desc")} error={touched && !form.desc.trim()} />
-        {touched && !form.desc.trim() && <span style={{ fontFamily: bodyFont, color: T.down, fontSize: 11, marginTop: 4, display: "block" }}>{t("descRequiredShort")}</span>}
+        {touched && !form.desc.trim() && <span style={{ fontFamily: bodyFont, color: T.down, fontSize: 12, marginTop: 4, display: "block" }}>{t("descRequiredShort")}</span>}
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -7463,7 +7465,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("launchAmountLabel")}</span>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("launchAmountLabel")}</span>
         <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surface, border: `1px solid ${touched && MIN_LAUNCH_ENFORCED && tonUsd() > 0 && !(parseFloat(form.buyAmount.replace(",", ".")) * tonUsd() >= MIN_LAUNCH_USD) ? T.down : T.line}` }}>
           <input
             value={form.buyAmount}
@@ -7477,11 +7479,11 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
             // Высота строки задаётся явно: без неё каретка наследует
             // межстрочный интервал от родителя и рисуется выше самого
             // текста.
-            style={{ fontFamily: displayFont, fontWeight: 700, color: T.ice, fontSize: 16, lineHeight: "20px", height: 20, background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 0, padding: 0 }}
+            style={{ fontFamily: displayFont, fontWeight: 700, color: T.ice, fontSize: 17.5, lineHeight: "20px", height: 20, background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 0, padding: 0 }}
           />
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>TON</span>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 14.5 }}>TON</span>
         </div>
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.5, marginTop: 6 }}>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.5, marginTop: 6 }}>
           {t("initialBuyHint")}
         </p>
         {(() => {
@@ -7490,14 +7492,14 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
           const minBuyTon = rate > 0 ? MIN_LAUNCH_USD / rate : 0;
           if (!Number.isFinite(buyNum) || buyNum <= 0) {
             return (
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.5 }}>
+              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.5 }}>
                 {t("launchAmountNote")}
               </p>
             );
           }
           if (MIN_LAUNCH_ENFORCED && rate > 0 && buyNum * rate < MIN_LAUNCH_USD) {
             return (
-              <p style={{ fontFamily: bodyFont, color: T.down, fontSize: 11, lineHeight: 1.5 }}>
+              <p style={{ fontFamily: bodyFont, color: T.down, fontSize: 12, lineHeight: 1.5 }}>
                 {trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(2) })}
               </p>
             );
@@ -7505,8 +7507,8 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
           const { tokens, pct } = tokensForTon(buyNum);
           return (
             <div className="flex items-center justify-between rounded-[20px] px-3.5 py-2.5" style={{ background: ink(0.06), border: `1px solid ${ink(0.2)}` }}>
-              <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 12 }}>{t("youWillGet")}</span>
-              <span style={{ fontFamily: monoFont, color: T.electric, fontSize: 12.5, fontWeight: 600 }}>
+              <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 13 }}>{t("youWillGet")}</span>
+              <span style={{ fontFamily: monoFont, color: T.electric, fontSize: 14, fontWeight: 600 }}>
                 {tokens.toLocaleString("ru-RU")} {(form.ticker.trim() || "TOKEN").toUpperCase()} · {pct.toFixed(pct < 1 ? 3 : 1)}% {t("supplyShare")}
               </span>
             </div>
@@ -7517,11 +7519,11 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
       {!connected && (
         <div className="rounded-[22px] p-4 flex items-center gap-2.5" style={{ background: ink(0.07), border: `1px solid ${ink(0.22)}` }}>
           <Wallet size={16} color={T.electric} />
-          <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 12.5 }}>{t("connectToConfirm")}</span>
+          <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 14 }}>{t("connectToConfirm")}</span>
         </div>
       )}
 
-      <button onClick={handleLaunch} className="cta-launch fx-tap rounded-[22px]" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 16, color: PRISM_TEXT, background: PRISM, position: "sticky", bottom: 12, padding: "18px 0" }}>
+      <button onClick={handleLaunch} className="cta-launch fx-tap rounded-[22px]" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 17.5, color: PRISM_TEXT, background: PRISM, position: "sticky", bottom: 12, padding: "18px 0" }}>
         {t("launchTokenCta")}
       </button>
 
@@ -7541,14 +7543,14 @@ function MyTokenCard({ t, onManage }) {
       <TokenAvatar tone={t.verified ? "neutral" : "neutral"} src={t.logoUrl}>{t.emoji}</TokenAvatar>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 600 }}>{t.name}</span>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 600 }}>{t.name}</span>
           {t.verified && <ShieldCheck size={12} color={T.electric} />}
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 10 }}>${t.ticker}</span>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>${t.ticker}</span>
         </div>
-        <div style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 16, color: T.turquoise, marginTop: 2 }}>{fmtUSD(t.mcapNum)}</div>
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5, marginTop: 2 }}>{tr("liqShort")} ${t.liq} · {holdersCount == null ? "—" : holdersCount.toLocaleString("ru-RU")} {tr("holdersShort")} · {tr("volShort")} {t.vol}</div>
+        <div style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 17.5, color: T.turquoise, marginTop: 2 }}>{fmtUSD(t.mcapNum)}</div>
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 2 }}>{tr("liqShort")} ${t.liq} · {holdersCount == null ? "—" : holdersCount.toLocaleString("ru-RU")} {tr("holdersShort")} · {tr("volShort")} {t.vol}</div>
       </div>
-      <button onClick={() => onManage && onManage(t)} className="fx-tap rounded-[16px] px-3 py-1.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 11, color: T.ice }}>{tr("manageBtn")}</button>
+      <button onClick={() => onManage && onManage(t)} className="fx-tap rounded-[16px] px-3 py-1.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 12, color: T.ice }}>{tr("manageBtn")}</button>
     </GlassCard>
   );
 }
@@ -7589,7 +7591,7 @@ function PinKeypad({ onDigit, onBackspace }) {
         if (k === "back") {
           return (
             <button key={idx} onClick={() => { haptic("soft"); onBackspace(); }} className="fx-tap flex items-center justify-center" style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: "50%", background: "transparent" }}>
-              <span style={{ fontFamily: bodyFont, fontSize: 19, color: T.muted }}>⌫</span>
+              <span style={{ fontFamily: bodyFont, fontSize: 20.5, color: T.muted }}>⌫</span>
             </button>
           );
         }
@@ -7607,7 +7609,7 @@ function PinKeypad({ onDigit, onBackspace }) {
               boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
             }}
           >
-            <span style={{ fontFamily: displayFont, fontSize: 21, fontWeight: 700, color: T.ice }}>{k}</span>
+            <span style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 700, color: T.ice }}>{k}</span>
           </button>
         );
       })}
@@ -7684,7 +7686,7 @@ function PinSetupModal({ mode, currentPin, onClose, onComplete, onDisable, showT
         <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
         <div className="flex flex-col items-center text-center gap-1" style={{ marginTop: -8 }}>
           <MintlyFrame size={52} glow={`${T.electric}55`}><Lock size={20} color={T.electric} /></MintlyFrame>
-          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700, marginTop: 8 }}>{titles[stage]}</div>
+          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700, marginTop: 8 }}>{titles[stage]}</div>
         </div>
         <div style={{ margin: "26px 0" }}><PinDots filled={entry.length} error={error} /></div>
         <PinKeypad onDigit={handleDigit} onBackspace={handleBackspace} />
@@ -7719,7 +7721,7 @@ function PinLockScreen({ pin, profile, onUnlock, onForgot }) {
   return (
     <div className="fx-view" style={{ position: "absolute", inset: 0, zIndex: 200, background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", overflow: "hidden" }}>
       <div style={{ position: "relative", flex: 1, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "calc(24px + var(--tg-inset-top, 0px)) 24px calc(24px + var(--tg-inset-bottom, 0px))" }}>
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 23, fontWeight: 700, letterSpacing: "-0.02em", textAlign: "center" }}>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em", textAlign: "center" }}>
           {hasName ? tf("greetingHi", { name: profile.nickname }) : t("greetingBack")}
         </div>
 
@@ -7737,11 +7739,11 @@ function PinLockScreen({ pin, profile, onUnlock, onForgot }) {
           </div>
         </div>
 
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 14 }}>{t("pinContinueNote")}</div>
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, marginTop: 14 }}>{t("pinContinueNote")}</div>
 
         <div style={{ margin: "28px 0" }}><PinDots filled={entry.length} error={error} /></div>
         <PinKeypad onDigit={handleDigit} onBackspace={handleBackspace} />
-        <button onClick={onForgot} className="fx-tap" style={{ marginTop: 26, fontFamily: bodyFont, fontSize: 12.5, color: T.muted, textDecoration: "underline", textUnderlineOffset: 3 }}>
+        <button onClick={onForgot} className="fx-tap" style={{ marginTop: 26, fontFamily: bodyFont, fontSize: 14, color: T.muted, textDecoration: "underline", textUnderlineOffset: 3 }}>
           {t("pinForgot")}
         </button>
       </div>
@@ -7757,10 +7759,10 @@ function ConnectModal({ open, onClose, onConnect }) {
         <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
         <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: -8 }}>
           <MintlyFrame size={56} glow={`${T.electric}55`}><Wallet size={22} color={T.electric} /></MintlyFrame>
-          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700, marginTop: 6 }}>{t("connectWalletModalTitle")}</div>
-          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("walletRequiredNote")}</div>
+          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700, marginTop: 6 }}>{t("connectWalletModalTitle")}</div>
+          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("walletRequiredNote")}</div>
         </div>
-        <button onClick={() => { onConnect(); onClose(); }} className="fx-tap w-full rounded-[20px] py-3 mt-5" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
+        <button onClick={() => { onConnect(); onClose(); }} className="fx-tap w-full rounded-[20px] py-3 mt-5" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}>
           {t("connectWalletCta")}
         </button>
       </div>
@@ -7792,8 +7794,8 @@ function SettingsRow({ label, sub, children }) {
   return (
     <div className="flex items-center gap-3 py-3" style={{ borderBottom: `1px solid ${T.line}` }}>
       <div className="flex-1">
-        <div style={{ fontFamily: bodyFont, fontSize: 13, color: T.ice }}>{label}</div>
-        {sub && <div style={{ fontFamily: bodyFont, fontSize: 11, color: T.muted, marginTop: 2 }}>{sub}</div>}
+        <div style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}>{label}</div>
+        {sub && <div style={{ fontFamily: bodyFont, fontSize: 12, color: T.muted, marginTop: 2 }}>{sub}</div>}
       </div>
       {children}
     </div>
@@ -7848,17 +7850,17 @@ function SettingsPanel({
     case "profile":
       body = (
         <>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, textAlign: "center" }}>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, textAlign: "center" }}>
             {t("editProfileDesc")}
           </p>
-          <button onClick={openEditFromSettings} className="fx-tap w-full rounded-[20px] py-3 mt-4" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
+          <button onClick={openEditFromSettings} className="fx-tap w-full rounded-[20px] py-3 mt-4" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}>
             {t("editProfile")}
           </button>
           {accountCreated && (
             <button
               onClick={() => setDeleteConfirmOpen(true)}
               className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-3"
-              style={{ background: "transparent", border: `1px solid rgba(255,77,77,0.35)`, fontFamily: displayFont, fontWeight: 700, fontSize: 13, color: T.down }}
+              style={{ background: "transparent", border: `1px solid rgba(255,77,77,0.35)`, fontFamily: displayFont, fontWeight: 700, fontSize: 14.5, color: T.down }}
             >
               <ShieldAlert size={15} /> {t("deleteAccountForever")}
             </button>
@@ -7868,16 +7870,16 @@ function SettingsPanel({
               <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 20, padding: 22 }}>
                 <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
                   <ShieldAlert size={18} color={T.down} />
-                  <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{t("deleteAccountQ")}</span>
+                  <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700 }}>{t("deleteAccountQ")}</span>
                 </div>
-                <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, marginBottom: 18 }}>
+                <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, marginBottom: 18 }}>
                   {t("deleteAccountBody")}
                 </p>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setDeleteConfirmOpen(false)} disabled={deleting} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice, opacity: deleting ? 0.6 : 1 }}>
+                  <button onClick={() => setDeleteConfirmOpen(false)} disabled={deleting} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.ice, opacity: deleting ? 0.6 : 1 }}>
                     {t("cancel")}
                   </button>
-                  <button onClick={confirmDeleteAccount} disabled={deleting} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: T.down, border: "none", fontFamily: displayFont, fontWeight: 700, fontSize: 13, color: "#1a0000", opacity: deleting ? 0.6 : 1 }}>
+                  <button onClick={confirmDeleteAccount} disabled={deleting} className="fx-tap flex-1 rounded-[20px] py-2.5" style={{ background: T.down, border: "none", fontFamily: displayFont, fontWeight: 700, fontSize: 14.5, color: "#1a0000", opacity: deleting ? 0.6 : 1 }}>
                     {deleting ? t("deletingText") : t("deleteShort")}
                   </button>
                 </div>
@@ -7896,7 +7898,7 @@ function SettingsPanel({
           <button
             onClick={() => { if (appSettings.pinEnabled) onChangePin(); else showToast(t("enablePinFirst")); }}
             className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-3"
-            style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: appSettings.pinEnabled ? T.ice : T.muted, opacity: appSettings.pinEnabled ? 1 : 0.55 }}
+            style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: appSettings.pinEnabled ? T.ice : T.muted, opacity: appSettings.pinEnabled ? 1 : 0.55 }}
           >
             <Lock size={14} color={T.muted} /> {t("changePinCta")}
           </button>
@@ -7908,30 +7910,30 @@ function SettingsPanel({
         <div className="flex flex-col gap-2 mt-2">
           {["RU", "EN"].map((lng) => (
             <button key={lng} onClick={() => onUpdateSetting("language", lng)} className="fx-tap w-full flex items-center justify-between rounded-[20px] py-3 px-3.5" style={{ background: T.surfaceHi, border: `1px solid ${appSettings.language === lng ? T.turquoise : T.line}` }}>
-              <span style={{ fontFamily: bodyFont, fontSize: 13, color: T.ice }}>{lng === "RU" ? "Русский" : "English"}</span>
+              <span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}>{lng === "RU" ? "Русский" : "English"}</span>
               {appSettings.language === lng && <CheckCircle2 size={16} color={T.turquoise} />}
             </button>
           ))}
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11, lineHeight: 1.5, marginTop: 2 }}>{t("langFullNote")}</p>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.5, marginTop: 2 }}>{t("langFullNote")}</p>
         </div>
       );
       break;
     case "referral":
       body = (
         <>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, textAlign: "center" }}>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, textAlign: "center" }}>
             {t("referralDesc")}
           </p>
           <div className="flex items-center justify-between mt-3 rounded-[20px] px-3.5 py-3" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
-            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{t("refInvited")}</span>
-            <span style={{ fontFamily: displayFont, color: T.turquoise, fontSize: 16, fontWeight: 700 }}>{inviteCount}</span>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{t("refInvited")}</span>
+            <span style={{ fontFamily: displayFont, color: T.turquoise, fontSize: 17.5, fontWeight: 700 }}>{inviteCount}</span>
           </div>
           <div className="flex items-center gap-2 mt-2 rounded-[20px] px-3 py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
-            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 11.5, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{refLink || "—"}</span>
+            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12.5, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{refLink || "—"}</span>
             <button onClick={copyReferral} className="fx-tap" disabled={!refLink}><Copy size={14} color={T.muted} /></button>
           </div>
           {refLink && (
-            <button onClick={shareReferral} className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
+            <button onClick={shareReferral} className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}>
               <Send size={14} /> {t("refShare")}
             </button>
           )}
@@ -7941,17 +7943,17 @@ function SettingsPanel({
     case "support":
       body = (
         <>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, textAlign: "center" }}>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, textAlign: "center" }}>
             {t("supportDesc")}
           </p>
-          <button onClick={contactSupport} className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-4" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
+          <button onClick={contactSupport} className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-4" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}>
             <Send size={14} /> {t("contactSupport")}
           </button>
         </>
       );
       break;
     case "privacy":
-      body = <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.6, marginTop: 4 }}>{t("privacyText")}</p>;
+      body = <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.6, marginTop: 4 }}>{t("privacyText")}</p>;
       break;
     default:
       body = null;
@@ -7977,7 +7979,7 @@ function SettingsPanel({
           <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
           <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: -8 }}>
             <MintlyFrame size={52} glow={`${T.electric}44`}><Icon size={20} color={T.electric} /></MintlyFrame>
-            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700, marginTop: 6 }}>{t(item.tKey)}</div>
+            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700, marginTop: 6 }}>{t(item.tKey)}</div>
           </div>
         </div>
         <div className="no-scrollbar" style={{ padding: "0 22px", paddingBottom: 22, overflowY: "auto", flex: 1, minHeight: 0 }}>
@@ -8007,13 +8009,13 @@ function TokenManageSheet({ token, onClose, showToast, onDelete }) {
         <div className="flex items-center gap-3" style={{ marginTop: -8, marginBottom: 14 }}>
           <TokenAvatar size={44} src={token.logoUrl}>{token.emoji}</TokenAvatar>
           <div>
-            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700 }}>{token.name}</div>
-            <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>${token.ticker}</div>
+            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{token.name}</div>
+            <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>${token.ticker}</div>
           </div>
         </div>
         <div className="flex flex-col gap-2">
           <button onClick={copyLink} className="fx-tap w-full flex items-center gap-2 rounded-[20px] py-3 px-3.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
-            <Copy size={15} color={T.muted} /><span style={{ fontFamily: bodyFont, fontSize: 13, color: T.ice }}>{t("copyLink")}</span>
+            <Copy size={15} color={T.muted} /><span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}>{t("copyLink")}</span>
           </button>
           {/* Список приходит из базы и содержит только свои токены,
              поэтому удаление здесь безопасно. */}
@@ -8025,14 +8027,14 @@ function TokenManageSheet({ token, onClose, showToast, onDelete }) {
                   className="fx-tap flex-1 flex items-center justify-center gap-2 rounded-[20px] py-3 px-3.5"
                   style={{ background: hexA(T.down, 0.14), border: `1px solid ${hexA(T.down, 0.4)}` }}
                 >
-                  <span style={{ fontFamily: bodyFont, fontSize: 13, color: T.down, fontWeight: 600 }}>{t("confirmDelete")}</span>
+                  <span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.down, fontWeight: 600 }}>{t("confirmDelete")}</span>
                 </button>
                 <button
                   onClick={() => setConfirmingDelete(false)}
                   className="fx-tap flex-1 flex items-center justify-center gap-2 rounded-[20px] py-3 px-3.5"
                   style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}
                 >
-                  <span style={{ fontFamily: bodyFont, fontSize: 13, color: T.muted }}>{t("cancel")}</span>
+                  <span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.muted }}>{t("cancel")}</span>
                 </button>
               </div>
             ) : (
@@ -8041,7 +8043,7 @@ function TokenManageSheet({ token, onClose, showToast, onDelete }) {
                 className="fx-tap w-full flex items-center gap-2 rounded-[20px] py-3 px-3.5"
                 style={{ background: "transparent", border: `1px solid ${hexA(T.down, 0.35)}` }}
               >
-                <Trash2 size={15} color={T.down} /><span style={{ fontFamily: bodyFont, fontSize: 13, color: T.down }}>{t("deleteToken")}</span>
+                <Trash2 size={15} color={T.down} /><span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.down }}>{t("deleteToken")}</span>
               </button>
             )
           )}
@@ -8301,7 +8303,7 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
       <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
         <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
           <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
-            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{t("tgAuthTitle")}</span>
+            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700 }}>{t("tgAuthTitle")}</span>
             <button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button>
           </div>
 
@@ -8317,12 +8319,12 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
             </AvatarFrame>
 
             {tgUser && (
-              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>
+              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700 }}>
                 {tgUser.username ? `@${tgUser.username}` : [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ")}
               </span>
             )}
 
-            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5, maxWidth: 280 }}>
+            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, maxWidth: 280 }}>
               {!insideTelegram ? t("tgAuthOutside") : isNew ? t("tgAuthNickHint") : t("tgAuthHint")}
             </p>
 
@@ -8339,12 +8341,12 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
                   error={tgNickTouched && !tgNickValid}
                 />
                 {tgNickTouched && !tgNickValid && (
-                  <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 11 }}>{t("nicknameError")}</span>
+                  <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12 }}>{t("nicknameError")}</span>
                 )}
               </div>
             )}
 
-            {tgError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12 }}>{tgError}</span>}
+            {tgError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 13 }}>{tgError}</span>}
 
             <button
               onClick={handleTelegramLogin}
@@ -8353,7 +8355,7 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
               style={{
                 background: canEnter ? PRISM : T.surfaceHi,
                 color: canEnter ? PRISM_TEXT : T.muted,
-                fontFamily: displayFont, fontWeight: 700, fontSize: 14,
+                fontFamily: displayFont, fontWeight: 700, fontSize: 15,
                 boxShadow: canEnter ? `0 0 22px ${glow(0.28)}` : "none",
                 opacity: tgBusy ? 0.6 : 1,
               }}
@@ -8475,7 +8477,7 @@ async function uploadAvatarIfNeeded(userId) {
     <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
         <div className="flex items-center justify-between" style={{ marginBottom: isEdit ? 4 : 14 }}>
-          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700 }}>
             {isEdit ? t("editProfile") : t("accountLabel")}
           </span>
           <button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button>
@@ -8496,7 +8498,7 @@ async function uploadAvatarIfNeeded(userId) {
                   style={{
                     background: active ? PRISM : "transparent",
                     color: active ? PRISM_TEXT : T.muted,
-                    fontFamily: displayFont, fontWeight: 700, fontSize: 12.5,
+                    fontFamily: displayFont, fontWeight: 700, fontSize: 14,
                   }}
                 >
                   <Icon size={13} /> {label}
@@ -8506,7 +8508,7 @@ async function uploadAvatarIfNeeded(userId) {
           </div>
         )}
 
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, marginBottom: 16 }}>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginBottom: 16 }}>
           {isEdit ? t("editHint") : isLogin ? t("loginHint") : t("createHint")}
         </p>
 
@@ -8516,7 +8518,7 @@ async function uploadAvatarIfNeeded(userId) {
             <button onClick={() => avatarInputRef.current && avatarInputRef.current.click()} className="fx-tap flex flex-col items-center justify-center gap-1 overflow-hidden" style={{ width: 84, height: 84, borderRadius: "50%", background: avatarUrl ? `center/cover no-repeat url(${avatarUrl})` : T.bg, border: avatarUrl ? `1.5px solid ${T.lineHi}` : `1px dashed ${T.lineHi}`, fontSize: 34 }}>
               {!avatarUrl && previewEmoji}
             </button>
-            {avatarUrl && <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 10.5 }}>{t("changeAvatarHint")}</span>}
+            {avatarUrl && <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{t("changeAvatarHint")}</span>}
           </div>
         )}
 
@@ -8526,18 +8528,18 @@ async function uploadAvatarIfNeeded(userId) {
               задним числом ломает всё это разом. */}
           {!isLogin && (
             <div className="flex flex-col gap-1.5">
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("nicknameLabel")}</span>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("nicknameLabel")}</span>
               <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-2.5" style={{ background: T.bg, border: `1px solid ${T.line}` }}>
                 <Lock size={13} color={T.muted} />
-                <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{nickname}</span>
+                <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{nickname}</span>
               </div>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11 }}>{t("nicknameLocked")}</span>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("nicknameLocked")}</span>
             </div>
           )}
           {!isLogin && <Field label={t("bioLabel")} placeholder={t("bioPlaceholder")} area value={bio} onChange={(e) => setBio(e.target.value)} />}
         </div>
-        {serverError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12, marginTop: 10, display: "block" }}>{serverError}</span>}
-        <button onClick={handleSubmit} disabled={submitting} className="fx-tap w-full rounded-[20px] py-3 mt-5" style={{ background: canSubmit ? PRISM : T.surfaceHi, color: canSubmit ? PRISM_TEXT : T.muted, fontFamily: displayFont, fontWeight: 700, fontSize: 14, boxShadow: canSubmit ? `0 0 22px ${glow(0.28)}` : "none", opacity: submitting ? 0.6 : 1 }}>
+        {serverError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 13, marginTop: 10, display: "block" }}>{serverError}</span>}
+        <button onClick={handleSubmit} disabled={submitting} className="fx-tap w-full rounded-[20px] py-3 mt-5" style={{ background: canSubmit ? PRISM : T.surfaceHi, color: canSubmit ? PRISM_TEXT : T.muted, fontFamily: displayFont, fontWeight: 700, fontSize: 15, boxShadow: canSubmit ? `0 0 22px ${glow(0.28)}` : "none", opacity: submitting ? 0.6 : 1 }}>
           {submitting ? t("submittingText") : isEdit ? t("saveChanges") : isLogin ? t("loginCta") : t("createAccountShort")}
         </button>
       </div>
@@ -8608,7 +8610,7 @@ function ProfileView({
               обрезанных краёв. */}
           <ProfileCardBg cardId={cosmetics.card} height={320} radius={0} bleed={16} top={PROFILE_CARD_TOP(insetTop)} />
           {accountCreated && (
-            <button onClick={logOut} className="fx-tap flex items-center gap-1.5" style={{ position: "absolute", top: 0, right: 0, zIndex: 2, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 12, color: T.rose }}>
+            <button onClick={logOut} className="fx-tap flex items-center gap-1.5" style={{ position: "absolute", top: 0, right: 0, zIndex: 2, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 13, color: T.rose }}>
               <LogOut size={13} /> {t("logOutShort")}
             </button>
           )}
@@ -8627,24 +8629,24 @@ function ProfileView({
           {accountCreated ? (
             <>
               <div className="flex items-center gap-1.5 mt-1">
-                <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700 }}>{profile.nickname}</span>
+                <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 20.5, fontWeight: 700 }}>{profile.nickname}</span>
                 <CreatorWreathBadge tier={creatorTier} size={19} />
                 <VerifiedBadge verified={verifyStatus === "verified"} size={16} />
               </div>
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>
+              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, maxWidth: 260, lineHeight: 1.5 }}>
                 {profile.bio || t("bioEmptyPlaceholder")}
               </p>
-              <div className="flex items-center gap-3" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>
+              <div className="flex items-center gap-3" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>
                 <span className="flex items-center gap-1"><Clock size={12} /> {t("memberSince")}</span>
               </div>
-              <button onClick={onOpenEditProfile} className="fx-tap rounded-[20px] px-5 py-2.5 mt-2" style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}>{t("editProfileBtn")}</button>
+              <button onClick={onOpenEditProfile} className="fx-tap rounded-[20px] px-5 py-2.5 mt-2" style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}>{t("editProfileBtn")}</button>
             </>
           ) : (
             <>
-              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 700, marginTop: 4 }}>{t("accountNotCreated")}</div>
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, maxWidth: 260, lineHeight: 1.5 }}>{t("accountNotCreatedBody")}</p>
+              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 18.5, fontWeight: 700, marginTop: 4 }}>{t("accountNotCreated")}</div>
+              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, maxWidth: 260, lineHeight: 1.5 }}>{t("accountNotCreatedBody")}</p>
               <div className="flex items-center gap-2 mt-2" style={{ width: "100%", maxWidth: 300 }}>
-                <button onClick={onOpenLogin} className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-[20px] px-4 py-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 12.5 }}>
+                <button onClick={onOpenLogin} className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-[20px] px-4 py-3" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14 }}>
                   <Send size={14} /> {t("tgAuthCta")}
                 </button>
               </div>
@@ -8666,22 +8668,22 @@ function ProfileView({
               {onClearAllTokens && myTokens.some((tok) => tok.network === "testnet") && (
                 confirmingClearAll ? (
                   <div className="flex items-center gap-1.5">
-                    <button onClick={() => { onClearAllTokens(); setConfirmingClearAll(false); }} className="fx-tap" style={{ fontFamily: bodyFont, fontSize: 11, color: T.down, fontWeight: 600 }}>{t("confirmDelete")}</button>
-                    <button onClick={() => setConfirmingClearAll(false)} className="fx-tap" style={{ fontFamily: bodyFont, fontSize: 11, color: T.muted }}>{t("cancel")}</button>
+                    <button onClick={() => { onClearAllTokens(); setConfirmingClearAll(false); }} className="fx-tap" style={{ fontFamily: bodyFont, fontSize: 12, color: T.down, fontWeight: 600 }}>{t("confirmDelete")}</button>
+                    <button onClick={() => setConfirmingClearAll(false)} className="fx-tap" style={{ fontFamily: bodyFont, fontSize: 12, color: T.muted }}>{t("cancel")}</button>
                   </div>
                 ) : (
-                  <button onClick={() => setConfirmingClearAll(true)} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 11.5, color: T.down }}>
+                  <button onClick={() => setConfirmingClearAll(true)} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 12.5, color: T.down }}>
                     <Trash2 size={13} /> {t("clearAllTokens")}
                   </button>
                 )
               )}
-              <button onClick={goCreateToken} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 11.5, color: unlocked ? T.electric : T.muted }}>{unlocked ? <PlusCircle size={13} /> : <Lock size={12} />} {t("myTokensCreate")}</button>
+              <button onClick={goCreateToken} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 12.5, color: unlocked ? T.electric : T.muted }}>{unlocked ? <PlusCircle size={13} /> : <Lock size={12} />} {t("myTokensCreate")}</button>
             </div>
           }>{t("myTokensTitle")}</SectionTitle>
           {myTokens.length === 0 ? (
             <GlassCard style={{ padding: 22 }} className="flex flex-col items-center text-center gap-2">
               <MintlyFrame size={40} glow={`${T.electric}44`}><Rocket size={16} color={T.electric} /></MintlyFrame>
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("noTokensYet")}</p>
+              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("noTokensYet")}</p>
             </GlassCard>
           ) : (
             <div className="flex flex-col gap-2">{myTokens.map(t => <MyTokenCard key={t.id} t={t} onManage={onManageToken} />)}</div>
@@ -8692,20 +8694,20 @@ function ProfileView({
           <SectionTitle>{t("activityTitle")}</SectionTitle>
           <GlassCard style={{ padding: 22 }} className="flex flex-col items-center text-center gap-2">
             <MintlyFrame size={40} glow={`${T.muted}33`}><Clock size={16} color={T.muted} /></MintlyFrame>
-            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("noActivityYet")}</p>
+            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("noActivityYet")}</p>
           </GlassCard>
         </div>
 
         <div className="mt-5">
           <SectionTitle action={
-            <button onClick={onOpenAchievements} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 11.5, color: T.electric }}>
+            <button onClick={onOpenAchievements} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 12.5, color: T.electric }}>
               {t("achAll")} <ChevronRight size={13} />
             </button>
           }>{t("achievementsTitle")}</SectionTitle>
           <button onClick={onOpenAchievements} className="fx-tap w-full text-left rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
             <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("achProgress")}</span>
-              <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("achProgress")}</span>
+              <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>
                 {tf("achUnlockedOf", { done: achievements.filter((a) => a.done).length, total: achievements.length })}
               </span>
             </div>
@@ -8717,7 +8719,7 @@ function ProfileView({
               {achievements.filter((a) => !a.done).slice(0, 3).map((a) => (
                 <span key={a.id} className="flex items-center gap-1 rounded-full px-2 py-1" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
                   <a.icon size={11} color={T.muted} />
-                  <span style={{ fontFamily: bodyFont, fontSize: 10.5, color: T.muted }}>{a.label}</span>
+                  <span style={{ fontFamily: bodyFont, fontSize: 11.5, color: T.muted }}>{a.label}</span>
                 </span>
               ))}
             </div>
@@ -8731,26 +8733,26 @@ function ProfileView({
               <>
                 <ShieldCheck size={22} color={T.electric} />
                 <div className="flex-1">
-                  <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600 }}>{t("verifiedStatus")}</div>
-                  <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{t("profileConfirmed")}</div>
+                  <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>{t("verifiedStatus")}</div>
+                  <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{t("profileConfirmed")}</div>
                 </div>
               </>
             ) : verifyStatus === "pending" ? (
               <>
                 <ShieldAlert size={22} color={T.violet} />
                 <div className="flex-1">
-                  <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600 }}>{t("pendingStatus")}</div>
-                  <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{t("verifyPending")}</div>
+                  <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>{t("pendingStatus")}</div>
+                  <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{t("verifyPending")}</div>
                 </div>
               </>
             ) : (
               <>
                 <ShieldAlert size={22} color={T.muted} />
                 <div className="flex-1">
-                  <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 600 }}>{t("notVerifiedStatus")}</div>
-                  <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{t("verifyCta")}</div>
+                  <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>{t("notVerifiedStatus")}</div>
+                  <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{t("verifyCta")}</div>
                 </div>
-                <button onClick={startVerify} className="fx-tap rounded-[16px] px-3 py-2 flex items-center gap-1.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 12, color: T.ice, opacity: unlocked ? 1 : 0.55 }}>
+                <button onClick={startVerify} className="fx-tap rounded-[16px] px-3 py-2 flex items-center gap-1.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice, opacity: unlocked ? 1 : 0.55 }}>
                   {!unlocked && <Lock size={11} color={T.muted} />} {t("verifyAccountBtn")}
                 </button>
               </>
@@ -8764,7 +8766,7 @@ function ProfileView({
             {SETTINGS_ITEMS.map((s, i) => (
               <button key={s.key} onClick={() => openSettingItem(s)} className="fx-tap w-full flex items-center gap-3 py-3" style={{ borderBottom: i < SETTINGS_ITEMS.length - 1 ? `1px solid ${T.line}` : "none", opacity: 1 }}>
                 <s.icon size={16} color={T.muted} />
-                <span style={{ fontFamily: bodyFont, fontSize: 13, color: T.ice, flex: 1, textAlign: "left" }}>{t(s.tKey)}</span>
+                <span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice, flex: 1, textAlign: "left" }}>{t(s.tKey)}</span>
                 <ChevronRight size={14} color={T.muted} />
               </button>
             ))}
@@ -10994,7 +10996,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
                     <Lock size={8} color={T.muted} />
                   </div>
                 )}
-                <span style={{ fontFamily: bodyFont, fontSize: 12.5, color: active ? T.ice : T.muted, transition: `color ${EASE}` }}>{label}</span>
+                <span style={{ fontFamily: bodyFont, fontSize: 14, color: active ? T.ice : T.muted, transition: `color ${EASE}` }}>{label}</span>
               </button>
             );
           })}
