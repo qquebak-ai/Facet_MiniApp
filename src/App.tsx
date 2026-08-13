@@ -5471,7 +5471,7 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
           {equipped ? t("shopEquipped") : t("shopEquip")}
         </span>
       ) : (
-        <span className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 11.5, fontWeight: 700, color: affordable ? "#FFD86B" : T.muted }}>
+        <span className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 11.5, fontWeight: 700, color: affordable ? T.electric : T.muted }}>
           <CoinIcon size={12} dim={!affordable} /> {price}
         </span>
       )}
@@ -5550,9 +5550,9 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
                   больше не закреплён: что купить, человек решает сам. */}
               {a.coins > 0 && (
                 <div className="flex items-center gap-1 flex-shrink-0 rounded-full px-2.5 py-1"
-                  style={{ background: a.done ? hexA(T.gold || "#FFD86B", 0.14) : T.surfaceHi, border: `1px solid ${a.done ? hexA("#FFD86B", 0.4) : T.line}` }}>
+                  style={{ background: a.done ? hexA(T.electric, 0.14) : T.surfaceHi, border: `1px solid ${a.done ? hexA(T.electric, 0.4) : T.line}` }}>
                   <CoinIcon size={12} dim={!a.done} />
-                  <span style={{ fontFamily: monoFont, fontSize: 11.5, fontWeight: 700, color: a.done ? "#FFD86B" : T.muted }}>
+                  <span style={{ fontFamily: monoFont, fontSize: 11.5, fontWeight: 700, color: a.done ? T.electric : T.muted }}>
                     +{a.coins}
                   </span>
                 </div>
@@ -5619,10 +5619,10 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
         <button
           onClick={onOpenAchievements}
           className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5 flex-shrink-0"
-          style={{ background: hexA("#FFD86B", 0.12), border: `1px solid ${hexA("#FFD86B", 0.35)}` }}
+          style={{ background: hexA(T.electric, 0.12), border: `1px solid ${hexA(T.electric, 0.35)}` }}
         >
           <CoinIcon size={15} />
-          <span style={{ fontFamily: monoFont, fontSize: 13.5, fontWeight: 700, color: "#FFD86B" }}>{coins}</span>
+          <span style={{ fontFamily: monoFont, fontSize: 13.5, fontWeight: 700, color: T.electric }}>{coins}</span>
         </button>
       </div>
       <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>{t("shopCoinsHint")}</p>
@@ -8869,19 +8869,33 @@ function ButtonRocketFlyby({ size = 26 }) {
 // Кленовый по умолчанию: из трёх фоновых пород он единственный, чей
 // силуэт остаётся узнаваемым листом на шестнадцати точках. Дубовый на
 // такой величине рассыпается в зубчики, мятный читается как капля.
-/* Монета магазина — столбик монет. Плоский кружок со звёздочкой внутри
-   на двенадцати точках читался как значок «избранного», а стопка ни с
-   чем не путается даже мелкой. Листа тут нет намеренно: не всё в
+/* Монеты магазина — стопка из трёх, в фирменном оранжевом. Одна плоская
+   монета читалась как непонятный овал, а жёлтый в приложении не
+   встречается больше нигде и выглядел деталью из чужого набора. У каждой
+   монеты есть боковая стенка: без неё три овала друг над другом читаются
+   как полоски, а не как деньги. Листа тут нет намеренно — не всё в
    приложении обязано быть листом. */
+const COIN_RX = 6.2;
+const COIN_RY = 2.2;
+const COIN_GAP = 3.6;
+const COIN_WALL = 2.25;
 function CoinIcon({ size = 14, dim = false }) {
-  const gold = dim ? T.muted : "#FFD86B";
+  const color = dim ? T.muted : T.electric;
+  const wall = `M${10 - COIN_RX} CY v${COIN_WALL} a${COIN_RX} ${COIN_RY} 0 0 0 ${COIN_RX * 2} 0 v${-COIN_WALL}`;
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" style={{ flexShrink: 0 }} aria-hidden>
-      <path d="M3 6 v4 a7 2.8 0 0 0 14 0 V6" fill={gold} opacity={dim ? 0.08 : 0.14} />
-      <path d="M3 6 v4 a7 2.8 0 0 0 14 0 V6" fill="none" stroke={gold} strokeWidth="1.25" />
-      <path d="M3 10.5 a7 2.8 0 0 0 14 0" fill="none" stroke={gold} strokeWidth="1.1" opacity="0.7" />
-      <ellipse cx="10" cy="6" rx="7" ry="2.8" fill={gold} opacity={dim ? 0.1 : 0.2} />
-      <ellipse cx="10" cy="6" rx="7" ry="2.8" fill="none" stroke={gold} strokeWidth="1.25" />
+      {[2, 1, 0].map((i) => {
+        const cy = 5 + i * COIN_GAP;
+        const side = wall.replace("CY", String(cy));
+        return (
+          <g key={i}>
+            <path d={side} fill={color} opacity={dim ? 0.08 : 0.16} />
+            <path d={side} fill="none" stroke={color} strokeWidth="1.2" />
+            <ellipse cx="10" cy={cy} rx={COIN_RX} ry={COIN_RY} fill={color} opacity={dim ? 0.1 : 0.2} />
+            <ellipse cx="10" cy={cy} rx={COIN_RX} ry={COIN_RY} fill="none" stroke={color} strokeWidth="1.2" />
+          </g>
+        );
+      })}
     </svg>
   );
 }
