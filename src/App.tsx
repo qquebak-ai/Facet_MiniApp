@@ -137,6 +137,8 @@ const STR = {
     shopLeftAfter: "Останется после покупки",
     shopBought: "{name} — куплено и надето",
     shopCoinsHint: "Монеты приходят за достижения. Тратить их можно только здесь.",
+    shopLockedTitle: "Магазин закрыт",
+    shopLockedBody: "Рамки и карточки надеваются на профиль, а монеты приходят за достижения. Войди, чтобы всё это стало твоим.",
     cosmeticApplied: "Применено", cosmeticRemoved: "Снято",
     settingsSaved: "Настройки сохранены",
     langTitle: "Язык", themeTitle: "Оформление", themeWhite: "Светлая",
@@ -400,6 +402,8 @@ const STR = {
     shopLeftAfter: "Left after this",
     shopBought: "{name} — bought and equipped",
     shopCoinsHint: "Coins come from achievements. They're only spent here.",
+    shopLockedTitle: "Shop is locked",
+    shopLockedBody: "Frames and cards go on your profile, and coins come from achievements. Sign in to make them yours.",
     cosmeticApplied: "Applied", cosmeticRemoved: "Removed",
     settingsSaved: "Settings saved",
     langTitle: "Language", themeTitle: "Appearance", themeWhite: "White",
@@ -681,6 +685,31 @@ const EASE = "240ms cubic-bezier(0.16, 1, 0.3, 1)";
    used only on :active. SPRING/EASE above stay for the release/bounce-back
    so the button snaps down immediately and eases back out smoothly. */
 const PRESS = "70ms cubic-bezier(0.4, 0, 1, 1)";
+
+/* Нижние шторки. Их дно совпадает с дном окна, а внизу у телефона либо
+   полоса «домой», либо скруглённый угол, либо собственная панель
+   Telegram — без запаса нижняя кнопка оказывается срезанной краем
+   экрана. Сколько там занято, знает только корень приложения (Telegram
+   присылает отступы событиями), поэтому он кладёт их в переменные
+   --tg-inset-bottom/--tg-inset-top, а шторки берут их отсюда. Сверху
+   ограничиваем высоту так, чтобы шапка шторки не уезжала под чёлку. */
+const SHEET_BACK = {
+  position: "absolute", inset: 0, background: "rgba(0,0,0,0.75)",
+  backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
+  display: "flex", alignItems: "flex-end",
+};
+function sheetCard(pad = 22, extra = {}) {
+  return {
+    width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`,
+    borderRadius: "22px 22px 0 0",
+    padding: pad,
+    paddingBottom: `calc(${pad}px + var(--tg-inset-bottom, 0px))`,
+    maxHeight: "calc(100% - var(--tg-inset-top, 0px) - 24px)",
+    overflowY: "auto",
+    WebkitOverflowScrolling: "touch",
+    ...extra,
+  };
+}
 
 function fmtUSD(n) {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
@@ -4709,7 +4738,8 @@ function BadgeSheet({ onClose, art, title, subtitle, text }) {
         position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.8)",
         backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end",
         justifyContent: "center",
-        padding: "0 12px calc(12px + env(safe-area-inset-bottom))",
+        padding: "0 12px calc(12px + var(--tg-inset-bottom, 0px))",
+        paddingTop: "var(--tg-inset-top, 0px)",
       }}
     >
       <div
@@ -4718,6 +4748,7 @@ function BadgeSheet({ onClose, art, title, subtitle, text }) {
           width: "100%", maxWidth: 420, background: T.surface,
           border: `1px solid ${T.lineHi}`, borderRadius: 26,
           padding: "26px 22px 22px",
+          maxHeight: "100%", overflowY: "auto",
           display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
           animation: "wreathSheetUp 340ms cubic-bezier(0.16,1,0.3,1) both",
         }}
@@ -5602,7 +5633,8 @@ function BuySheet({ item, kind, coins, cosmetics, onBuy, onClose }) {
       style={{
         position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.8)",
         backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center",
-        padding: "0 12px calc(12px + env(safe-area-inset-bottom))",
+        padding: "0 12px calc(12px + var(--tg-inset-bottom, 0px))",
+        paddingTop: "var(--tg-inset-top, 0px)",
       }}
     >
       <div
@@ -5610,6 +5642,7 @@ function BuySheet({ item, kind, coins, cosmetics, onBuy, onClose }) {
         style={{
           width: "100%", maxWidth: 420, background: T.surface,
           border: `1px solid ${T.lineHi}`, borderRadius: 26, padding: "22px 22px 18px",
+          maxHeight: "100%", overflowY: "auto",
           display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
           animation: "wreathSheetUp 340ms cubic-bezier(0.16,1,0.3,1) both",
         }}
@@ -5657,7 +5690,7 @@ function BuySheet({ item, kind, coins, cosmetics, onBuy, onClose }) {
   );
 }
 
-function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady = true, onOpenAchievements, showToast }) {
+function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady = true, onOpenAchievements, showToast, accountCreated = false, onOpenLogin }) {
   const [tab, setTab] = useState("frames");
   // Нажатие отмечается сразу здесь, не дожидаясь, пока выбор дойдёт до
   // состояния всего приложения и вернётся обратно пропсом. Рамка при
@@ -5695,6 +5728,32 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
   useEffect(() => {
     if (pending && cosmetics[pending.kind] === pending.id) setPending(null);
   }, [cosmetics, pending]);
+
+  // Без аккаунта магазин закрыт целиком: монеты копятся за достижения,
+  // а достижения считаются по профилю — купить и надеть тут нечего и
+  // некому. Показываем витрину закрытой, а не пустой, и сразу даём вход.
+  if (!accountCreated) {
+    return (
+      <div className="flex flex-col gap-4 pt-2">
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("shopTitle")}</span>
+        <div className="flex flex-col items-center text-center gap-3" style={{
+          background: T.surface, border: `1px solid ${T.line}`, borderRadius: 24,
+          padding: "34px 22px 26px", marginTop: 6,
+        }}>
+          <MintlyFrame size={58} glow={`${T.electric}44`}><Lock size={22} color={T.electric} /></MintlyFrame>
+          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 700, marginTop: 4 }}>{t("shopLockedTitle")}</div>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.55, maxWidth: 270 }}>{t("shopLockedBody")}</p>
+          <button
+            onClick={() => onOpenLogin && onOpenLogin()}
+            className="fx-tap flex items-center justify-center gap-1.5 rounded-[20px] px-5 py-3 mt-1"
+            style={{ width: "100%", maxWidth: 280, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 13 }}
+          >
+            <Send size={14} /> {t("tgAuthCta")}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 pt-2">
@@ -6757,8 +6816,8 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
   }
 
   return (
-    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }} onClick={onClose}>
-      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: "22px 22px 0 0", padding: 20, maxHeight: "88%", overflowY: "auto" }}>
+    <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
+      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(20)}>
         <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
           <div className="flex items-center gap-2">
             <TokenAvatar size={34} src={token.logoUrl}>{token.emoji}</TokenAvatar>
@@ -7008,7 +7067,8 @@ function ImageCropModal({ file, shape = "circle", onCancel, onConfirm }) {
       style={{
         position: "fixed", inset: 0, zIndex: 300,
         background: "rgba(0,0,0,0.9)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "calc(20px + var(--tg-inset-top, 0px)) 20px calc(20px + var(--tg-inset-bottom, 0px))",
       }}
       onClick={(e) => { e.stopPropagation(); onCancel(); }}
     >
@@ -7115,7 +7175,7 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
   }
 
   return (
-    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 80, background: "rgba(0,0,0,0.92)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 80, background: "rgba(0,0,0,0.92)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "calc(20px + var(--tg-inset-top, 0px)) 20px calc(20px + var(--tg-inset-bottom, 0px))", overflowY: "auto" }}>
       {error ? (
         <div className="fx-modal-card flex flex-col items-center text-center gap-4" style={{ width: "100%", maxWidth: 340, background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 24, padding: 24 }}>
           <div style={{ width: 64, height: 64, clipPath: FACET, background: hexA(T.down, 0.12), border: `1px solid ${hexA(T.down, 0.35)}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -7608,8 +7668,8 @@ function PinSetupModal({ mode, currentPin, onClose, onComplete, onDisable, showT
   };
 
   return (
-    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 70, background: "rgba(0,0,0,0.82)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }} onClick={onClose}>
-      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: "22px 22px 0 0", padding: 22, paddingBottom: 34 }}>
+    <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 70, background: "rgba(0,0,0,0.82)" }} onClick={onClose}>
+      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22, { paddingBottom: "calc(34px + var(--tg-inset-bottom, 0px))" })}>
         <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
         <div className="flex flex-col items-center text-center gap-1" style={{ marginTop: -8 }}>
           <MintlyFrame size={52} glow={`${T.electric}55`}><Lock size={20} color={T.electric} /></MintlyFrame>
@@ -7647,7 +7707,7 @@ function PinLockScreen({ pin, profile, onUnlock, onForgot }) {
 
   return (
     <div className="fx-view" style={{ position: "absolute", inset: 0, zIndex: 200, background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", overflow: "hidden" }}>
-      <div style={{ position: "relative", flex: 1, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ position: "relative", flex: 1, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "calc(24px + var(--tg-inset-top, 0px)) 24px calc(24px + var(--tg-inset-bottom, 0px))" }}>
         <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 23, fontWeight: 700, letterSpacing: "-0.02em", textAlign: "center" }}>
           {hasName ? tf("greetingHi", { name: profile.nickname }) : t("greetingBack")}
         </div>
@@ -7681,8 +7741,8 @@ function PinLockScreen({ pin, profile, onUnlock, onForgot }) {
 function ConnectModal({ open, onClose, onConnect }) {
   if (!open) return null;
   return (
-    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }} onClick={onClose}>
-      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: "22px 22px 0 0", padding: 22 }}>
+    <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
+      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
         <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
         <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: -8 }}>
           <MintlyFrame size={56} glow={`${T.electric}55`}><Wallet size={22} color={T.electric} /></MintlyFrame>
@@ -7793,7 +7853,7 @@ function SettingsPanel({
             </button>
           )}
           {deleteConfirmOpen && (
-            <div className="fx-modal-back" style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => !deleting && setDeleteConfirmOpen(false)}>
+            <div className="fx-modal-back" style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "calc(24px + var(--tg-inset-top, 0px)) 24px calc(24px + var(--tg-inset-bottom, 0px))", overflowY: "auto" }} onClick={() => !deleting && setDeleteConfirmOpen(false)}>
               <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 20, padding: 22 }}>
                 <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
                   <ShieldAlert size={18} color={T.down} />
@@ -7893,7 +7953,9 @@ function SettingsPanel({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%", maxWidth: 440, background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 26,
-          maxHeight: `calc(88vh - ${insetBottom + insetTop}px)`, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden",
+          // Считаем от окна приложения, а не от vh: внутри Telegram высота
+          // окна меньше высоты браузерного экрана, и 88vh вылезали за край.
+          maxHeight: `calc(100% - ${insetTop + 14}px)`, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden",
           boxShadow: "0 -16px 44px rgba(0,0,0,0.45)",
         }}
       >
@@ -7928,8 +7990,8 @@ function TokenManageSheet({ token, onClose, showToast, onDelete }) {
     showToast(t("tokenLinkCopied"));
   }
   return (
-    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }} onClick={onClose}>
-      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: "22px 22px 0 0", padding: 22 }}>
+    <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
+      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
         <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
         <div className="flex items-center gap-3" style={{ marginTop: -8, marginBottom: 14 }}>
           <TokenAvatar size={44} src={token.logoUrl}>{token.emoji}</TokenAvatar>
@@ -8176,8 +8238,8 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
     }
 
     return (
-      <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }} onClick={onClose}>
-        <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: "22px 22px 0 0", padding: 22, maxHeight: "88%", overflowY: "auto" }}>
+      <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
+        <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
           <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
             <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{t("tgAuthTitle")}</span>
             <button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button>
@@ -8350,8 +8412,8 @@ async function uploadAvatarIfNeeded(userId) {
   }
 
   return (
-    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }} onClick={onClose}>
-      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: "22px 22px 0 0", padding: 22, maxHeight: "88%", overflowY: "auto" }}>
+    <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
+      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
         <div className="flex items-center justify-between" style={{ marginBottom: isEdit ? 4 : 14 }}>
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>
             {isEdit ? t("editProfile") : t("accountLabel")}
@@ -8429,7 +8491,7 @@ function ProfileView({
   connected, onOpenConnectModal, showToast,
   accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut,
   onOpenSetting, onManageToken, onGoCreate, onOpenToken, myTokens = [], onClearAllTokens,
-  cosmetics = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
+  cosmetics: cosmeticsProp = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
   // Достижения считаются в корне: их же показывает магазин и отдельная
   // страница достижений, дублировать запрос незачем.
   achievements = [], creatorTier = 0, onVerified,
@@ -8443,6 +8505,11 @@ function ProfileView({
   const [confirmingClearAll, setConfirmingClearAll] = useState(false);
 
 
+
+  // Без аккаунта украшений нет: пустой профиль с чужой рамкой и фоном
+  // выглядит как чей-то чужой, хотя войти ещё даже не предлагали.
+  // Прошлый выбор хранится и вернётся сам, как только человек войдёт.
+  const cosmetics = accountCreated ? cosmeticsProp : { frame: "none", card: "none" };
 
   const unlocked = accountCreated && connected;
   function requireUnlock(missingMsg) {
@@ -9175,6 +9242,16 @@ function useTelegramViewport() {
     window.addEventListener("resize", onResize);
     return () => { cancelled = true; window.removeEventListener("resize", onResize); };
   }, []);
+
+  // Кладём отступы в переменные на <html>. Оттуда их видно всем, включая
+  // окна, которые рисуются порталом прямо в body, мимо корня приложения.
+  // Берём большее из двух источников: вне Telegram отступы придут нулями,
+  // а внутри Telegram браузерный env() часто пустой.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--tg-inset-bottom", `max(${insetBottom}px, env(safe-area-inset-bottom, 0px))`);
+    root.style.setProperty("--tg-inset-top", `max(${insetTop}px, env(safe-area-inset-top, 0px))`);
+  }, [insetBottom, insetTop]);
 
   return { height, insetBottom, insetTop, deviceTop, fullscreen, ready };
 }
@@ -10638,7 +10715,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // когда проблема воспроизводится только на одном клиенте.
       data-platform={device.platform}
       data-telegram={device.inTelegram ? "1" : "0"}
-      style={{ background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden" }}
+      style={{
+        background: T.bg, height, minHeight: height, width: "100%", maxWidth: 480,
+        margin: "0 auto", fontFamily: bodyFont, position: "relative", overflow: "hidden",
+      }}
     >
       <GlobalStyle />
       {/* Обрамление появляется только после заставки и только когда
@@ -10746,6 +10826,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               achievementsReady={achievementsReady}
               onOpenAchievements={() => setView("achievements")}
               showToast={showToast}
+              accountCreated={accountCreated}
+              onOpenLogin={openLoginProfile}
             />
           </KeepAlive>
           {view === "achievements" && (
