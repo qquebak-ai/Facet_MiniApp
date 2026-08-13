@@ -136,7 +136,7 @@ const STR = {
     shopBuyFor: "Купить за {n}",
     shopLeftAfter: "Останется после покупки",
     shopBought: "{name} — куплено и надето",
-    shopCoinsHint: "Монеты приходят за достижения. Тратить их можно только здесь.",
+    shopCoinsHint: "Монеты приходят за достижения и за приглашённых друзей. Тратить их можно только здесь.",
     shopLockedTitle: "Магазин закрыт",
     shopLockedBody: "Рамки и карточки надеваются на профиль, а монеты приходят за достижения. Войди, чтобы всё это стало твоим.",
     cosmeticApplied: "Применено", cosmeticRemoved: "Снято",
@@ -274,7 +274,9 @@ const STR = {
     pinRowSub: "Запрашивать код при каждом открытии Mintly",
     enablePinFirst: "Сначала включи PIN-код",
     changePinCta: "Сменить PIN-код",
-    referralDesc: "Приглашай друзей — получай % от их комиссий за сделки.",
+    referralDesc: "Приглашай друзей — получай монеты за каждого, кто заведёт аккаунт по твоей ссылке. Тратить их можно в магазине.",
+    refPerFriend: "За каждого друга",
+    refEarned: "Заработано монет",
     supportDesc: "Ответим в течение суток в Telegram-поддержке.",
     contactSupport: "Написать в поддержку",
     copyLink: "Скопировать ссылку",
@@ -402,7 +404,7 @@ const STR = {
     shopBuyFor: "Buy for {n}",
     shopLeftAfter: "Left after this",
     shopBought: "{name} — bought and equipped",
-    shopCoinsHint: "Coins come from achievements. They're only spent here.",
+    shopCoinsHint: "Coins come from achievements and invited friends. They're only spent here.",
     shopLockedTitle: "Shop is locked",
     shopLockedBody: "Frames and cards go on your profile, and coins come from achievements. Sign in to make them yours.",
     cosmeticApplied: "Applied", cosmeticRemoved: "Removed",
@@ -540,7 +542,9 @@ const STR = {
     pinRowSub: "Require a code every time Mintly opens",
     enablePinFirst: "Enable PIN code first",
     changePinCta: "Change PIN code",
-    referralDesc: "Invite friends — earn a % of their trading fees.",
+    referralDesc: "Invite friends — earn coins for everyone who signs up through your link. Spend them in the shop.",
+    refPerFriend: "Per friend",
+    refEarned: "Coins earned",
     supportDesc: "We'll reply within a day on Telegram support.",
     contactSupport: "Message support",
     copyLink: "Copy link",
@@ -3829,6 +3833,17 @@ const ACH_COINS = {
   invite10: 300,
   invite25: 600,
 };
+
+/* Монеты за каждого приглашённого — сверх достижений за приглашения.
+   Достижения дают ступеньки (первый, пятый, десятый), а это платит за
+   каждого, включая тех, кто попал между ступенями: иначе после двадцать
+   пятого приглашения новые люди перестают что-либо приносить.
+   Начисление считается по базе, не по счётчику в телефоне: приписать
+   себе приглашённых, которых нет, нельзя. */
+const REFERRAL_COINS = 100;
+function coinsFromInvites(inviteCount) {
+  return Math.max(0, Math.floor(inviteCount || 0)) * REFERRAL_COINS;
+}
 
 function buildAchievements({ tokensCount = 0, bestMcapUsd = 0, invites = 0, connected = false, profile = {}, cosmetics = {} }) {
   const bioLen = (profile.bio || "").trim().length;
@@ -7942,9 +7957,23 @@ function SettingsPanel({
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, textAlign: "center" }}>
             {t("referralDesc")}
           </p>
-          <div className="flex items-center justify-between mt-3 rounded-[20px] px-3.5 py-3" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
+          {/* Цена приглашения стоит первой строкой: ради неё сюда и
+              заходят, а счёт приглашённых без неё — просто число. */}
+          <div className="flex items-center justify-between mt-3 rounded-[20px] px-3.5 py-3" style={{ background: T.surfaceHi, border: `1px solid ${hexA(T.electric, 0.35)}` }}>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{t("refPerFriend")}</span>
+            <span className="flex items-center gap-1.5" style={{ fontFamily: displayFont, color: T.electric, fontSize: 17.5, fontWeight: 700 }}>
+              <CoinIcon size={16} /> {REFERRAL_COINS}
+            </span>
+          </div>
+          <div className="flex items-center justify-between mt-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
             <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{t("refInvited")}</span>
             <span style={{ fontFamily: displayFont, color: T.turquoise, fontSize: 17.5, fontWeight: 700 }}>{inviteCount}</span>
+          </div>
+          <div className="flex items-center justify-between mt-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{t("refEarned")}</span>
+            <span className="flex items-center gap-1.5" style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700 }}>
+              <CoinIcon size={16} /> {coinsFromInvites(inviteCount)}
+            </span>
           </div>
           <div className="flex items-center gap-2 mt-2 rounded-[20px] px-3 py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
             <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12.5, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{refLink || "—"}</span>
@@ -10222,9 +10251,14 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     [myTokens.length, bestMcapUsd, inviteCount, connected, profile, cosmetics],
   );
 
-  // Баланс: выданное площадкой плюс заработанное достижениями минус
-  // потраченное на покупки.
-  const coins = Math.max(0, coinsGranted + coinsEarned(achievements) - coinsSpent(owned));
+  // Баланс: выданное площадкой, заработанное достижениями и приглашениями,
+  // минус потраченное на покупки. Отдельного поля с балансом в базе нет
+  // намеренно — всё складывается из того, что и так проверяемо, поэтому
+  // подкрутить его запросом из браузера не выйдет.
+  const coins = Math.max(
+    0,
+    coinsGranted + coinsEarned(achievements) + coinsFromInvites(inviteCount) - coinsSpent(owned),
+  );
 
   function buyCosmetic(kind, id) {
     const price = cosmeticPrice(kind, id);
