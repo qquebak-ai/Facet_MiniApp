@@ -935,7 +935,6 @@ function GlobalStyle() {
         88%  { opacity: var(--o); }
         100% { transform: translate3d(var(--dx), 104vh, 0) rotate(var(--r1)); opacity: 0; }
       }
-      @keyframes islandGlow { 0%,100%{ opacity:0.75; } 50%{ opacity:1; } }
       /* Заливка листа в индикаторе загрузки: бежит снизу вверх и уходит
          за верхний край, потом начинается заново. */
       @keyframes leafLoaderFill {
@@ -980,10 +979,6 @@ function GlobalStyle() {
         0%, 100% { opacity: 0.75; transform: scale(0.94); }
         50%      { opacity: 1;    transform: scale(1.06); }
       }
-      /* Обрамление проявляется, а не возникает рывком: его показывают
-         после заставки, и резкое появление читалось бы как подёргивание. */
-      @keyframes frameFadeIn { from { opacity: 0; } to { opacity: 1; } }
-      @keyframes frameFadeOut { from { opacity: 1; } to { opacity: 0; } }
       /* Пролёт ракеты по кнопке запуска: справа налево, с паузой между
          заходами. Поворот на 135 градусов — картинка нарисована носом
          вверх-вправо, а лететь она должна носом вперёд, то есть влево. */
@@ -994,27 +989,8 @@ function GlobalStyle() {
         40%  { transform: translateX(-40px) rotate(-135deg); opacity: 0; }
         100% { transform: translateX(-40px) rotate(-135deg); opacity: 0; }
       }
-      /* Реакция острова на прилёт ракеты: две искры бегут от середины
-         нижней грани в разные стороны, встречаются наверху, и после
-         этого вспыхивает и плавно гаснет весь контур. Смещение штриха
-         отрицательное у обеих: каждая идёт по своему пути, а он уже
-         задан в нужную сторону. */
-      /* Искры гаснут ровно в момент встречи наверху: дальше горит уже
-         весь контур, и две яркие точки поверх него читались бы как
-         забытый на месте след. */
-      @keyframes islandSparkRun {
-        0%   { stroke-dashoffset: 0; opacity: 1; }
-        94%  { opacity: 1; }
-        100% { stroke-dashoffset: -500; opacity: 0; }
-      }
-      @keyframes islandRingBurst {
-        0%   { opacity: 0; filter: drop-shadow(0 0 0 ${T.electric}); }
-        3%   { opacity: 1; }
-        16%  { opacity: 1; filter: drop-shadow(0 0 20px ${T.electric}); }
-        100% { opacity: 0; filter: drop-shadow(0 0 0 ${T.electric}); }
-      }
       /* Ракета: строго снизу вверх по центру, к концу — уменьшение и
-         растворение внутри острова. Конечная точка приходит переменной
+         растворение за верхним краем. Конечная точка приходит переменной
          --fly-to. Сама картинка нарисована носом вверх-вправо, поэтому
          разворачивается на 45 градусов — иначе при вертикальном полёте
          она шла бы боком. */
@@ -8945,201 +8921,6 @@ function useDevice() {
   return DEVICE;
 }
 
-/* Ракета запуска.
-
-   Летит снизу вверх и «влетает» в остров: к концу пути уменьшается и
-   гаснет, а обрамление острова в этот момент вспыхивает. Если острова
-   нет (не тот айфон или окно Telegram начинается ниже), ракета просто
-   уходит за верхний край — анимация остаётся осмысленной.
-
-   Всё на CSS-анимациях: рисовать её покадрово в JS незачем, а на
-   композиции она не даёт нагрузки поверх торгового экрана. */
-const ROCKET_FLIGHT_MS = 1900;
-
-// Анимация ракеты — настоящая из Telegram (Lottie). Файл лежит в public
-// и подгружается один раз: класть полмегабайта в основной пакет ради
-// анимации, которая играет раз в жизни токена, незачем.
-let rocketAnimData = null;
-let rocketAnimLoading = null;
-function loadRocketAnimation(variant = "default") {
-  if (rocketAnimData) return Promise.resolve(rocketAnimData);
-  if (rocketAnimLoading) return rocketAnimLoading;
-  const file = variant === "outline" ? "/rocket-outline.json" : "/rocket.json";
-  rocketAnimLoading = fetch(file)
-    .then((r) => (r.ok ? r.json() : null))
-    .then((data) => { rocketAnimData = data; rocketAnimLoading = null; return data; })
-    .catch(() => { rocketAnimLoading = null; return null; });
-  return rocketAnimLoading;
-}
-
-/* Ракета запуска.
-
-   Летит снизу вверх по центру и «влетает» в остров: к концу пути
-   уменьшается и гаснет, а обрамление острова в этот момент вспыхивает.
-   Если острова нет (не тот айфон или окно Telegram начинается ниже),
-   ракета просто уходит за верхний край — анимация остаётся осмысленной.
-
-   Картинка нарисована носом вверх-вправо, поэтому при вертикальном
-   полёте её разворачивают на 45 градусов. */
-function LaunchRocket({ targetTop = ROCKET_TOUCH_TOP, variant = "default" }) {
-  const holderRef = useRef(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    let anim = null;
-    (async () => {
-      const [{ default: lottie }, data] = await Promise.all([
-        import("lottie-web/build/player/lottie_light"),
-        loadRocketAnimation(variant),
-      ]);
-      if (cancelled || !data || !holderRef.current) return;
-      anim = lottie.loadAnimation({
-        container: holderRef.current,
-        renderer: "svg",
-        loop: true,
-        autoplay: true,
-        animationData: data,
-      });
-    })();
-    return () => { cancelled = true; if (anim) anim.destroy(); };
-  }, [variant]);
-
-  return (
-    <div
-      aria-hidden
-      style={{
-        position: "fixed", inset: 0, zIndex: 1900, pointerEvents: "none",
-        // Ракета летит к центру острова: конец пути приходит переменной.
-        ["--fly-to"]: `${targetTop}px`,
-      }}
-    >
-      {/* Два слоя: внешний ведёт полёт, внутренний доворачивает картинку
-          и сдвигает её так, чтобы центром вращения и точкой прилёта был
-          сам корпус. В исходном кадре ракета нарисована не по центру
-          холста, а в его верхнем правом углу — без поправки она уходила
-          в остров мимо, левее и выше. */}
-      <div
-        style={{
-          // По горизонтали центрует translate(-50%) в самой анимации,
-          // поэтому отрицательного поля здесь быть не должно: вместе они
-          // сдвигали ракету на её же ширину влево. По вертикали поле
-          // нужно — чтобы --fly-to означала центр, а не верхний край.
-          position: "absolute", left: "50%", top: 0, width: 168, height: 168, marginTop: -84,
-          animation: `rocketFly ${ROCKET_FLIGHT_MS}ms cubic-bezier(0.45,0,0.5,1) forwards`,
-        }}
-      >
-        {/* Поправка на то, что в исходном кадре ракета нарисована не по
-            центру холста: измерено по отрисовке, смещение около 13 на 11
-            точек для этого размера. */}
-        <div ref={holderRef} style={{ width: "100%", height: "100%", transform: "translate(13px, -11px)" }} />
-      </div>
-    </div>
-  );
-}
-
-/* Обрамление «Динамического острова».
-
-   Отличить айфон с островом от айфона с чёлкой по строке браузера
-   нельзя — модель там не пишут. Но верхний безопасный отступ у них
-   разный: у чёлки это 44–48 точек, у острова 59 (у Pro-моделей 16-й
-   серии 62). Порог посередине и разделяет поколения.
-
-   Размеры самого острова заданы системой: 125.7 × 36.7 точки, отступ
-   сверху 11. Рамка рисуется чуть больше, ровно вокруг него. */
-const ISLAND_MIN_SAFE_TOP = 51;
-const ISLAND_WIDTH = 126;
-const ISLAND_HEIGHT = 37.3;
-const ISLAND_TOP = 11;
-// Зазор между островом и рамкой. Ровно на половину толщины линии:
-// обводка рисуется по центру пути, поэтому внешняя её половина ложится
-// вплотную к краю острова, а внутренняя — на сам остров. Больший зазор
-// читался как отдельная рамка рядом, а не как обводка самого острова.
-const ISLAND_GAP = 1;
-// Нижняя граница обрамления и вынос носа ракеты от её центра. Ракета
-// должна погаснуть ровно в тот миг, когда нос коснулся рамки, а не
-// пролететь сквозь неё: значит центр в конце пути стоит настолько ниже
-// границы, насколько нос выступает вперёд.
-const ISLAND_BOTTOM = ISLAND_TOP - ISLAND_GAP + ISLAND_HEIGHT + ISLAND_GAP * 2;
-const ROCKET_NOSE_OFFSET = 50;
-const ROCKET_TOUCH_TOP = ISLAND_BOTTOM + ROCKET_NOSE_OFFSET;
-
-function DynamicIslandFrame({ topOffset = 0, hitKey = 0, phase = "in" }) {
-  const w = ISLAND_WIDTH + ISLAND_GAP * 2;
-  const h = ISLAND_HEIGHT + ISLAND_GAP * 2;
-  const r = h / 2;
-  const pad = 16; // место под свечение, чтобы его не срезало по краю
-
-  // Контур пилюли, начатый строго от середины нижней грани: искры
-  // стартуют оттуда и расходятся в обе стороны, поэтому обе половины
-  // описываются одним и тем же путём, пройденным в разные стороны.
-  const ringCW = `M ${w / 2} ${h} L ${w - r} ${h} A ${r} ${r} 0 0 0 ${w - r} 0 L ${r} 0 A ${r} ${r} 0 0 0 ${r} ${h} Z`;
-  const ringCCW = `M ${w / 2} ${h} L ${r} ${h} A ${r} ${r} 0 0 1 ${r} 0 L ${w - r} 0 A ${r} ${r} 0 0 1 ${w - r} ${h} Z`;
-
-  return (
-    <div
-      aria-hidden
-      style={{
-        position: "fixed",
-        top: ISLAND_TOP - ISLAND_GAP - pad + topOffset,
-        left: "50%",
-        marginLeft: -(w / 2 + pad),
-        width: w + pad * 2,
-        height: h + pad * 2,
-        pointerEvents: "none",
-        // Выше всего, включая заставку и модальные окна: это обрамление
-        // самого экрана телефона, а не элемент интерфейса.
-        zIndex: 2000,
-        animation: phase === "out"
-          ? "frameFadeOut 500ms ease-in both"
-          : "frameFadeIn 420ms ease-out both",
-      }}
-    >
-      <svg width={w + pad * 2} height={h + pad * 2} viewBox={`${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`} style={{ overflow: "visible" }}>
-        {/* спокойное состояние */}
-        <path
-          d={ringCW}
-          fill="none"
-          stroke={T.electric}
-          strokeWidth={1.5}
-          style={{ filter: `drop-shadow(0 0 6px ${hexA(T.electric, 0.6)})`, animation: "islandGlow 3.4s ease-in-out infinite" }}
-        />
-
-        {/* Реакция на прилёт ракеты. Ключ меняется на каждый запуск —
-            элементы пересоздаются, и анимация проигрывается заново. */}
-        {hitKey > 0 && (
-          <g key={hitKey}>
-            {/* две искры от середины нижней грани навстречу друг другу */}
-            {[["islandSparkRun", ringCW], ["islandSparkRun", ringCCW]].map(([anim, d], i) => (
-              <path
-                key={i}
-                d={d}
-                pathLength={1000}
-                fill="none"
-                stroke="#FFE9C8"
-                strokeWidth={3}
-                strokeLinecap="round"
-                strokeDasharray="26 974"
-                style={{
-                  filter: `drop-shadow(0 0 7px ${T.electric})`,
-                  animation: `${anim} 700ms cubic-bezier(0.5,0,0.6,1) forwards`,
-                }}
-              />
-            ))}
-            {/* встретились наверху — вспыхивает весь контур и плавно гаснет */}
-            <path
-              d={ringCW}
-              fill="none"
-              stroke="#FFC9A8"
-              strokeWidth={2.6}
-              style={{ opacity: 0, animation: "islandRingBurst 1400ms 690ms ease-out forwards" }}
-            />
-          </g>
-        )}
-      </svg>
-    </div>
-  );
-}
-
 /* Ракета, пролетающая на фоне кнопки запуска.
 
    Та же анимация Telegram, что и при самом запуске, только маленькая и
@@ -9190,6 +8971,93 @@ function ButtonRocketFlyby({ size = 26 }) {
   );
 }
 
+/* Ракета запуска.
+
+   Летит снизу вверх и уходит за верхний край, уменьшаясь и гасая.
+
+   Всё на CSS-анимациях: рисовать её покадрово в JS незачем, а на
+   композиции она не даёт нагрузки поверх торгового экрана. */
+const ROCKET_FLIGHT_MS = 1900;
+
+// Анимация ракеты — настоящая из Telegram (Lottie). Файл лежит в public
+// и подгружается один раз: класть полмегабайта в основной пакет ради
+// анимации, которая играет раз в жизни токена, незачем.
+let rocketAnimData = null;
+let rocketAnimLoading = null;
+function loadRocketAnimation(variant = "default") {
+  if (rocketAnimData) return Promise.resolve(rocketAnimData);
+  if (rocketAnimLoading) return rocketAnimLoading;
+  const file = variant === "outline" ? "/rocket-outline.json" : "/rocket.json";
+  rocketAnimLoading = fetch(file)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => { rocketAnimData = data; rocketAnimLoading = null; return data; })
+    .catch(() => { rocketAnimLoading = null; return null; });
+  return rocketAnimLoading;
+}
+
+/* Ракета запуска.
+
+   Летит снизу вверх по центру и уходит за верхний край, уменьшаясь и
+   гасая.
+
+   Картинка нарисована носом вверх-вправо, поэтому при вертикальном
+   полёте её разворачивают на 45 градусов. */
+function LaunchRocket({ targetTop = ROCKET_TOUCH_TOP, variant = "default" }) {
+  const holderRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let anim = null;
+    (async () => {
+      const [{ default: lottie }, data] = await Promise.all([
+        import("lottie-web/build/player/lottie_light"),
+        loadRocketAnimation(variant),
+      ]);
+      if (cancelled || !data || !holderRef.current) return;
+      anim = lottie.loadAnimation({
+        container: holderRef.current,
+        renderer: "svg",
+        loop: true,
+        autoplay: true,
+        animationData: data,
+      });
+    })();
+    return () => { cancelled = true; if (anim) anim.destroy(); };
+  }, [variant]);
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "fixed", inset: 0, zIndex: 1900, pointerEvents: "none",
+        // Конец пути приходит переменной.
+        ["--fly-to"]: `${targetTop}px`,
+      }}
+    >
+      {/* Два слоя: внешний ведёт полёт, внутренний доворачивает картинку
+          и сдвигает её так, чтобы центром вращения и точкой прилёта был
+          сам корпус. В исходном кадре ракета нарисована не по центру
+          холста, а в его верхнем правом углу — без поправки она уходила
+          бы мимо, левее и выше. */}
+      <div
+        style={{
+          // По горизонтали центрует translate(-50%) в самой анимации,
+          // поэтому отрицательного поля здесь быть не должно: вместе они
+          // сдвигали ракету на её же ширину влево. По вертикали поле
+          // нужно — чтобы --fly-to означала центр, а не верхний край.
+          position: "absolute", left: "50%", top: 0, width: 168, height: 168, marginTop: -84,
+          animation: `rocketFly ${ROCKET_FLIGHT_MS}ms cubic-bezier(0.45,0,0.5,1) forwards`,
+        }}
+      >
+        {/* Поправка на то, что в исходном кадре ракета нарисована не по
+            центру холста: измерено по отрисовке, смещение около 13 на 11
+            точек для этого размера. */}
+        <div ref={holderRef} style={{ width: "100%", height: "100%", transform: "translate(13px, -11px)" }} />
+      </div>
+    </div>
+  );
+}
+
 /* Лист как иконка. Тот же контур, что падает на фоне приложения, —
    чтобы кнопка запуска была из того же набора, что и всё остальное, а
    не из чужого. Прожилки на такой величине не рисуются: они
@@ -9229,100 +9097,13 @@ function LeafIcon({ size = 14, color = T.electric, kind = 0 }) {
   );
 }
 
-/* Обрамление экрана — для телефонов без «острова».
-
-   Там врезаться не во что, поэтому ракета доходит до верхней границы
-   самого экрана, а светится его контур. Эффект тот же самый: две искры
-   от середины нижней грани расходятся по контуру, встречаются наверху и
-   поджигают весь обрамок, который потом плавно гаснет.
-
-   Скругление угла экрана веб-страница не знает: у телефонов оно около
-   сорока точек, у настольного окна прямые углы. Разделяем по наличию
-   сенсорного ввода. */
-const SCREEN_FRAME_INSET = 3;
-const SCREEN_FRAME_RADIUS = 44;
-const ROCKET_TOUCH_TOP_SCREEN = SCREEN_FRAME_INSET + ROCKET_NOSE_OFFSET;
-
-function ScreenFrame({ hitKey = 0, phase = "in" }) {
-  const [size, setSize] = useState(() => (typeof window === "undefined"
-    ? { w: 0, h: 0 }
-    : { w: window.innerWidth, h: window.innerHeight }));
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const update = () => setSize({ w: window.innerWidth, h: window.innerHeight });
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("orientationchange", update);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("orientationchange", update);
-    };
-  }, []);
-
-  if (!size.w || !size.h) return null;
-
-  const inset = SCREEN_FRAME_INSET;
-  const w = size.w - inset * 2;
-  const h = size.h - inset * 2;
-  const r = Math.min(DEVICE.isTouch ? SCREEN_FRAME_RADIUS : 14, w / 2, h / 2);
-
-  // Контур начинается от середины нижней грани — оттуда стартуют искры.
-  const ringCW = `M ${w / 2} ${h} L ${w - r} ${h} A ${r} ${r} 0 0 0 ${w} ${h - r} L ${w} ${r} A ${r} ${r} 0 0 0 ${w - r} 0 L ${r} 0 A ${r} ${r} 0 0 0 0 ${r} L 0 ${h - r} A ${r} ${r} 0 0 0 ${r} ${h} Z`;
-  const ringCCW = `M ${w / 2} ${h} L ${r} ${h} A ${r} ${r} 0 0 1 0 ${h - r} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 L ${w - r} 0 A ${r} ${r} 0 0 1 ${w} ${r} L ${w} ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h} Z`;
-
-  return (
-    <div
-      aria-hidden
-      style={{
-        position: "fixed", left: inset, top: inset, width: w, height: h,
-        pointerEvents: "none", zIndex: 2000,
-        animation: phase === "out"
-          ? "frameFadeOut 500ms ease-in both"
-          : "frameFadeIn 420ms ease-out both",
-      }}
-    >
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ overflow: "visible" }}>
-        <path
-          d={ringCW}
-          fill="none"
-          stroke={T.electric}
-          strokeWidth={1.5}
-          style={{ filter: `drop-shadow(0 0 6px ${hexA(T.electric, 0.6)})`, animation: "islandGlow 3.4s ease-in-out infinite" }}
-        />
-        {hitKey > 0 && (
-          <g key={hitKey}>
-            {[ringCW, ringCCW].map((d, i) => (
-              <path
-                key={i}
-                d={d}
-                pathLength={1000}
-                fill="none"
-                stroke="#FFE9C8"
-                strokeWidth={3}
-                strokeLinecap="round"
-                strokeDasharray="26 974"
-                style={{
-                  filter: `drop-shadow(0 0 7px ${T.electric})`,
-                  // Контур экрана длиннее островного, поэтому и бежать по
-                  // нему дольше: иначе искры мелькали бы рывком.
-                  animation: "islandSparkRun 1100ms cubic-bezier(0.5,0,0.6,1) forwards",
-                }}
-              />
-            ))}
-            <path
-              d={ringCW}
-              fill="none"
-              stroke="#FFC9A8"
-              strokeWidth={2.6}
-              style={{ opacity: 0, animation: "islandRingBurst 1400ms 1090ms ease-out forwards" }}
-            />
-          </g>
-        )}
-      </svg>
-    </div>
-  );
-}
+/* Куда летит ракета. Раньше она метила в обрамление — в контур
+   «Динамического острова» или в рамку по краю экрана, — и всё это жило
+   ровно на время запуска токена. Обрамления больше нет: остаётся сама
+   ракета, которая уходит вверх и гаснет за краем. Вынос носа от центра
+   картинки нужен, чтобы за край ушла именно ракета, а не её середина. */
+const ROCKET_NOSE_OFFSET = 50;
+const ROCKET_TOUCH_TOP = -ROCKET_NOSE_OFFSET;
 
 function useTelegramViewport() {
   const [height, setHeight] = useState(
@@ -9448,40 +9229,17 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [tab, setTab] = useState("home");
   const [token, setToken] = useState(null);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
-  const { height, insetBottom, insetTop, deviceTop, fullscreen, ready: viewportReady } = useTelegramViewport();
+  const { height, insetBottom, insetTop } = useTelegramViewport();
   const device = useDevice();
-  // Рамка вокруг «острова» рисуется только там, где остров есть и где он
-  // виден: в обычном режиме окно Telegram начинается ниже него, и
-  // обрамлять нечего. Параметр ?island=1 включает её принудительно —
-  // чтобы можно было посмотреть на любом устройстве.
-  const forceIsland = typeof window !== "undefined" && /[?&]island=1/.test(window.location.search);
   const rocketVariant = typeof window !== "undefined" && /[?&]rocket=outline/.test(window.location.search) ? "outline" : "default";
-  // Полёт ракеты после удачного запуска токена и вспышка острова в
-  // момент, когда она в него влетает.
+  // Полёт ракеты после удачного запуска токена.
   const [rocketFlying, setRocketFlying] = useState(false);
-  const [islandHitKey, setIslandHitKey] = useState(0);
-  // Обрамление живёт только во время запуска токена — и вокруг острова,
-  // и по краю экрана там, где острова нет. Постоянно висеть оно не
-  // может: остров умеет раскрываться под музыку, звонок, таймер — и
-  // тогда он становится больше нашей рамки, а веб-странице его форма
-  // недоступна, узнать о раскрытии неоткуда. Контур экрана, висевший
-  // всё время, просто мешал смотреть на приложение.
-  // null — не показываем, "in" — проявляется и держится, "out" — гаснет.
-  const [islandFramePhase, setIslandFramePhase] = useState(null);
   const rocketTimers = useRef([]);
   function playLaunchRocket() {
     rocketTimers.current.forEach(clearTimeout);
     setRocketFlying(true);
-    setIslandFramePhase("in");
-    rocketTimers.current = [
-      // Искры трогаются в тот момент, когда ракета уже у самого острова.
-      setTimeout(() => setIslandHitKey((n) => n + 1), ROCKET_FLIGHT_MS - 130),
-      setTimeout(() => setRocketFlying(false), ROCKET_FLIGHT_MS + 60),
-      // Вспышка контура доигрывает около двух секунд после касания,
-      // потом рамка уходит.
-      setTimeout(() => setIslandFramePhase("out"), ROCKET_FLIGHT_MS + 2100),
-      setTimeout(() => setIslandFramePhase(null), ROCKET_FLIGHT_MS + 2600),
-    ];
+    // Убираем ракету, когда она уже ушла за верхний край.
+    rocketTimers.current = [setTimeout(() => setRocketFlying(false), ROCKET_FLIGHT_MS + 60)];
   }
   useEffect(() => () => rocketTimers.current.forEach(clearTimeout), []);
   // Анимацию тянем заранее, в фоне: к моменту запуска токена она должна
@@ -9494,13 +9252,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // поправить, не тратя TON.
   useEffect(() => {
     if (typeof window === "undefined" || !/[?&]rocket=1/.test(window.location.search)) return;
-    // С запасом: до конца заставки рамка ещё не показывается, и полёт
-    // прошёл бы впустую.
+    // С запасом, чтобы полёт не пришёлся на заставку.
     const to = setTimeout(playLaunchRocket, 7000);
     return () => clearTimeout(to);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const showIsland = forceIsland || (device.isIOS && deviceTop >= ISLAND_MIN_SAFE_TOP && (fullscreen || !device.inTelegram));
 
   // Always open on Home — closing and reopening the app (or refreshing)
   // should land the person back on the front page rather than wherever
@@ -10890,7 +10646,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   ];
   const bootDone = bootSteps.every((s) => s.done);
   const [bootHidden, setBootHidden] = useState(false);
-  const framesReady = bootHidden && (viewportReady || !device.inTelegram);
   // Страховка: даже если какой-то запрос завис, дольше 9 секунд держать
   // человека на заставке нельзя.
   useEffect(() => {
@@ -10918,20 +10673,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       }}
     >
       <GlobalStyle />
-      {/* Обрамление появляется только после заставки и только когда
-          Telegram уже сообщил отступы. Раньше на телефоне с островом в
-          первые мгновения рисовался контур экрана — отступы ещё не
-          пришли, приложение считало, что острова нет, — а потом рамка
-          прыгала на своё место. Вне Telegram отступов не будет вовсе,
-          там ждать нечего. */}
-      {/* Обрамление — часть запуска токена, а не постоянная деталь
-          интерфейса: раньше на телефонах без острова контур экрана висел
-          всё время и мешал. Теперь и остров, и рамка экрана появляются
-          только на время полёта ракеты и гаснут вместе с ней. */}
-      {framesReady && islandFramePhase && (showIsland
-        ? <DynamicIslandFrame hitKey={islandHitKey} phase={islandFramePhase} />
-        : <ScreenFrame hitKey={islandHitKey} phase={islandFramePhase} />)}
-      {rocketFlying && <LaunchRocket targetTop={showIsland ? ROCKET_TOUCH_TOP : ROCKET_TOUCH_TOP_SCREEN} variant={rocketVariant} />}
+      {/* Запуск токена показывает ракету — и только её. Обводки
+          «Динамического острова» и контура экрана, которые она
+          поджигала, убраны: на разных телефонах они ложились по-разному,
+          а на тех, где острова нет, рамка выглядела случайной деталью. */}
+      {rocketFlying && <LaunchRocket variant={rocketVariant} />}
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast key={toastSeq} toast={toast} insetTop={insetTop} leaving={toastLeaving} />
