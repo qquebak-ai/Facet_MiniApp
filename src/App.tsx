@@ -152,6 +152,16 @@ const STR = {
     notifyProgressSub: "Половина пути, девять десятых, закрытие кривой",
     notifyNeedBot: "Открой бота и нажми «Старт», иначе сообщения не дойдут",
     notifySaved: "Сохранено",
+    chestTitle: "Сундук",
+    chestSub: "Случайная рамка или карточка из тех, которых у тебя ещё нет",
+    chestOpen: "Открыть за {n}",
+    chestGot: "Из сундука: {name}",
+    chestEmpty: "Всё уже куплено — открывать нечего",
+    nickChange: "Сменить ник",
+    nickChangeSub: "Первый ник бесплатный, дальше {n} монет",
+    nickChangeCta: "Сменить за {n}",
+    nickChanged: "Теперь ты {name}",
+    nickTaken: "Имя {name} уже занято",
     walletHoldings: "Твои токены",
     walletHoldingsEmpty: "Пока пусто. Купи токен в мемпаде — он появится здесь.",
     saveFailed: "Не удалось сохранить — попробуй ещё раз",
@@ -433,6 +443,16 @@ const STR = {
     notifyProgressSub: "Halfway, nine tenths, curve closed",
     notifyNeedBot: "Open the bot and press Start, otherwise messages won't arrive",
     notifySaved: "Saved",
+    chestTitle: "Chest",
+    chestSub: "A random frame or card you don't own yet",
+    chestOpen: "Open for {n}",
+    chestGot: "From the chest: {name}",
+    chestEmpty: "Everything is bought — nothing left to roll",
+    nickChange: "Change nickname",
+    nickChangeSub: "The first one is free, next ones cost {n} coins",
+    nickChangeCta: "Change for {n}",
+    nickChanged: "You are {name} now",
+    nickTaken: "{name} is already taken",
     walletHoldings: "Your tokens",
     walletHoldingsEmpty: "Nothing yet. Buy a token in the mempad and it shows up here.",
     saveFailed: "Could not save — try again",
@@ -3922,6 +3942,27 @@ function coinsSpent(owned) {
   return sum;
 }
 
+/* Сундук. Дешевле любой рамки и карточки, но что достанется — не
+   выбираешь. Нужен потому, что монеты иначе некуда девать: скупив всё
+   нужное, человек копит их без цели. Из сундука приходит только то,
+   чего ещё нет, — платить за уже купленное было бы обманом. */
+const CHEST_PRICE = 140;
+function chestPool(owned) {
+  const pool = [];
+  for (const item of AVATAR_FRAMES) {
+    if ((item.price || 0) > 0 && !owned.has(ownedKey("frame", item.id))) pool.push({ kind: "frame", id: item.id, item });
+  }
+  for (const item of PROFILE_CARDS) {
+    if ((item.price || 0) > 0 && !owned.has(ownedKey("card", item.id))) pool.push({ kind: "card", id: item.id, item });
+  }
+  return pool;
+}
+
+/* Смена ника. Первое имя выбирается бесплатно при создании аккаунта,
+   дальше — за монеты: под ником человека знают в ленте покупок и в
+   чужих профилях, и бесплатная чехарда именами всех бы запутала. */
+const NICKNAME_PRICE = 500;
+
 /* Пороги для уведомлений о покупках. Мелкий шаг внизу — токен на старте
    разбирают по чуть-чуть, и там важна каждая сделка; крупные значения
    нужны, когда торговля пошла и сообщений становится слишком много. */
@@ -5752,7 +5793,49 @@ function BuySheet({ item, kind, coins, cosmetics, onBuy, onClose }) {
   );
 }
 
-function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady = true, onOpenAchievements, showToast, accountCreated = false, onOpenLogin }) {
+/* Карточка сундука в магазине. Показывает цену и сколько вещей ещё не
+   куплено: без этого непонятно, есть ли смысл открывать. */
+function ChestCard({ coins, owned, onOpen }) {
+  const left = chestPool(owned).length;
+  const canOpen = left > 0 && coins >= CHEST_PRICE;
+  return (
+    <div
+      className="fx-card rounded-[22px] p-4 flex items-center gap-3"
+      style={{ background: T.surface, border: `1px solid ${hexA(T.electric, 0.35)}` }}
+    >
+      <div style={{
+        width: 46, height: 46, borderRadius: 14, flexShrink: 0,
+        background: hexA(T.electric, 0.12), border: `1px solid ${hexA(T.electric, 0.4)}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <Gift size={22} color={T.electric} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15.5, fontWeight: 700 }}>{t("chestTitle")}</div>
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.4, marginTop: 2 }}>
+          {left > 0 ? t("chestSub") : t("chestEmpty")}
+        </div>
+      </div>
+      <button
+        onClick={() => canOpen && onOpen && onOpen()}
+        disabled={!canOpen}
+        className="fx-tap flex items-center gap-1.5 rounded-full px-3.5 py-2"
+        style={{
+          flexShrink: 0,
+          background: canOpen ? PRISM : T.surfaceHi,
+          color: canOpen ? PRISM_TEXT : T.muted,
+          border: canOpen ? "none" : `1px solid ${T.line}`,
+          fontFamily: displayFont, fontWeight: 700, fontSize: 13,
+          opacity: left > 0 ? 1 : 0.5,
+        }}
+      >
+        <CoinIcon size={14} dim={!canOpen} /> {CHEST_PRICE}
+      </button>
+    </div>
+  );
+}
+
+function ShopView({ cosmetics, owned, coins, onEquip, onBuy, onOpenChest, achievementsReady = true, onOpenAchievements, showToast, accountCreated = false, onOpenLogin }) {
   const [tab, setTab] = useState("frames");
   // Нажатие отмечается сразу здесь, не дожидаясь, пока выбор дойдёт до
   // состояния всего приложения и вернётся обратно пропсом. Рамка при
@@ -5839,6 +5922,10 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, achievementsReady =
         </button>
       </div>
       <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("shopCoinsHint")}</p>
+
+      {/* Сундук — единственное, на что монеты уходят бесконечно: рамки и
+          карточки рано или поздно скупаются все. */}
+      <ChestCard coins={coins} owned={owned} onOpen={onOpenChest} />
 
       <div className="flex items-center gap-2">
         {[["frames", t("shopTabFrames")], ["cards", t("shopTabCards")]].map(([id, label]) => {
@@ -8389,7 +8476,7 @@ async function signInWithTelegram(nickname) {
    "edit"   — profile fields only, no password, updates the existing row
    When not in "edit" mode, a segmented tab lets the user flip between
    login/create without closing the sheet — that's the "красивое меню". */
-function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAddress }) {
+function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAddress, onChangeNickname }) {
   const isEdit = mode === "edit";
   const [tgBusy, setTgBusy] = useState(false);
   const [tgError, setTgError] = useState("");
@@ -8412,6 +8499,10 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
   const [tgProbe, setTgProbe] = useState(null);
   const [tgNick, setTgNick] = useState("");
   const [tgNickTouched, setTgNickTouched] = useState(false);
+  // Смена ника в режиме правки профиля.
+  const [nickEditing, setNickEditing] = useState(false);
+  const [newNick, setNewNick] = useState("");
+  const [nickTouched, setNickTouched] = useState(false);
 
   useEffect(() => {
     if (!open || isEdit || !telegramInitData()) return;
@@ -8713,17 +8804,63 @@ async function uploadAvatarIfNeeded(userId) {
         )}
 
         <div className="flex flex-col gap-3.5">
-          {/* Ник здесь только показан. Менять его нельзя: под ним человека
-              знают в ленте, в чужих профилях и в ссылках, и подмена имени
-              задним числом ломает всё это разом. */}
+          {/* Ник меняется за монеты. Бесплатно его выбирают один раз, при
+              создании аккаунта: под ним человека знают в ленте покупок и
+              в чужих профилях, и бесплатная чехарда именами всех бы
+              запутала. Пока смена не начата — имя просто показано. */}
           {!isLogin && (
             <div className="flex flex-col gap-1.5">
               <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("nicknameLabel")}</span>
-              <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-2.5" style={{ background: T.bg, border: `1px solid ${T.line}` }}>
-                <Lock size={13} color={T.muted} />
-                <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{nickname}</span>
-              </div>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("nicknameLocked")}</span>
+              {nickEditing ? (
+                <>
+                  <Field
+                    label=""
+                    placeholder="leo_builds"
+                    value={newNick}
+                    onChange={(e) => { setNewNick(e.target.value); setNickTouched(true); }}
+                    error={nickTouched && !NICKNAME_RE.test(newNick.trim())}
+                  />
+                  {nickTouched && !NICKNAME_RE.test(newNick.trim()) && (
+                    <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12 }}>{t("nicknameError")}</span>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setNickEditing(false); setNewNick(""); setNickTouched(false); }}
+                      className="fx-tap rounded-[20px] px-4 py-2.5"
+                      style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13.5, color: T.ice }}
+                    >
+                      {t("cancel")}
+                    </button>
+                    <button
+                      onClick={() => onChangeNickname && onChangeNickname(newNick.trim(), () => { setNickEditing(false); setNewNick(""); setNickTouched(false); })}
+                      disabled={!NICKNAME_RE.test(newNick.trim())}
+                      className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-[20px] px-4 py-2.5"
+                      style={{
+                        background: NICKNAME_RE.test(newNick.trim()) ? PRISM : T.surfaceHi,
+                        color: NICKNAME_RE.test(newNick.trim()) ? PRISM_TEXT : T.muted,
+                        border: NICKNAME_RE.test(newNick.trim()) ? "none" : `1px solid ${T.line}`,
+                        fontFamily: displayFont, fontWeight: 700, fontSize: 13.5,
+                      }}
+                    >
+                      <CoinIcon size={14} dim={!NICKNAME_RE.test(newNick.trim())} /> {tf("nickChangeCta", { n: NICKNAME_PRICE })}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-2.5" style={{ background: T.bg, border: `1px solid ${T.line}` }}>
+                    <span className="flex-1" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{nickname}</span>
+                    <button
+                      onClick={() => { setNickEditing(true); setNewNick(nickname); }}
+                      className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5"
+                      style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 12.5, color: T.ice }}
+                    >
+                      <CoinIcon size={13} /> {t("nickChange")}
+                    </button>
+                  </div>
+                  <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{tf("nickChangeSub", { n: NICKNAME_PRICE })}</span>
+                </>
+              )}
             </div>
           )}
           {!isLogin && <Field label={t("bioLabel")} placeholder={t("bioPlaceholder")} area value={bio} onChange={(e) => setBio(e.target.value)} />}
@@ -9712,6 +9849,23 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // ниже, когда посчитается лучшая капитализация.
     setCreatorTier(Number(prof.creator_tier) || 0);
     setCoinsGranted(Number(prof.coins_granted) || 0);
+    // Потраченное. У тех, кто покупал до появления этой колонки, она
+    // пустая — заполняем её один раз суммой цен уже купленного, иначе
+    // баланс подскочил бы на всё когда-либо потраченное.
+    {
+      const stored = Number(prof.coins_spent);
+      const fromServer = Array.isArray(prof.owned_cosmetics) ? prof.owned_cosmetics : [];
+      if (Number.isFinite(stored) && stored > 0) {
+        setCoinsSpentTotal(stored);
+      } else {
+        const guessed = coinsSpent(new Set(fromServer));
+        setCoinsSpentTotal(guessed);
+        if (guessed > 0) {
+          supabase.from("profiles").update({ coins_spent: guessed }).eq("id", user.id)
+            .then(({ error }) => { if (error) console.warn("[mintly] coins_spent not saved:", error.message); });
+        }
+      }
+    }
     // Настройки уведомлений. Колонок может не быть, если SQL ещё не
     // выполнен — тогда действуют значения по умолчанию, как и на сервере.
     setNotifyPrefs({
@@ -10085,6 +10239,21 @@ const FEE_PERCENT = 0.01; // 1% комиссии
      просто начислить, и городить ради этого отдельный экран незачем.
      Правится только в Supabase, приложение колонку не пишет. */
   const [coinsGranted, setCoinsGranted] = useState(0);
+  // Сколько монет потрачено за всё время. Раньше это выводилось из
+  // списка купленных вещей, но сундук стоит дешевле того, что из него
+  // выпадает, а смена ника вещей не добавляет вовсе — теперь считаем по
+  // факту списания.
+  const [coinsSpentTotal, setCoinsSpentTotal] = useState(0);
+  function spendCoins(amount) {
+    const next = Math.max(0, coinsSpentTotal + Math.max(0, Math.round(amount)));
+    setCoinsSpentTotal(next);
+    if (userId) {
+      supabase.from("profiles").update({ coins_spent: next }).eq("id", userId)
+        .then(({ error }) => { if (error) console.warn("[mintly] coins_spent not saved:", error.message); });
+    }
+    return next;
+  }
+
   const [owned, setOwned] = useState(() => {
     try {
       if (typeof window !== "undefined") {
@@ -10257,7 +10426,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // подкрутить его запросом из браузера не выйдет.
   const coins = Math.max(
     0,
-    coinsGranted + coinsEarned(achievements) + coinsFromInvites(inviteCount) - coinsSpent(owned),
+    coinsGranted + coinsEarned(achievements) + coinsFromInvites(inviteCount) - coinsSpentTotal,
   );
 
   function buyCosmetic(kind, id) {
@@ -10270,6 +10439,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     next.add(ownedKey(kind, id));
     setOwned(next);
     persistOwned(next);
+    spendCoins(price);
     // Купленное сразу и надеваем: отдельное нажатие «а теперь примерь»
     // ничего не решает, а лишний шаг раздражает. Своего сообщения
     // «надето» тут не нужно — про покупку скажем одной строкой ниже.
@@ -10277,6 +10447,49 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const item = (kind === "frame" ? FRAME_BY_ID : CARD_BY_ID)[id];
     showToast(tf("shopBought", { name: pickLabel(item ? item.label : null) || id }));
   }
+  // Смена ника за монеты. Занятость проверяет сама база уникальным
+  // индексом: между проверкой и записью имя могли увести, и только отказ
+  // от базы говорит об этом наверняка.
+  async function changeNickname(next, done) {
+    const name = String(next || "").trim();
+    if (!NICKNAME_RE.test(name)) return;
+    if (name.toLowerCase() === String(profile.nickname || "").toLowerCase()) { done && done(); return; }
+    if (coins < NICKNAME_PRICE) {
+      showToast(tf("shopNotEnough", { n: NICKNAME_PRICE - coins }));
+      return;
+    }
+    if (!userId) return;
+    const { error } = await supabase.from("profiles").update({ nickname: name }).eq("id", userId);
+    if (error) {
+      const занято = /duplicate|unique|nickname/i.test(error.message || "");
+      showToast(занято ? tf("nickTaken", { name }) : t("saveFailed"));
+      return;
+    }
+    spendCoins(NICKNAME_PRICE);
+    setProfile((prev) => ({ ...prev, nickname: name }));
+    showToast(tf("nickChanged", { name }));
+    done && done();
+  }
+
+  // Открыть сундук: списываем цену, выдаём случайную вещь из тех, что
+  // ещё не куплены, и сразу надеваем — как при обычной покупке.
+  function openChest() {
+    if (coins < CHEST_PRICE) {
+      showToast(tf("shopNotEnough", { n: CHEST_PRICE - coins }));
+      return;
+    }
+    const pool = chestPool(owned);
+    if (!pool.length) { showToast(t("chestEmpty")); return; }
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    const next = new Set(owned);
+    next.add(ownedKey(pick.kind, pick.id));
+    setOwned(next);
+    persistOwned(next);
+    spendCoins(CHEST_PRICE);
+    equipCosmetic(pick.kind, pick.id, true);
+    showToast(tf("chestGot", { name: pickLabel(pick.item.label) || pick.id }));
+  }
+
   async function deleteMyToken(id) {
     // Optimistic local removal, then the real delete — RLS (see
     // supabase_tokens_schema.sql) already guarantees a user can only
@@ -10938,7 +11151,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       )}
 
       <ConnectModal open={connectModalOpen} onClose={() => setConnectModalOpen(false)} onConnect={() => tonConnectUI.openModal()} />
-      <AuthModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} onSubmit={submitProfile} initial={profile} mode={profileModalMode} walletAddress={walletAddress} />
+      <AuthModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} onSubmit={submitProfile} initial={profile} mode={profileModalMode} walletAddress={walletAddress} onChangeNickname={changeNickname} />
       <SettingsPanel
         item={settingsItem}
         onClose={() => setSettingsItem(null)}
@@ -11022,6 +11235,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               coins={coins}
               onEquip={equipCosmetic}
               onBuy={buyCosmetic}
+              onOpenChest={openChest}
               achievementsReady={achievementsReady}
               onOpenAchievements={() => setView("achievements")}
               showToast={showToast}
