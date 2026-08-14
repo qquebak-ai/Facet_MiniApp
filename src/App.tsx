@@ -9449,15 +9449,34 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           if (usd > 0) {
             tonUsdLive = usd;
             setTonPriceUsd(usd);
-            return;
+            return true;
           }
         } catch (e) { /* пробуем следующий источник */ }
       }
+      return false;
     }
-    loadRate().finally(() => setTonPriceChecked(true));
+    // Пока курса нет, в приложении пусто: без него не считаются ни цена,
+    // ни капитализация, ни шкала до листинга — и только что запущенный
+    // токен не появляется на главной. Оба источника падают редко, но
+    // тогда ждать общего пятиминутного круга слишком долго: пробуем
+    // снова через несколько секунд, разводя попытки всё дальше.
+    let retryTimer = null;
+    let stopped = false;
+    (async () => {
+      const ok = await loadRate();
+      setTonPriceChecked(true);
+      if (ok || stopped) return;
+      let delay = 8000;
+      const again = async () => {
+        if (stopped || await loadRate()) return;
+        delay = Math.min(delay * 2, 60000);
+        retryTimer = setTimeout(again, delay);
+      };
+      retryTimer = setTimeout(again, delay);
+    })();
     // Курс живой: за час он успевает уйти, а экран может висеть долго.
     const iv = setInterval(loadRate, 5 * 60 * 1000);
-    return () => clearInterval(iv);
+    return () => { stopped = true; clearTimeout(retryTimer); clearInterval(iv); };
   }, []);
 
   // Global toast — rendered once at the root (not nested inside any
@@ -9653,8 +9672,22 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // объём и изменение за сутки. Ограничиваем количество запросов —
     // лента может быть длинной, а при открытии токена всё равно идёт
     // отдельное, более свежее обновление.
-    const withCurve = rows.filter((tok) => tok.curveAddress).slice(0, 12);
-    if (!withCurve.length) return;
+    await enrichCurveMarkets(rows);
+  }
+
+  // Дочитывает у кривых всё, чего нет в базе: цену, капитализацию, объём
+  // и — для блока «Почти на бирже» — собранное и цель. Вынесено
+  // отдельно, потому что вызывается не только при первой загрузке:
+  // рынок читается по курсу TON, а он приходит своим запросом и может
+  // опоздать. Раньше в этом случае числа не появлялись вовсе до
+  // перезапуска приложения — и только что созданный токен не показывался
+  // на главной, хотя в базе и в цепочке был.
+  const enriching = useRef(false);
+  async function enrichCurveMarkets(rows) {
+    const withCurve = (rows || []).filter((tok) => tok.curveAddress).slice(0, 12);
+    if (!withCurve.length || enriching.current) return;
+    enriching.current = true;
+    try {
     const markets = await Promise.all(
       withCurve.map((tok) => fetchCurveMarket(tok.curveAddress, tok.address, TON_TESTNET, tonPriceUsd)),
     );
@@ -9683,7 +9716,21 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         return p ? { ...tok, ...p } : tok;
       }),
     );
+    } finally {
+      enriching.current = false;
+    }
   }
+
+  // Курс приехал позже ленты — дочитываем рынок тем токенам, которым не
+  // досталось. Сюда же попадает только что запущенный токен: он
+  // добавляется в ленту сразу, но без чисел кривой.
+  useEffect(() => {
+    if (!(tonPriceUsd > 0)) return;
+    const need = communityTokens.filter((tok) => tok.curveAddress && tok.graduationTon == null);
+    if (!need.length) return;
+    enrichCurveMarkets(need);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tonPriceUsd, communityTokens]);
 
   useEffect(() => {
     let active = true;
