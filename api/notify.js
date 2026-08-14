@@ -49,8 +49,9 @@ const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
 // длинный список упрётся в 429 на середине.
 const BATCH = 25;
 
-// Прибавка меньше этой не стоит сообщения: покупка на сотые доли TON
-// разбудит человека без повода.
+// Порог по умолчанию — для тех, кто ничего не выбирал. Свой каждый
+// задаёт в настройках приложения (profiles.notify_min_ton): у кого токен
+// разбирают мелкими сделками, тому десятки сообщений в день не нужны.
 const MIN_BUY_TON = 0.05;
 
 function ok(res, body) { return res.status(200).json(body); }
@@ -112,11 +113,27 @@ export default async function handler(req, res) {
   if (!tokens || !tokens.length) return ok(res, { checked: 0, sent: 0 });
 
   const owners = [...new Set(tokens.map((t) => t.owner_id).filter(Boolean))];
-  const { data: profiles } = await admin
+  // Настройки берём вместе с адресом: что слать и с какой суммы,
+  // решает получатель. Колонок может ещё не быть в базе — тогда
+  // работают значения по умолчанию.
+  let profiles = null;
+  const owned = owners.length ? owners : ["00000000-0000-0000-0000-000000000000"];
+  const full = await admin
     .from("profiles")
-    .select("id, telegram_id")
-    .in("id", owners.length ? owners : ["00000000-0000-0000-0000-000000000000"]);
+    .select("id, telegram_id, notify_buys, notify_min_ton, notify_progress")
+    .in("id", owned);
+  if (full.error) {
+    const plain = await admin.from("profiles").select("id, telegram_id").in("id", owned);
+    profiles = plain.data;
+  } else {
+    profiles = full.data;
+  }
   const chatOf = new Map((profiles || []).map((p) => [p.id, p.telegram_id]));
+  const prefOf = new Map((profiles || []).map((p) => [p.id, {
+    buys: p.notify_buys !== false,
+    progress: p.notify_progress !== false,
+    minTon: Number(p.notify_min_ton) >= 0 ? Number(p.notify_min_ton) : MIN_BUY_TON,
+  }]));
 
   const { data: states } = await admin
     .from("token_notify")
@@ -153,11 +170,18 @@ export default async function handler(req, res) {
     const known = prev.last_real_ton != null;
     const grew = known ? curve.realTon - prev.last_real_ton : 0;
 
+    const pref = prefOf.get(tok.owner_id) || { buys: true, progress: true, minTon: MIN_BUY_TON };
     if (chat) {
-      if (grew >= MIN_BUY_TON) {
+      if (pref.buys && grew >= Math.max(0, pref.minTon)) {
         if (await tell(chat, `Купили <b>${label}</b> на ${fmt(grew)} TON\nВ кривой уже ${fmt(curve.realTon)} из ${fmt(target)} TON`)) sent += 1;
       }
-      if (curve.graduated && !prev.sent_closed) {
+      if (!pref.progress) {
+        // Вехи выключены — отметки всё равно ставим, иначе после
+        // включения прилетит всё сразу за прошлый месяц.
+        next.sent_closed = curve.graduated || prev.sent_closed;
+        next.sent_almost = pct >= 90 || prev.sent_almost;
+        next.sent_half = pct >= 50 || prev.sent_half;
+      } else if (curve.graduated && !prev.sent_closed) {
         if (await tell(chat, `<b>${label}</b> закрыл кривую 🎉\nСобрано ${fmt(curve.realTon)} TON. Торговля в приложении закончилась, ликвидность уходит на биржу.`)) sent += 1;
         next.sent_closed = true;
       } else if (!curve.graduated && pct >= 90 && !prev.sent_almost) {

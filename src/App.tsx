@@ -7,7 +7,7 @@ import {
   Copy, ExternalLink, LogOut, ChevronRight, Rocket, MoreHorizontal, HeartCrack,
   Settings as SettingsIcon, Lock, Gift, LifeBuoy,
   FileText, CheckCircle2, RefreshCw, X,
-  Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown
+  Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown, Bell
 } from "lucide-react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, beginCell, toNano } from "@ton/core";
@@ -142,6 +142,17 @@ const STR = {
     cosmeticApplied: "Применено", cosmeticRemoved: "Снято",
     settingsSaved: "Настройки сохранены",
     langTitle: "Язык", themeTitle: "Оформление", themeWhite: "Светлая",
+    notifyTitle: "Уведомления",
+    notifyDesc: "Бот пишет о том, что происходит с твоими токенами. Что именно присылать — выбираешь здесь.",
+    notifyBuys: "Покупки",
+    notifyBuysSub: "Когда кто-то покупает твой токен",
+    notifyMin: "Начиная с суммы",
+    notifyMinSub: "Покупки мельче не тревожат",
+    notifyProgress: "Путь до биржи",
+    notifyProgressSub: "Половина пути, девять десятых, закрытие кривой",
+    notifyNeedBot: "Открой бота и нажми «Старт», иначе сообщения не дойдут",
+    notifySaved: "Сохранено",
+    saveFailed: "Не удалось сохранить — попробуй ещё раз",
     langFullNote: "Интерфейс переведён на выбранный язык.",
     buy: "Купить", sell: "Продать", cancel: "Отмена", confirm: "Подтвердить", following: "Вы подписаны", share: "Поделиться",
     disconnectShort: "Отключить",
@@ -410,6 +421,17 @@ const STR = {
     cosmeticApplied: "Applied", cosmeticRemoved: "Removed",
     settingsSaved: "Settings saved",
     langTitle: "Language", themeTitle: "Appearance", themeWhite: "White",
+    notifyTitle: "Notifications",
+    notifyDesc: "The bot tells you what happens to your tokens. Pick what it should send.",
+    notifyBuys: "Buys",
+    notifyBuysSub: "When someone buys your token",
+    notifyMin: "From this amount",
+    notifyMinSub: "Smaller buys stay silent",
+    notifyProgress: "Road to the exchange",
+    notifyProgressSub: "Halfway, nine tenths, curve closed",
+    notifyNeedBot: "Open the bot and press Start, otherwise messages won't arrive",
+    notifySaved: "Saved",
+    saveFailed: "Could not save — try again",
     langFullNote: "The interface is translated into the selected language.",
     buy: "Buy", sell: "Sell", cancel: "Cancel", confirm: "Confirm", following: "Following", share: "Share",
     disconnectShort: "Disconnect",
@@ -3896,9 +3918,15 @@ function coinsSpent(owned) {
   return sum;
 }
 
+/* Пороги для уведомлений о покупках. Мелкий шаг внизу — токен на старте
+   разбирают по чуть-чуть, и там важна каждая сделка; крупные значения
+   нужны, когда торговля пошла и сообщений становится слишком много. */
+const NOTIFY_THRESHOLDS = [0.05, 0.5, 1, 5, 10, 50];
+
 const SETTINGS_ITEMS = [
   { key: "profile", icon: SettingsIcon, tKey: "profileSettings" },
   { key: "security", icon: Lock, tKey: "security" },
+  { key: "notify", icon: Bell, tKey: "notifyTitle" },
   { key: "language", icon: Globe2, tKey: "langTitle" },
   { key: "referral", icon: Gift, tKey: "referral" },
   { key: "support", icon: LifeBuoy, tKey: "support" },
@@ -7830,6 +7858,7 @@ function SettingsPanel({
   onOpenEditProfile, profile, showToast,
   onTogglePin, onChangePin, insetBottom = 0, insetTop = 0,
   accountCreated, onDeleteAccount, userId, inviteCount = 0,
+  notifyPrefs = { buys: true, minTon: 0.05, progress: true }, onUpdateNotify,
 }) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -7922,6 +7951,56 @@ function SettingsPanel({
             <Lock size={14} color={T.muted} /> {t("changePinCta")}
           </button>
         </div>
+      );
+      break;
+    case "notify":
+      body = (
+        <>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, textAlign: "center" }}>
+            {t("notifyDesc")}
+          </p>
+          <div className="mt-2">
+            <SettingsRow label={t("notifyBuys")} sub={t("notifyBuysSub")}>
+              <ToggleSwitch on={notifyPrefs.buys} onChange={(v) => onUpdateNotify && onUpdateNotify({ buys: v })} />
+            </SettingsRow>
+            <SettingsRow label={t("notifyProgress")} sub={t("notifyProgressSub")}>
+              <ToggleSwitch on={notifyPrefs.progress} onChange={(v) => onUpdateNotify && onUpdateNotify({ progress: v })} />
+            </SettingsRow>
+          </div>
+
+          {/* Порог показываем только когда покупки вообще включены:
+              иначе это настройка ни к чему. */}
+          {notifyPrefs.buys && (
+            <div className="mt-3">
+              <div style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}>{t("notifyMin")}</div>
+              <div style={{ fontFamily: bodyFont, fontSize: 12, color: T.muted, marginTop: 2 }}>{t("notifyMinSub")}</div>
+              <div className="flex flex-wrap gap-2 mt-2.5">
+                {NOTIFY_THRESHOLDS.map((v) => {
+                  const active = Math.abs(Number(notifyPrefs.minTon) - v) < 0.0005;
+                  return (
+                    <button
+                      key={v}
+                      onClick={() => onUpdateNotify && onUpdateNotify({ minTon: v })}
+                      className="fx-tap fx-chip rounded-full px-3.5 py-2"
+                      style={{
+                        fontFamily: monoFont, fontSize: 13, fontWeight: 700,
+                        background: active ? T.ice : "transparent",
+                        color: active ? T.bg : T.muted,
+                        border: `1px solid ${active ? T.ice : T.line}`,
+                      }}
+                    >
+                      {v} TON
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.5, marginTop: 14, textAlign: "center" }}>
+            {t("notifyNeedBot")}
+          </p>
+        </>
       );
       break;
     case "language":
@@ -9527,6 +9606,23 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // Сколько человек пришло по своей ссылке. Считается по профилям, где
   // стоит связь с этим пользователем: то есть по тем, кто действительно
   // зашёл и завёл аккаунт, а не по кликам.
+  // Что присылать в Telegram и с какой суммы. Живёт в профиле: сообщения
+  // шлёт сервер, и на устройстве эти настройки ему недоступны.
+  const [notifyPrefs, setNotifyPrefs] = useState({ buys: true, minTon: 0.05, progress: true });
+  async function updateNotifyPrefs(patch) {
+    const next = { ...notifyPrefs, ...patch };
+    setNotifyPrefs(next);
+    if (!userId) return;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ notify_buys: next.buys, notify_min_ton: next.minTon, notify_progress: next.progress })
+      .eq("id", userId);
+    if (error) {
+      console.warn("[mintly] notify prefs not saved:", error.message);
+      showToast(t("saveFailed"));
+    }
+  }
+
   const [inviteCount, setInviteCount] = useState(0);
   const [invitesReady, setInvitesReady] = useState(false);
   useEffect(() => {
@@ -9569,6 +9665,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // ниже, когда посчитается лучшая капитализация.
     setCreatorTier(Number(prof.creator_tier) || 0);
     setCoinsGranted(Number(prof.coins_granted) || 0);
+    // Настройки уведомлений. Колонок может не быть, если SQL ещё не
+    // выполнен — тогда действуют значения по умолчанию, как и на сервере.
+    setNotifyPrefs({
+      buys: prof.notify_buys !== false,
+      progress: prof.notify_progress !== false,
+      minTon: Number(prof.notify_min_ton) >= 0 ? Number(prof.notify_min_ton) : 0.05,
+    });
     setAccountCreated(true);
     // Косметика хранится в профиле, а не только на устройстве — иначе её
     // не увидят другие. Но если на сервере пусто, а локально что-то
@@ -10768,6 +10871,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         onDeleteAccount={deleteAccountForever}
         userId={userId}
         inviteCount={inviteCount}
+        notifyPrefs={notifyPrefs}
+        onUpdateNotify={updateNotifyPrefs}
       />
       <PinSetupModal
         mode={pinModal ? pinModal.mode : null}
