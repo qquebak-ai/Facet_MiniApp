@@ -152,6 +152,8 @@ const STR = {
     notifyProgressSub: "Половина пути, девять десятых, закрытие кривой",
     notifyNeedBot: "Открой бота и нажми «Старт», иначе сообщения не дойдут",
     notifySaved: "Сохранено",
+    walletHoldings: "Твои токены",
+    walletHoldingsEmpty: "Пока пусто. Купи токен в мемпаде — он появится здесь.",
     saveFailed: "Не удалось сохранить — попробуй ещё раз",
     langFullNote: "Интерфейс переведён на выбранный язык.",
     buy: "Купить", sell: "Продать", cancel: "Отмена", confirm: "Подтвердить", following: "Вы подписаны", share: "Поделиться",
@@ -431,6 +433,8 @@ const STR = {
     notifyProgressSub: "Halfway, nine tenths, curve closed",
     notifyNeedBot: "Open the bot and press Start, otherwise messages won't arrive",
     notifySaved: "Saved",
+    walletHoldings: "Your tokens",
+    walletHoldingsEmpty: "Nothing yet. Buy a token in the mempad and it shows up here.",
     saveFailed: "Could not save — try again",
     langFullNote: "The interface is translated into the selected language.",
     buy: "Buy", sell: "Sell", cancel: "Cancel", confirm: "Confirm", following: "Following", share: "Share",
@@ -6124,7 +6128,7 @@ function HomeView({ onGoTab, curveTokens = [], onOpenToken }) {
 /* WalletView — кошелёк отдельным разделом. Раньше он лежал карточкой
    посреди профиля, между аватаркой и своими токенами: чтобы посмотреть
    баланс, приходилось идти в личные настройки. */
-function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0, onConnect, onDisconnect, onCopy }) {
+function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0, onConnect, onDisconnect, onCopy, holdings = [], holdingsReady = false, onSell }) {
   const [copied, setCopied] = useState(false);
   const balance = useCountUp(connected ? tonBalance : 0, 900, connected);
   const usd = useCountUp(connected ? tonBalance * tonPriceUsd : 0, 900, connected);
@@ -6164,6 +6168,49 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
         <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13 }}>{short}</span>
         {copied ? <CheckCircle2 size={13} color={T.up} /> : <Copy size={13} color={T.muted} />}
       </button>
+
+      {/* Что куплено на этом кошельке. Продать можно прямо отсюда: раньше
+          для этого приходилось искать свой токен в ленте и открывать его
+          экран. */}
+      <div className="w-full" style={{ marginTop: 26 }}>
+        <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("walletHoldings")}</span>
+          {holdings.length > 0 && (
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{holdings.length}</span>
+          )}
+        </div>
+
+        {!holdingsReady ? (
+          <PageLoader minHeight={120} />
+        ) : !holdings.length ? (
+          <div className="rounded-[22px] p-5 text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
+            <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, lineHeight: 1.5 }}>{t("walletHoldingsEmpty")}</div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {holdings.map(({ tok, amount }) => (
+              <div
+                key={tok.id}
+                className="fx-card w-full flex items-center gap-3 rounded-[22px] p-3"
+                style={{ background: T.surface, border: `1px solid ${T.line}` }}
+              >
+                <TokenAvatar size={40} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${tok.ticker}</div>
+                  <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12, marginTop: 3 }}>{fmtCompact(amount)} {tok.ticker}</div>
+                </div>
+                <button
+                  onClick={() => onSell && onSell(tok)}
+                  className="fx-tap rounded-full px-4 py-2"
+                  style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: displayFont, fontWeight: 700, fontSize: 13, color: T.ice, flexShrink: 0 }}
+                >
+                  {t("sell")}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <button
         onClick={onDisconnect}
@@ -9947,6 +9994,43 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     });
     return () => { cancelled = true; };
   }, [tradeModal, token?.tokenAddress, walletAddress, balanceRefreshTick]);
+  /* Что лежит на кошельке из запущенного здесь же. Спрашиваем у сети, а
+     не у локального счётчика: человек мог купить с другого устройства
+     или продать вне приложения. Раньше этого списка не было вовсе —
+     продать можно было, только найдя свой токен в ленте и открыв его. */
+  const [walletHoldings, setWalletHoldings] = useState([]);
+  const [holdingsReady, setHoldingsReady] = useState(false);
+  useEffect(() => {
+    if (!connected || !walletAddress || !communityTokens.length) {
+      setWalletHoldings([]);
+      setHoldingsReady(!!walletAddress ? true : false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      // Больше десятка за раз не спрашиваем: у tonapi без ключа
+      // считанные запросы в секунду, а список может быть длинным.
+      const list = communityTokens.filter((tok) => tok.address).slice(0, 14);
+      const found = [];
+      for (const tok of list) {
+        if (cancelled) return;
+        try {
+          const info = await fetchJettonAccount(tok.address, walletAddress, TON_TESTNET);
+          if (info && info.balance > 0) found.push({ tok, amount: info.balance });
+        } catch (e) { /* один не ответил — остальные всё равно нужны */ }
+      }
+      if (!cancelled) { setWalletHoldings(found); setHoldingsReady(true); }
+    })();
+    return () => { cancelled = true; };
+  }, [connected, walletAddress, communityTokens, balanceRefreshTick]);
+
+  // Продажа прямо из кошелька: открываем то же окно сделки, что и на
+  // экране токена, но экран не меняем — человек остаётся в кошельке.
+  function sellFromWallet(tok) {
+    setToken(tok.price == null ? localTokenToFeedShape(tok) : tok);
+    setTradeModal({ mode: "sell" });
+  }
+
   const [appSettings, setAppSettings] = useState(() => {
     const base = { language: "RU", theme: "Dark", pinEnabled: false };
     try {
@@ -10926,6 +11010,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
                 if (typeof navigator !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(walletAddress).catch(() => {});
                 showToast(t("addressCopied"));
               }}
+              holdings={walletHoldings}
+              holdingsReady={holdingsReady}
+              onSell={sellFromWallet}
             />
           </KeepAlive>
           <KeepAlive show={view === "shop"}>
