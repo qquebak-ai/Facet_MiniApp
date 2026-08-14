@@ -10244,6 +10244,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // выпадает, а смена ника вещей не добавляет вовсе — теперь считаем по
   // факту списания.
   const [coinsSpentTotal, setCoinsSpentTotal] = useState(0);
+  /* Баланс, посчитанный базой. Он и есть настоящий: там же лежат цены и
+     там же происходит списание. Местный расчёт ниже остаётся запасным —
+     на случай, если серверные функции ещё не выполнены (тогда rpc
+     вернёт ошибку, и приложение продолжит считать по-старому). */
+  const [serverBalance, setServerBalance] = useState(null);
   function spendCoins(amount) {
     const next = Math.max(0, coinsSpentTotal + Math.max(0, Math.round(amount)));
     setCoinsSpentTotal(next);
@@ -10263,22 +10268,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     } catch (e) { /* localStorage unavailable */ }
     return new Set();
   });
-  function persistOwned(next) {
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("mintly_owned", JSON.stringify([...next]));
-      }
-    } catch (e) { /* localStorage unavailable */ }
-    if (userId) {
-      supabase
-        .from("profiles")
-        .update({ owned_cosmetics: [...next] })
-        .eq("id", userId)
-        .then(({ error }) => {
-          if (error) console.warn("[mintly] failed to save purchases:", error.message);
-        });
-    }
-  }
+  // Купленное записывает база: список вещей приходит оттуда же, где
+  // происходит списание, и на устройстве его больше не хранят — иначе
+  // владение можно было бы дописать себе руками.
   function equipCosmetic(kind, id, silent = false) {
     setCosmetics((c) => ({ ...c, [kind]: id }));
     try {
@@ -10424,22 +10416,67 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // минус потраченное на покупки. Отдельного поля с балансом в базе нет
   // намеренно — всё складывается из того, что и так проверяемо, поэтому
   // подкрутить его запросом из браузера не выйдет.
-  const coins = Math.max(
+  /* Закрытые достижения отмечаются в базе: она сама проверяет условие
+     (запуски, приглашения, заполненный профиль, надетый наряд) и только
+     тогда начисляет. На слово приложения ничего не начисляется. */
+  useEffect(() => {
+    if (!userId) { setServerBalance(null); return; }
+    let cancelled = false;
+    supabase.rpc("coins_balance", { uid: userId }).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error || typeof data !== "number") {
+        console.warn("[mintly] серверный баланс недоступен:", error && error.message);
+        return;
+      }
+      setServerBalance(data);
+    });
+    return () => { cancelled = true; };
+  }, [userId, owned, coinsSpentTotal]);
+
+  const claimedRef = useRef(new Set());
+  useEffect(() => {
+    if (!userId || !achievementsReady) return;
+    const done = (achievements || []).filter((a) => a.done && !claimedRef.current.has(a.id));
+    if (!done.length) return;
+    (async () => {
+      for (const a of done) {
+        claimedRef.current.add(a.id);
+        const { data, error } = await supabase.rpc("claim_achievement", { p_id: a.id });
+        if (error) { claimedRef.current.delete(a.id); continue; }
+        if (data && typeof data.balance === "number") setServerBalance(data.balance);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, achievementsReady, achievements]);
+
+  const localCoins = Math.max(
     0,
     coinsGranted + coinsEarned(achievements) + coinsFromInvites(inviteCount) - coinsSpentTotal,
   );
+  const coins = serverBalance == null ? localCoins : serverBalance;
 
-  function buyCosmetic(kind, id) {
+  async function buyCosmetic(kind, id) {
     const price = cosmeticPrice(kind, id);
     if (price > coins) {
       showToast(tf("shopNotEnough", { n: price - coins }));
       return;
     }
+    // Решает база: она знает цену, считает баланс и списывает. Раньше и
+    // счёт, и списание жили в браузере — а значит, правились из него же.
+    const { data, error } = await supabase.rpc("shop_buy", { p_kind: kind, p_id: id });
+    if (error || !data || data.ok !== true) {
+      const code = (data && data.error) || "";
+      showToast(code === "not_enough" ? tf("shopNotEnough", { n: data.need || price })
+        : code === "already_owned" ? t("cosmeticApplied")
+        : t("saveFailed"));
+      if (code === "already_owned") equipCosmetic(kind, id, true);
+      return;
+    }
     const next = new Set(owned);
     next.add(ownedKey(kind, id));
     setOwned(next);
-    persistOwned(next);
-    spendCoins(price);
+    setCoinsSpentTotal((v) => v + price);
+    if (typeof data.balance === "number") setServerBalance(data.balance);
     // Купленное сразу и надеваем: отдельное нажатие «а теперь примерь»
     // ничего не решает, а лишний шаг раздражает. Своего сообщения
     // «надето» тут не нужно — про покупку скажем одной строкой ниже.
@@ -10459,13 +10496,17 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       return;
     }
     if (!userId) return;
-    const { error } = await supabase.from("profiles").update({ nickname: name }).eq("id", userId);
-    if (error) {
-      const занято = /duplicate|unique|nickname/i.test(error.message || "");
-      showToast(занято ? tf("nickTaken", { name }) : t("saveFailed"));
+    const { data, error } = await supabase.rpc("change_nickname", { p_name: name, p_price: NICKNAME_PRICE });
+    if (error || !data || data.ok !== true) {
+      const code = (data && data.error) || "";
+      showToast(code === "taken" ? tf("nickTaken", { name })
+        : code === "not_enough" ? tf("shopNotEnough", { n: data.need || NICKNAME_PRICE })
+        : code === "bad_name" ? t("nicknameError")
+        : t("saveFailed"));
       return;
     }
-    spendCoins(NICKNAME_PRICE);
+    setCoinsSpentTotal((v) => v + NICKNAME_PRICE);
+    if (typeof data.balance === "number") setServerBalance(data.balance);
     setProfile((prev) => ({ ...prev, nickname: name }));
     showToast(tf("nickChanged", { name }));
     done && done();
@@ -10473,21 +10514,29 @@ const FEE_PERCENT = 0.01; // 1% комиссии
 
   // Открыть сундук: списываем цену, выдаём случайную вещь из тех, что
   // ещё не куплены, и сразу надеваем — как при обычной покупке.
-  function openChest() {
+  async function openChest() {
     if (coins < CHEST_PRICE) {
       showToast(tf("shopNotEnough", { n: CHEST_PRICE - coins }));
       return;
     }
-    const pool = chestPool(owned);
-    if (!pool.length) { showToast(t("chestEmpty")); return; }
-    const pick = pool[Math.floor(Math.random() * pool.length)];
+    // Что выпадет, тоже решает база: жеребьёвка в браузере означала бы,
+    // что её можно переиграть, пока не выпадет нужное.
+    const { data, error } = await supabase.rpc("shop_open_chest", { p_price: CHEST_PRICE });
+    if (error || !data || data.ok !== true) {
+      const code = (data && data.error) || "";
+      showToast(code === "empty" ? t("chestEmpty")
+        : code === "not_enough" ? tf("shopNotEnough", { n: data.need || CHEST_PRICE })
+        : t("saveFailed"));
+      return;
+    }
     const next = new Set(owned);
-    next.add(ownedKey(pick.kind, pick.id));
+    next.add(ownedKey(data.kind, data.id));
     setOwned(next);
-    persistOwned(next);
-    spendCoins(CHEST_PRICE);
-    equipCosmetic(pick.kind, pick.id, true);
-    showToast(tf("chestGot", { name: pickLabel(pick.item.label) || pick.id }));
+    setCoinsSpentTotal((v) => v + CHEST_PRICE);
+    if (typeof data.balance === "number") setServerBalance(data.balance);
+    equipCosmetic(data.kind, data.id, true);
+    const item = (data.kind === "frame" ? FRAME_BY_ID : CARD_BY_ID)[data.id];
+    showToast(tf("chestGot", { name: pickLabel(item ? item.label : null) || data.id }));
   }
 
   async function deleteMyToken(id) {
