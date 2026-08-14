@@ -724,9 +724,13 @@ function sheetCard(pad = 22, extra = {}) {
 }
 
 function fmtUSD(n) {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(0)}`;
+  // Как и с ценой: величина может быть ещё не посчитана. Прочерк вместо
+  // числа, а не падение всего экрана на одном обращении.
+  const v = typeof n === "number" ? n : (n === null || n === "" || n === undefined ? NaN : Number(n));
+  if (!Number.isFinite(v)) return "—";
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
+  return `$${v.toFixed(0)}`;
 }
 
 /* Подпись шкалы графика. Обычного округления тут мало: когда весь
@@ -765,7 +769,13 @@ function generateFakeTxHash() {
 }
 
 function fmtPrice(p) {
-  return "$" + p.toFixed(p < 0.001 ? 6 : 4);
+  // Цены может не быть вовсе: у токена на кривой она считается из
+  // состояния контракта и приезжает позже самой карточки. Прочерк вместо
+  // числа честнее выдуманного нуля, а главное — экран не падает целиком
+  // из-за одной ненайденной величины.
+  const n = typeof p === "number" ? p : (p === null || p === "" || p === undefined ? NaN : Number(p));
+  if (!Number.isFinite(n)) return "—";
+  return "$" + n.toFixed(n < 0.001 ? 6 : 4);
 }
 function fmtCountdown(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -10374,7 +10384,14 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     showToast(t("pinResetToast"));
   }
 
-  function openToken(t) { setToken(t); setView("token"); }
+  function openToken(t) {
+    // Токены сообщества хранятся в базе строкой, где нет ни цены, ни
+    // объёма — их считает кривая, и приходят они отдельно. В таком виде
+    // карточка попадала прямо на экран токена, и он падал на первом же
+    // обращении к цене. Приводим к общему виду ленты.
+    setToken(t && t.price == null ? localTokenToFeedShape(t) : t);
+    setView("token");
+  }
   function goTab(name) { setTab(name); setView(name); }
   // Создание — отдельная страница, а не вкладка: пункт из нижнего меню
   // убран, поэтому tab не трогаем — подсветка остаётся на том разделе,
