@@ -1,22 +1,34 @@
-/* Обработчик сообщений бота.
+/* Обработчик сообщений бота. Делает два дела.
  *
- * Нужен ради одного: приглашение должно доходить и тогда, когда человек
+ * Первое — приглашения. Метка должна доходить и тогда, когда человек
  * попадает сначала в чат с ботом, а не сразу в приложение. Такое бывает
  * постоянно — ссылку пересылают, её открывают с компьютера, жмут «Start»
  * в чате. В этом случае Telegram отдаёт метку из ссылки боту в виде
  * «/start ref_<id>», а приложение о ней не узнаёт вовсе: там метка
  * приходит только при переходе по прямой ссылке на само приложение.
- *
  * Поэтому бот кладёт метку в отдельную таблицу — «этот телеграм-аккаунт
  * пришёл от такого-то». Когда человек заведёт профиль, вход возьмёт её
  * оттуда. Метка живёт до первого использования.
  *
+ * Второе — поддержка. Бот носит переписку в обе стороны: вопрос из лички
+ * складывает в базу и пересылает в чат команды, а ответ команды —
+ * реплаем на пересланный вопрос — возвращает человеку в личку и в
+ * приложение (см. api/_support.js и supabase_support.sql).
+ *
  * Подключение — один раз, открыв в браузере:
  *   https://<домен>/api/telegram-bot?setup=<TELEGRAM_WEBHOOK_SECRET>
  * Токен бота сервер берёт сам из окружения (см. функцию setup ниже).
+ *
+ * Чтобы заработала поддержка, нужен ещё служебный чат:
+ *   1. Завести группу и добавить туда бота.
+ *   2. Сделать бота администратором группы — иначе Telegram не покажет
+ *      ему обычные сообщения, и ответы команды до людей не дойдут.
+ *      (Второй способ: @BotFather → /setprivacy → Disable.)
+ *   3. Отправить в группе «/id» — бот ответит числом.
+ *   4. Положить это число в переменную окружения SUPPORT_CHAT_ID.
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { SUPPORT_CHAT_ID, adminClient, acceptQuestion, deliverAnswer } from "./_support.js";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -57,6 +69,89 @@ async function tg(method, body) {
   }
 }
 
+/* Ответ команды. Приходит реплаем в служебном чате — по сообщению, на
+   которое отвечают, и находится нужная переписка. */
+async function handleTeamReply(message) {
+  const текст = typeof message.text === "string" ? message.text.trim() : "";
+  const цель = message.reply_to_message;
+  // Не реплай — значит, команда переговаривается между собой: в такой
+  // разговор лезть нечего.
+  if (!текст || текст.startsWith("/") || !цель) return;
+
+  const admin = adminClient();
+  const { data: связь } = await admin
+    .from("support_relay")
+    .select("user_id")
+    .eq("admin_message_id", цель.message_id)
+    .maybeSingle();
+
+  if (!связь) {
+    await tg("sendMessage", {
+      chat_id: message.chat.id,
+      reply_to_message_id: message.message_id,
+      text: "Не вижу, кому это адресовано. Отвечать нужно реплаем на пересланный вопрос.",
+    });
+    return;
+  }
+
+  const { data: профиль } = await admin
+    .from("profiles")
+    .select("id, nickname, telegram_id")
+    .eq("id", связь.user_id)
+    .maybeSingle();
+
+  const итог = await deliverAnswer(admin, {
+    userId: связь.user_id,
+    telegramId: профиль && профиль.telegram_id,
+    text: текст,
+    adminName: (message.from && (message.from.first_name || message.from.username)) || null,
+  });
+
+  await tg("sendMessage", {
+    chat_id: message.chat.id,
+    reply_to_message_id: message.message_id,
+    text: !итог.ok
+      ? "Ответ не сохранился, попробуй ещё раз."
+      : итог.delivered
+        ? "✓ Отправлено"
+        : "✓ Сохранено в приложении. В личку не дошло: человек не начинал диалог с ботом или заблокировал его.",
+  });
+}
+
+/* Вопрос, написанный боту в личку. Тем же путём, что и из приложения:
+   в базу и в чат команды разом. */
+async function handlePrivateQuestion(message, from) {
+  const текст = typeof message.text === "string" ? message.text.trim() : "";
+  if (!текст) return;
+
+  const admin = adminClient();
+  const { data: профиль } = await admin
+    .from("profiles")
+    .select("id, nickname, telegram_id")
+    .eq("telegram_id", from.id)
+    .maybeSingle();
+
+  // Без аккаунта переписку не к кому привязать: ответ должен вернуться
+  // в приложение, а приложение узнаёт человека по профилю.
+  if (!профиль) {
+    await tg("sendMessage", {
+      chat_id: message.chat.id,
+      text: "Чтобы написать в поддержку, сначала заведи аккаунт в приложении — тогда ответ придёт и сюда, и в переписку внутри Mintly.",
+      reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", web_app: { url: APP_URL } }]] },
+    });
+    return;
+  }
+
+  const итог = await acceptQuestion(admin, { profile: профиль, body: текст, source: "bot" });
+  const ответ = итог.ok
+    ? "Приняли. Ответим здесь же и в приложении."
+    : итог.error === "too_fast" ? "Слишком часто. Подожди немного и напиши ещё раз."
+    : итог.error === "too_many" ? "На сегодня хватит сообщений — ответим на те, что уже есть."
+    : итог.error === "too_long" ? "Слишком длинно. Уложись в 2000 знаков."
+    : "Не получилось отправить. Попробуй ещё раз чуть позже.";
+  await tg("sendMessage", { chat_id: message.chat.id, text: ответ });
+}
+
 function welcome(chatId) {
   // Кнопка открывает приложение прямо из чата, минуя короткое имя
   // мини-приложения: если оно не задано в BotFather, ссылка вида
@@ -65,7 +160,7 @@ function welcome(chatId) {
   // взята при создании профиля.
   return tg("sendMessage", {
     chat_id: chatId,
-    text: "Mintly — запуск токенов в Telegram.\n\nОткрой приложение, чтобы создать свой токен или торговать чужими.",
+    text: "Mintly — запуск токенов в Telegram.\n\nОткрой приложение, чтобы создать свой токен или торговать чужими.\n\nЕсли что-то не работает или есть вопрос — просто напиши сюда, это и есть поддержка.",
     reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", web_app: { url: APP_URL } }]] },
   });
 }
@@ -137,18 +232,39 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
-  const message = update.message || update.edited_message;
+  // Правки чужих сообщений разбирать нечего: ответ уже ушёл, а вопрос
+  // уже в чате команды.
+  const message = update.message;
   const text = message && typeof message.text === "string" ? message.text.trim() : "";
   const from = message && message.from;
-  if (!from || !text.startsWith("/start")) return res.status(200).json({ ok: true });
+  const chat = (message && message.chat) || {};
+  if (!from || !message) return res.status(200).json({ ok: true });
+
+  // Узнать id чата. Нужно ровно один раз — чтобы задать SUPPORT_CHAT_ID,
+  // — но работать должно в любом чате, в том числе до того, как эта
+  // переменная задана.
+  if (text === "/id" || text.startsWith("/id@")) {
+    await tg("sendMessage", { chat_id: chat.id, text: `id этого чата: ${chat.id}` });
+    return res.status(200).json({ ok: true });
+  }
+
+  // Служебный чат команды: всё, что здесь пишут реплаем, — ответы людям.
+  if (SUPPORT_CHAT_ID && String(chat.id) === String(SUPPORT_CHAT_ID)) {
+    await handleTeamReply(message);
+    return res.status(200).json({ ok: true });
+  }
+
+  // Личка: всё, что не «/start», — вопрос в поддержку.
+  if (!text.startsWith("/start")) {
+    if (chat.type === "private" && text) await handlePrivateQuestion(message, from);
+    return res.status(200).json({ ok: true });
+  }
 
   const payload = text.slice("/start".length).trim();
   const inviter = inviterFromPayload(payload);
 
   if (inviter) {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+    const admin = adminClient();
     try {
       // Своей же ссылкой воспользоваться нельзя, и приглашать того, кто
       // уже завёл профиль, — тоже: приглашение засчитывается один раз, за

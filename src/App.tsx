@@ -302,8 +302,19 @@ const STR = {
     referralDesc: "Приглашай друзей — получай монеты за каждого, кто заведёт аккаунт по твоей ссылке. Тратить их можно в магазине.",
     refPerFriend: "За каждого друга",
     refEarned: "Заработано монет",
-    supportDesc: "Ответим в течение суток в Telegram-поддержке.",
+    supportDesc: "Напиши, что случилось. Отвечаем в течение суток — ответ придёт сюда и в Telegram.",
     contactSupport: "Написать в поддержку",
+    supportPlaceholder: "Что случилось?",
+    supportSend: "Отправить",
+    supportEmpty: "Переписки пока нет. Напиши первым — прочитаем все сообщения.",
+    supportNeedAccount: "Чтобы написать в поддержку, сначала заведи аккаунт.",
+    supportSent: "Отправлено",
+    supportFailed: "Не отправилось. Попробуй ещё раз.",
+    supportTooFast: "Слишком часто. Подожди немного.",
+    supportTooMany: "На сегодня хватит сообщений — ответим на те, что уже есть.",
+    supportTooLong: "Слишком длинно: не больше 2000 знаков.",
+    supportTeam: "Поддержка",
+    supportYou: "Ты",
     copyLink: "Скопировать ссылку",
     privacyText: "Мы собираем только данные, необходимые для работы приложения: никнейм, адрес кошелька и историю сделок внутри Mintly. Данные не передаются третьим лицам в рекламных целях. Ты можешь удалить аккаунт в любой момент — все локальные данные профиля будут стёрты немедленно.",
     accountLabel: "Аккаунт",
@@ -595,8 +606,19 @@ const STR = {
     referralDesc: "Invite friends — earn coins for everyone who signs up through your link. Spend them in the shop.",
     refPerFriend: "Per friend",
     refEarned: "Coins earned",
-    supportDesc: "We'll reply within a day on Telegram support.",
+    supportDesc: "Tell us what happened. We reply within a day — here and in Telegram.",
     contactSupport: "Message support",
+    supportPlaceholder: "What happened?",
+    supportSend: "Send",
+    supportEmpty: "No messages yet. Write first — we read every one.",
+    supportNeedAccount: "Create an account first to message support.",
+    supportSent: "Sent",
+    supportFailed: "Didn't go through. Try again.",
+    supportTooFast: "Too often. Give it a moment.",
+    supportTooMany: "That's enough for today — we'll answer what you've sent.",
+    supportTooLong: "Too long: 2000 characters max.",
+    supportTeam: "Support",
+    supportYou: "You",
     copyLink: "Copy link",
     privacyText: "We only collect data needed to run the app: nickname, wallet address, and your trade history within Mintly. Data is never shared with third parties for advertising. You can delete your account at any time — all local profile data is erased immediately.",
     accountLabel: "Account",
@@ -8818,6 +8840,174 @@ function SettingsRow({ label, sub, children }) {
 }
 
 
+/* Переписка с поддержкой.
+
+   Раньше «Поддержка» открывала ссылку на чат, которого нет, — человек
+   упирался в тупик. Теперь это настоящая переписка: вопрос уходит на
+   сервер, тот кладёт его в базу и пересылает команде в Telegram, а ответ
+   возвращается сюда же (см. api/support.js и api/_support.js).
+
+   Новые ответы забираем опросом раз в двенадцать секунд, пока окно
+   открыто. Постоянное соединение здесь было бы лишним: переписка со
+   службой поддержки — не чат, где важна каждая секунда, а держать канал
+   ради одного сообщения в неделю дороже, чем изредка спросить. */
+function SupportChat({ accountCreated, showToast }) {
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const дно = useRef(null);
+
+  async function load() {
+    const { data, error } = await supabase
+      .from("support_messages")
+      .select("id, body, from_admin, admin_name, created_at")
+      .order("created_at", { ascending: true })
+      .limit(200);
+    if (!error) setMessages(data || []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    if (!accountCreated) { setLoading(false); return; }
+    load();
+    // Ответы отмечаем прочитанными сразу: окно открыто, человек их видит.
+    supabase.rpc("support_mark_seen").then(() => {}, () => {});
+    const t = setInterval(load, 12000);
+    return () => clearInterval(t);
+  }, [accountCreated]);
+
+  // Показываем последнее сообщение, а не начало переписки: ради него
+  // окно и открывают.
+  useEffect(() => {
+    if (дно.current && дно.current.scrollIntoView) дно.current.scrollIntoView({ block: "nearest" });
+  }, [messages.length]);
+
+  async function send() {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session && session.access_token;
+      if (!token) throw new Error("no_session");
+      const res = await fetch("/api/support", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ body: text }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        const код = json.error;
+        showToast(код === "too_fast" ? t("supportTooFast")
+          : код === "too_many" ? t("supportTooMany")
+          : код === "too_long" ? t("supportTooLong")
+          : t("supportFailed"));
+        return;
+      }
+      setDraft("");
+      // Своё сообщение подставляем сразу, не дожидаясь опроса: пауза в
+      // двенадцать секунд читается как «не отправилось».
+      if (json.message) setMessages((prev) => [...prev, json.message]);
+      else load();
+      haptic("light");
+    } catch (err) {
+      showToast(t("supportFailed"));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!accountCreated) {
+    return (
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, textAlign: "center", marginTop: 6 }}>
+        {t("supportNeedAccount")}
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, textAlign: "center" }}>
+        {t("supportDesc")}
+      </p>
+
+      <div className="flex flex-col gap-2" style={{ marginTop: 14, minHeight: 120 }}>
+        {loading && !messages.length && (
+          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, textAlign: "center", padding: "18px 0" }}>…</div>
+        )}
+        {!loading && !messages.length && (
+          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, textAlign: "center", padding: "18px 0", lineHeight: 1.5 }}>
+            {t("supportEmpty")}
+          </div>
+        )}
+        {messages.map((m) => {
+          const свой = !m.from_admin;
+          return (
+            <div key={m.id} style={{ alignSelf: свой ? "flex-end" : "flex-start", maxWidth: "86%" }}>
+              <div style={{
+                fontFamily: bodyFont, fontSize: 11.5, color: T.muted,
+                textAlign: свой ? "right" : "left", marginBottom: 3,
+              }}>
+                {свой ? t("supportYou") : (m.admin_name || t("supportTeam"))}
+              </div>
+              <div style={{
+                fontFamily: bodyFont, fontSize: 14, lineHeight: 1.45,
+                color: свой ? PRISM_TEXT : T.ice,
+                background: свой ? PRISM : T.surfaceHi,
+                border: свой ? "none" : `1px solid ${T.line}`,
+                borderRadius: 18,
+                // Угол со стороны своего автора срезан меньше — так с
+                // одного взгляда видно, кто говорит, даже без подписи.
+                borderBottomRightRadius: свой ? 6 : 18,
+                borderBottomLeftRadius: свой ? 18 : 6,
+                padding: "9px 13px", whiteSpace: "pre-wrap", wordBreak: "break-word",
+              }}>
+                {m.body}
+              </div>
+            </div>
+          );
+        })}
+        <div ref={дно} />
+      </div>
+
+      {/* Поле ввода липнет к низу окна: переписка растёт вверх, а писать
+          человек хочет не прокручивая. */}
+      <div style={{
+        position: "sticky", bottom: 0, marginTop: 12, paddingTop: 10, paddingBottom: 2,
+        background: T.surface,
+      }}>
+        <div className="flex items-end gap-2">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.slice(0, 2000))}
+            placeholder={t("supportPlaceholder")}
+            rows={2}
+            style={{
+              flex: 1, minWidth: 0, resize: "none",
+              fontFamily: bodyFont, fontSize: 16, lineHeight: 1.4, color: T.ice,
+              background: T.bg, border: `1px solid ${T.line}`, borderRadius: 18,
+              padding: "10px 13px", outline: "none",
+            }}
+          />
+          <button
+            onClick={send}
+            disabled={!draft.trim() || sending}
+            className="fx-tap flex items-center justify-center"
+            style={{
+              width: 46, height: 46, borderRadius: "50%", flexShrink: 0,
+              background: draft.trim() && !sending ? PRISM : T.surfaceHi,
+              border: draft.trim() && !sending ? "none" : `1px solid ${T.line}`,
+            }}
+          >
+            <Send size={16} color={draft.trim() && !sending ? PRISM_TEXT : T.muted} />
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 /* SettingsPanel — a lightweight bottom-sheet used so every row under
    "Settings" actually opens real, distinct content instead of the
    same placeholder for every item. */
@@ -8841,9 +9031,6 @@ function SettingsPanel({
     setDeleting(false);
     setDeleteConfirmOpen(false);
     onClose();
-  }
-  function contactSupport() {
-    if (typeof window !== "undefined") window.open("https://t.me/mintly_support", "_blank", "noopener,noreferrer");
   }
   const refLink = referralLink(userId);
   function copyReferral() {
@@ -9021,16 +9208,7 @@ function SettingsPanel({
       );
       break;
     case "support":
-      body = (
-        <>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, textAlign: "center" }}>
-            {t("supportDesc")}
-          </p>
-          <button onClick={contactSupport} className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-4" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}>
-            <Send size={14} /> {t("contactSupport")}
-          </button>
-        </>
-      );
+      body = <SupportChat accountCreated={accountCreated} showToast={showToast} />;
       break;
     case "privacy":
       body = <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.6, marginTop: 4 }}>{t("privacyText")}</p>;
@@ -9717,7 +9895,7 @@ function ProfileView({
   cosmetics: cosmeticsProp = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
   // Достижения считаются в корне: их же показывает магазин и отдельная
   // страница достижений, дублировать запрос незачем.
-  achievements = [], creatorTier = 0, onVerified,
+  achievements = [], creatorTier = 0, onVerified, supportUnread = 0,
 }) {
   // Подтверждение хранится в профиле, а не только на экране: иначе
   // значок пропадал при первом же обновлении страницы.
@@ -9941,6 +10119,18 @@ function ProfileView({
               >
                 <s.icon size={16} color={T.muted} />
                 <span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice, flex: 1, textAlign: "left" }}>{t(s.tKey)}</span>
+                {/* Ответ поддержки ждёт прочтения. Без метки о нём знает
+                    только личка в Telegram, а её человек мог отключить. */}
+                {s.key === "support" && supportUnread > 0 && (
+                  <span style={{
+                    minWidth: 20, height: 20, padding: "0 6px", borderRadius: 999,
+                    background: PRISM, color: PRISM_TEXT,
+                    fontFamily: monoFont, fontSize: 12, fontWeight: 700,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {supportUnread > 9 ? "9+" : supportUnread}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -10664,6 +10854,33 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     })();
     return () => { cancelled = true; };
   }, [userId]);
+
+  /* Непрочитанные ответы поддержки. Нужны ради точки на пункте настроек:
+     ответ приходит и в личку Telegram, но её человек мог отключить или
+     потерять среди чатов, а приложение он открывает сам. */
+  const [supportUnread, setSupportUnread] = useState(0);
+  useEffect(() => {
+    if (!userId) { setSupportUnread(0); return; }
+    let cancelled = false;
+    async function пересчитать() {
+      try {
+        // Своя переписка и так единственная, что видна: строки закрыты
+        // политикой доступа (см. supabase_support.sql).
+        const { count } = await supabase
+          .from("support_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("from_admin", true)
+          .eq("seen_by_user", false);
+        if (!cancelled) setSupportUnread(count || 0);
+      } catch (err) {
+        // Таблицы ещё нет — просто не показываем точку.
+      }
+    }
+    пересчитать();
+    const t = setInterval(пересчитать, 60000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [userId]);
+
   async function loadProfileForUser(user) {
     setUserId(user ? user.id : null);
     if (!user) { setAccountCreated(false); setProfile(EMPTY_PROFILE); setMyTokens([]); setCoinsGranted(0); return; }
@@ -12171,7 +12388,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onOpenLogin={openLoginProfile}
               onOpenEditProfile={openEditProfile}
               onLogOut={logOutProfile}
-              onOpenSetting={(item) => setSettingsItem(item)}
+              supportUnread={supportUnread}
+              // Точку гасим сразу при открытии: отметку «прочитано» ставит
+              // сама переписка, но ждать до следующего пересчёта — значит
+              // минуту показывать её поверх уже прочитанного.
+              onOpenSetting={(item) => { setSettingsItem(item); if (item.key === "support") setSupportUnread(0); }}
               onManageToken={(tok) => setManageToken_(tok)}
               onGoCreate={openCreate}
               onOpenToken={openToken}
