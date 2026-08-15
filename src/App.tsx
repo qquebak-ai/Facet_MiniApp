@@ -1058,19 +1058,19 @@ function GlobalStyle() {
          нарастанием, как будто внутри что-то бьётся; потом крышка
          откидывается назад, а из щели бьёт свет. */
       @keyframes chestShake {
-        0%, 100% { transform: translateX(0) rotate(0deg); }
-        10% { transform: translateX(-3px) rotate(-2deg); }
-        20% { transform: translateX(3px) rotate(2deg); }
-        35% { transform: translateX(-5px) rotate(-3deg); }
-        50% { transform: translateX(5px) rotate(3deg); }
-        65% { transform: translateX(-7px) rotate(-4deg); }
-        80% { transform: translateX(7px) rotate(4deg); }
-        92% { transform: translateX(-3px) rotate(-1deg); }
+        0%, 100% { transform: translate(0, 0) rotate(0deg); }
+        12% { transform: translate(-3px, -1px) rotate(-1.5deg); }
+        24% { transform: translate(3px, 0) rotate(1.5deg); }
+        38% { transform: translate(-5px, -3px) rotate(-2.5deg); }
+        52% { transform: translate(5px, 0) rotate(2.5deg); }
+        66% { transform: translate(-6px, -5px) rotate(-3deg); }
+        80% { transform: translate(6px, -1px) rotate(3deg); }
+        92% { transform: translate(-2px, -2px) rotate(-1deg); }
       }
       @keyframes chestLidOpen {
-        0%   { transform: rotate(0deg); }
-        60%  { transform: rotate(-128deg); }
-        100% { transform: rotate(-118deg); }
+        0%   { transform: translate(0, 0) rotate(0deg) scaleY(1); }
+        45%  { transform: translate(-14px, -20px) rotate(-16deg) scaleY(0.72); }
+        100% { transform: translate(-26px, -30px) rotate(-27deg) scaleY(0.5); }
       }
       /* Свет из-под крышки: узкая полоса расходится в широкий конус. */
       @keyframes chestBeam {
@@ -5843,6 +5843,102 @@ function BuySheet({ item, kind, coins, cosmetics, onBuy, onClose }) {
   );
 }
 
+/* Сам кейс.
+
+   Не коробка с крышкой, а гранёный ларец в том же ключе, что и всё
+   остальное: скошенные углы, тонкая оранжевая обводка, тёмные грани с
+   разной светимостью — так же нарисованы карточки токенов и рамки в
+   магазине. Рисуется в изометрии: ромб сверху, два параллелограмма по
+   бокам. Плоская коробка «в лоб» выглядела наклейкой, а не предметом.
+
+   Крышка откидывается назад вокруг дальнего ребра, и одновременно из
+   короба бьёт свет — он же подсвечивает изнутри верхние кромки. */
+function ChestArt({ open }) {
+  // Изометрия: половина ширины, половина глубины, высота стенок.
+  const cx = 80, w = 52, d = 27, h = 40;
+  const Л = `${cx - w},${86}`;
+  const Д = `${cx},${86 - d}`;
+  const П = `${cx + w},${86}`;
+  const Б = `${cx},${86 + d}`;
+  const низЛ = `${cx - w},${86 + h}`;
+  const низБ = `${cx},${86 + d + h}`;
+  const низП = `${cx + w},${86 + h}`;
+
+  return (
+    <svg width="196" height="188" viewBox="0 0 160 160" style={{ position: "relative", overflow: "visible" }}>
+      <defs>
+        <linearGradient id="chestFront" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#1b1b1f" />
+          <stop offset="100%" stopColor="#0a0a0c" />
+        </linearGradient>
+        <linearGradient id="chestSide" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#131316" />
+          <stop offset="100%" stopColor="#08080a" />
+        </linearGradient>
+        <linearGradient id="chestLid" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#232329" />
+          <stop offset="100%" stopColor="#111114" />
+        </linearGradient>
+        <linearGradient id="chestInner" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={T.electric} stopOpacity="0.95" />
+          <stop offset="100%" stopColor={T.electric} stopOpacity="0.15" />
+        </linearGradient>
+        {/* Свет, выходящий наружу: у основания плотный, кверху сходит на нет. */}
+        <linearGradient id="chestBeamG" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stopColor={T.electric} stopOpacity="0.55" />
+          <stop offset="100%" stopColor={T.electric} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Тень под кейсом — она же держит его на «полу». */}
+      <ellipse cx={cx} cy={86 + d + h + 8} rx="58" ry="10" fill="#000" opacity="0.55" />
+
+      {/* Луч наружу. Рисуется до корпуса, чтобы корпус его перекрывал. */}
+      {open && (
+        <path
+          d={`M${cx - w + 8},80 L${cx + w - 8},80 L${cx + w + 30},-46 L${cx - w - 30},-46 Z`}
+          fill="url(#chestBeamG)"
+          style={{ transformOrigin: `${cx}px 80px`, animation: "chestBeam 560ms ease-out both" }}
+        />
+      )}
+
+      {/* Нутро: видно только когда крышка ушла. */}
+      {open && (
+        <polygon points={`${Л} ${Д} ${П} ${Б}`} fill="url(#chestInner)" />
+      )}
+
+      {/* Стенки. Передняя светлее боковой — как будто свет падает слева. */}
+      <polygon points={`${Л} ${Б} ${низБ} ${низЛ}`} fill="url(#chestFront)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round" />
+      <polygon points={`${Б} ${П} ${низП} ${низБ}`} fill="url(#chestSide)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round" opacity="0.9" />
+
+      {/* Пояс по низу — деталь, из-за которой кейс перестаёт быть просто
+          призмой. Повторяет скос граней самого приложения. */}
+      <polyline points={`${cx - w},${86 + h - 12} ${cx},${86 + d + h - 12} ${cx + w},${86 + h - 12}`}
+        fill="none" stroke={T.electric} strokeWidth="1.5" opacity="0.45" />
+
+      {/* Замок на передней грани: гранёная пластина со знаком приложения. */}
+      <g transform={`translate(${cx - 16}, ${86 + d - 4})`}>
+        <path d="M4 0 L24 0 L28 4 L28 24 L24 28 L4 28 L0 24 L0 4 Z"
+          fill="#0c0c0e" stroke={T.electric} strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M7 21 V9 L14 15 L21 9 V21" fill="none" stroke={T.electric}
+          strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+
+      {/* Крышка: тот же ромб, откидывается назад вокруг дальнего ребра. */}
+      <g style={{
+        transformOrigin: `${cx}px ${86 - d}px`,
+        animation: open ? "chestLidOpen 640ms cubic-bezier(0.34,1.28,0.5,1) both" : "none",
+      }}>
+        <polygon points={`${Л} ${Д} ${П} ${Б}`} fill="url(#chestLid)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round" />
+        {/* Грань на крышке: две линии от центра к углам — тот же приём,
+            что на карточках токенов. */}
+        <polyline points={`${cx - w},86 ${cx},${86 - d + 9} ${cx + w},86`} fill="none" stroke={T.electric} strokeWidth="1.4" opacity="0.5" />
+        <circle cx={cx} cy={86 - 3} r="4.5" fill={T.electric} opacity="0.9" />
+      </g>
+    </svg>
+  );
+}
+
 /* Окно открытия сундука.
 
    Сначала сундук вздрагивает, потом крышка откидывается и из щели бьёт
@@ -5897,29 +5993,12 @@ function ChestReveal({ prize, onClose }) {
           </>
         )}
 
-        <svg width="132" height="112" viewBox="0 0 112 96" style={{ position: "relative", animation: открыт ? "none" : "chestShake 900ms ease-in-out both" }}>
-          {/* Свет из-под крышки */}
-          {открыт && (
-            <path
-              d="M20 46 L92 46 L112 -6 L0 -6 Z"
-              fill={hexA(T.electric, 0.35)}
-              style={{ transformOrigin: "56px 46px", animation: "chestBeam 520ms ease-out both" }}
-            />
-          )}
-          {/* Основание */}
-          <rect x="14" y="44" width="84" height="44" rx="7" fill={T.surfaceHi} stroke={T.electric} strokeWidth="3" />
-          <rect x="48" y="56" width="16" height="20" rx="3" fill={T.electric} />
-          {/* Крышка — откидывается назад вокруг задней кромки */}
-          <g style={{ transformOrigin: "18px 46px", animation: открыт ? "chestLidOpen 620ms cubic-bezier(0.34,1.3,0.5,1) both" : "none" }}>
-            <path d="M14 46 Q14 20 56 20 Q98 20 98 46 Z" fill={T.surface} stroke={T.electric} strokeWidth="3" strokeLinejoin="round" />
-            <rect x="48" y="34" width="16" height="12" rx="2" fill={T.electric} />
-          </g>
-        </svg>
+        <ChestArt open={открыт} />
 
         {/* Приз выезжает поверх сундука */}
         {показатьПриз && (
           <div style={{
-            position: "absolute", top: 0,
+            position: "absolute", top: -18,
             animation: "prizeRise 620ms cubic-bezier(0.16,1,0.3,1) both",
           }}>
             <div style={{
@@ -5943,7 +6022,7 @@ function ChestReveal({ prize, onClose }) {
       </div>
 
       {/* Подпись появляется вместе с призом, иначе выдаёт его заранее. */}
-      <div style={{ minHeight: 88, marginTop: 34, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start" }}>
+      <div style={{ minHeight: 88, marginTop: 22, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start" }}>
         {показатьПриз ? (
           <div className="flex flex-col items-center" style={{ animation: "fadeInUp 420ms ease-out both" }}>
             <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>
