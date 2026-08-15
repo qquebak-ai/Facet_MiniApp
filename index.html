@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Mintly</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Ловушка ошибок стоит до самого приложения. Обработчик внутри
+         main.tsx не помогал: ошибка в импортируемом модуле случается
+         раньше, чем этот файл начинает выполняться, и человек видел
+         чёрный экран без единого слова о причине. -->
+    <script>
+      window.addEventListener("error", function (e) {
+        var msg = (e.error && (e.error.stack || e.error.message)) || e.message || "неизвестная ошибка";
+        var el = document.createElement("pre");
+        el.style.cssText = "background:#1a0000;color:#ff8080;padding:16px;font-size:12px;white-space:pre-wrap;word-break:break-word;position:fixed;inset:0;overflow:auto;z-index:99999;margin:0;";
+        el.textContent = "ОШИБКА ЗАГРУЗКИ ПРИЛОЖЕНИЯ:\n\n" + msg;
+        document.body.appendChild(el);
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
