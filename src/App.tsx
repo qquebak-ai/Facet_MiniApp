@@ -255,6 +255,7 @@ const STR = {
     deleteToken: "Удалить токен из списка",
     confirmDelete: "Точно удалить?",
     clearAllTokens: "Очистить тестнет",
+    tokensCleared: "Токены прежней сети удалены",
     deleteFailedToast: "Не удалось удалить — попробуйте ещё раз",
     tokenCreatedToast: "Токен {name} (${ticker}) создан ✅",
     padClosedTitle: "Мемпад закрыт",
@@ -560,6 +561,7 @@ const STR = {
     deleteToken: "Delete token from list",
     confirmDelete: "Delete for sure?",
     clearAllTokens: "Clear testnet",
+    tokensCleared: "Old-network tokens removed",
     deleteFailedToast: "Couldn't delete — try again",
     tokenCreatedToast: "Token {name} (${ticker}) created ✅",
     padClosedTitle: "Memepad closed",
@@ -1919,11 +1921,33 @@ async function fetchTokenInfo(tokenAddress) {
 const TONAPI_MAINNET_BASE = "https://tonapi.io";
 
 // Сеть, в которой приложение запускает и торгует своими токенами.
-// Отдельно от TONAPI_MAINNET_BASE выше: общая лента всегда читается из
-// mainnet, а собственные контракты пока живут в тестнете. Внутри
-// компонента есть TON_TESTNET — он берёт значение отсюда, чтобы сеть
-// была задана в одном месте.
-const TON_TESTNET_NETWORK = true;
+// Отдельно от TONAPI_MAINNET_BASE выше: общая лента всегда читалась из
+// mainnet, а собственные контракты жили в тестнете. Теперь и они в
+// боевой сети — деньги настоящие. Внутри компонента есть TON_TESTNET, он
+// берёт значение отсюда: сеть задана в одном месте, и от неё зависит
+// всё — адреса API, эксплорер, проверка сети кошелька, какие токены
+// показывать в ленте.
+const TON_TESTNET_NETWORK = false;
+
+/* Адреса площадки в записи текущей сети.
+ *
+ * Один и тот же счёт пишется по-разному: в боевой сети «UQ…»/«EQ…», в
+ * тестовой — «0Q…»/«kQ…». Отличается только приставка, сам счёт тот же,
+ * но кошелёк, увидев чужую приставку, отказывается отправлять — а
+ * комиссия площадки была записана как раз в тестовой форме. Приводим к
+ * форме текущей сети сами: так переключение сети не оставляет за собой
+ * адрес, по которому деньги не уйдут. */
+// Та же сеть словом: в базе она лежит строкой рядом с каждым токеном.
+const CURRENT_NETWORK = TON_TESTNET_NETWORK ? "testnet" : "mainnet";
+
+function addressForNetwork(raw) {
+  try {
+    return Address.parse(raw).toString({ testOnly: TON_TESTNET_NETWORK, bounceable: false });
+  } catch (e) {
+    // Разобрать не вышло — отдаём как есть: пусть падает там, где видно.
+    return raw;
+  }
+}
 
 // Адрес кошелька жетона у конкретного владельца. Нужен для продажи:
 // продать — значит перевести жетоны со своего кошелька на кошелёк
@@ -9902,7 +9926,7 @@ function ProfileView({
   cosmetics: cosmeticsProp = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
   // Достижения считаются в корне: их же показывает магазин и отдельная
   // страница достижений, дублировать запрос незачем.
-  achievements = [], creatorTier = 0, onVerified, supportUnread = 0,
+  achievements = [], creatorTier = 0, onVerified, supportUnread = 0, oldNetworkTokens = 0,
 }) {
   // Подтверждение хранится в профиле, а не только на экране: иначе
   // значок пропадал при первом же обновлении страницы.
@@ -10011,7 +10035,10 @@ function ProfileView({
         <div className="mt-5">
           <SectionTitle action={
             <div className="flex items-center gap-3">
-              {onClearAllTokens && myTokens.some((tok) => tok.network === "testnet") && (
+              {/* Токенов прежней сети в списке уже нет — их считает база,
+                  поэтому и кнопка появляется по её счёту, а не по тому,
+                  что видно на экране. */}
+              {onClearAllTokens && oldNetworkTokens > 0 && (
                 confirmingClearAll ? (
                   <div className="flex items-center gap-1.5">
                     <button onClick={() => { onClearAllTokens(); setConfirmingClearAll(false); }} className="fx-tap" style={{ fontFamily: bodyFont, fontSize: 12, color: T.down, fontWeight: 600 }}>{t("confirmDelete")}</button>
@@ -10507,12 +10534,15 @@ function useTelegramViewport() {
 --------------------------------------------------------- */
 
 export default function TonLaunchApp() {
-  const TREASURY_ADDRESS = "UQD8ipaRIc2X1zJw0C8S9XfsKQOYiNAEPRUpfNidEZ3pIDdo";
+  const TREASURY_ADDRESS = addressForNetwork("UQD8ipaRIc2X1zJw0C8S9XfsKQOYiNAEPRUpfNidEZ3pIDdo");
 // Кошелёк комиссии площадки. Он зашивается в кривую при запуске токена,
 // и контракт сам отправляет туда 1% с каждой покупки и продажи. Смена
 // адреса действует только на новые токены: у уже развёрнутых кривых
 // получатель поменять нельзя.
-const FEE_ADDRESS = "0QClGN5huzz-Z3bwgxr7GOPe5Jyi8PNKbsNnDFKFNGbjunBZ";
+// Кошелёк комиссии. Записан в тестовой форме («0Q…»), но счёт тот же —
+// приводим к форме текущей сети, чтобы в боевой деньги действительно
+// уходили: mainnet-форма этого же счёта — UQClGN5h…usvT.
+const FEE_ADDRESS = addressForNetwork("0QClGN5huzz-Z3bwgxr7GOPe5Jyi8PNKbsNnDFKFNGbjunBZ");
 const FEE_PERCENT = 0.01; // 1% комиссии
   // Балансовый API (tonapi.io) по умолчанию смотрит в mainnet. Если
   // кошелёк подключён в testnet (например, для проверки покупки на
@@ -11010,6 +11040,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       .from("tokens")
       .select("*")
       .eq("owner_id", uid)
+      .eq("network", CURRENT_NETWORK)
       .order("created_at", { ascending: false });
     if (error) { console.error("[mintly] failed to load tokens from Supabase:", error); return; }
     setMyTokens((data || []).map(mapTokenRow));
@@ -11025,6 +11056,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const { data, error } = await supabase
       .from("tokens")
       .select("*")
+      // Токены чужой сети в ленте — мусор: их кривых в этой сети нет,
+      // и каждое чтение рынка возвращало бы нули. Отсекаем в запросе, а
+      // не после: иначе двести строк тестовых токенов вытеснили бы
+      // боевые из выборки.
+      .eq("network", CURRENT_NETWORK)
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) { console.error("[mintly] failed to load community tokens from Supabase:", error); setCommunityLoaded(true); return; }
@@ -11619,24 +11655,46 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const { error } = await supabase.from("tokens").delete().eq("id", id);
     if (error) { console.error("[mintly] failed to delete token from Supabase:", error); showToast(t("deleteFailedToast")); if (userId) loadMyTokens(userId); loadCommunityTokens(); }
   }
+  /* Уборка токенов прежней сети.
+
+     После переезда в боевую сеть тестовые токены из ленты пропали: их
+     кривых в этой сети нет, читать у них нечего. Но в базе они остались
+     и мозолят глаза владельцу — здесь он стирает их разом.
+
+     Считаем и удаляем прямо в базе, а не по загруженному списку:
+     загруженного списка этих токенов больше нет. NULL в колонке сети —
+     это самые первые запуски, когда сеть ещё не записывалась; они тоже
+     тестовые. */
+  const [otherNetworkTokens, setOtherNetworkTokens] = useState(0);
+  const ЧУЖАЯ_СЕТЬ = `network.neq.${CURRENT_NETWORK},network.is.null`;
+  useEffect(() => {
+    if (!userId) { setOtherNetworkTokens(0); return; }
+    let cancelled = false;
+    (async () => {
+      const { count } = await supabase
+        .from("tokens")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", userId)
+        .or(ЧУЖАЯ_СЕТЬ);
+      if (!cancelled) setOtherNetworkTokens(count || 0);
+    })();
+    return () => { cancelled = true; };
+  }, [userId]);
+
   async function clearAllMyTokens() {
-    // Only clean up testnet junk — never touches real mainnet tokens,
-    // even if the same account has both. Because delete goes straight to
-    // Supabase (not just this device's local state), a purge here removes
-    // them from communityTokens too, so they vanish from the mempad for
-    // every user, not just this browser.
-    const testnetIds = myTokens.filter((tok) => tok.network === "testnet").map((tok) => tok.id);
-    if (!testnetIds.length) return;
-    setMyTokens((prev) => prev.filter((tok) => tok.network !== "testnet"));
-    setCommunityTokens((prev) => prev.filter((tok) => !testnetIds.includes(tok.id)));
-    setHoldings((prev) => {
-      const next = { ...prev };
-      testnetIds.forEach((id) => delete next[id]);
-      try { if (typeof window !== "undefined") window.localStorage.setItem("mintly_holdings", JSON.stringify(next)); } catch (e) { /* localStorage unavailable */ }
-      return next;
-    });
-    const { error } = await supabase.from("tokens").delete().in("id", testnetIds);
-    if (error) { console.error("[mintly] failed to clear testnet tokens in Supabase:", error); showToast(t("deleteFailedToast")); if (userId) loadMyTokens(userId); loadCommunityTokens(); }
+    if (!userId || !otherNetworkTokens) return;
+    const { error } = await supabase
+      .from("tokens")
+      .delete()
+      .eq("owner_id", userId)
+      .or(ЧУЖАЯ_СЕТЬ);
+    if (error) {
+      console.error("[mintly] failed to clear old-network tokens:", error);
+      showToast(t("deleteFailedToast"));
+      return;
+    }
+    setOtherNetworkTokens(0);
+    showToast(t("tokensCleared"));
   }
   // Real per-token holdings — the source of truth for "how much of this
   // token do I actually own", so Sell can never exceed what was actually
@@ -12405,6 +12463,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onOpenToken={openToken}
               myTokens={myTokens}
               onClearAllTokens={clearAllMyTokens}
+              oldNetworkTokens={otherNetworkTokens}
               cosmetics={cosmetics}
               onGoShop={() => goTab("shop")}
               onOpenAchievements={() => setView("achievements")}

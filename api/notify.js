@@ -39,9 +39,11 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CRON_SECRET = process.env.CRON_SECRET;
 
-// Сеть берём ту же, что и приложение: у токенов из тестовой сети
-// состояние лежит на testnet.tonapi.io и на боевом узле его нет.
-const TESTNET = process.env.TON_TESTNET !== "0";
+// Сеть берём ту же, что и приложение (TON_TESTNET_NETWORK в src/App.tsx):
+// у токенов из тестовой сети состояние лежит на testnet.tonapi.io и на
+// боевом узле его нет. Приложение работает в боевой сети, поэтому и
+// здесь она по умолчанию; тестовая включается явно — TON_TESTNET=1.
+const TESTNET = process.env.TON_TESTNET === "1";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
 
 // Сколько токенов проверяем за один заход. Ограничение не про базу, а
@@ -107,6 +109,10 @@ export default async function handler(req, res) {
     .from("tokens")
     .select("id, name, ticker, curve_address, owner_id")
     .not("curve_address", "is", null)
+    // Токены прежней сети сюда попадать не должны: их кривых на этом
+    // узле нет, каждая проверка уходила бы в пустоту и занимала место в
+    // пачке, которую и так ограничивает tonapi.
+    .eq("network", TESTNET ? "testnet" : "mainnet")
     .order("created_at", { ascending: false })
     .limit(BATCH);
   if (error) return res.status(500).json({ error: "tokens_failed", detail: error.message });
