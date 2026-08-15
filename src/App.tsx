@@ -1027,6 +1027,14 @@ function GlobalStyle() {
          волна: сильный порыв, откат, слабое качание, снова порыв. Углы
          остаются небольшими: знак висит рядом с ником, и заметное
          движение там раздражало бы. */
+      /* Лист в полёте: кувыркается вокруг себя и то приближается, то
+         уходит вглубь — от этого движение перестаёт быть механическим. */
+      @keyframes leafTumble {
+        0%   { transform: rotate(-16deg) scale(0.82); }
+        30%  { transform: rotate(24deg) scale(1.08); }
+        60%  { transform: rotate(-8deg) scale(0.92); }
+        100% { transform: rotate(-16deg) scale(0.82); }
+      }
       @keyframes wreathSway {
         0%   { transform: rotate(-1.8deg); }
         22%  { transform: rotate(1.9deg); }
@@ -1068,9 +1076,9 @@ function GlobalStyle() {
         92% { transform: translate(-2px, -2px) rotate(-1deg); }
       }
       @keyframes chestLidOpen {
-        0%   { transform: translate(0, 0) rotate(0deg) scaleY(1); }
-        45%  { transform: translate(-14px, -20px) rotate(-16deg) scaleY(0.72); }
-        100% { transform: translate(-26px, -30px) rotate(-27deg) scaleY(0.5); }
+        0%   { transform: translateY(0) scaleY(1); }
+        45%  { transform: translateY(-14px) scaleY(-0.5); }
+        100% { transform: translateY(-22px) scaleY(-0.92); }
       }
       /* Свет из-под крышки: узкая полоса расходится в широкий конус. */
       @keyframes chestBeam {
@@ -4531,9 +4539,20 @@ const AVATAR_FRAMES = [
     spin: 16, glow: "#9FD8FF",
   },
   {
+    // Не точки по кругу, а настоящая орбита: два наклонённых эллипса,
+    // по каждому идёт своё тело — и одно уходит за аватарку, другое
+    // проходит перед ней. Кольцо под ними почти не видно, вся рамка
+    // держится на этом движении.
     id: "orbit", label: { RU: "Орбита", EN: "Orbit" }, price: 240,
-    colors: ["rgba(255,255,255,0.06)", "rgba(255,255,255,0.28)", "rgba(255,255,255,0.06)"],
-    spin: 20, glow: "#FFFFFF", orbiters: 3, orbitColor: "#FF6B35",
+    colors: ["rgba(255,255,255,0.05)", "rgba(255,255,255,0.22)", "rgba(255,255,255,0.05)"],
+    spin: 26, glow: "#FF6B35",
+    orbit: {
+      color: "#FF6B35",
+      rings: [
+        { tilt: -20, squash: 0.36, dur: 6.5, size: 2.6, trail: true },
+        { tilt: 38, squash: 0.24, dur: 10, size: 2, trail: true },
+      ],
+    },
   },
   {
     id: "spark", label: { RU: "Искры", EN: "Sparks" }, price: 300,
@@ -4550,9 +4569,13 @@ const AVATAR_FRAMES = [
     // Голова с хвостом бежит по кольцу. Хвост — конический градиент,
     // который к голове разгорается; сама голова отдельной точкой, иначе
     // на тонком кольце она не читается.
+    // Ядро с двойным хвостом: длинный холодный след по самому кольцу и
+    // короткие искры, отстающие от головы. Голова разгорается и гаснет
+    // на витке — комета не просто ездит по кругу, а горит.
     id: "comet", label: { RU: "Комета", EN: "Comet" }, price: 320,
-    colors: ["rgba(255,255,255,0.04)", "rgba(255,255,255,0.16)", "rgba(255,255,255,0.04)"],
-    spin: 28, glow: "#7CE3FF", comet: { color: "#7CE3FF", dur: 3.4 },
+    colors: ["rgba(255,255,255,0.04)", "rgba(255,255,255,0.14)", "rgba(255,255,255,0.04)"],
+    spin: 28, glow: "#7CE3FF",
+    comet: { color: "#7CE3FF", dur: 3.4, embers: 5, flare: true },
   },
   {
     // Пунктирная дуга поверх кольца: короткие штрихи бегут быстрее
@@ -4564,9 +4587,13 @@ const AVATAR_FRAMES = [
   {
     // Листья с фона приложения, только облетают аватарку по кругу и
     // покачиваются на ходу.
+    // Листья теперь не просто едут по кругу: каждый крутится вокруг себя,
+    // покачивается и меняет размер на витке — то ближе, то дальше. Пород
+    // три, и у каждой свой оттенок, как на фоне приложения.
     id: "leafring", label: { RU: "Листопад", EN: "Leaf fall" }, price: 280,
-    colors: ["rgba(56,211,159,0.10)", "rgba(56,211,159,0.44)", "rgba(56,211,159,0.10)"],
-    spin: 22, glow: "#38D39F", leaves: 3, leafColor: "#5BFF9F",
+    colors: ["rgba(56,211,159,0.08)", "rgba(56,211,159,0.38)", "rgba(91,255,159,0.18)", "rgba(56,211,159,0.08)"],
+    spin: 22, glow: "#38D39F",
+    leafFall: { count: 6, colors: ["#5BFF9F", "#38D39F", "#9BFFC7"] },
   },
   {
     // Радуга по кольцу и белый блик, который проходит по ней насквозь.
@@ -5241,6 +5268,36 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         }} />
       )}
 
+      {/* Искры, отстающие от головы кометы: каждая идёт по тому же
+          кругу, но с задержкой — и гаснет, не догнав. */}
+      {f.comet && Array.from({ length: f.comet.embers || 0 }).map((_, i) => {
+        const отставание = (i + 1) * 0.055;
+        const с = ring * (1.1 - i * 0.12);
+        return (
+          <span key={`e${i}`} style={{
+            position: "absolute", left: "50%", top: "50%",
+            width: с, height: с, marginLeft: -с / 2, marginTop: -с / 2,
+            borderRadius: "50%", background: f.comet.color,
+            opacity: 0.75 - i * 0.12,
+            boxShadow: `0 0 ${ring * 2}px ${hexA(f.comet.color, 0.7)}`,
+            ["--orbit-r"]: `${size / 2 - ring / 2}px`,
+            animation: `spotlightOrbit ${f.comet.dur}s linear ${-f.comet.dur * (0.75 - отставание)}s infinite`,
+            zIndex: 3,
+          }} />
+        );
+      })}
+
+      {/* Вспышка на витке: голова разгорается и опадает, а не светит
+          ровно — иначе комета читается как бегущая точка. */}
+      {f.comet && f.comet.flare && (
+        <span style={{
+          position: "absolute", inset: -ring * 2, borderRadius: "50%",
+          boxShadow: `0 0 ${size * 0.3}px ${ring * 1.6}px ${hexA(f.comet.color, 0.32)}`,
+          animation: `glowPulse ${f.comet.dur}s ease-in-out infinite`,
+          zIndex: 0,
+        }} />
+      )}
+
       {/* круги, расходящиеся наружу */}
       {Array.from({ length: f.waves || 0 }).map((_, i) => (
         <span key={`w${i}`} style={{
@@ -5249,6 +5306,31 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
           animation: `frameWave 3s ease-out ${-i * 1}s infinite`, zIndex: 3,
         }} />
       ))}
+
+      {/* Листопад: лист идёт по кругу, крутится вокруг себя и меняет
+          размер — то приближается, то уходит вглубь. Половина листьев
+          рисуется за аватаркой, половина перед ней. */}
+      {f.leafFall && Array.from({ length: f.leafFall.count }).map((_, i) => {
+        const с = Math.max(9, Math.round(size * (0.15 + (i % 3) * 0.03)));
+        const дл = 13 + (i % 4) * 3.5;
+        return (
+          <span key={`lf${i}`} style={{
+            position: "absolute", left: "50%", top: "50%",
+            width: с, height: с, marginLeft: -с / 2, marginTop: -с / 2,
+            ["--orbit-r"]: `${orbitR - (i % 2) * ring}px`,
+            animation: `spotlightOrbit ${дл}s linear ${-i * (дл / f.leafFall.count)}s infinite`,
+            zIndex: i % 2 ? 3 : 0,
+          }}>
+            <span style={{
+              display: "block",
+              animation: `leafTumble ${3.4 + (i % 3) * 0.9}s ease-in-out infinite`,
+              animationDelay: `${-i * 0.6}s`,
+            }}>
+              <LeafIcon size={с} kind={i % 3} color={f.leafFall.colors[i % f.leafFall.colors.length]} />
+            </span>
+          </span>
+        );
+      })}
 
       {/* листья, облетающие аватарку */}
       {Array.from({ length: f.leaves || 0 }).map((_, i) => {
@@ -5266,6 +5348,64 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
           </span>
         );
       })}
+      {/* Орбиты: наклонённые эллипсы и тела, идущие по ним. Тело в
+          верхней половине пути прячется за аватарку, в нижней проходит
+          перед ней — это и создаёт объём. Один слой рисуется под
+          аватаркой, другой поверх, а само тело переключается между ними
+          на середине витка. */}
+      {f.orbit && [0, 1].map((слой) => (
+        <div key={`ob${слой}`} style={{
+          position: "absolute", inset: -ring * 2, pointerEvents: "none",
+          zIndex: слой === 0 ? 0 : 3,
+        }}>
+          {f.orbit.rings.map((r, i) => {
+            const w = size + ring * 4;
+            const h = w * r.squash;
+            return (
+              <div key={i} style={{
+                position: "absolute", left: "50%", top: "50%",
+                width: w, height: h, marginLeft: -w / 2, marginTop: -h / 2,
+                transform: `rotate(${r.tilt}deg)`,
+              }}>
+                {/* Сама траектория — тонкая, чтобы не спорить с кольцом. */}
+                {слой === 0 && (
+                  <div style={{
+                    position: "absolute", inset: 0, borderRadius: "50%",
+                    border: `${Math.max(1, ring * 0.35)}px solid ${hexA(f.orbit.color, 0.5)}`,
+                    boxShadow: `0 0 ${ring * 2}px ${hexA(f.orbit.color, 0.35)}`,
+                  }} />
+                )}
+                {/* Тело. Верхнюю половину пути показывает нижний слой,
+                    нижнюю — верхний: половинки чередуются по фазе. */}
+                <div style={{
+                  position: "absolute", inset: 0,
+                  animation: `spin360 ${r.dur}s linear infinite`,
+                  animationDelay: `${-r.dur * (слой === 0 ? 0 : 0.5)}s`,
+                  clipPath: слой === 0 ? "inset(0 0 50% 0)" : "inset(50% 0 0 0)",
+                }}>
+                  <span style={{
+                    position: "absolute", left: "50%", top: 0,
+                    width: ring * r.size, height: ring * r.size,
+                    marginLeft: -ring * r.size / 2, marginTop: -ring * r.size / 2,
+                    borderRadius: "50%", background: "#fff",
+                    boxShadow: `0 0 ${ring * 4}px ${ring * 1.2}px ${f.orbit.color}`,
+                  }} />
+                  {/* След за телом: короткая дуга того же цвета. */}
+                  {r.trail && (
+                    <div style={{
+                      position: "absolute", inset: 0, borderRadius: "50%",
+                      border: `${Math.max(1, ring * 0.5)}px solid transparent`,
+                      borderTopColor: hexA(f.orbit.color, 0.55),
+                      filter: `blur(${ring * 0.3}px)`,
+                    }} />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
       {/* точки, вращающиеся по орбите вокруг рамки */}
       {Array.from({ length: f.orbiters || 0 }).map((_, i) => (
         <span key={`o${i}`} style={{
@@ -5967,86 +6107,85 @@ const ROLL_WIN_INDEX = 30;
    Крышка откидывается назад вокруг дальнего ребра, и одновременно из
    короба бьёт свет — он же подсвечивает изнутри верхние кромки. */
 function ChestArt({ open }) {
-  // Изометрия: половина ширины, половина глубины, высота стенок.
-  const cx = 80, w = 52, d = 27, h = 40;
-  const Л = `${cx - w},${86}`;
-  const Д = `${cx},${86 - d}`;
-  const П = `${cx + w},${86}`;
-  const Б = `${cx},${86 + d}`;
-  const низЛ = `${cx - w},${86 + h}`;
-  const низБ = `${cx},${86 + d + h}`;
-  const низП = `${cx + w},${86 + h}`;
+  /* Кейс развёрнут лицом к зрителю, но смотрим на него сверху — поэтому
+     видно и переднюю стенку, и крышку, уходящую вглубь трапецией.
+     Раньше он стоял углом, и знак на грани читался косо. */
+  const cx = 80;
+  const пшир = 54;           // половина ширины передней стенки
+  const верх = 84;           // линия, где стенка встречается с крышкой
+  const выс = 44;            // высота стенки
+  const глуб = 26;           // насколько крышка уходит назад
+  const зшир = 42;           // половина ширины дальней кромки — перспектива
+
+  const перед = `${cx - пшир},${верх} ${cx + пшир},${верх} ${cx + пшир},${верх + выс} ${cx - пшир},${верх + выс}`;
+  const крышка = `${cx - пшир},${верх} ${cx - зшир},${верх - глуб} ${cx + зшир},${верх - глуб} ${cx + пшир},${верх}`;
 
   return (
     <svg width="196" height="188" viewBox="0 0 160 160" style={{ position: "relative", overflow: "visible" }}>
       <defs>
         <linearGradient id="chestFront" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#1b1b1f" />
-          <stop offset="100%" stopColor="#0a0a0c" />
+          <stop offset="0%" stopColor="#1e1e23" />
+          <stop offset="100%" stopColor="#09090b" />
         </linearGradient>
-        <linearGradient id="chestSide" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#131316" />
-          <stop offset="100%" stopColor="#08080a" />
-        </linearGradient>
-        <linearGradient id="chestLid" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#232329" />
-          <stop offset="100%" stopColor="#111114" />
+        <linearGradient id="chestLid" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stopColor="#26262c" />
+          <stop offset="100%" stopColor="#131317" />
         </linearGradient>
         <linearGradient id="chestInner" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={T.electric} stopOpacity="0.95" />
-          <stop offset="100%" stopColor={T.electric} stopOpacity="0.15" />
+          <stop offset="0%" stopColor={T.electric} stopOpacity="0.9" />
+          <stop offset="100%" stopColor={T.electric} stopOpacity="0.12" />
         </linearGradient>
-        {/* Свет, выходящий наружу: у основания плотный, кверху сходит на нет. */}
         <linearGradient id="chestBeamG" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0%" stopColor={T.electric} stopOpacity="0.55" />
+          <stop offset="0%" stopColor={T.electric} stopOpacity="0.5" />
           <stop offset="100%" stopColor={T.electric} stopOpacity="0" />
         </linearGradient>
       </defs>
 
-      {/* Тень под кейсом — она же держит его на «полу». */}
-      <ellipse cx={cx} cy={86 + d + h + 8} rx="58" ry="10" fill="#000" opacity="0.55" />
+      <ellipse cx={cx} cy={верх + выс + 8} rx="60" ry="10" fill="#000" opacity="0.55" />
 
-      {/* Луч наружу. Рисуется до корпуса, чтобы корпус его перекрывал. */}
       {open && (
         <path
-          d={`M${cx - w + 8},80 L${cx + w - 8},80 L${cx + w + 30},-46 L${cx - w - 30},-46 Z`}
+          d={`M${cx - зшир},${верх - глуб} L${cx + зшир},${верх - глуб} L${cx + зшир + 34},-48 L${cx - зшир - 34},-48 Z`}
           fill="url(#chestBeamG)"
-          style={{ transformOrigin: `${cx}px 80px`, animation: "chestBeam 560ms ease-out both" }}
+          style={{ transformOrigin: `${cx}px ${верх - глуб}px`, animation: "chestBeam 560ms ease-out both" }}
         />
       )}
 
-      {/* Нутро: видно только когда крышка ушла. */}
-      {open && (
-        <polygon points={`${Л} ${Д} ${П} ${Б}`} fill="url(#chestInner)" />
-      )}
+      {/* Нутро — видно, когда крышка ушла назад. */}
+      {open && <polygon points={крышка} fill="url(#chestInner)" />}
 
-      {/* Стенки. Передняя светлее боковой — как будто свет падает слева. */}
-      <polygon points={`${Л} ${Б} ${низБ} ${низЛ}`} fill="url(#chestFront)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round" />
-      <polygon points={`${Б} ${П} ${низП} ${низБ}`} fill="url(#chestSide)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round" opacity="0.9" />
+      {/* Передняя стенка со скошенными нижними углами: тот же скос, что у
+          карточек и кнопок приложения. */}
+      <path
+        d={`M${cx - пшир},${верх} H${cx + пшир} V${верх + выс - 10} L${cx + пшир - 10},${верх + выс} H${cx - пшир + 10} L${cx - пшир},${верх + выс - 10} Z`}
+        fill="url(#chestFront)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round"
+      />
 
-      {/* Пояс по низу — деталь, из-за которой кейс перестаёт быть просто
-          призмой. Повторяет скос граней самого приложения. */}
-      <polyline points={`${cx - w},${86 + h - 12} ${cx},${86 + d + h - 12} ${cx + w},${86 + h - 12}`}
-        fill="none" stroke={T.electric} strokeWidth="1.5" opacity="0.45" />
+      {/* Рёбра по бокам передней стенки — намёк на толщину корпуса. */}
+      <line x1={cx - пшир + 7} y1={верх + 4} x2={cx - пшир + 7} y2={верх + выс - 12} stroke={T.electric} strokeWidth="1.2" opacity="0.35" />
+      <line x1={cx + пшир - 7} y1={верх + 4} x2={cx + пшир - 7} y2={верх + выс - 12} stroke={T.electric} strokeWidth="1.2" opacity="0.35" />
 
-      {/* Замок на передней грани: гранёная пластина со знаком приложения. */}
-      <g transform={`translate(${cx - 16}, ${86 + d - 4})`}>
-        <path d="M4 0 L24 0 L28 4 L28 24 L24 28 L4 28 L0 24 L0 4 Z"
-          fill="#0c0c0e" stroke={T.electric} strokeWidth="1.6" strokeLinejoin="round" />
-        <path d="M7 21 V9 L14 15 L21 9 V21" fill="none" stroke={T.electric}
+      {/* Замок по центру: гранёная пластина со знаком приложения. */}
+      <g transform={`translate(${cx - 15}, ${верх + 9})`}>
+        <path d="M4 0 H22 L26 4 V22 L22 26 H4 L0 22 V4 Z"
+          fill="#0b0b0d" stroke={T.electric} strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M6.5 19.5 V8.5 L13 14 L19.5 8.5 V19.5" fill="none" stroke={T.electric}
           strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
       </g>
 
-      {/* Крышка: тот же ромб, откидывается назад вокруг дальнего ребра. */}
+      {/* Крышка: трапеция, уходящая вглубь. Откидывается назад вокруг
+          дальней кромки. */}
       <g style={{
-        transformOrigin: `${cx}px ${86 - d}px`,
+        transformOrigin: `${cx}px ${верх - глуб}px`,
         animation: open ? "chestLidOpen 640ms cubic-bezier(0.34,1.28,0.5,1) both" : "none",
       }}>
-        <polygon points={`${Л} ${Д} ${П} ${Б}`} fill="url(#chestLid)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round" />
-        {/* Грань на крышке: две линии от центра к углам — тот же приём,
-            что на карточках токенов. */}
-        <polyline points={`${cx - w},86 ${cx},${86 - d + 9} ${cx + w},86`} fill="none" stroke={T.electric} strokeWidth="1.4" opacity="0.5" />
-        <circle cx={cx} cy={86 - 3} r="4.5" fill={T.electric} opacity="0.9" />
+        <polygon points={крышка} fill="url(#chestLid)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round" />
+        {/* Полоса вдоль крышки — ребро жёсткости. */}
+        <line x1={cx - пшир + 12} y1={верх - 4} x2={cx - зшир + 10} y2={верх - глуб + 4}
+          stroke={T.electric} strokeWidth="1.2" opacity="0.4" />
+        <line x1={cx + пшир - 12} y1={верх - 4} x2={cx + зшир - 10} y2={верх - глуб + 4}
+          stroke={T.electric} strokeWidth="1.2" opacity="0.4" />
+        <circle cx={cx} cy={верх - глуб / 2} r="4" fill={T.electric} opacity="0.85" />
       </g>
     </svg>
   );
