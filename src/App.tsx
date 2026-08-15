@@ -1075,10 +1075,21 @@ function GlobalStyle() {
         80% { transform: translate(6px, -1px) rotate(3deg); }
         92% { transform: translate(-2px, -2px) rotate(-1deg); }
       }
+      /* Крышка откидывается назад: её плоскость сокращается почти в
+         линию (она встала на ребро), потом слегка отваливается дальше и
+         снова раскрывается — так читается инерция тяжёлой крышки. */
       @keyframes chestLidOpen {
         0%   { transform: translateY(0) scaleY(1); }
-        45%  { transform: translateY(-14px) scaleY(-0.5); }
-        100% { transform: translateY(-22px) scaleY(-0.92); }
+        50%  { transform: translateY(-2px) scaleY(0.05); }
+        76%  { transform: translateY(-9px) scaleY(-0.72); }
+        100% { transform: translateY(-7px) scaleY(-0.62); }
+      }
+      /* Изнанка проступает ровно в тот миг, когда крышка проходит через
+         ребро: до этого мы видим лицевую сторону, после — обратную. */
+      @keyframes lidFlip {
+        0%, 54%  { opacity: 0; }
+        58%      { opacity: 1; }
+        100%     { opacity: 1; }
       }
       /* Свет из-под крышки: узкая полоса расходится в широкий конус. */
       @keyframes chestBeam {
@@ -6158,6 +6169,13 @@ function ChestArt({ open }) {
           <stop offset="0%" stopColor={T.electric} stopOpacity="0.5" />
           <stop offset="100%" stopColor={T.electric} stopOpacity="0" />
         </linearGradient>
+        {/* Изнанка крышки: у ближней кромки её достаёт свет из короба,
+            дальше уходит в тень. */}
+        <linearGradient id="chBack" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stopColor={T.electric} stopOpacity="0.5" />
+          <stop offset="55%" stopColor="#141418" stopOpacity="1" />
+          <stop offset="100%" stopColor="#0a0a0d" stopOpacity="1" />
+        </linearGradient>
         {/* Свечение щели: ярче к середине, к краям сходит. */}
         <linearGradient id="chSlit" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor={T.electric} stopOpacity="0" />
@@ -6234,21 +6252,48 @@ function ChestArt({ open }) {
         />
       )}
 
-      {/* Крышка. */}
+      {/* Крышка. Не плоская трапеция, а щиток с толщиной: сверху
+          крышка, снизу торец — по нему и видно, что она не нарисована,
+          а лежит на корпусе. Откидываясь, крышка почти встаёт на ребро:
+          её плоскость сокращается по высоте, торец уходит вниз, и
+          показывается изнанка — светлее лицевой, потому что на неё падает
+          свет изнутри. */}
       <g style={{
         transformOrigin: `${cx}px ${верх - глуб}px`,
-        animation: open ? "chestLidOpen 640ms cubic-bezier(0.34,1.28,0.5,1) both" : "none",
+        animation: open ? "chestLidOpen 660ms cubic-bezier(0.32,1.2,0.5,1) both" : "none",
       }}>
+        {/* Торец: полоска по переднему краю крышки. */}
+        <path
+          d={`M${cx - пшир},${верх} H${cx + пшир} V${верх - 6} H${cx - пшир} Z`}
+          fill="#15151a" stroke={T.electric} strokeWidth="1.6" strokeLinejoin="round"
+          opacity={open ? 0.85 : 1}
+        />
+        {/* Плоскость крышки. */}
         <polygon points={крышка} fill="url(#chLid)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round" />
         <polygon points={крышка} fill="url(#chSheen)" />
-        {/* Рёбра жёсткости вдоль скатов. */}
-        <line x1={cx - пшир + 13} y1={верх - 3} x2={cx - зшир + 11} y2={верх - глуб + 3}
-          stroke={T.electric} strokeWidth="1.1" opacity="0.42" />
-        <line x1={cx + пшир - 13} y1={верх - 3} x2={cx + зшир - 11} y2={верх - глуб + 3}
-          stroke={T.electric} strokeWidth="1.1" opacity="0.42" />
-        {/* Ручка на дальней кромке. */}
-        <path d={`M${cx - 9},${верх - глуб + 5} q9,-7 18,0`} fill="none" stroke={T.electric} strokeWidth="1.8" strokeLinecap="round" opacity="0.9" />
-        <circle cx={cx} cy={верх - глуб + 10} r="2.6" fill={T.electric} opacity="0.85" />
+
+        {/* Изнанка: проступает, когда крышка развернулась. Рисуется
+            поверх лицевой и гасит её. */}
+        {open && (
+          <polygon
+            points={крышка}
+            fill="url(#chBack)"
+            stroke={hexA(T.electric, 0.8)}
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+            style={{ animation: "lidFlip 660ms ease-in both" }}
+          />
+        )}
+
+        {/* Рёбра по скатам и ручка — на лицевой стороне. */}
+        <g style={open ? { opacity: 0, transition: `opacity ${EASE}` } : undefined}>
+          <line x1={cx - пшир + 13} y1={верх - 3} x2={cx - зшир + 11} y2={верх - глуб + 3}
+            stroke={T.electric} strokeWidth="1.1" opacity="0.42" />
+          <line x1={cx + пшир - 13} y1={верх - 3} x2={cx + зшир - 11} y2={верх - глуб + 3}
+            stroke={T.electric} strokeWidth="1.1" opacity="0.42" />
+          <path d={`M${cx - 9},${верх - глуб + 5} q9,-7 18,0`} fill="none" stroke={T.electric} strokeWidth="1.8" strokeLinecap="round" opacity="0.9" />
+          <circle cx={cx} cy={верх - глуб + 10} r="2.6" fill={T.electric} opacity="0.85" />
+        </g>
       </g>
     </svg>
   );
