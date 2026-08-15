@@ -5849,6 +5849,107 @@ function BuySheet({ item, kind, coins, cosmetics, onBuy, onClose }) {
   );
 }
 
+/* Подтверждение перед открытием кейса.
+
+   То же правило, что и с покупкой вещи: монеты не уходят по одному
+   нажатию. Здесь же видно, сколько останется и что вообще может выпасть
+   — иначе непонятно, за что платишь. */
+function ChestBuySheet({ coins, owned, onConfirm, onClose }) {
+  if (typeof document === "undefined") return null;
+  const pool = chestPool(owned);
+  const left = Math.max(0, coins - CHEST_PRICE);
+  const хватает = coins >= CHEST_PRICE && pool.length > 0;
+
+  return createPortal(
+    <div
+      className="fx-modal-back"
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.85)",
+        backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center",
+        padding: "0 12px calc(12px + var(--tg-inset-bottom, 0px))",
+        paddingTop: "var(--tg-inset-top, 0px)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 420, background: T.surface,
+          border: `1px solid ${T.lineHi}`, borderRadius: 26, padding: "22px 22px 18px",
+          maxHeight: "100%", overflowY: "auto",
+          display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+          animation: "wreathSheetUp 340ms cubic-bezier(0.16,1,0.3,1) both",
+        }}
+      >
+        <div style={{ transform: "scale(0.62)", transformOrigin: "center", height: 118, display: "flex", alignItems: "center" }}>
+          <ChestArt open={false} />
+        </div>
+
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19.5, fontWeight: 700, marginTop: 6 }}>{t("chestTitle")}</span>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 4, lineHeight: 1.45, maxWidth: 280 }}>
+          {t("chestSub")}
+        </span>
+
+        {/* Что может выпасть: несколько вещей из тех, которых ещё нет. */}
+        {pool.length > 0 && (
+          <div className="flex items-center justify-center gap-2" style={{ marginTop: 14 }}>
+            {pool.slice(0, 4).map((это) => (
+              <div key={`${это.kind}:${это.id}`} style={{
+                width: 52, height: 52, borderRadius: 13, overflow: "hidden", position: "relative",
+                background: T.bg, border: `1px solid ${T.line}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {это.kind === "frame" ? (
+                  <AvatarFrame frameId={это.id} size={36}>
+                    <div style={{ width: "100%", height: "100%", background: T.bg }} />
+                  </AvatarFrame>
+                ) : (
+                  <ProfileCardBg cardId={это.id} height={52} radius={13} />
+                )}
+              </div>
+            ))}
+            {pool.length > 4 && (
+              <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>+{pool.length - 4}</span>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between w-full rounded-[18px] px-4 py-3" style={{ marginTop: 16, background: T.bg, border: `1px solid ${T.line}` }}>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("shopLeftAfter")}</span>
+          <span className="flex items-center gap-1.5">
+            <CoinIcon size={14} dim={!хватает} />
+            <span style={{ fontFamily: monoFont, color: хватает ? T.ice : T.muted, fontSize: 14.5, fontWeight: 700 }}>{left}</span>
+          </span>
+        </div>
+
+        <button
+          onClick={() => хватает && onConfirm()}
+          disabled={!хватает}
+          className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3.5"
+          style={{
+            marginTop: 12,
+            background: хватает ? PRISM : T.surfaceHi,
+            color: хватает ? PRISM_TEXT : T.muted,
+            border: хватает ? "none" : `1px solid ${T.line}`,
+            fontFamily: displayFont, fontWeight: 700, fontSize: 15.5,
+          }}
+        >
+          <CoinIcon size={16} tone={хватает ? PRISM_TEXT : T.muted} />
+          {pool.length ? tf("chestOpen", { n: CHEST_PRICE }) : t("chestEmpty")}
+        </button>
+        <button
+          onClick={onClose}
+          className="fx-tap w-full rounded-[20px] py-2.5"
+          style={{ marginTop: 8, background: "transparent", border: "none", fontFamily: bodyFont, fontSize: 14.5, color: T.muted }}
+        >
+          {t("cancel")}
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /* Лента перебора при открытии кейса: размер плитки и место выигрышной.
    Тридцать штук — столько, чтобы разгон чувствовался, но ожидание не
    тянулось. */
@@ -6155,20 +6256,28 @@ function ChestCard({ coins, owned, onOpen }) {
           {left > 0 ? t("chestSub") : t("chestEmpty")}
         </div>
       </div>
+      {/* Цена: монета тёмная по оранжевому, число крупнее подписей вокруг.
+          Раньше монета была того же цвета, что и кнопка, и от неё
+          оставалось смутное пятно — виднелось одно число. */}
       <button
         onClick={() => canOpen && onOpen && onOpen()}
         disabled={!canOpen}
-        className="fx-tap flex items-center gap-1.5 rounded-full px-3.5 py-2"
+        className="fx-tap flex items-center gap-1.5 rounded-full"
         style={{
-          flexShrink: 0,
+          flexShrink: 0, padding: "9px 14px",
           background: canOpen ? PRISM : T.surfaceHi,
-          color: canOpen ? PRISM_TEXT : T.muted,
           border: canOpen ? "none" : `1px solid ${T.line}`,
-          fontFamily: displayFont, fontWeight: 700, fontSize: 13,
+          boxShadow: canOpen ? `0 0 18px ${hexA(T.electric, 0.35)}` : "none",
           opacity: left > 0 ? 1 : 0.5,
         }}
       >
-        <CoinIcon size={14} dim={!canOpen} /> {CHEST_PRICE}
+        <CoinIcon size={17} tone={canOpen ? PRISM_TEXT : T.muted} />
+        <span style={{
+          fontFamily: displayFont, fontWeight: 700, fontSize: 16,
+          color: canOpen ? PRISM_TEXT : T.muted, letterSpacing: "-0.01em",
+        }}>
+          {CHEST_PRICE}
+        </span>
       </button>
     </div>
   );
@@ -6191,6 +6300,9 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, onOpenChest, achiev
   // Нажатие на некупленный предмет открывает окно подтверждения, а не
   // списывает монеты сразу.
   const [confirming, setConfirming] = useState(null); // { kind, id }
+  // Кейс тоже спрашивает подтверждение: монеты не должны уходить по
+  // одному касанию.
+  const [chestConfirm, setChestConfirm] = useState(false);
   const buy = useCallback((k, id) => { setConfirming({ kind: k, id }); }, []);
   const buyRef = useRef(onBuy);
   useEffect(() => { buyRef.current = onBuy; });
@@ -6264,7 +6376,7 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, onOpenChest, achiev
 
       {/* Сундук — единственное, на что монеты уходят бесконечно: рамки и
           карточки рано или поздно скупаются все. */}
-      <ChestCard coins={coins} owned={owned} onOpen={onOpenChest} />
+      <ChestCard coins={coins} owned={owned} onOpen={() => setChestConfirm(true)} />
 
       <div className="flex items-center gap-2">
         {[["frames", t("shopTabFrames")], ["cards", t("shopTabCards")]].map(([id, label]) => {
@@ -6307,6 +6419,15 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, onOpenChest, achiev
           );
         })}
       </div>
+      )}
+
+      {chestConfirm && (
+        <ChestBuySheet
+          coins={coins}
+          owned={owned}
+          onConfirm={() => { setChestConfirm(false); if (onOpenChest) onOpenChest(); }}
+          onClose={() => setChestConfirm(false)}
+        />
       )}
 
       {confirming && (
@@ -9682,8 +9803,10 @@ function LaunchRocket({ targetTop = ROCKET_TOUCH_TOP, variant = "default" }) {
    овалов. Ровный кружок с буквой читается при любом размере и сразу
    говорит, что валюта своя, а не чужая. Цвет фирменный оранжевый:
    жёлтого в приложении нет больше нигде. */
-function CoinIcon({ size = 14, dim = false }) {
-  const color = dim ? T.muted : T.electric;
+function CoinIcon({ size = 14, dim = false, tone }) {
+  // tone — когда монета лежит на цветной кнопке: своим оранжевым по
+  // оранжевому она сливалась в пятно.
+  const color = tone || (dim ? T.muted : T.electric);
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" style={{ flexShrink: 0 }} aria-hidden>
       <circle cx="10" cy="10" r="8.4" fill={color} opacity={dim ? 0.08 : 0.18} />
