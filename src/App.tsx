@@ -6106,6 +6106,44 @@ function ChestBuySheet({ coins, owned, onConfirm, onClose }) {
    тянулось. */
 const ROLL_ITEM = 76;
 const ROLL_WIN_INDEX = 30;
+const ROLL_MS = 2800;
+const ROLL_EASE = [0.11, 0.75, 0.1, 1];
+
+/* Когда мимо указателя проходит очередная вещь — по этим моментам и
+   бьёт вибрация.
+
+   Ровный метроном тут не годится: лента резко стартует и долго
+   выбегает, а рука в это время чувствовала бы посторонний ритм поверх
+   картинки. Поэтому щелчки считаются по той же кривой, по которой едет
+   лента. Кривая отвечает на вопрос «сколько пути пройдено к моменту t»,
+   а нужно обратное — когда пройдено ровно k делений; идём по параметру
+   кривой и снимаем отсечки.
+
+   Первые деления пролетают за 13 мс друг от друга. Их выбрасываем:
+   телефон столько вибраций подряд не отрабатывает, Telegram лишние
+   глотает, и вместо разгона в руке получилась бы каша. */
+const ROLL_TICK_MIN_GAP = 55;
+function rollTickTimes(steps, dur) {
+  const bez = (s, a, b) => 3 * (1 - s) * (1 - s) * s * a + 3 * (1 - s) * s * s * b + s * s * s;
+  const [x1, y1, x2, y2] = ROLL_EASE;
+  const out = [];
+  let деление = 1;
+  let прошлый = -Infinity;
+  for (let i = 1; i <= 600 && деление <= steps; i++) {
+    const s = i / 600;
+    const путь = bez(s, y1, y2); // ось Y кривой — какая доля пути пройдена
+    while (деление <= steps && путь >= деление / steps) {
+      const время = bez(s, x1, x2) * dur; // ось X — в какой момент это случилось
+      if (время - прошлый >= ROLL_TICK_MIN_GAP) {
+        out.push(время);
+        прошлый = время;
+      }
+      деление++;
+    }
+  }
+  return out;
+}
+const ROLL_TICKS = rollTickTimes(ROLL_WIN_INDEX, ROLL_MS);
 
 /* Сам кейс.
 
@@ -6321,6 +6359,22 @@ function ChestReveal({ prize, onClose }) {
       setTimeout(() => setPhase("roll"), 1350),
       setTimeout(() => setPhase("prize"), 4250),
     ];
+    // Лента отдаётся в руку: щелчок на каждой вещи, что проезжает мимо
+    // указателя. Последний — не щелчок, а остановка, поэтому весомее.
+    let былаВибрация = 0;
+    ROLL_TICKS.forEach((мс, i) => {
+      const остановка = i === ROLL_TICKS.length - 1;
+      t.push(setTimeout(() => {
+        // Пока поток занят первым кадром ленты, таймеры сбиваются в кучу
+        // и приходят вплотную — две такие вибрации сливаются в одну
+        // длинную. Разгон от этого только смазывается, поэтому лишние
+        // пропускаем прямо перед отправкой, а не только при расчёте.
+        const сейчас = Date.now();
+        if (!остановка && сейчас - былаВибрация < ROLL_TICK_MIN_GAP) return;
+        былаВибрация = сейчас;
+        haptic(остановка ? "medium" : "soft");
+      }, 1350 + мс));
+    });
     return () => t.forEach(clearTimeout);
   }, [prize && prize.kind, prize && prize.id]);
 
@@ -6424,7 +6478,7 @@ function ChestReveal({ prize, onClose }) {
             display: "flex", gap: 8, alignItems: "center", height: "100%",
             // Кривая почти без разгона и с долгим выбегом — это и читается
             // как «замедляется и останавливается».
-            animation: "rollStrip 2800ms cubic-bezier(0.11, 0.75, 0.1, 1) both",
+            animation: `rollStrip ${ROLL_MS}ms cubic-bezier(${ROLL_EASE.join(",")}) both`,
             ["--roll-to"]: `-${ROLL_WIN_INDEX * (ROLL_ITEM + 8) - (300 - ROLL_ITEM) / 2}px`,
           }}>
             {лента.map((это, i) => (
