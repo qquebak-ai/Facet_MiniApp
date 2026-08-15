@@ -1027,6 +1027,19 @@ function GlobalStyle() {
          волна: сильный порыв, откат, слабое качание, снова порыв. Углы
          остаются небольшими: знак висит рядом с ником, и заметное
          движение там раздражало бы. */
+      /* Извержение на орбите. Не ровное «дыхание» туда-сюда — то читается
+         как лампочка на реостате, — а протуберанец: вспышка встаёт рывком
+         и долго опадает, следом идёт слабый повторный выброс. На пике
+         плазму отбрасывает наружу, поэтому линия заодно раздувается и
+         размывается по краю. */
+      @keyframes orbitFlare {
+        0%   { opacity: 0.10; transform: scale(1);     filter: blur(0px); }
+        7%   { opacity: 1;    transform: scale(1.045); filter: blur(1.4px); }
+        24%  { opacity: 0.34; transform: scale(1.012); filter: blur(0.4px); }
+        38%  { opacity: 0.72; transform: scale(1.028); filter: blur(0.9px); }
+        62%  { opacity: 0.18; transform: scale(1.006); filter: blur(0.2px); }
+        100% { opacity: 0.10; transform: scale(1);     filter: blur(0px); }
+      }
       /* Лист в полёте: кувыркается вокруг себя и то приближается, то
          уходит вглубь — от этого движение перестаёт быть механическим. */
       @keyframes leafTumble {
@@ -4559,9 +4572,12 @@ const AVATAR_FRAMES = [
     spin: 26, glow: "#FF6B35",
     orbit: {
       color: "#FF6B35",
+      // flare — период вспышки на этой линии. Периоды несоразмерны
+      // (3.7 и 5.3), поэтому извержения никогда не совпадают: рамка не
+      // мигает целиком, а живёт вразнобой, как поверхность звезды.
       rings: [
-        { tilt: -20, squash: 0.36, dur: 6.5, size: 2.6, trail: true },
-        { tilt: 38, squash: 0.24, dur: 10, size: 2, trail: true },
+        { tilt: -20, squash: 0.36, dur: 6.5, size: 2.6, trail: true, flare: 3.7 },
+        { tilt: 38, squash: 0.24, dur: 10, size: 2, trail: true, flare: 5.3 },
       ],
     },
   },
@@ -5378,13 +5394,28 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
                 width: w, height: h, marginLeft: -w / 2, marginTop: -h / 2,
                 transform: `rotate(${r.tilt}deg)`,
               }}>
-                {/* Сама траектория — тонкая, чтобы не спорить с кольцом. */}
+                {/* Сама траектория — тонкая, чтобы не спорить с кольцом.
+                    Слоя два: ровная холодная линия, которая видна всегда,
+                    и поверх неё раскалённая — она и извергается. Порознь
+                    их держим потому, что при затухании вспышки линия
+                    должна не исчезать, а остывать. */}
                 {слой === 0 && (
-                  <div style={{
-                    position: "absolute", inset: 0, borderRadius: "50%",
-                    border: `${Math.max(1, ring * 0.35)}px solid ${hexA(f.orbit.color, 0.5)}`,
-                    boxShadow: `0 0 ${ring * 2}px ${hexA(f.orbit.color, 0.35)}`,
-                  }} />
+                  <>
+                    <div style={{
+                      position: "absolute", inset: 0, borderRadius: "50%",
+                      border: `${Math.max(1, ring * 0.35)}px solid ${hexA(f.orbit.color, 0.32)}`,
+                      boxShadow: `0 0 ${ring * 2}px ${hexA(f.orbit.color, 0.22)}`,
+                    }} />
+                    <div style={{
+                      position: "absolute", inset: 0, borderRadius: "50%",
+                      border: `${Math.max(1, ring * 0.45)}px solid ${hexA(f.orbit.color, 0.85)}`,
+                      boxShadow: `0 0 ${ring * 5}px ${ring}px ${hexA(f.orbit.color, 0.5)}, inset 0 0 ${ring * 2}px ${hexA(f.orbit.color, 0.4)}`,
+                      animation: `orbitFlare ${r.flare || 4}s cubic-bezier(0.2,0.9,0.3,1) infinite`,
+                      // Сдвиг по фазе — чтобы линии не вспыхивали разом
+                      // даже в первый заход, до расхождения периодов.
+                      animationDelay: `${-i * 1.9}s`,
+                    }} />
+                  </>
                 )}
                 {/* Тело. Верхнюю половину пути показывает нижний слой,
                     нижнюю — верхний: половинки чередуются по фазе. */}
