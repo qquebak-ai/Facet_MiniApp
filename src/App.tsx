@@ -157,6 +157,8 @@ const STR = {
     chestOpen: "Открыть за {n}",
     chestGot: "Из сундука: {name}",
     chestEmpty: "Всё уже куплено — открывать нечего",
+    chestOpening: "Открываем…",
+    chestTake: "Забрать",
     nickChange: "Сменить ник",
     nickChangeSub: "Первый ник бесплатный, дальше {n} монет",
     nickChangeCta: "Сменить за {n}",
@@ -448,6 +450,8 @@ const STR = {
     chestOpen: "Open for {n}",
     chestGot: "From the chest: {name}",
     chestEmpty: "Everything is bought — nothing left to roll",
+    chestOpening: "Opening…",
+    chestTake: "Take it",
     nickChange: "Change nickname",
     nickChangeSub: "The first one is free, next ones cost {n} coins",
     nickChangeCta: "Change for {n}",
@@ -1050,6 +1054,52 @@ function GlobalStyle() {
          --fly-to. Сама картинка нарисована носом вверх-вправо, поэтому
          разворачивается на 45 градусов — иначе при вертикальном полёте
          она шла бы боком. */
+      /* Открытие сундука. Сначала он вздрагивает — три коротких рывка с
+         нарастанием, как будто внутри что-то бьётся; потом крышка
+         откидывается назад, а из щели бьёт свет. */
+      @keyframes chestShake {
+        0%, 100% { transform: translateX(0) rotate(0deg); }
+        10% { transform: translateX(-3px) rotate(-2deg); }
+        20% { transform: translateX(3px) rotate(2deg); }
+        35% { transform: translateX(-5px) rotate(-3deg); }
+        50% { transform: translateX(5px) rotate(3deg); }
+        65% { transform: translateX(-7px) rotate(-4deg); }
+        80% { transform: translateX(7px) rotate(4deg); }
+        92% { transform: translateX(-3px) rotate(-1deg); }
+      }
+      @keyframes chestLidOpen {
+        0%   { transform: rotate(0deg); }
+        60%  { transform: rotate(-128deg); }
+        100% { transform: rotate(-118deg); }
+      }
+      /* Свет из-под крышки: узкая полоса расходится в широкий конус. */
+      @keyframes chestBeam {
+        0%   { opacity: 0; transform: scaleX(0.2) scaleY(0.3); }
+        40%  { opacity: 1; }
+        100% { opacity: 0.85; transform: scaleX(1) scaleY(1); }
+      }
+      @keyframes chestFlash {
+        0%   { opacity: 0; transform: scale(0.4); }
+        30%  { opacity: 1; transform: scale(1.15); }
+        100% { opacity: 0; transform: scale(1.8); }
+      }
+      /* Приз выезжает из сундука и оседает на месте. */
+      @keyframes prizeRise {
+        0%   { opacity: 0; transform: translateY(46px) scale(0.5); }
+        55%  { opacity: 1; transform: translateY(-10px) scale(1.06); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @keyframes prizeGlow {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 0.9; }
+      }
+      /* Искры разлетаются от сундука в момент вспышки. Каждой задан свой
+         угол и задержка переменными. */
+      @keyframes chestSpark {
+        0%   { opacity: 0; transform: rotate(var(--a)) translateY(0) scale(0.5); }
+        20%  { opacity: 1; }
+        100% { opacity: 0; transform: rotate(var(--a)) translateY(var(--d)) scale(1); }
+      }
       @keyframes rocketFly {
         0%   { transform: translate(-50%, calc(100vh + 150px)) rotate(-45deg); opacity: 0; }
         7%   { opacity: 1; }
@@ -5793,6 +5843,132 @@ function BuySheet({ item, kind, coins, cosmetics, onBuy, onClose }) {
   );
 }
 
+/* Окно открытия сундука.
+
+   Сначала сундук вздрагивает, потом крышка откидывается и из щели бьёт
+   свет — и только после этого показывается, что досталось. Пауза здесь
+   не для красоты: без неё выпавшая вещь появлялась мгновенно, и не
+   оставалось секунды, ради которой сундук и открывают. */
+function ChestReveal({ prize, onClose }) {
+  const [phase, setPhase] = useState("shaking"); // shaking | open | prize
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase("open"), 900);
+    const t2 = setTimeout(() => setPhase("prize"), 1500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  if (typeof document === "undefined" || !prize) return null;
+  const item = prize.item;
+  const открыт = phase !== "shaking";
+  const показатьПриз = phase === "prize";
+
+  return createPortal(
+    <div
+      className="fx-modal-back"
+      onClick={показатьПриз ? onClose : undefined}
+      style={{
+        position: "fixed", inset: 0, zIndex: 95, background: "rgba(0,0,0,0.9)",
+        backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        padding: "calc(24px + var(--tg-inset-top, 0px)) 24px calc(24px + var(--tg-inset-bottom, 0px))",
+      }}
+    >
+      {/* Сам сундук. Пока не открыт — трясётся; после открытия остаётся
+          на месте с откинутой крышкой, а приз выезжает над ним. */}
+      <div style={{ position: "relative", width: 190, height: 210, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 6 }}>
+        {открыт && (
+          <>
+            <div style={{
+              position: "absolute", bottom: 12, width: 170, height: 170, borderRadius: "50%",
+              background: `radial-gradient(closest-side, ${hexA(T.electric, 0.7)}, transparent 70%)`,
+              animation: "chestFlash 700ms ease-out both",
+            }} />
+            {[0, 45, 90, 135, 180, 225, 270, 315].map((a, i) => (
+              <span
+                key={a}
+                style={{
+                  position: "absolute", width: 4, height: 12, borderRadius: 2, background: T.electric,
+                  ["--a"]: `${a}deg`, ["--d"]: `${58 + (i % 3) * 14}px`,
+                  animation: `chestSpark ${620 + (i % 3) * 90}ms ease-out both`,
+                  animationDelay: `${i * 22}ms`,
+                }}
+              />
+            ))}
+          </>
+        )}
+
+        <svg width="132" height="112" viewBox="0 0 112 96" style={{ position: "relative", animation: открыт ? "none" : "chestShake 900ms ease-in-out both" }}>
+          {/* Свет из-под крышки */}
+          {открыт && (
+            <path
+              d="M20 46 L92 46 L112 -6 L0 -6 Z"
+              fill={hexA(T.electric, 0.35)}
+              style={{ transformOrigin: "56px 46px", animation: "chestBeam 520ms ease-out both" }}
+            />
+          )}
+          {/* Основание */}
+          <rect x="14" y="44" width="84" height="44" rx="7" fill={T.surfaceHi} stroke={T.electric} strokeWidth="3" />
+          <rect x="48" y="56" width="16" height="20" rx="3" fill={T.electric} />
+          {/* Крышка — откидывается назад вокруг задней кромки */}
+          <g style={{ transformOrigin: "18px 46px", animation: открыт ? "chestLidOpen 620ms cubic-bezier(0.34,1.3,0.5,1) both" : "none" }}>
+            <path d="M14 46 Q14 20 56 20 Q98 20 98 46 Z" fill={T.surface} stroke={T.electric} strokeWidth="3" strokeLinejoin="round" />
+            <rect x="48" y="34" width="16" height="12" rx="2" fill={T.electric} />
+          </g>
+        </svg>
+
+        {/* Приз выезжает поверх сундука */}
+        {показатьПриз && (
+          <div style={{
+            position: "absolute", top: 0,
+            animation: "prizeRise 620ms cubic-bezier(0.16,1,0.3,1) both",
+          }}>
+            <div style={{
+              position: "absolute", inset: -22, borderRadius: "50%",
+              background: `radial-gradient(closest-side, ${hexA(T.electric, 0.5)}, transparent 72%)`,
+              animation: "prizeGlow 2.2s ease-in-out infinite",
+            }} />
+            <div style={{ position: "relative" }}>
+              {prize.kind === "frame" ? (
+                <AvatarFrame frameId={prize.id} size={92}>
+                  <div style={{ width: "100%", height: "100%", background: T.bg }} />
+                </AvatarFrame>
+              ) : (
+                <div style={{ width: 132, height: 84, borderRadius: 16, overflow: "hidden", position: "relative", border: `1px solid ${T.lineHi}` }}>
+                  <ProfileCardBg cardId={prize.id} height={84} radius={16} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Подпись появляется вместе с призом, иначе выдаёт его заранее. */}
+      <div style={{ minHeight: 88, marginTop: 34, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start" }}>
+        {показатьПриз ? (
+          <div className="flex flex-col items-center" style={{ animation: "fadeInUp 420ms ease-out both" }}>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>
+              {prize.kind === "frame" ? t("shopTabFrames") : t("shopTabCards")}
+            </span>
+            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 22, fontWeight: 700, marginTop: 4 }}>
+              {pickLabel(item ? item.label : null) || prize.id}
+            </span>
+            <button
+              onClick={onClose}
+              className="fx-tap rounded-[20px] px-7 py-3"
+              style={{ marginTop: 18, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}
+            >
+              {t("chestTake")}
+            </button>
+          </div>
+        ) : (
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{t("chestOpening")}</span>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /* Карточка сундука в магазине. Показывает цену и сколько вещей ещё не
    куплено: без этого непонятно, есть ли смысл открывать. */
 function ChestCard({ coins, owned, onOpen }) {
@@ -10512,6 +10688,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     done && done();
   }
 
+  // Что выпало из сундука: показывается в отдельном окне с анимацией.
+  const [chestPrize, setChestPrize] = useState(null);
+
   // Открыть сундук: списываем цену, выдаём случайную вещь из тех, что
   // ещё не куплены, и сразу надеваем — как при обычной покупке.
   async function openChest() {
@@ -10536,7 +10715,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     if (typeof data.balance === "number") setServerBalance(data.balance);
     equipCosmetic(data.kind, data.id, true);
     const item = (data.kind === "frame" ? FRAME_BY_ID : CARD_BY_ID)[data.id];
-    showToast(tf("chestGot", { name: pickLabel(item ? item.label : null) || data.id }));
+    // Вместо строчки внизу экрана — окно с открытием: ради этой секунды
+    // сундук и покупают.
+    setChestPrize({ kind: data.kind, id: data.id, item });
   }
 
   async function deleteMyToken(id) {
@@ -11228,6 +11409,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         onDisable={completePinDisable}
         showToast={showToast}
       />
+      <ChestReveal prize={chestPrize} onClose={() => setChestPrize(null)} />
       <TokenManageSheet token={manageToken_} onClose={() => setManageToken_(null)} showToast={showToast} onDelete={deleteMyToken} />
       <TradeModal t={token} tradeModal={tradeModal} onClose={() => setTradeModal(null)} onConfirm={confirmTrade} walletTonBalance={tonBalance} tonPriceUsd={tonPriceUsd} heldAmount={chainHolding} curveState={tradeCurveState} />
       <TokenLaunchOverlay
