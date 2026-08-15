@@ -6032,7 +6032,10 @@ function ChestBuySheet({ coins, owned, onConfirm, onClose }) {
           animation: "wreathSheetUp 340ms cubic-bezier(0.16,1,0.3,1) both",
         }}
       >
-        <div style={{ transform: "scale(0.62)", transformOrigin: "center", height: 118, display: "flex", alignItems: "center" }}>
+        {/* Кейс — то, ради чего открыто окно, поэтому он крупнее всего
+            остального. Высота коробки идёт следом за масштабом: рисунок
+            188 точек ростом, и меньшая коробка обрезала бы его сверху. */}
+        <div style={{ transform: "scale(0.8)", transformOrigin: "center", height: 150, display: "flex", alignItems: "center" }}>
           <ChestArt open={false} />
         </div>
 
