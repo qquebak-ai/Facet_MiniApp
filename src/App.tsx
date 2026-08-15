@@ -4183,9 +4183,13 @@ function WidgetSparks() {
   );
 }
 
-function HomeHero({ onGoTab }) {
+function HomeHero({ onGoTab, onGoCreate }) {
   const actions = [
-    { icon: Rocket, key: "homeActionLaunch", onClick: () => onGoTab("create") },
+    // Запуск — не вкладка, а отдельная страница, поэтому и открывается
+    // своим способом. Через onGoTab подсветка нижнего меню уезжала на
+    // несуществующий раздел, и «назад» с этой страницы возвращал на неё же:
+    // возвращаться он умеет только на вкладку, с которой пришли.
+    { icon: Rocket, key: "homeActionLaunch", onClick: onGoCreate },
     { icon: Flame, key: "homeActionMempad", onClick: () => onGoTab("mempad") },
     { icon: Wallet, key: "homeActionWallet", onClick: () => onGoTab("wallet") },
   ];
@@ -7033,10 +7037,10 @@ function AlmostListed({ tokens = [], onOpen }) {
   );
 }
 
-function HomeView({ onGoTab, curveTokens = [], onOpenToken }) {
+function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken }) {
   return (
     <div className="flex flex-col gap-4" style={{ paddingBottom: 12 }}>
-      <HomeHero onGoTab={onGoTab} />
+      <HomeHero onGoTab={onGoTab} onGoCreate={onGoCreate} />
       <AlmostListed tokens={curveTokens} onOpen={onOpenToken} />
     </div>
   );
@@ -12093,7 +12097,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             can still scroll clear of it. */}
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), paddingBottom: 116 + insetBottom }} key={view}>
           <KeepAlive show={view === "home"}>
-            <HomeView onGoTab={goTab} curveTokens={communityTokens} onOpenToken={openToken} />
+            <HomeView onGoTab={goTab} onGoCreate={openCreate} curveTokens={communityTokens} onOpenToken={openToken} />
           </KeepAlive>
           <KeepAlive show={view === "mempad"}>
             <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />
