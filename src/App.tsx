@@ -313,6 +313,7 @@ const STR = {
     supportTooFast: "Слишком часто. Подожди немного.",
     supportTooMany: "На сегодня хватит сообщений — ответим на те, что уже есть.",
     supportTooLong: "Слишком длинно: не больше 2000 знаков.",
+    supportUndelivered: "Поддержка сейчас недоступна — сообщение не отправилось. Попробуй позже.",
     supportTeam: "Поддержка",
     supportYou: "Ты",
     copyLink: "Скопировать ссылку",
@@ -617,6 +618,7 @@ const STR = {
     supportTooFast: "Too often. Give it a moment.",
     supportTooMany: "That's enough for today — we'll answer what you've sent.",
     supportTooLong: "Too long: 2000 characters max.",
+    supportUndelivered: "Support is unreachable right now — the message wasn't sent. Try later.",
     supportTeam: "Support",
     supportYou: "You",
     copyLink: "Copy link",
@@ -8899,9 +8901,14 @@ function SupportChat({ accountCreated, showToast }) {
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) {
         const код = json.error;
+        // Недоставленный вопрос сервер не сохраняет, поэтому и говорим
+        // прямо: не отправилось. Иначе человек ждал бы ответа на то,
+        // чего никто не получил.
+        if (код === "undelivered") console.warn("[mintly] поддержка недоступна:", json.detail);
         showToast(код === "too_fast" ? t("supportTooFast")
           : код === "too_many" ? t("supportTooMany")
           : код === "too_long" ? t("supportTooLong")
+          : код === "undelivered" ? t("supportUndelivered")
           : t("supportFailed"));
         return;
       }

@@ -95,7 +95,14 @@ export async function acceptQuestion(admin, { profile, body, source }) {
     .single();
   if (error) return { ok: false, error: "store_failed", detail: error.message };
 
-  await forwardToTeam(admin, { profile, text, source, first: было.length === 0 });
+  const доставка = await forwardToTeam(admin, { profile, text, source, first: было.length === 0 });
+  if (!доставка.ok) {
+    // Вопрос, которого никто не прочитает, хуже неотправленного: человек
+    // будет ждать ответа, а его никто не увидит. Убираем запись — тогда
+    // «попробуй ещё раз» действительно имеет смысл, а не плодит копии.
+    await admin.from("support_messages").delete().eq("id", сообщение.id);
+    return { ok: false, error: "undelivered", detail: доставка.detail };
+  }
   return { ok: true, message: сообщение };
 }
 
@@ -106,8 +113,8 @@ export async function acceptQuestion(admin, { profile, body, source }) {
  * переспрашивая. */
 async function forwardToTeam(admin, { profile, text, source, first }) {
   if (!SUPPORT_CHAT_ID) {
-    console.warn("[support] SUPPORT_CHAT_ID не задан — вопрос сохранён, но команде не ушёл");
-    return;
+    console.error("[support] SUPPORT_CHAT_ID не задан — вопросы отправлять некуда");
+    return { ok: false, detail: "SUPPORT_CHAT_ID не задан" };
   }
   const кто = esc(profile.nickname || "без ника");
   const ссылка = profile.telegram_id
@@ -125,14 +132,18 @@ async function forwardToTeam(admin, { profile, text, source, first }) {
 
   const id = ответ && ответ.result && ответ.result.message_id;
   if (!id) {
-    console.warn("[support] вопрос не доставлен в чат команды:", JSON.stringify(ответ).slice(0, 200));
-    return;
+    // Причину Telegram пишет словами — она и нужна тому, кто настраивает:
+    // «chat not found» и «not enough rights» лечатся по-разному.
+    const причина = (ответ && (ответ.description || ответ.error)) || "Telegram не принял сообщение";
+    console.error("[support] вопрос не доставлен в чат команды:", причина);
+    return { ok: false, detail: причина };
   }
   // Метка живёт вместе с сообщением в чате: реплай по нему и приведёт
   // обратно к нужной переписке.
   await admin
     .from("support_relay")
     .upsert({ admin_message_id: id, user_id: profile.id }, { onConflict: "admin_message_id" });
+  return { ok: true };
 }
 
 /* Ответ команды человеку: в базу — чтобы был виден в приложении, и в

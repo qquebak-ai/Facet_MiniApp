@@ -12,11 +12,72 @@
  */
 
 import {
-  BOT_TOKEN, SUPABASE_URL, SERVICE_ROLE_KEY, MAX_LEN,
-  adminClient, acceptQuestion,
+  BOT_TOKEN, SUPABASE_URL, SERVICE_ROLE_KEY, SUPPORT_CHAT_ID, MAX_LEN,
+  adminClient, acceptQuestion, tgCall,
 } from "./_support.js";
 
+const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
+
+/* Проверка связи — открыть в браузере:
+ *   https://<домен>/api/support?check=<TELEGRAM_WEBHOOK_SECRET>
+ *
+ * Вопрос идёт через четыре звена: переменные окружения, база, бот и
+ * группа. Когда до чата ничего не доходит, по одному молчанию не понять,
+ * какое из них подвело, а лазить по журналам Vercel ради этого — долго.
+ * Здесь каждое звено дёргается по очереди и отвечает за себя. */
+async function check(res) {
+  const итог = {
+    переменные: {
+      TELEGRAM_BOT_TOKEN: !!BOT_TOKEN,
+      SUPABASE_URL: !!SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY: !!SERVICE_ROLE_KEY,
+      SUPPORT_CHAT_ID: SUPPORT_CHAT_ID || false,
+    },
+  };
+
+  if (BOT_TOKEN) {
+    const me = await tgCall("getMe");
+    итог.бот = me.ok ? `@${me.result.username}` : `не принят Telegram: ${me.description || "?"}`;
+  }
+
+  if (SUPABASE_URL && SERVICE_ROLE_KEY) {
+    const admin = adminClient();
+    итог.таблицы = {};
+    for (const имя of ["support_messages", "support_relay"]) {
+      const { error } = await admin.from(имя).select("*", { head: true, count: "exact" }).limit(1);
+      // Нет таблицы — значит, supabase_support.sql ещё не выполнен.
+      итог.таблицы[имя] = error ? `нет доступа: ${error.message}` : "есть";
+    }
+  }
+
+  if (BOT_TOKEN && SUPPORT_CHAT_ID) {
+    const чат = await tgCall("getChat", { chat_id: SUPPORT_CHAT_ID });
+    итог.чат = чат.ok
+      ? `${чат.result.title || чат.result.username || чат.result.id} (${чат.result.type})`
+      : `не виден боту: ${чат.description || "?"}`;
+    const проба = await tgCall("sendMessage", {
+      chat_id: SUPPORT_CHAT_ID,
+      text: "Проверка связи: поддержка настроена, вопросы будут приходить сюда.",
+    });
+    итог.проверочное_сообщение = проба.ok ? "доставлено" : `не доставлено: ${проба.description || "?"}`;
+  } else if (!SUPPORT_CHAT_ID) {
+    итог.чат = "SUPPORT_CHAT_ID не задан — вопросы отправлять некуда";
+  }
+
+  итог.готово = итог.проверочное_сообщение === "доставлено"
+    && итог.таблицы && итог.таблицы.support_messages === "есть";
+  return res.status(200).json(итог);
+}
+
 export default async function handler(req, res) {
+  // Проверка связи идёт обычной ссылкой в браузере — но только со
+  // знанием секрета: она пишет в чат команды.
+  if (req.method === "GET") {
+    const asked = new URL(req.url, "https://x").searchParams.get("check");
+    if (!WEBHOOK_SECRET) return res.status(500).json({ error: "no_webhook_secret" });
+    if (asked !== WEBHOOK_SECRET) return res.status(401).json({ error: "bad_secret" });
+    return check(res);
+  }
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "method_not_allowed" });
@@ -58,8 +119,13 @@ export default async function handler(req, res) {
   const итог = await acceptQuestion(admin, { profile: кто, body: text, source: "app" });
   if (!итог.ok) {
     const код = итог.error;
-    const статус = код === "too_fast" || код === "too_many" ? 429 : код === "store_failed" ? 500 : 400;
-    return res.status(статус).json({ error: код });
+    const статус = код === "too_fast" || код === "too_many" ? 429
+      : код === "store_failed" || код === "undelivered" ? 500
+      : 400;
+    // Причину недоставки отдаём наружу: она видна в консоли браузера и
+    // сразу называет виновника — незаданный чат, чужие права, нет бота
+    // в группе.
+    return res.status(статус).json({ error: код, detail: итог.detail });
   }
   return res.status(200).json({ ok: true, message: итог.message });
 }
