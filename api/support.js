@@ -34,6 +34,12 @@ async function check(res) {
       SUPPORT_CHAT_ID: SUPPORT_CHAT_ID || false,
     },
   };
+  // Если знак пришлось вернуть — говорим об этом: работать будет и так,
+  // но в переменной лучше починить, иначе то же самое всплывёт в других
+  // местах.
+  if (SUPPORT_CHAT_ID && SUPPORT_CHAT_ID !== String(process.env.SUPPORT_CHAT_ID || "").trim()) {
+    итог.замечание = `в SUPPORT_CHAT_ID потерян минус, читаем как ${SUPPORT_CHAT_ID}`;
+  }
 
   if (BOT_TOKEN) {
     const me = await tgCall("getMe");

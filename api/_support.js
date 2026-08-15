@@ -19,7 +19,20 @@ import { createClient } from "@supabase/supabase-js";
 export const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 export const SUPABASE_URL = process.env.SUPABASE_URL;
 export const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-export const SUPPORT_CHAT_ID = process.env.SUPPORT_CHAT_ID || "";
+/* Номер служебного чата.
+ *
+ * У супергрупп он отрицательный и начинается со «100…»: -1004453921574.
+ * Минус теряется при копировании постоянно — а Telegram на такой номер
+ * отвечает сухим «chat not found», ничего не поясняя, и виновника ищут
+ * часами. Положительным числом вида 100xxxxxxxxx чат быть не может: у
+ * людей номера короче и без этой приставки, поэтому знак возвращаем
+ * сами. */
+export function normalizeChatId(raw) {
+  const v = String(raw == null ? "" : raw).trim();
+  return /^100\d{9,}$/.test(v) ? `-${v}` : v;
+}
+
+export const SUPPORT_CHAT_ID = normalizeChatId(process.env.SUPPORT_CHAT_ID);
 export const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
 
 // Пределы для одного человека. Не про защиту базы, а про живого
