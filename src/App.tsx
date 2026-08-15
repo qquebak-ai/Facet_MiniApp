@@ -1095,6 +1095,12 @@ function GlobalStyle() {
       }
       /* Искры разлетаются от сундука в момент вспышки. Каждой задан свой
          угол и задержка переменными. */
+      /* Лента едет справа налево и встаёт на выигрышной вещи. Конечная
+         точка приходит переменной --roll-to. */
+      @keyframes rollStrip {
+        0%   { transform: translateX(130px); }
+        100% { transform: translateX(var(--roll-to)); }
+      }
       @keyframes chestSpark {
         0%   { opacity: 0; transform: rotate(var(--a)) translateY(0) scale(0.5); }
         20%  { opacity: 1; }
@@ -5843,6 +5849,12 @@ function BuySheet({ item, kind, coins, cosmetics, onBuy, onClose }) {
   );
 }
 
+/* Лента перебора при открытии кейса: размер плитки и место выигрышной.
+   Тридцать штук — столько, чтобы разгон чувствовался, но ожидание не
+   тянулось. */
+const ROLL_ITEM = 76;
+const ROLL_WIN_INDEX = 30;
+
 /* Сам кейс.
 
    Не коробка с крышкой, а гранёный ларец в том же ключе, что и всё
@@ -5946,16 +5958,46 @@ function ChestArt({ open }) {
    не для красоты: без неё выпавшая вещь появлялась мгновенно, и не
    оставалось секунды, ради которой сундук и открывают. */
 function ChestReveal({ prize, onClose }) {
-  const [phase, setPhase] = useState("shaking"); // shaking | open | prize
+  // shaking — кейс вздрагивает; open — крышка откинулась; roll — лента
+  // перебирает вещи и замедляется; prize — остановились на выпавшей.
+  const [phase, setPhase] = useState("shaking");
+  // Отсчёт начинается с появления приза, а не с запуска приложения.
+  // Окно висит в разметке всегда (просто пустое), и таймеры, заведённые
+  // при монтировании, успевали отыграть задолго до того, как человек
+  // нажимал «открыть» — кейс сразу показывал результат.
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase("open"), 900);
-    const t2 = setTimeout(() => setPhase("prize"), 1500);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, []);
+    if (!prize) return;
+    setPhase("shaking");
+    const t = [
+      setTimeout(() => setPhase("open"), 850),
+      setTimeout(() => setPhase("roll"), 1350),
+      setTimeout(() => setPhase("prize"), 4250),
+    ];
+    return () => t.forEach(clearTimeout);
+  }, [prize && prize.kind, prize && prize.id]);
+
+  /* Лента перебора. Что выпало, известно заранее — это прислала база, —
+     но показать сразу значит отдать всё напряжение задаром. Поэтому мимо
+     окна проезжают чужие вещи, лента замедляется и встаёт ровно на
+     нужной. Порядок собирается один раз: пересчитывать его на каждой
+     перерисовке нельзя, лента бы дёргалась. */
+  const лента = useMemo(() => {
+    if (!prize) return [];
+    const все = [
+      ...AVATAR_FRAMES.filter((i) => (i.price || 0) > 0).map((i) => ({ kind: "frame", id: i.id, item: i })),
+      ...PROFILE_CARDS.filter((i) => (i.price || 0) > 0).map((i) => ({ kind: "card", id: i.id, item: i })),
+    ];
+    const out = [];
+    for (let i = 0; i < ROLL_WIN_INDEX; i++) out.push(все[Math.floor(Math.random() * все.length)]);
+    out.push(prize);
+    for (let i = 0; i < 4; i++) out.push(все[Math.floor(Math.random() * все.length)]);
+    return out;
+  }, [prize && prize.id]);
 
   if (typeof document === "undefined" || !prize) return null;
   const item = prize.item;
   const открыт = phase !== "shaking";
+  const крутится = phase === "roll";
   const показатьПриз = phase === "prize";
 
   return createPortal(
@@ -6020,6 +6062,48 @@ function ChestReveal({ prize, onClose }) {
           </div>
         )}
       </div>
+
+      {/* Лента перебора: живёт между открытием крышки и показом приза. */}
+      {крутится && (
+        <div style={{
+          position: "relative", width: "100%", maxWidth: 300, height: ROLL_ITEM + 14,
+          marginTop: 16, overflow: "hidden",
+          // Края уходят в темноту, иначе лента обрывается по краю окна.
+          maskImage: "linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent)",
+          WebkitMaskImage: "linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent)",
+        }}>
+          <div style={{
+            display: "flex", gap: 8, alignItems: "center", height: "100%",
+            // Кривая почти без разгона и с долгим выбегом — это и читается
+            // как «замедляется и останавливается».
+            animation: "rollStrip 2800ms cubic-bezier(0.11, 0.75, 0.1, 1) both",
+            ["--roll-to"]: `-${ROLL_WIN_INDEX * (ROLL_ITEM + 8) - (300 - ROLL_ITEM) / 2}px`,
+          }}>
+            {лента.map((это, i) => (
+              <div key={i} style={{
+                width: ROLL_ITEM, height: ROLL_ITEM, flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                borderRadius: 14, background: T.surface, border: `1px solid ${T.line}`,
+                position: "relative", overflow: "hidden",
+              }}>
+                {это.kind === "frame" ? (
+                  <AvatarFrame frameId={это.id} size={ROLL_ITEM - 20}>
+                    <div style={{ width: "100%", height: "100%", background: T.bg }} />
+                  </AvatarFrame>
+                ) : (
+                  <ProfileCardBg cardId={это.id} height={ROLL_ITEM} radius={14} />
+                )}
+              </div>
+            ))}
+          </div>
+          {/* Указатель по центру: без него непонятно, на чём лента встала. */}
+          <div style={{
+            position: "absolute", left: "50%", top: 0, bottom: 0, width: 2,
+            transform: "translateX(-50%)", background: T.electric,
+            boxShadow: `0 0 12px ${T.electric}`,
+          }} />
+        </div>
+      )}
 
       {/* Подпись появляется вместе с призом, иначе выдаёт его заранее. */}
       <div style={{ minHeight: 88, marginTop: 22, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start" }}>
