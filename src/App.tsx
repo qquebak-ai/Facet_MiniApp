@@ -1084,7 +1084,7 @@ function GlobalStyle() {
         to   { transform: translate3d(-50%, 0, 0); }
       }
       @keyframes moltenBreath {
-        0%, 100% { opacity: 0.55; }
+        0%, 100% { opacity: 0.72; }
         50%      { opacity: 1; }
       }
       /* Уголёк и токсик: частица отрывается от кольца и уходит наружу,
@@ -4821,6 +4821,25 @@ const AVATAR_FRAMES = [
   },
 ];
 
+/* Плиты корки для карточки «Магма». Выложены руками в сетке 100×100 и
+   занимают только низ: карточка — фон под аватаркой, ником и описанием,
+   и середина обязана оставаться пустой. Первый заход раскидывал плиты по
+   всей высоте плюс отдельные обломки сверху — они висели над ником
+   четырёхугольниками ни к селу ни к городу.
+
+   Верхний край полосы неровный: ровная линия горизонта выдала бы, что
+   это не порода, а сетка. */
+const MAGMA_PLATES = [
+  { p: [[0, 72], [16, 62], [34, 70], [28, 84], [2, 86]], лаг: 0 },
+  { p: [[16, 62], [40, 58], [52, 70], [34, 70]], лаг: 0.7 },
+  { p: [[40, 58], [64, 60], [72, 72], [52, 70]], лаг: 1.4 },
+  { p: [[64, 60], [86, 58], [100, 66], [100, 78], [72, 72]], лаг: 2.1 },
+  { p: [[2, 86], [28, 84], [24, 100], [0, 100]], лаг: 2.8 },
+  { p: [[28, 84], [34, 70], [52, 70], [58, 86], [46, 100], [24, 100]], лаг: 0.4 },
+  { p: [[52, 70], [72, 72], [84, 84], [74, 100], [46, 100], [58, 86]], лаг: 1.1 },
+  { p: [[72, 72], [100, 78], [100, 100], [74, 100], [84, 84]], лаг: 1.8 },
+];
+
 const PROFILE_CARDS = [
   { id: "none", label: { RU: "Без карточки", EN: "No card" } },
   {
@@ -4854,13 +4873,14 @@ const PROFILE_CARDS = [
     floor: true, grid: "rgba(255,255,255,0.16)",
   },
   {
-    // Треснувшая корка: тёмная плита, а по ней ломаные светящиеся швы.
-    // Рисуется теми же средствами, что кейс и рамки, — тонкая линия на
-    // тёмном. Пробовал вещество из шума: получалось убедительно, но
-    // походило на фотографию лавы и выпадало из всего остального.
+    // Корка из плит: тёмные грани с раскалёнными швами между ними —
+    // тот же приём, что у кейса, только развёрнутый на всю карточку.
+    // Рисунок не случайный: плиты выложены руками, низ забит породой,
+    // верх оставлен пустым под аватарку и ник. Случайная сетка трещин
+    // получалась паутиной поверх текста.
     id: "magmaCard", label: { RU: "Магма", EN: "Magma" }, price: 380,
-    base: "linear-gradient(180deg, rgba(255,61,0,0.26) 0%, rgba(122,27,0,0.14) 48%, rgba(0,0,0,0) 100%)",
-    cracks: { count: 11, color: "#FF3D00", hot: "#FFB061" },
+    base: "linear-gradient(180deg, rgba(122,27,0,0.14) 0%, rgba(255,61,0,0.10) 55%, rgba(255,61,0,0.20) 100%)",
+    crust: { seam: "#FF6B35", hot: "#FFD9A0", deep: "#12060A" },
     rise: 9, riseColor: "#FFB061",
   },
   {
@@ -5957,43 +5977,6 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
       opacity: 0.45 + rnd() * 0.45, dur: 9 + rnd() * 9, delay: -rnd() * 14,
     }));
   }, [cardId]);
-  /* Швы треснувшей корки. Ломаная строится один раз от самого предмета:
-     пересчитывай её на каждой перерисовке — рисунок прыгал бы. Идут
-     сверху вниз с уводом вбок, у части есть отросток — прямая линия
-     читается как царапина, а не как разлом. */
-  const cracks = useMemo(() => {
-    if (!c.cracks) return [];
-    const rnd = seededRand(hashSeed(`${cardId}-cracks`));
-    return Array.from({ length: c.cracks.count }, () => {
-      // Разлом начинается где угодно и уходит недалеко: длинная линия
-      // через всю карточку читается ниткой, а не трещиной. Углы резкие,
-      // шаг короткий — плита колется, а не рвётся.
-      let x = 4 + rnd() * 92;
-      let y = 4 + rnd() * 92;
-      const точки = [[x, y]];
-      const шагов = 3 + Math.floor(rnd() * 3);
-      let курс = rnd() * Math.PI * 2;
-      for (let k = 0; k < шагов; k++) {
-        курс += (rnd() - 0.5) * 1.9; // излом на каждом шаге
-        const шаг = 7 + rnd() * 13;
-        x += Math.cos(курс) * шаг;
-        y += Math.sin(курс) * шаг;
-        точки.push([x, y]);
-      }
-      const с = точки[1 + Math.floor(rnd() * (точки.length - 2))];
-      const ветка = rnd() > 0.35
-        ? [с, [с[0] + (rnd() - 0.5) * 26, с[1] + (rnd() - 0.5) * 26]]
-        : null;
-      const путь = (пп) => пп.map(([a, b], k) => `${k ? "L" : "M"}${a.toFixed(1)},${b.toFixed(1)}`).join(" ");
-      return {
-        d: путь(точки),
-        branch: ветка ? путь(ветка) : null,
-        dur: 3.4 + rnd() * 3.6,
-        delay: -rnd() * 6,
-        width: 0.6 + rnd() * 0.6,
-      };
-    });
-  }, [cardId]);
   const beams = useMemo(() => {
     const rnd = seededRand(hashSeed(`${cardId}-beams`));
     return Array.from({ length: c.beams || 0 }, (_, i) => ({
@@ -6059,32 +6042,43 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
         </svg>
       ))}
 
-      {/* Трещины. Тонкая яркая жила поверх широкой тусклой: так шов
-          светится изнутри, а не выглядит нарисованной чертой. Каждая
-          разгорается в свой срок — плита дышит неровно. */}
-      {c.cracks && (
-        <svg
-          width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"
-          style={{ position: "absolute", inset: 0 }} aria-hidden
-        >
-          {cracks.map((к, i) => (
-            <g key={`cr${i}`} style={{ animation: `moltenBreath ${к.dur}s ease-in-out ${к.delay}s infinite` }}>
-              <path d={к.d} fill="none" stroke={c.cracks.color} strokeWidth={к.width * 4}
-                strokeLinecap="round" strokeLinejoin="round" opacity="0.55"
-                style={{ filter: "blur(2.5px)" }} vectorEffect="non-scaling-stroke" />
-              <path d={к.d} fill="none" stroke={c.cracks.hot} strokeWidth={к.width}
-                strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-              {к.branch && (
-                <>
-                  <path d={к.branch} fill="none" stroke={c.cracks.color} strokeWidth={к.width * 2.2}
-                    strokeLinecap="round" opacity="0.3" style={{ filter: "blur(2px)" }} vectorEffect="non-scaling-stroke" />
-                  <path d={к.branch} fill="none" stroke={c.cracks.hot} strokeWidth={к.width * 0.7}
-                    strokeLinecap="round" opacity="0.85" vectorEffect="non-scaling-stroke" />
-                </>
-              )}
-            </g>
-          ))}
-        </svg>
+      {/* Корка. Плиты залиты почти чёрным, светятся только швы между
+          ними — как грани кейса. Под коркой ровное зарево: без него
+          швы висят в пустоте и читаются чертежом. */}
+      {c.crust && (
+        <>
+          <div style={{
+            position: "absolute", left: "-10%", right: "-10%", bottom: "-12%", height: "46%",
+            background: `radial-gradient(60% 100% at 50% 100%, ${hexA(c.crust.seam, 0.5)} 0%, ${hexA(c.crust.seam, 0.16)} 45%, transparent 72%)`,
+            filter: "blur(10px)",
+            animation: "moltenBreath 6.5s ease-in-out infinite",
+          }} />
+          <svg
+            width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"
+            style={{ position: "absolute", inset: 0 }} aria-hidden
+          >
+            {MAGMA_PLATES.map((пл, i) => (
+              <g key={`pl${i}`} style={{
+                animation: `moltenBreath ${5.5 + (i % 4) * 1.4}s ease-in-out ${-пл.лаг}s infinite`,
+              }}>
+                <polygon
+                  points={пл.p.map(([x, y]) => `${x},${y}`).join(" ")}
+                  fill={c.crust.deep} fillOpacity="0.85"
+                  stroke={c.crust.seam} strokeWidth="1.6" strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                  style={{ filter: `drop-shadow(0 0 6px ${hexA(c.crust.seam, 0.95)})` }}
+                />
+                {/* Раскалённая жила по шву — тоньше и светлее обводки:
+                    от этого шов светится изнутри, а не обведён. */}
+                <polygon
+                  points={пл.p.map(([x, y]) => `${x},${y}`).join(" ")}
+                  fill="none" stroke={c.crust.hot} strokeWidth="0.7"
+                  strokeLinejoin="round" opacity="0.9" vectorEffect="non-scaling-stroke"
+                />
+              </g>
+            ))}
+          </svg>
+        </>
       )}
 
       {/* Волны: широкие размытые полосы ходят вдоль карточки. Каждая со
