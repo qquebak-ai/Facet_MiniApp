@@ -4,7 +4,7 @@ import {
   Search, Flame, TrendingUp, Clock, Sparkles, ArrowUpRight, ArrowDownRight,
   Wallet, Home as HomeIcon, PlusCircle, User, ChevronLeft, Share2, Star,
   ShieldCheck, ShieldAlert, Globe, Globe2, Send, Twitter, Image as ImageIcon, Upload,
-  Copy, ExternalLink, LogOut, ChevronRight, Rocket, MoreHorizontal, HeartCrack,
+  Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, MoreHorizontal, HeartCrack,
   Settings as SettingsIcon, Lock, Gift, LifeBuoy,
   FileText, CheckCircle2, RefreshCw, X,
   Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown, Bell
@@ -314,6 +314,9 @@ const STR = {
     supportTooLong: "Слишком длинно: не больше 2000 знаков.",
     supportUndelivered: "Поддержка сейчас недоступна — сообщение не отправилось. Попробуй позже.",
     supportTeam: "Поддержка",
+    supportFaqLead: "Может, ответ уже здесь. Если нет — напиши нам.",
+    supportOther: "Другое — написать в поддержку",
+    supportBackToFaq: "Частые вопросы",
     supportYou: "Ты",
     copyLink: "Скопировать ссылку",
     privacyText: "Мы собираем только данные, необходимые для работы приложения: никнейм, адрес кошелька и историю сделок внутри Mintly. Данные не передаются третьим лицам в рекламных целях. Ты можешь удалить аккаунт в любой момент — все локальные данные профиля будут стёрты немедленно.",
@@ -618,6 +621,9 @@ const STR = {
     supportTooLong: "Too long: 2000 characters max.",
     supportUndelivered: "Support is unreachable right now — the message wasn't sent. Try later.",
     supportTeam: "Support",
+    supportFaqLead: "The answer might already be here. If not, write to us.",
+    supportOther: "Something else — message support",
+    supportBackToFaq: "Common questions",
     supportYou: "You",
     copyLink: "Copy link",
     privacyText: "We only collect data needed to run the app: nickname, wallet address, and your trade history within Mintly. Data is never shared with third parties for advertising. You can delete your account at any time — all local profile data is erased immediately.",
@@ -8873,11 +8879,112 @@ function SettingsRow({ label, sub, children }) {
    открыто. Постоянное соединение здесь было бы лишним: переписка со
    службой поддержки — не чат, где важна каждая секунда, а держать канал
    ради одного сообщения в неделю дороже, чем изредка спросить. */
+/* Частые вопросы.
+
+   Большая часть обращений — одни и те же семь вопросов, и ответ на них
+   человеку нужен сейчас, а не через сутки. Поэтому переписка начинается
+   не с пустого поля, а со списка: живой ответ остаётся для того, что
+   сюда не уложилось.
+
+   Числа здесь не выдуманы, а взяты из кода: цена сундука и смены ника —
+   из магазина, порог запуска — из проверки формы, потолок кривой — из
+   параметров контракта. Расходиться им нельзя: человек, которому в
+   поддержке сказали «1500 TON», будет считать по этому числу. */
+const SUPPORT_FAQ = [
+  {
+    id: "launch",
+    q: { RU: "Как запустить свой токен?", EN: "How do I launch a token?" },
+    a: {
+      RU: `Мемпад → «Запустить токен». Нужен аккаунт и подключённый кошелёк TON. В форме — логотип, название, тикер, описание и сумма первой покупки: минимум $${MIN_LAUNCH_USD} в TON, плюс около ${NETWORK_FEE_TON} TON уйдёт на комиссию сети. Токен появляется в сети сразу после подписи в кошельке.`,
+      EN: `Mempad → "Launch token". You need an account and a connected TON wallet. Fill in the logo, name, ticker, description and your first buy: at least $${MIN_LAUNCH_USD} worth of TON, plus about ${NETWORK_FEE_TON} TON for the network fee. The token goes on-chain right after you sign in the wallet.`,
+    },
+  },
+  {
+    id: "fees",
+    q: { RU: "Какие комиссии?", EN: "What are the fees?" },
+    a: {
+      RU: "Площадка берёт 1% с каждой покупки и продажи — контракт удерживает его сам. Отдельно платится комиссия сети TON, она идёт валидаторам, а не нам. Запуск токена бесплатный: платишь только за первую покупку и сеть.",
+      EN: "The platform takes 1% of every buy and sell — the contract withholds it itself. On top of that there's the TON network fee, which goes to validators, not us. Launching is free: you only pay for your first buy and the network.",
+    },
+  },
+  {
+    id: "curve",
+    q: { RU: "Почему цена растёт сама?", EN: "Why does the price move on its own?" },
+    a: {
+      RU: "У каждого токена своя бондинг-кривая — контракт, который сам является второй стороной сделки. Чем больше токенов выкуплено, тем дороже следующий; при продаже — наоборот. Поэтому торговать можно с первой секунды, не дожидаясь, пока кто-то заведёт ликвидность.",
+      EN: "Every token gets its own bonding curve — a contract that is itself the counterparty. The more tokens bought, the pricier the next one; selling moves it back. That's why trading works from the first second, with nobody needing to seed liquidity.",
+    },
+  },
+  {
+    id: "dex",
+    q: { RU: "Когда токен попадёт на биржу?", EN: "When does a token reach an exchange?" },
+    a: {
+      RU: "Когда в кривой наберётся 1500 TON. После этого торговля внутри приложения заканчивается: собранные TON и оставшийся выпуск уходят на биржу и становятся парой для торговли. На экране токена видно, сколько пути пройдено.",
+      EN: "Once the curve collects 1500 TON. Trading inside the app then ends: the collected TON and the remaining supply move to a DEX and become a trading pair. The token screen shows how far along it is.",
+    },
+  },
+  {
+    id: "referral",
+    q: { RU: "Не засчитался друг по ссылке", EN: "My invite didn't count" },
+    a: {
+      RU: `Приглашение засчитывается один раз — за нового человека, который завёл аккаунт, перейдя по твоей ссылке. Если у него уже был аккаунт в Mintly или он открыл приложение не по ссылке, монеты не начислятся. За каждого засчитанного — ${REFERRAL_COINS} монет, счётчик в разделе «Приглашения».`,
+      EN: `An invite counts once — for a new person who created an account after following your link. If they already had a Mintly account, or opened the app without the link, nothing is credited. Each counted invite is ${REFERRAL_COINS} coins; the counter lives in "Referral".`,
+    },
+  },
+  {
+    id: "coins",
+    q: { RU: "Что за монеты и где их тратить?", EN: "What are coins for?" },
+    a: {
+      RU: `Монеты дают за достижения и приглашения. Тратятся в магазине: рамки и карточки профиля, сундук за ${CHEST_PRICE} монет со случайной вещью и смена ника за ${NICKNAME_PRICE}. На токены и TON они не меняются.`,
+      EN: `Coins come from achievements and invites. Spend them in the shop: profile frames and cards, a chest for ${CHEST_PRICE} coins with a random item, and a nickname change for ${NICKNAME_PRICE}. They don't convert to tokens or TON.`,
+    },
+  },
+  {
+    id: "wallet",
+    q: { RU: "Кошелёк не подключается", EN: "The wallet won't connect" },
+    a: {
+      RU: "Проверь, что кошелёк работает в основной сети TON, а не в тестовой — при несовпадении приложение скажет об этом перед подписью. Помогает и обычное: обновить кошелёк, переоткрыть приложение, отключить и подключить заново в разделе «Кошелёк».",
+      EN: "Make sure the wallet is on TON mainnet, not testnet — the app warns about a mismatch before signing. The usual steps help too: update the wallet, reopen the app, disconnect and connect again in \"Wallet\".",
+    },
+  },
+];
+
+/* Одна строка вопроса: нажатие раскрывает ответ. */
+function FaqItem({ item, open, onToggle }) {
+  return (
+    <div style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, borderRadius: 18, overflow: "hidden" }}>
+      <button
+        onClick={onToggle}
+        className="fx-tap w-full flex items-center gap-2"
+        style={{ background: "transparent", border: "none", padding: "12px 14px", textAlign: "left" }}
+      >
+        <span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice, flex: 1 }}>{pickLabel(item.q)}</span>
+        <ChevronDown
+          size={15} color={T.muted}
+          style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: `transform ${EASE}` }}
+        />
+      </button>
+      {open && (
+        <div style={{
+          fontFamily: bodyFont, fontSize: 13.5, lineHeight: 1.5, color: T.muted,
+          padding: "0 14px 13px", animation: "fadeInUp 240ms ease-out both",
+        }}>
+          {pickLabel(item.a)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SupportChat({ accountCreated, showToast }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  // Начинаем с частых вопросов, а не с пустого поля: у большинства вопрос
+  // из списка, и ответ нужен сейчас.
+  const [mode, setMode] = useState("faq");
+  const [openQuestion, setOpenQuestion] = useState(null);
   const дно = useRef(null);
 
   async function load() {
@@ -8899,11 +9006,19 @@ function SupportChat({ accountCreated, showToast }) {
     return () => clearInterval(t);
   }, [accountCreated]);
 
+  /* Если переписка уже начата, человек вернулся за ответом, а не за
+     списком вопросов — открываем её сразу. Срабатывает один раз, на
+     переходе «сообщений не было → появились»: иначе кнопка «Частые
+     вопросы» не работала бы, окно возвращалось бы в переписку. */
+  const естьПереписка = messages.length > 0;
+  useEffect(() => { if (естьПереписка) setMode("chat"); }, [естьПереписка]);
+
   // Показываем последнее сообщение, а не начало переписки: ради него
   // окно и открывают.
   useEffect(() => {
+    if (mode !== "chat") return;
     if (дно.current && дно.current.scrollIntoView) дно.current.scrollIntoView({ block: "nearest" });
-  }, [messages.length]);
+  }, [messages.length, mode]);
 
   async function send() {
     const text = draft.trim();
@@ -8953,9 +9068,45 @@ function SupportChat({ accountCreated, showToast }) {
     );
   }
 
+  if (mode === "faq") {
+    return (
+      <>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, textAlign: "center" }}>
+          {t("supportFaqLead")}
+        </p>
+        <div className="flex flex-col gap-2" style={{ marginTop: 14 }}>
+          {SUPPORT_FAQ.map((item) => (
+            <FaqItem
+              key={item.id}
+              item={item}
+              open={openQuestion === item.id}
+              // Открыт всегда один: раскрытые разом ответы превращают
+              // список в простыню, по которой уже не найти свой вопрос.
+              onToggle={() => setOpenQuestion(openQuestion === item.id ? null : item.id)}
+            />
+          ))}
+        </div>
+        <button
+          onClick={() => setMode("chat")}
+          className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3"
+          style={{ marginTop: 14, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}
+        >
+          <Send size={14} /> {t("supportOther")}
+        </button>
+      </>
+    );
+  }
+
   return (
     <>
-      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, textAlign: "center" }}>
+      <button
+        onClick={() => setMode("faq")}
+        className="fx-tap flex items-center gap-1"
+        style={{ background: "transparent", border: "none", fontFamily: bodyFont, fontSize: 13, color: T.muted, alignSelf: "flex-start" }}
+      >
+        <ChevronLeft size={13} color={T.muted} /> {t("supportBackToFaq")}
+      </button>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, textAlign: "center", marginTop: 8 }}>
         {t("supportDesc")}
       </p>
 
