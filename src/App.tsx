@@ -194,6 +194,9 @@ const STR = {
     mempadLaunchToken: "Запустить токен",
     tickerBought: "купил", tickerSold: "продал",
     sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionWallet: "Кошелёк",
+    statLaunched24: "запусков за сутки",
+    statRaised: "TON в кривых",
+    statGraduated: "вышли на биржу",
     homeAlmostTitle: "Почти на бирже",
     homeAlmostSub: "Ближе всех к выходу на DEX",
     homeAlmostLeft: "осталось {left} TON",
@@ -501,6 +504,9 @@ const STR = {
     mempadLaunchToken: "Launch token",
     tickerBought: "bought", tickerSold: "sold",
     sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionWallet: "Wallet",
+    statLaunched24: "launches today",
+    statRaised: "TON in curves",
+    statGraduated: "reached a DEX",
     homeAlmostTitle: "Almost listed",
     homeAlmostSub: "Closest to hitting a DEX",
     homeAlmostLeft: "{left} TON to go",
@@ -7087,10 +7093,59 @@ function AlmostListed({ tokens = [], onOpen }) {
   );
 }
 
+/* Три числа под приветствием: сколько запущено за сутки, сколько TON
+   лежит в живых кривых и сколько токенов дошло до биржи.
+
+   Считает их база одним вызовом (см. supabase_platform_stats.sql):
+   собранное и вышедшие на биржу хранятся в служебной таблице, закрытой
+   от браузера, а тянуть состояние двух десятков кривых с цепочки ради
+   строки на главной — верный способ упереться в лимиты tonapi.
+
+   Пока не запущено ни одного токена, полоса не показывается вовсе: ряд
+   нулей на главной говорит о месте хуже, чем его отсутствие. */
+function HomeStats() {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.rpc("platform_stats").then(({ data, error }) => {
+      if (cancelled || error || !data) return;
+      setStats(data);
+    }, () => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!stats || !(Number(stats.launched) > 0)) return null;
+
+  const ячейки = [
+    { v: String(stats.launched24 || 0), k: "statLaunched24" },
+    { v: fmtTon(Number(stats.raisedTon) || 0), k: "statRaised" },
+    { v: String(stats.graduated || 0), k: "statGraduated" },
+  ];
+
+  return (
+    <div className="fx-view flex rounded-[22px]" style={{ background: T.surface, border: `1px solid ${T.line}`, padding: "12px 4px" }}>
+      {ячейки.map((с, i) => (
+        <div
+          key={с.k}
+          className="flex-1 flex flex-col items-center text-center"
+          // Разделители между ячейками, а не рамка вокруг каждой: три
+          // отдельные карточки на узком экране читаются как три кнопки.
+          style={{ borderLeft: i ? `1px solid ${T.line}` : "none", padding: "0 6px" }}
+        >
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, lineHeight: 1.1 }}>{с.v}</span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 3, lineHeight: 1.25 }}>{t(с.k)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken }) {
   return (
     <div className="flex flex-col gap-4" style={{ paddingBottom: 12 }}>
       <HomeHero onGoTab={onGoTab} onGoCreate={onGoCreate} />
+      <HomeStats />
       <AlmostListed tokens={curveTokens} onOpen={onOpenToken} />
     </div>
   );
