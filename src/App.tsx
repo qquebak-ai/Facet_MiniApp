@@ -1074,6 +1074,58 @@ function GlobalStyle() {
         62%  { opacity: 0.18; transform: scale(1.006); filter: blur(0.2px); }
         100% { opacity: 0.10; transform: scale(1);     filter: blur(0px); }
       }
+      /* Уголёк и токсик: частица отрывается от кольца и уходит наружу,
+         истончаясь. Путь задаётся переменной --rise у самой частицы —
+         так одни улетают дальше других, и струя не выглядит строем. */
+      @keyframes emberRise {
+        0%   { transform: translateY(0) scale(1); opacity: 0; }
+        12%  { opacity: 1; }
+        70%  { opacity: 0.7; }
+        100% { transform: translateY(calc(var(--rise, 20px) * -1)) scale(0.25); opacity: 0; }
+      }
+      /* Живой огонь не горит ровно. Неровные ступени вместо плавной
+         волны: между ними глаз не успевает угадать следующую. */
+      @keyframes frameFlicker {
+        0%, 100% { opacity: 0.5; }
+        18%      { opacity: 1; }
+        31%      { opacity: 0.62; }
+        47%      { opacity: 0.9; }
+        63%      { opacity: 0.55; }
+        82%      { opacity: 0.85; }
+      }
+      /* Искра слетает с кольца по касательной и гаснет на лету. */
+      @keyframes sparkShoot {
+        0%   { transform: translateX(0) scale(0.6); opacity: 0; }
+        14%  { opacity: 1; }
+        100% { transform: translateX(var(--fly, 18px)) scale(0.15); opacity: 0; }
+      }
+      /* Капля собирается на кольце, срывается и падает. Долгая пауза в
+         начале — капли копятся медленнее, чем падают. */
+      @keyframes dripFall {
+        0%, 62% { transform: translateY(0) scale(0.5); opacity: 0; }
+        68%     { transform: translateY(2px) scale(1); opacity: 0.9; }
+        100%    { transform: translateY(var(--drop, 16px)) scale(0.7); opacity: 0; }
+      }
+      /* Пульс: не ровные круги, а удар сердца — сильная волна, слабая
+         следом, пауза. */
+      @keyframes heartWave {
+        0%   { transform: scale(1); opacity: 0.75; }
+        16%  { transform: scale(1.16); opacity: 0.32; }
+        26%  { transform: scale(1.1); opacity: 0.4; }
+        44%  { transform: scale(1.3); opacity: 0.14; }
+        70%  { transform: scale(1.42); opacity: 0; }
+        100% { transform: scale(1.42); opacity: 0; }
+      }
+      /* Корона затмения: лучи дышат, вытягиваясь наружу. */
+      @keyframes coronaBreath {
+        0%, 100% { transform: scaleY(1); opacity: 0.3; }
+        50%      { transform: scaleY(1.45); opacity: 0.85; }
+      }
+      /* Грани льда вспыхивают вразнобой. */
+      @keyframes frostTwinkle {
+        0%, 100% { opacity: 0.2; }
+        50%      { opacity: 0.95; }
+      }
       /* Лист в полёте: кувыркается вокруг себя и то приближается, то
          уходит вглубь — от этого движение перестаёт быть механическим. */
       @keyframes leafTumble {
@@ -4606,21 +4658,39 @@ function pickLabel(obj) {
 const AVATAR_FRAMES = [
   { id: "none", label: { RU: "Без рамки", EN: "No frame" } },
   {
+    // Не оранжевое кольцо, а тлеющий уголь: жар по кольцу дышит
+    // вразнобой, и с него срываются искры, которые гаснут на лету.
     id: "ember", label: { RU: "Уголёк", EN: "Ember" }, price: 120,
     colors: ["#FF6B35", "#FFC46B", "#FF3D00", "#FF6B35"], spin: 7, glow: "#FF6B35",
+    heat: { color: "#FFC46B", dur: 2.4 },
+    rise: { count: 5, color: "#FF8A3D", dur: 2.8 },
   },
   {
+    // Сияние — не полоса цвета, а занавеси, которые идут одна сквозь
+    // другую. Поэтому поверх кольца ещё два размытых слоя: разные
+    // скорости и встречные направления дают ту самую переливчатость.
     id: "aurora", label: { RU: "Полярное сияние", EN: "Aurora" }, price: 180,
     colors: ["#38D39F", "#2E6BFF", "#B14CFF", "#38D39F"], spin: 11, glow: "#2E6BFF",
+    curtains: [
+      { colors: ["rgba(56,211,159,0)", "#7CE3FF", "rgba(46,107,255,0)", "#B14CFF", "rgba(56,211,159,0)"], dur: 7, blur: 3, opacity: 0.55 },
+      { colors: ["rgba(177,76,255,0)", "#38D39F", "rgba(124,227,255,0)", "#2E6BFF", "rgba(177,76,255,0)"], dur: 17, blur: 5, opacity: 0.4, reverse: true },
+    ],
   },
   {
+    // Металл, а не жёлтая полоска: фаска по внутреннему краю даёт
+    // толщину, а узкий блик, обегающий кольцо, — полировку.
     id: "gold", label: { RU: "Золото", EN: "Gold" }, price: 260,
     colors: ["#7A5B15", "#FFE9A8", "#C9A227", "#FFF6D5", "#7A5B15"], spin: 13, glow: "#FFD86B",
+    metal: { bevel: "#3A2A08", shine: "#FFF6D5", dur: 4.2 },
   },
   {
+    // Лёд — это грани. По кольцу нарастают короткие иглы инея, каждая
+    // вспыхивает в свой черёд: серое кольцо само по себе читалось
+    // просто как металл потусклее.
     id: "ice", label: { RU: "Лёд", EN: "Ice" }, price: 200,
     colors: ["rgba(255,255,255,0.12)", "#FFFFFF", "rgba(255,255,255,0.12)", "#9FD8FF", "rgba(255,255,255,0.12)"],
     spin: 16, glow: "#9FD8FF",
+    frost: { count: 9, color: "#DCF2FF", dur: 3.6 },
   },
   {
     // Не точки по кругу, а настоящая орбита: два наклонённых эллипса,
@@ -4642,13 +4712,21 @@ const AVATAR_FRAMES = [
     },
   },
   {
+    // Были шесть звёздочек, приклеенных к краю, — они и мигали на
+    // месте. Теперь искры срываются с кольца и гаснут на лету, а
+    // звёздочки остались редкой подсветкой.
     id: "spark", label: { RU: "Искры", EN: "Sparks" }, price: 300,
-    colors: ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.4)", "rgba(255,255,255,0.1)"],
-    spin: 24, glow: "#FFFFFF", sparks: 6,
+    colors: ["rgba(255,255,255,0.08)", "#FFFFFF", "rgba(255,255,255,0.25)", "#CFE8FF", "rgba(255,255,255,0.08)"],
+    spin: 24, glow: "#FFFFFF", sparks: 4,
+    burst: { count: 8, color: "#FFFFFF", dur: 1.9 },
   },
   {
+    // Кислота: со дна кольца поднимаются пузыри, а снизу срывается
+    // капля. Без этого рамка была просто зелёной.
     id: "toxic", label: { RU: "Токсик", EN: "Toxic" }, price: 260,
     colors: ["#0F3D2A", "#5BFF9F", "#0F3D2A", "#B6FF3D", "#0F3D2A"], spin: 6, glow: "#5BFF9F",
+    rise: { count: 4, color: "#B6FF3D", dur: 3.4, hollow: true },
+    drip: { count: 2, color: "#5BFF9F", dur: 4.6 },
   },
   // Дальше — рамки со своим устройством, а не просто с другим набором
   // цветов: у каждой добавлен слой, которого нет у остальных.
@@ -4669,7 +4747,10 @@ const AVATAR_FRAMES = [
     // самого кольца, и получается разряд, а не вращение.
     id: "plasma", label: { RU: "Плазма", EN: "Plasma" }, price: 320,
     colors: ["#2A0A3D", "#B14CFF", "#2A0A3D", "#2E6BFF", "#2A0A3D"], spin: 9, glow: "#B14CFF",
+    // Два ряда штрихов навстречу друг другу: один разряд читается как
+    // вращение, встречные — как пробой.
     dashes: { color: "#E6C8FF", dur: 2.8 },
+    dashes2: { color: "#7CB0FF", dur: 1.6, reverse: true },
   },
   {
     // Листья с фона приложения, только облетают аватарку по кругу и
@@ -4687,12 +4768,16 @@ const AVATAR_FRAMES = [
     id: "prism", label: { RU: "Призма", EN: "Prism" }, price: 400,
     colors: ["#FF3D6E", "#FFC46B", "#5BFF9F", "#2E6BFF", "#B14CFF", "#FF3D6E"],
     spin: 15, glow: "#B14CFF", sweep: true,
+    // Расслоение цвета: тот же радужный круг двумя тонкими копиями,
+    // сдвинутыми по фазе, — как свет, разложенный на краях стекла.
+    chroma: [{ dur: 21, opacity: 0.5 }, { dur: 9, opacity: 0.35, reverse: true }],
   },
   {
-    // Кольца расходятся наружу, как круги по воде.
+    // Кольца расходятся наружу — но не мерным метрономом, а ударом
+    // сердца: сильная волна, слабая следом, пауза.
     id: "pulse", label: { RU: "Пульс", EN: "Pulse" }, price: 240,
     colors: ["rgba(56,211,159,0.14)", "#38D39F", "rgba(56,211,159,0.14)"],
-    spin: 18, glow: "#38D39F", waves: 3,
+    spin: 18, glow: "#38D39F", waves: 3, beat: true,
   },
   {
     // Почти чёрное кольцо с одной раскалённой дугой и широким ореолом:
@@ -4700,6 +4785,9 @@ const AVATAR_FRAMES = [
     id: "eclipse", label: { RU: "Затмение", EN: "Eclipse" }, price: 360,
     colors: ["#08080C", "#08080C", "#FFE9A8", "#FF6B35", "#08080C", "#08080C"],
     spin: 24, glow: "#FF9A3D", halo: true,
+    // Корона: лучи по кругу дышат вразнобой, поэтому свет из-за края
+    // виден даже там, где сама раскалённая дуга уже прошла.
+    corona: { count: 14, color: "#FFB061", dur: 4.4 },
   },
 ];
 
@@ -5301,6 +5389,63 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         WebkitMaskImage: ringMask, maskImage: ringMask,
       }} />
 
+      {/* Занавеси сияния: те же цвета, но размытые и на своей скорости,
+          одна навстречу другой. Их наложение и даёт переливы, которых у
+          одного кольца быть не может. */}
+      {(f.curtains || []).map((c, i) => (
+        <div key={`cu${i}`} style={{
+          position: "absolute", inset: 0, borderRadius: "50%",
+          background: `conic-gradient(from ${i * 120}deg, ${c.colors.join(", ")})`,
+          filter: `blur(${c.blur}px)`, opacity: c.opacity,
+          animation: `spin360 ${c.dur}s linear infinite${c.reverse ? " reverse" : ""}`,
+          willChange: "transform", zIndex: 1,
+          WebkitMaskImage: ringMask, maskImage: ringMask,
+        }} />
+      ))}
+
+      {/* Расслоение цвета у призмы. */}
+      {(f.chroma || []).map((c, i) => (
+        <div key={`ch${i}`} style={{
+          // Копии шире самого кольца и смещены наружу: под ним они
+          // просто не видны, а по краю дают цветную кайму, как у стекла.
+          position: "absolute", inset: -ring * (0.7 + i * 0.6), borderRadius: "50%",
+          background: `conic-gradient(from ${i * 60}deg, ${f.colors.join(", ")})`,
+          opacity: c.opacity, filter: `blur(${Math.max(1.5, ring * 0.6)}px)`,
+          animation: `spin360 ${c.dur}s linear infinite${c.reverse ? " reverse" : ""}`,
+          willChange: "transform", zIndex: 0,
+        }} />
+      ))}
+
+      {/* Металл: тёмная фаска по внутреннему краю и узкий блик, который
+          обегает кольцо. Без фаски золото выглядит наклейкой. */}
+      {f.metal && (
+        <>
+          <div style={{
+            position: "absolute", inset: ring * 0.9, borderRadius: "50%",
+            boxShadow: `0 0 0 ${Math.max(1, ring * 0.28)}px ${hexA(f.metal.bevel, 0.85)}`,
+            zIndex: 1,
+          }} />
+          <div style={{
+            position: "absolute", inset: 0, borderRadius: "50%",
+            background: `conic-gradient(from 0deg, transparent 0deg, transparent 300deg, ${hexA(f.metal.shine, 0.9)} 342deg, #fff 352deg, transparent 360deg)`,
+            animation: `spin360 ${f.metal.dur}s linear infinite`,
+            willChange: "transform", zIndex: 1,
+            WebkitMaskImage: ringMask, maskImage: ringMask,
+          }} />
+        </>
+      )}
+
+      {/* Жар уголька: то же кольцо, но ярче и вразнобой мерцающее. */}
+      {f.heat && (
+        <div style={{
+          position: "absolute", inset: 0, borderRadius: "50%",
+          background: `conic-gradient(from 40deg, transparent 0deg, ${hexA(f.heat.color, 0.9)} 60deg, transparent 150deg, ${hexA(f.heat.color, 0.7)} 240deg, transparent 320deg)`,
+          filter: `blur(${Math.max(1, ring * 0.4)}px)`,
+          animation: `frameFlicker ${f.heat.dur}s ease-in-out infinite`,
+          zIndex: 1, WebkitMaskImage: ringMask, maskImage: ringMask,
+        }} />
+      )}
+
       {/* хвост кометы: к голове разгорается, за ней сходит на нет */}
       {f.comet && (
         <div style={{
@@ -5323,6 +5468,22 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
             fill="none" stroke={f.dashes.color} strokeWidth={ring * 0.55} strokeLinecap="round"
             strokeDasharray={`${ring * 0.9} ${ring * 2.4}`} opacity={0.9}
             style={{ filter: `drop-shadow(0 0 ${ring * 1.6}px ${f.dashes.color})` }}
+          />
+        </svg>
+      )}
+
+      {/* Встречный ряд штрихов у плазмы. */}
+      {f.dashes2 && (
+        <svg width={size} height={size} style={{
+          position: "absolute", inset: 0,
+          animation: `spin360 ${f.dashes2.dur}s linear infinite${f.dashes2.reverse ? " reverse" : ""}`,
+          willChange: "transform", zIndex: 1,
+        }} aria-hidden>
+          <circle
+            cx={size / 2} cy={size / 2} r={size / 2 - ring * 1.1}
+            fill="none" stroke={f.dashes2.color} strokeWidth={ring * 0.3} strokeLinecap="round"
+            strokeDasharray={`${ring * 0.5} ${ring * 3.2}`} opacity={0.75}
+            style={{ filter: `drop-shadow(0 0 ${ring}px ${f.dashes2.color})` }}
           />
         </svg>
       )}
@@ -5385,14 +5546,142 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         }} />
       )}
 
-      {/* круги, расходящиеся наружу */}
+      {/* круги, расходящиеся наружу; у «пульса» — ударами сердца */}
       {Array.from({ length: f.waves || 0 }).map((_, i) => (
         <span key={`w${i}`} style={{
           position: "absolute", inset: 0, borderRadius: "50%",
           border: `${Math.max(1, ring * 0.5)}px solid ${hexA(f.glow, 0.55)}`,
-          animation: `frameWave 3s ease-out ${-i * 1}s infinite`, zIndex: 3,
+          animation: f.beat
+            ? `heartWave 2.6s cubic-bezier(0.2,0.8,0.3,1) ${-i * 0.87}s infinite`
+            : `frameWave 3s ease-out ${-i * 1}s infinite`,
+          zIndex: 3,
         }} />
       ))}
+
+      {/* Частицы, срывающиеся с кольца: искры уголька и пузыри кислоты.
+          Каждая стартует в своей точке края и уходит наружу по радиусу —
+          поэтому поворот задаётся до подъёма, а сам подъём идёт по
+          вложенному слою: иначе «вверх» у всех был бы один и тот же. */}
+      {f.rise && Array.from({ length: f.rise.count }).map((_, i) => {
+        const угол = (360 / f.rise.count) * i + (i % 2 ? 18 : 0);
+        const с = Math.max(2, ring * (0.7 + (i % 3) * 0.2));
+        return (
+          <span key={`ri${i}`} style={{
+            position: "absolute", left: "50%", top: "50%", width: 0, height: 0,
+            transform: `rotate(${угол}deg) translateY(${-(size / 2 - ring / 2)}px)`,
+            zIndex: 3,
+          }}>
+            <span style={{
+              display: "block", width: с, height: с, marginLeft: -с / 2, marginTop: -с / 2,
+              borderRadius: "50%",
+              background: f.rise.hollow ? "transparent" : f.rise.color,
+              border: f.rise.hollow ? `1px solid ${f.rise.color}` : "none",
+              boxShadow: `0 0 ${ring * 1.6}px ${hexA(f.rise.color, 0.8)}`,
+              ["--rise"]: `${Math.round(size * (0.16 + (i % 3) * 0.05))}px`,
+              animation: `emberRise ${f.rise.dur + (i % 3) * 0.6}s ease-out ${-i * (f.rise.dur / f.rise.count)}s infinite`,
+            }} />
+          </span>
+        );
+      })}
+
+      {/* Капли: срываются с нижней части кольца и падают. */}
+      {f.drip && Array.from({ length: f.drip.count }).map((_, i) => {
+        const угол = 120 + i * 55;
+        const с = Math.max(2, ring * 0.9);
+        return (
+          <span key={`dr${i}`} style={{
+            position: "absolute", left: "50%", top: "50%", width: 0, height: 0,
+            transform: `rotate(${угол}deg) translateY(${size / 2 - ring / 2}px) rotate(${-угол}deg)`,
+            zIndex: 3,
+          }}>
+            <span style={{
+              display: "block", width: с, height: с * 1.3, marginLeft: -с / 2,
+              borderRadius: "50% 50% 50% 50% / 60% 60% 40% 40%",
+              background: f.drip.color,
+              boxShadow: `0 0 ${ring * 1.4}px ${hexA(f.drip.color, 0.7)}`,
+              ["--drop"]: `${Math.round(size * 0.2)}px`,
+              animation: `dripFall ${f.drip.dur + i * 1.3}s ease-in ${-i * 2.1}s infinite`,
+            }} />
+          </span>
+        );
+      })}
+
+      {/* Искры, слетающие с кольца по касательной. */}
+      {f.burst && Array.from({ length: f.burst.count }).map((_, i) => {
+        const угол = (360 / f.burst.count) * i + 11;
+        const с = Math.max(1.6, ring * 0.62);
+        return (
+          <span key={`bu${i}`} style={{
+            position: "absolute", left: "50%", top: "50%", width: 0, height: 0,
+            // Минус девяносто, а не плюс: с плюсом ось X после поворота
+            // смотрит внутрь, и искры улетали в аватарку.
+            transform: `rotate(${угол}deg) translateY(${-(size / 2 - ring / 2)}px) rotate(${-90 + (i % 2 ? 25 : -25)}deg)`,
+            zIndex: 3,
+          }}>
+            <span style={{
+              // Росчерк вдоль полёта, а не точка: точка на этом размере
+              // читается как соринка, а не как искра.
+              display: "block", width: с * 3, height: с, marginLeft: -с * 1.5, marginTop: -с / 2,
+              borderRadius: с, background: `linear-gradient(90deg, ${hexA(f.burst.color, 0)}, ${f.burst.color})`,
+              boxShadow: `0 0 ${ring * 1.8}px ${hexA(f.burst.color, 0.9)}`,
+              ["--fly"]: `${Math.round(size * (0.16 + (i % 4) * 0.05))}px`,
+              animation: `sparkShoot ${f.burst.dur + (i % 4) * 0.5}s ease-out ${-i * 0.42}s infinite`,
+            }} />
+          </span>
+        );
+      })}
+
+      {/* Иней: короткие иглы по внутреннему краю, вспыхивают вразнобой. */}
+      {f.frost && (
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }} aria-hidden>
+          {Array.from({ length: f.frost.count }).map((_, i) => {
+            // Углы неровные, длины разные: ровный шаг по кругу читается
+            // как деления циферблата, а не как наросший иней.
+            const a = ((360 / f.frost.count) * i + (i % 3) * 7 - 5) * Math.PI / 180;
+            const R = size / 2 - ring * 0.75;
+            const дл = ring * (1.1 + (i % 4) * 0.45);
+            const тчк = (rad, r) => [size / 2 + Math.cos(rad) * r, size / 2 + Math.sin(rad) * r];
+            const [x1, y1] = тчк(a, R);
+            const [x2, y2] = тчк(a, R - дл);
+            // Две ветки под углом от середины иглы — так растёт иней.
+            const [bx1, by1] = тчк(a + 0.3, R - дл * 0.85);
+            const [bx2, by2] = тчк(a - 0.3, R - дл * 0.85);
+            const [сx, сy] = тчк(a, R - дл * 0.45);
+            const толщ = Math.max(0.7, ring * 0.16);
+            return (
+              <g key={i} style={{
+                animation: `frostTwinkle ${f.frost.dur + (i % 4) * 0.8}s ease-in-out ${-i * 0.37}s infinite`,
+              }}>
+                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={f.frost.color} strokeWidth={толщ} strokeLinecap="round" />
+                <line x1={сx} y1={сy} x2={bx1} y2={by1} stroke={f.frost.color} strokeWidth={толщ * 0.7} strokeLinecap="round" opacity="0.75" />
+                <line x1={сx} y1={сy} x2={bx2} y2={by2} stroke={f.frost.color} strokeWidth={толщ * 0.7} strokeLinecap="round" opacity="0.75" />
+              </g>
+            );
+          })}
+        </svg>
+      )}
+
+      {/* Корона затмения: лучи из-за края, дышат вразнобой. */}
+      {f.corona && Array.from({ length: f.corona.count }).map((_, i) => {
+        const угол = (360 / f.corona.count) * i;
+        const дл = ring * (2.2 + (i % 3) * 1.1);
+        return (
+          <span key={`co${i}`} style={{
+            position: "absolute", left: "50%", top: "50%", width: 0, height: 0,
+            transform: `rotate(${угол}deg)`, zIndex: 0,
+          }}>
+            <span style={{
+              display: "block", width: Math.max(1, ring * 0.5), height: дл,
+              marginLeft: -ring * 0.25,
+              marginTop: -(size / 2 + дл - ring * 0.5),
+              transformOrigin: "50% 100%",
+              background: `linear-gradient(to top, ${hexA(f.corona.color, 0.75)}, transparent)`,
+              filter: `blur(${Math.max(0.5, ring * 0.25)}px)`,
+              animation: `coronaBreath ${f.corona.dur + (i % 4) * 0.9}s ease-in-out ${-i * 0.31}s infinite`,
+            }} />
+          </span>
+        );
+      })}
 
       {/* Листопад: лист идёт по кругу, крутится вокруг себя и меняет
           размер — то приближается, то уходит вглубь. Половина листьев
