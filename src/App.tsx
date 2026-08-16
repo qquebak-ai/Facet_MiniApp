@@ -8976,7 +8976,7 @@ function FaqItem({ item, open, onToggle }) {
   );
 }
 
-function SupportChat({ accountCreated, showToast }) {
+function SupportChat({ accountCreated, showToast, onRead }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
@@ -9000,18 +9000,19 @@ function SupportChat({ accountCreated, showToast }) {
   useEffect(() => {
     if (!accountCreated) { setLoading(false); return; }
     load();
-    // Ответы отмечаем прочитанными сразу: окно открыто, человек их видит.
-    supabase.rpc("support_mark_seen").then(() => {}, () => {});
     const t = setInterval(load, 12000);
     return () => clearInterval(t);
   }, [accountCreated]);
 
-  /* Если переписка уже начата, человек вернулся за ответом, а не за
-     списком вопросов — открываем её сразу. Срабатывает один раз, на
-     переходе «сообщений не было → появились»: иначе кнопка «Частые
-     вопросы» не работала бы, окно возвращалось бы в переписку. */
-  const естьПереписка = messages.length > 0;
-  useEffect(() => { if (естьПереписка) setMode("chat"); }, [естьПереписка]);
+  /* Прочитанными ответы становятся при входе в переписку, а не при
+     открытии окна: окно открывается на списке вопросов, и до самих
+     ответов человек может не дойти. Отметь мы их раньше — метка на
+     пункте настроек погасла бы, а ответ так и остался бы непрочитанным. */
+  useEffect(() => {
+    if (mode !== "chat" || !accountCreated) return;
+    supabase.rpc("support_mark_seen").then(() => {}, () => {});
+    if (onRead) onRead();
+  }, [mode, accountCreated]);
 
   // Показываем последнее сообщение, а не начало переписки: ради него
   // окно и открывают.
@@ -9193,7 +9194,7 @@ function SettingsPanel({
   item, onClose, appSettings, onUpdateSetting,
   onOpenEditProfile, profile, showToast,
   onTogglePin, onChangePin, insetBottom = 0, insetTop = 0,
-  accountCreated, onDeleteAccount, userId, inviteCount = 0,
+  accountCreated, onDeleteAccount, userId, inviteCount = 0, onSupportRead,
   notifyPrefs = { buys: true, minTon: 0.05, progress: true }, onUpdateNotify,
 }) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -9386,7 +9387,7 @@ function SettingsPanel({
       );
       break;
     case "support":
-      body = <SupportChat accountCreated={accountCreated} showToast={showToast} />;
+      body = <SupportChat accountCreated={accountCreated} showToast={showToast} onRead={onSupportRead} />;
       break;
     case "privacy":
       body = <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.6, marginTop: 4 }}>{t("privacyText")}</p>;
@@ -12432,6 +12433,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         inviteCount={inviteCount}
         notifyPrefs={notifyPrefs}
         onUpdateNotify={updateNotifyPrefs}
+        onSupportRead={() => setSupportUnread(0)}
       />
       <PinSetupModal
         mode={pinModal ? pinModal.mode : null}
@@ -12544,10 +12546,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onOpenEditProfile={openEditProfile}
               onLogOut={logOutProfile}
               supportUnread={supportUnread}
-              // Точку гасим сразу при открытии: отметку «прочитано» ставит
-              // сама переписка, но ждать до следующего пересчёта — значит
-              // минуту показывать её поверх уже прочитанного.
-              onOpenSetting={(item) => { setSettingsItem(item); if (item.key === "support") setSupportUnread(0); }}
+              onOpenSetting={(item) => setSettingsItem(item)}
               onManageToken={(tok) => setManageToken_(tok)}
               onGoCreate={openCreate}
               onOpenToken={openToken}
