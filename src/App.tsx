@@ -4821,24 +4821,56 @@ const AVATAR_FRAMES = [
   },
 ];
 
-/* Плиты корки для карточки «Магма». Выложены руками в сетке 100×100 и
-   занимают только низ: карточка — фон под аватаркой, ником и описанием,
-   и середина обязана оставаться пустой. Первый заход раскидывал плиты по
-   всей высоте плюс отдельные обломки сверху — они висели над ником
-   четырёхугольниками ни к селу ни к городу.
+/* Поле лавы для карточки «Магма».
+ *
+ * Плиты выкладываются сеткой с перспективой: у горизонта мелкие и
+ * узкие, к низу крупнее и шире. Так рисунок читается поверхностью,
+ * уходящей вдаль, — а не набором линий. Восемь крупных многоугольников
+ * до этого давали ровно то, чего не хотелось: на большой карточке от
+ * плиты видно только пару длинных рёбер.
+ *
+ * Узлы сетки общие у соседних плит, поэтому щелей между ними нет; они
+ * же сдвинуты случайно — иначе поле выглядит кафелем. Разброс считается
+ * один раз от самого предмета, чтобы рисунок не прыгал.
+ */
+function magmaField(seedKey) {
+  const rnd = seededRand(hashSeed(seedKey));
+  const РЯДЫ = 6;
+  const СТОЛБЦЫ = 8;
+  const ГОРИЗОНТ = 56;
+  const узлы = [];
+  for (let r = 0; r <= РЯДЫ; r++) {
+    const t = r / РЯДЫ;
+    // Ряды сгущаются к горизонту: равномерные читаются лестницей.
+    const глубина = Math.pow(t, 1.8);
+    const y = ГОРИЗОНТ + (104 - ГОРИЗОНТ) * глубина;
+    // Чем ближе, тем шире расходятся столбцы — это и даёт перспективу.
+    const ширина = 46 + 86 * глубина;
+    const шаг = ширина / СТОЛБЦЫ;
+    const ряд = [];
+    for (let c = 0; c <= СТОЛБЦЫ; c++) {
+      const x = 50 + (c / СТОЛБЦЫ - 0.5) * ширина + (rnd() - 0.5) * шаг * 0.5;
+      ряд.push([x, y + (rnd() - 0.5) * (4 + глубина * 7)]);
+    }
+    узлы.push(ряд);
+  }
 
-   Верхний край полосы неровный: ровная линия горизонта выдала бы, что
-   это не порода, а сетка. */
-const MAGMA_PLATES = [
-  { p: [[0, 72], [16, 62], [34, 70], [28, 84], [2, 86]], лаг: 0 },
-  { p: [[16, 62], [40, 58], [52, 70], [34, 70]], лаг: 0.7 },
-  { p: [[40, 58], [64, 60], [72, 72], [52, 70]], лаг: 1.4 },
-  { p: [[64, 60], [86, 58], [100, 66], [100, 78], [72, 72]], лаг: 2.1 },
-  { p: [[2, 86], [28, 84], [24, 100], [0, 100]], лаг: 2.8 },
-  { p: [[28, 84], [34, 70], [52, 70], [58, 86], [46, 100], [24, 100]], лаг: 0.4 },
-  { p: [[52, 70], [72, 72], [84, 84], [74, 100], [46, 100], [58, 86]], лаг: 1.1 },
-  { p: [[72, 72], [100, 78], [100, 100], [74, 100], [84, 84]], лаг: 1.8 },
-];
+  const плиты = [];
+  for (let r = 0; r < РЯДЫ; r++) {
+    for (let c = 0; c < СТОЛБЦЫ; c++) {
+      const углы = [узлы[r][c], узлы[r][c + 1], узлы[r + 1][c + 1], узлы[r + 1][c]];
+      const глубина = (r + 1) / РЯДЫ;
+      плиты.push({
+        d: углы.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ") + " Z",
+        // Ближние плиты горячее: у горизонта порода почти остыла.
+        жар: 0.25 + глубина * 0.75,
+        dur: 4.5 + rnd() * 4,
+        delay: -rnd() * 7,
+      });
+    }
+  }
+  return плиты;
+}
 
 const PROFILE_CARDS = [
   { id: "none", label: { RU: "Без карточки", EN: "No card" } },
@@ -5977,6 +6009,7 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
       opacity: 0.45 + rnd() * 0.45, dur: 9 + rnd() * 9, delay: -rnd() * 14,
     }));
   }, [cardId]);
+  const field = useMemo(() => (c.crust ? magmaField(`${cardId}-field`) : []), [cardId]);
   const beams = useMemo(() => {
     const rnd = seededRand(hashSeed(`${cardId}-beams`));
     return Array.from({ length: c.beams || 0 }, (_, i) => ({
@@ -6042,38 +6075,36 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
         </svg>
       ))}
 
-      {/* Корка. Плиты залиты почти чёрным, светятся только швы между
-          ними — как грани кейса. Под коркой ровное зарево: без него
-          швы висят в пустоте и читаются чертежом. */}
+      {/* Поле лавы: плиты корки уходят к горизонту. Швы между ними —
+          единственное, что светится; сами плиты почти чёрные, как грани
+          кейса. Над горизонтом зарево, иначе поле обрывается в пустоту. */}
       {c.crust && (
         <>
           <div style={{
-            position: "absolute", left: "-10%", right: "-10%", bottom: "-12%", height: "46%",
-            background: `radial-gradient(60% 100% at 50% 100%, ${hexA(c.crust.seam, 0.5)} 0%, ${hexA(c.crust.seam, 0.16)} 45%, transparent 72%)`,
-            filter: "blur(10px)",
-            animation: "moltenBreath 6.5s ease-in-out infinite",
+            position: "absolute", left: "-15%", right: "-15%", bottom: 0, height: "58%",
+            background: `radial-gradient(70% 100% at 50% 92%, ${hexA(c.crust.seam, 0.42)} 0%, ${hexA(c.crust.seam, 0.12)} 48%, transparent 76%)`,
+            filter: "blur(12px)",
+            animation: "moltenBreath 7s ease-in-out infinite",
           }} />
           <svg
             width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"
             style={{ position: "absolute", inset: 0 }} aria-hidden
           >
-            {MAGMA_PLATES.map((пл, i) => (
-              <g key={`pl${i}`} style={{
-                animation: `moltenBreath ${5.5 + (i % 4) * 1.4}s ease-in-out ${-пл.лаг}s infinite`,
-              }}>
-                <polygon
-                  points={пл.p.map(([x, y]) => `${x},${y}`).join(" ")}
-                  fill={c.crust.deep} fillOpacity="0.85"
-                  stroke={c.crust.seam} strokeWidth="1.6" strokeLinejoin="round"
+            {field.map((пл, i) => (
+              <g key={`pl${i}`} style={{ animation: `moltenBreath ${пл.dur}s ease-in-out ${пл.delay}s infinite` }}>
+                <path
+                  d={пл.d} fill={c.crust.deep} fillOpacity="0.88"
+                  stroke={c.crust.seam} strokeOpacity={пл.жар}
+                  strokeWidth={0.7 + пл.жар} strokeLinejoin="round"
                   vectorEffect="non-scaling-stroke"
-                  style={{ filter: `drop-shadow(0 0 6px ${hexA(c.crust.seam, 0.95)})` }}
+                  style={{ filter: `drop-shadow(0 0 ${2 + пл.жар * 4}px ${hexA(c.crust.seam, пл.жар)})` }}
                 />
                 {/* Раскалённая жила по шву — тоньше и светлее обводки:
                     от этого шов светится изнутри, а не обведён. */}
-                <polygon
-                  points={пл.p.map(([x, y]) => `${x},${y}`).join(" ")}
-                  fill="none" stroke={c.crust.hot} strokeWidth="0.7"
-                  strokeLinejoin="round" opacity="0.9" vectorEffect="non-scaling-stroke"
+                <path
+                  d={пл.d} fill="none" stroke={c.crust.hot}
+                  strokeOpacity={пл.жар * 0.8} strokeWidth="0.6"
+                  strokeLinejoin="round" vectorEffect="non-scaling-stroke"
                 />
               </g>
             ))}
