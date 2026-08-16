@@ -4835,12 +4835,13 @@ const AVATAR_FRAMES = [
  */
 function magmaField(seedKey) {
   const rnd = seededRand(hashSeed(seedKey));
-  const РЯДЫ = 8;
+  const РЯДЫ = 7;
   const СТОЛБЦЫ = 9;
-  // Горизонт выведен за верхний край: поле занимает весь фон, а линии
-  // стыка не видно. Кверху плиты мельчают и почти гаснут — там ник и
-  // описание, читаться должны они, а не порода.
-  const ГОРИЗОНТ = -4;
+  // Горизонт держим примерно на середине. Без него поле перестаёт быть
+  // полом: плиты растягиваются по всей высоте и читаются плоской сеткой
+  // на стене — глубина пропадает. Всё, что выше, добирается небом и
+  // заревом, поэтому фон всё равно занят целиком.
+  const ГОРИЗОНТ = 52;
   const узлы = [];
   for (let r = 0; r <= РЯДЫ; r++) {
     const t = r / РЯДЫ;
@@ -4848,7 +4849,7 @@ function magmaField(seedKey) {
     const глубина = Math.pow(t, 1.8);
     const y = ГОРИЗОНТ + (104 - ГОРИЗОНТ) * глубина;
     // Чем ближе, тем шире расходятся столбцы — это и даёт перспективу.
-    const ширина = 34 + 100 * глубина;
+    const ширина = 40 + 96 * глубина;
     const шаг = ширина / СТОЛБЦЫ;
     const ряд = [];
     for (let c = 0; c <= СТОЛБЦЫ; c++) {
@@ -4866,7 +4867,7 @@ function magmaField(seedKey) {
       плиты.push({
         d: углы.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ") + " Z",
         // Ближние плиты горячее: вверху порода остыла до черноты.
-        жар: 0.1 + Math.pow(глубина, 1.4) * 0.9,
+        жар: 0.16 + Math.pow(глубина, 1.3) * 0.84,
         dur: 4.5 + rnd() * 4,
         delay: -rnd() * 7,
       });
@@ -6083,11 +6084,28 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
           кейса. Над горизонтом зарево, иначе поле обрывается в пустоту. */}
       {c.crust && (
         <>
+          {/* Небо над полем: марево от жара, поднимающееся кверху. Без
+              него верх карточки — просто пустота, и рисунок кончается
+              на полпути. */}
           <div style={{
-            position: "absolute", left: "-15%", right: "-15%", bottom: 0, height: "58%",
-            background: `radial-gradient(70% 100% at 50% 92%, ${hexA(c.crust.seam, 0.42)} 0%, ${hexA(c.crust.seam, 0.12)} 48%, transparent 76%)`,
-            filter: "blur(12px)",
+            position: "absolute", left: 0, right: 0, top: 0, height: "56%",
+            background: `linear-gradient(180deg, transparent 0%, ${hexA(c.crust.seam, 0.05)} 45%, ${hexA(c.crust.seam, 0.16)} 100%)`,
+          }} />
+          {/* Зарево на самом горизонте: там, где порода уходит вдаль,
+              свет сливается в полосу — она и продаёт глубину. */}
+          <div style={{
+            position: "absolute", left: "-10%", right: "-10%", top: "52%", height: "22%",
+            transform: "translateY(-50%)",
+            background: `radial-gradient(60% 100% at 50% 50%, ${hexA(c.crust.hot, 0.5)} 0%, ${hexA(c.crust.seam, 0.28)} 30%, transparent 70%)`,
+            filter: "blur(9px)",
             animation: "moltenBreath 7s ease-in-out infinite",
+          }} />
+          {/* Свет снизу: ближние швы горят ярче всего. */}
+          <div style={{
+            position: "absolute", left: "-15%", right: "-15%", bottom: 0, height: "46%",
+            background: `radial-gradient(70% 100% at 50% 100%, ${hexA(c.crust.seam, 0.34)} 0%, transparent 72%)`,
+            filter: "blur(12px)",
+            animation: "moltenBreath 9s ease-in-out -3s infinite",
           }} />
           <svg
             width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"
