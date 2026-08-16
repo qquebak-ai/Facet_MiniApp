@@ -135,6 +135,7 @@ const STR = {
     shopNotEnough: "Не хватает {n} монет — закрой достижение",
     shopBuyFor: "Купить за {n}",
     shopLeftAfter: "Останется после покупки",
+    shopNoItem: "Этой вещи ещё нет в каталоге — напиши в поддержку",
     shopBought: "{name} — куплено и надето",
     shopCoinsHint: "Монеты приходят за достижения и за приглашённых друзей. Тратить их можно только здесь.",
     shopLockedTitle: "Магазин закрыт",
@@ -445,6 +446,7 @@ const STR = {
     shopNotEnough: "{n} coins short — close an achievement",
     shopBuyFor: "Buy for {n}",
     shopLeftAfter: "Left after this",
+    shopNoItem: "This item isn't in the catalogue yet — message support",
     shopBought: "{name} — bought and equipped",
     shopCoinsHint: "Coins come from achievements and invited friends. They're only spent here.",
     shopLockedTitle: "Shop is locked",
@@ -12180,8 +12182,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const { data, error } = await supabase.rpc("shop_buy", { p_kind: kind, p_id: id });
     if (error || !data || data.ok !== true) {
       const code = (data && data.error) || "";
+      // «Нет в каталоге» — не сбой сети, а недостающая строка в прайсе
+      // базы: цену знает она, и без записи покупка невозможна в принципе.
+      // Общее «не удалось сохранить» отправляло искать поломку не там.
+      if (code === "no_item") console.warn("[mintly] нет в таблице cosmetics:", kind, id);
       showToast(code === "not_enough" ? tf("shopNotEnough", { n: data.need || price })
         : code === "already_owned" ? t("cosmeticApplied")
+        : code === "no_item" ? t("shopNoItem")
         : t("saveFailed"));
       if (code === "already_owned") equipCosmetic(kind, id, true);
       return;
