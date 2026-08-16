@@ -4854,19 +4854,13 @@ const PROFILE_CARDS = [
     floor: true, grid: "rgba(255,255,255,0.16)",
   },
   {
-    // Не подложка с цветом, а вещество: свет течёт под застывшей коркой.
-    // Корка — застывший шум, взятый маской; движется под ней светящаяся
-    // подложка. Пересчитывать шум каждый кадр незачем — на глаз то же
-    // самое, а телефон греется.
+    // Треснувшая корка: тёмная плита, а по ней ломаные светящиеся швы.
+    // Рисуется теми же средствами, что кейс и рамки, — тонкая линия на
+    // тёмном. Пробовал вещество из шума: получалось убедительно, но
+    // походило на фотографию лавы и выпадало из всего остального.
     id: "magmaCard", label: { RU: "Магма", EN: "Magma" }, price: 380,
-    base: "radial-gradient(130% 95% at 50% 108%, rgba(255,61,0,0.5) 0%, rgba(122,27,0,0.34) 42%, rgba(0,0,0,0) 76%)",
-    molten: {
-      hot: "#FFE3B0", mid: "#FF6B35", deep: "#7A1B00",
-      layers: [
-        { freq: "0.025 0.055", octaves: 4, seed: 5, dur: 26, opacity: 0.9, cut: 0.58 },
-        { freq: "0.06 0.11", octaves: 3, seed: 23, dur: 17, opacity: 0.45, cut: 0.7, reverse: true },
-      ],
-    },
+    base: "linear-gradient(180deg, rgba(255,61,0,0.26) 0%, rgba(122,27,0,0.14) 48%, rgba(0,0,0,0) 100%)",
+    cracks: { count: 11, color: "#FF3D00", hot: "#FFB061" },
     rise: 9, riseColor: "#FFB061",
   },
   {
@@ -5963,6 +5957,43 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
       opacity: 0.45 + rnd() * 0.45, dur: 9 + rnd() * 9, delay: -rnd() * 14,
     }));
   }, [cardId]);
+  /* Швы треснувшей корки. Ломаная строится один раз от самого предмета:
+     пересчитывай её на каждой перерисовке — рисунок прыгал бы. Идут
+     сверху вниз с уводом вбок, у части есть отросток — прямая линия
+     читается как царапина, а не как разлом. */
+  const cracks = useMemo(() => {
+    if (!c.cracks) return [];
+    const rnd = seededRand(hashSeed(`${cardId}-cracks`));
+    return Array.from({ length: c.cracks.count }, () => {
+      // Разлом начинается где угодно и уходит недалеко: длинная линия
+      // через всю карточку читается ниткой, а не трещиной. Углы резкие,
+      // шаг короткий — плита колется, а не рвётся.
+      let x = 4 + rnd() * 92;
+      let y = 4 + rnd() * 92;
+      const точки = [[x, y]];
+      const шагов = 3 + Math.floor(rnd() * 3);
+      let курс = rnd() * Math.PI * 2;
+      for (let k = 0; k < шагов; k++) {
+        курс += (rnd() - 0.5) * 1.9; // излом на каждом шаге
+        const шаг = 7 + rnd() * 13;
+        x += Math.cos(курс) * шаг;
+        y += Math.sin(курс) * шаг;
+        точки.push([x, y]);
+      }
+      const с = точки[1 + Math.floor(rnd() * (точки.length - 2))];
+      const ветка = rnd() > 0.35
+        ? [с, [с[0] + (rnd() - 0.5) * 26, с[1] + (rnd() - 0.5) * 26]]
+        : null;
+      const путь = (пп) => пп.map(([a, b], k) => `${k ? "L" : "M"}${a.toFixed(1)},${b.toFixed(1)}`).join(" ");
+      return {
+        d: путь(точки),
+        branch: ветка ? путь(ветка) : null,
+        dur: 3.4 + rnd() * 3.6,
+        delay: -rnd() * 6,
+        width: 0.6 + rnd() * 0.6,
+      };
+    });
+  }, [cardId]);
   const beams = useMemo(() => {
     const rnd = seededRand(hashSeed(`${cardId}-beams`));
     return Array.from({ length: c.beams || 0 }, (_, i) => ({
@@ -6028,64 +6059,33 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
         </svg>
       ))}
 
-      {/* Расплав во всю карточку. Корка — застывший шум, взятый маской:
-          где шум светлее порога, там дыра, и сквозь неё виден свет.
-          Движется не шум, а светящаяся подложка под ним — поэтому
-          вещество течёт, а телефон не пересчитывает шум каждый кадр.
-          Слоя два, с разной крупностью и в разные стороны: один читался
-          бы как ползущая текстура. */}
-      {c.molten && c.molten.layers.map((L, i) => {
-        const uid = `cm${i}-${Math.round(height)}`;
-        // Без viewBox: система координат совпадает с точками экрана, и
-        // шум считается в натуральную величину. На растянутой сетке
-        // 100×100 он размывался при увеличении до размера карточки.
-        return (
-          <svg
-            key={uid} width="100%" height="100%"
-            style={{ position: "absolute", inset: 0, opacity: L.opacity, mixBlendMode: i ? "screen" : "normal" }}
-            aria-hidden
-          >
-            <defs>
-              <filter id={`fn-${uid}`} x="0" y="0" width="100%" height="100%">
-                <feTurbulence type="fractalNoise" baseFrequency={L.freq} numOctaves={L.octaves} seed={L.seed} result="n" />
-                {/* Из шума делаем белое с прозрачностью по красному
-                    каналу, а затем режем по порогу крутой прямой. Без
-                    этого края остаются мягкими, и вместо рваных жил по
-                    карточке ползут серые облака. */}
-                <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1 0 0 0 0" />
-                <feComponentTransfer>
-                  <feFuncA type="linear" slope="9" intercept={-9 * L.cut} />
-                </feComponentTransfer>
-              </filter>
-              <mask id={`mk-${uid}`}>
-                <rect x="0" y="0" width="100%" height="100%" fill="#fff" filter={`url(#fn-${uid})`} />
-              </mask>
-              {/* Узкая раскалённая полоса среди тёмного: жила должна
-                  светиться местами, а не гореть по всей длине. */}
-              <linearGradient id={`gm-${uid}`} x1="0" y1="0" x2="1" y2="0.35">
-                <stop offset="0%" stopColor={c.molten.deep} />
-                <stop offset="18%" stopColor={c.molten.deep} />
-                <stop offset="34%" stopColor={c.molten.mid} />
-                <stop offset="44%" stopColor={c.molten.hot} />
-                <stop offset="56%" stopColor={c.molten.mid} />
-                <stop offset="76%" stopColor={c.molten.deep} />
-                <stop offset="100%" stopColor={c.molten.deep} />
-              </linearGradient>
-            </defs>
-            <g mask={`url(#mk-${uid})`}>
-              {/* Подложка вдвое шире карточки и едет на свою ширину —
-                  поэтому свет идёт непрерывно, без стыка. */}
-              <rect
-                x="0" y="0" width="200%" height="100%" fill={`url(#gm-${uid})`}
-                style={{
-                  animation: `moltenDrift ${L.dur}s linear infinite${L.reverse ? " reverse" : ""}`,
-                  willChange: "transform",
-                }}
-              />
+      {/* Трещины. Тонкая яркая жила поверх широкой тусклой: так шов
+          светится изнутри, а не выглядит нарисованной чертой. Каждая
+          разгорается в свой срок — плита дышит неровно. */}
+      {c.cracks && (
+        <svg
+          width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"
+          style={{ position: "absolute", inset: 0 }} aria-hidden
+        >
+          {cracks.map((к, i) => (
+            <g key={`cr${i}`} style={{ animation: `moltenBreath ${к.dur}s ease-in-out ${к.delay}s infinite` }}>
+              <path d={к.d} fill="none" stroke={c.cracks.color} strokeWidth={к.width * 4}
+                strokeLinecap="round" strokeLinejoin="round" opacity="0.55"
+                style={{ filter: "blur(2.5px)" }} vectorEffect="non-scaling-stroke" />
+              <path d={к.d} fill="none" stroke={c.cracks.hot} strokeWidth={к.width}
+                strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+              {к.branch && (
+                <>
+                  <path d={к.branch} fill="none" stroke={c.cracks.color} strokeWidth={к.width * 2.2}
+                    strokeLinecap="round" opacity="0.3" style={{ filter: "blur(2px)" }} vectorEffect="non-scaling-stroke" />
+                  <path d={к.branch} fill="none" stroke={c.cracks.hot} strokeWidth={к.width * 0.7}
+                    strokeLinecap="round" opacity="0.85" vectorEffect="non-scaling-stroke" />
+                </>
+              )}
             </g>
-          </svg>
-        );
-      })}
+          ))}
+        </svg>
+      )}
 
       {/* Волны: широкие размытые полосы ходят вдоль карточки. Каждая со
           своим сроком, поэтому они то расходятся, то накладываются. */}
