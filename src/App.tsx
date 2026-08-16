@@ -1074,6 +1074,17 @@ function GlobalStyle() {
         62%  { opacity: 0.18; transform: scale(1.006); filter: blur(0.2px); }
         100% { opacity: 0.10; transform: scale(1);     filter: blur(0px); }
       }
+      /* Расплав течёт под застывшей коркой: двигается не шум, а сама
+         светящаяся подложка под ним. Пересчитывать шум каждый кадр
+         телефон не обязан — а выглядит одинаково. */
+      @keyframes moltenDrift {
+        from { transform: translate3d(0, 0, 0); }
+        to   { transform: translate3d(-50%, 0, 0); }
+      }
+      @keyframes moltenBreath {
+        0%, 100% { opacity: 0.55; }
+        50%      { opacity: 1; }
+      }
       /* Уголёк и токсик: частица отрывается от кольца и уходит наружу,
          истончаясь. Путь задаётся переменной --rise у самой частицы —
          так одни улетают дальше других, и струя не выглядит строем. */
@@ -4764,6 +4775,23 @@ const AVATAR_FRAMES = [
     leafFall: { count: 6, colors: ["#5BFF9F", "#38D39F", "#9BFFC7"] },
   },
   {
+    // Первая рамка, у которой край — не окружность. Кольцо пропущено
+    // через застывший шум и медленно поворачивается: неровности едут по
+    // краю, и получается язык пламени, а не вращение картинки. Шум
+    // считается один раз — движение даёт поворот, а не пересчёт.
+    id: "magma", label: { RU: "Магма", EN: "Magma" }, price: 460,
+    colors: ["#2A0A00", "#FF3D00", "#FFC46B", "#FF6B35", "#2A0A00"],
+    spin: 34, glow: "#FF5A1F",
+    molten: {
+      hot: "#FFE3B0", mid: "#FF6B35", deep: "#7A1B00",
+      layers: [
+        { scale: 9, dur: 15, width: 7, opacity: 0.95, seed: 3, freq: 0.03 },
+        { scale: 15, dur: 26, width: 3.5, opacity: 0.55, seed: 17, freq: 0.05, reverse: true },
+      ],
+    },
+    rise: { count: 6, color: "#FFB061", dur: 2.6 },
+  },
+  {
     // Радуга по кольцу и белый блик, который проходит по ней насквозь.
     id: "prism", label: { RU: "Призма", EN: "Prism" }, price: 400,
     colors: ["#FF3D6E", "#FFC46B", "#5BFF9F", "#2E6BFF", "#B14CFF", "#FF3D6E"],
@@ -4822,6 +4850,22 @@ const PROFILE_CARDS = [
     id: "sunset", label: { RU: "Закат", EN: "Sunset" }, price: 240,
     base: "linear-gradient(180deg, #FF6B35 0%, #B14CFF 45%, rgba(0,0,0,0) 100%)",
     floor: true, grid: "rgba(255,255,255,0.16)",
+  },
+  {
+    // Не подложка с цветом, а вещество: свет течёт под застывшей коркой.
+    // Корка — застывший шум, взятый маской; движется под ней светящаяся
+    // подложка. Пересчитывать шум каждый кадр незачем — на глаз то же
+    // самое, а телефон греется.
+    id: "magmaCard", label: { RU: "Магма", EN: "Magma" }, price: 380,
+    base: "radial-gradient(130% 95% at 50% 108%, rgba(255,61,0,0.5) 0%, rgba(122,27,0,0.34) 42%, rgba(0,0,0,0) 76%)",
+    molten: {
+      hot: "#FFE3B0", mid: "#FF6B35", deep: "#7A1B00",
+      layers: [
+        { freq: "0.025 0.055", octaves: 4, seed: 5, dur: 26, opacity: 0.9, cut: 0.58 },
+        { freq: "0.06 0.11", octaves: 3, seed: 23, dur: 17, opacity: 0.45, cut: 0.7, reverse: true },
+      ],
+    },
+    rise: 9, riseColor: "#FFB061",
   },
   {
     id: "meteor", label: { RU: "Метеоры", EN: "Meteors" }, price: 220,
@@ -5435,6 +5479,45 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         </>
       )}
 
+      {/* Расплав: неровный, живущий край. Кольцо смещается застывшим
+          шумом, а потом медленно поворачивается вместе с ним — бугры и
+          языки едут по кромке. Пересчитывать шум на каждом кадре не
+          нужно: телефон греется, а на глаз то же самое. */}
+      {f.molten && f.molten.layers.map((L, i) => {
+        // Размер в ключе: у маленьких аватарок своя копия фильтра, иначе
+        // одна и та же деформация выглядела бы то грубой, то незаметной.
+        const uid = `mo${i}-${size}`;
+        return (
+          <svg
+            key={uid} width={size} height={size} viewBox="0 0 100 100"
+            style={{ position: "absolute", inset: 0, zIndex: 1, overflow: "visible", pointerEvents: "none" }}
+            aria-hidden
+          >
+            <defs>
+              <filter id={`f-${uid}`} x="-45%" y="-45%" width="190%" height="190%">
+                <feTurbulence type="fractalNoise" baseFrequency={L.freq} numOctaves="3" seed={L.seed} result="n" />
+                <feDisplacementMap in="SourceGraphic" in2="n" scale={L.scale} xChannelSelector="R" yChannelSelector="G" />
+              </filter>
+              <linearGradient id={`g-${uid}`} x1="0" y1="0" x2="0.8" y2="1">
+                <stop offset="0%" stopColor={f.molten.hot} />
+                <stop offset="38%" stopColor={f.molten.mid} />
+                <stop offset="100%" stopColor={f.molten.deep} />
+              </linearGradient>
+            </defs>
+            <g style={{
+              transformOrigin: "50px 50px",
+              animation: `spin360 ${L.dur}s linear infinite${L.reverse ? " reverse" : ""}`,
+            }}>
+              <circle
+                cx="50" cy="50" r={50 - L.width / 2}
+                fill="none" stroke={`url(#g-${uid})`} strokeWidth={L.width}
+                opacity={L.opacity} filter={`url(#f-${uid})`}
+              />
+            </g>
+          </svg>
+        );
+      })}
+
       {/* Жар уголька: то же кольцо, но ярче и вразнобой мерцающее. */}
       {f.heat && (
         <div style={{
@@ -5942,6 +6025,65 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
           <path d="M5 0 C5.4 3.2 6.8 4.6 10 5 C6.8 5.4 5.4 6.8 5 10 C4.6 6.8 3.2 5.4 0 5 C3.2 4.6 4.6 3.2 5 0 Z" fill="#FFFFFF" />
         </svg>
       ))}
+
+      {/* Расплав во всю карточку. Корка — застывший шум, взятый маской:
+          где шум светлее порога, там дыра, и сквозь неё виден свет.
+          Движется не шум, а светящаяся подложка под ним — поэтому
+          вещество течёт, а телефон не пересчитывает шум каждый кадр.
+          Слоя два, с разной крупностью и в разные стороны: один читался
+          бы как ползущая текстура. */}
+      {c.molten && c.molten.layers.map((L, i) => {
+        const uid = `cm${i}-${Math.round(height)}`;
+        // Без viewBox: система координат совпадает с точками экрана, и
+        // шум считается в натуральную величину. На растянутой сетке
+        // 100×100 он размывался при увеличении до размера карточки.
+        return (
+          <svg
+            key={uid} width="100%" height="100%"
+            style={{ position: "absolute", inset: 0, opacity: L.opacity, mixBlendMode: i ? "screen" : "normal" }}
+            aria-hidden
+          >
+            <defs>
+              <filter id={`fn-${uid}`} x="0" y="0" width="100%" height="100%">
+                <feTurbulence type="fractalNoise" baseFrequency={L.freq} numOctaves={L.octaves} seed={L.seed} result="n" />
+                {/* Из шума делаем белое с прозрачностью по красному
+                    каналу, а затем режем по порогу крутой прямой. Без
+                    этого края остаются мягкими, и вместо рваных жил по
+                    карточке ползут серые облака. */}
+                <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1 0 0 0 0" />
+                <feComponentTransfer>
+                  <feFuncA type="linear" slope="9" intercept={-9 * L.cut} />
+                </feComponentTransfer>
+              </filter>
+              <mask id={`mk-${uid}`}>
+                <rect x="0" y="0" width="100%" height="100%" fill="#fff" filter={`url(#fn-${uid})`} />
+              </mask>
+              {/* Узкая раскалённая полоса среди тёмного: жила должна
+                  светиться местами, а не гореть по всей длине. */}
+              <linearGradient id={`gm-${uid}`} x1="0" y1="0" x2="1" y2="0.35">
+                <stop offset="0%" stopColor={c.molten.deep} />
+                <stop offset="18%" stopColor={c.molten.deep} />
+                <stop offset="34%" stopColor={c.molten.mid} />
+                <stop offset="44%" stopColor={c.molten.hot} />
+                <stop offset="56%" stopColor={c.molten.mid} />
+                <stop offset="76%" stopColor={c.molten.deep} />
+                <stop offset="100%" stopColor={c.molten.deep} />
+              </linearGradient>
+            </defs>
+            <g mask={`url(#mk-${uid})`}>
+              {/* Подложка вдвое шире карточки и едет на свою ширину —
+                  поэтому свет идёт непрерывно, без стыка. */}
+              <rect
+                x="0" y="0" width="200%" height="100%" fill={`url(#gm-${uid})`}
+                style={{
+                  animation: `moltenDrift ${L.dur}s linear infinite${L.reverse ? " reverse" : ""}`,
+                  willChange: "transform",
+                }}
+              />
+            </g>
+          </svg>
+        );
+      })}
 
       {/* Волны: широкие размытые полосы ходят вдоль карточки. Каждая со
           своим сроком, поэтому они то расходятся, то накладываются. */}

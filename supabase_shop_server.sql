@@ -36,6 +36,7 @@ insert into public.cosmetics (kind, id, price) values
   ('frame', 'prism', 400),
   ('frame', 'pulse', 240),
   ('frame', 'eclipse', 360),
+  ('frame', 'magma', 460),
   ('card', 'none', 0),
   ('card', 'grid', 80),
   ('card', 'night', 140),
@@ -48,7 +49,8 @@ insert into public.cosmetics (kind, id, price) values
   ('card', 'sparkCard', 200),
   ('card', 'leafCard', 240),
   ('card', 'beam', 220),
-  ('card', 'holoCard', 300)
+  ('card', 'holoCard', 300),
+  ('card', 'magmaCard', 380)
 on conflict (kind, id) do update set price = excluded.price;
 
 alter table public.cosmetics enable row level security;
