@@ -254,8 +254,6 @@ const STR = {
     buyAmountTooLow: "Минимальная сумма запуска — ${min} (≈{tons} TON)",
     deleteToken: "Удалить токен из списка",
     confirmDelete: "Точно удалить?",
-    clearAllTokens: "Очистить тестнет",
-    tokensCleared: "Токены прежней сети удалены",
     deleteFailedToast: "Не удалось удалить — попробуйте ещё раз",
     tokenCreatedToast: "Токен {name} (${ticker}) создан ✅",
     padClosedTitle: "Мемпад закрыт",
@@ -560,8 +558,6 @@ const STR = {
     buyAmountTooLow: "Minimum launch amount is ${min} (≈{tons} TON)",
     deleteToken: "Delete token from list",
     confirmDelete: "Delete for sure?",
-    clearAllTokens: "Clear testnet",
-    tokensCleared: "Old-network tokens removed",
     deleteFailedToast: "Couldn't delete — try again",
     tokenCreatedToast: "Token {name} (${ticker}) created ✅",
     padClosedTitle: "Memepad closed",
@@ -9922,11 +9918,11 @@ async function uploadAvatarIfNeeded(userId) {
 function ProfileView({
   connected, onOpenConnectModal, showToast,
   accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut,
-  onOpenSetting, onManageToken, onGoCreate, onOpenToken, myTokens = [], onClearAllTokens,
+  onOpenSetting, onManageToken, onGoCreate, onOpenToken, myTokens = [],
   cosmetics: cosmeticsProp = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
   // Достижения считаются в корне: их же показывает магазин и отдельная
   // страница достижений, дублировать запрос незачем.
-  achievements = [], creatorTier = 0, onVerified, supportUnread = 0, oldNetworkTokens = 0,
+  achievements = [], creatorTier = 0, onVerified, supportUnread = 0,
 }) {
   // Подтверждение хранится в профиле, а не только на экране: иначе
   // значок пропадал при первом же обновлении страницы.
@@ -9934,7 +9930,6 @@ function ProfileView({
   useEffect(() => {
     setVerifyStatus((cur) => (profile.verified ? "verified" : cur === "pending" ? "pending" : "none"));
   }, [profile.verified]);
-  const [confirmingClearAll, setConfirmingClearAll] = useState(false);
 
 
 
@@ -10035,21 +10030,6 @@ function ProfileView({
         <div className="mt-5">
           <SectionTitle action={
             <div className="flex items-center gap-3">
-              {/* Токенов прежней сети в списке уже нет — их считает база,
-                  поэтому и кнопка появляется по её счёту, а не по тому,
-                  что видно на экране. */}
-              {onClearAllTokens && oldNetworkTokens > 0 && (
-                confirmingClearAll ? (
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={() => { onClearAllTokens(); setConfirmingClearAll(false); }} className="fx-tap" style={{ fontFamily: bodyFont, fontSize: 12, color: T.down, fontWeight: 600 }}>{t("confirmDelete")}</button>
-                    <button onClick={() => setConfirmingClearAll(false)} className="fx-tap" style={{ fontFamily: bodyFont, fontSize: 12, color: T.muted }}>{t("cancel")}</button>
-                  </div>
-                ) : (
-                  <button onClick={() => setConfirmingClearAll(true)} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 12.5, color: T.down }}>
-                    <Trash2 size={13} /> {t("clearAllTokens")}
-                  </button>
-                )
-              )}
               <button onClick={goCreateToken} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 12.5, color: unlocked ? T.electric : T.muted }}>{unlocked ? <PlusCircle size={13} /> : <Lock size={12} />} {t("myTokensCreate")}</button>
             </div>
           }>{t("myTokensTitle")}</SectionTitle>
@@ -11655,47 +11635,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const { error } = await supabase.from("tokens").delete().eq("id", id);
     if (error) { console.error("[mintly] failed to delete token from Supabase:", error); showToast(t("deleteFailedToast")); if (userId) loadMyTokens(userId); loadCommunityTokens(); }
   }
-  /* Уборка токенов прежней сети.
-
-     После переезда в боевую сеть тестовые токены из ленты пропали: их
-     кривых в этой сети нет, читать у них нечего. Но в базе они остались
-     и мозолят глаза владельцу — здесь он стирает их разом.
-
-     Считаем и удаляем прямо в базе, а не по загруженному списку:
-     загруженного списка этих токенов больше нет. NULL в колонке сети —
-     это самые первые запуски, когда сеть ещё не записывалась; они тоже
-     тестовые. */
-  const [otherNetworkTokens, setOtherNetworkTokens] = useState(0);
-  const ЧУЖАЯ_СЕТЬ = `network.neq.${CURRENT_NETWORK},network.is.null`;
-  useEffect(() => {
-    if (!userId) { setOtherNetworkTokens(0); return; }
-    let cancelled = false;
-    (async () => {
-      const { count } = await supabase
-        .from("tokens")
-        .select("id", { count: "exact", head: true })
-        .eq("owner_id", userId)
-        .or(ЧУЖАЯ_СЕТЬ);
-      if (!cancelled) setOtherNetworkTokens(count || 0);
-    })();
-    return () => { cancelled = true; };
-  }, [userId]);
-
-  async function clearAllMyTokens() {
-    if (!userId || !otherNetworkTokens) return;
-    const { error } = await supabase
-      .from("tokens")
-      .delete()
-      .eq("owner_id", userId)
-      .or(ЧУЖАЯ_СЕТЬ);
-    if (error) {
-      console.error("[mintly] failed to clear old-network tokens:", error);
-      showToast(t("deleteFailedToast"));
-      return;
-    }
-    setOtherNetworkTokens(0);
-    showToast(t("tokensCleared"));
-  }
   // Real per-token holdings — the source of truth for "how much of this
   // token do I actually own", so Sell can never exceed what was actually
   // bought through this app. Purely local (same trust model as myTokens
@@ -12462,8 +12401,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onGoCreate={openCreate}
               onOpenToken={openToken}
               myTokens={myTokens}
-              onClearAllTokens={clearAllMyTokens}
-              oldNetworkTokens={otherNetworkTokens}
               cosmetics={cosmetics}
               onGoShop={() => goTab("shop")}
               onOpenAchievements={() => setView("achievements")}
