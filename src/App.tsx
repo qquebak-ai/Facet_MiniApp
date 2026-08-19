@@ -71,11 +71,6 @@ const WHITE_THEME = {
 
 const THEMES = { Dark: DARK_THEME, White: WHITE_THEME };
 
-// Тёмно-синий за стеклом на главной. В палитре приложения синего нет
-// вовсе — он нужен ровно здесь, как источник света под стеклянными
-// плитами: на чёрном стекло не читается стеклом.
-const HERO_NAVY = "#16255E";
-
 /* hexA(hex, alpha) -> "rgba(r,g,b,alpha)". Lets glow/ring/shadow effects
    that used to be hardcoded to white (e.g. "rgba(255,255,255,0.3)")
    instead track whatever the current theme's accent or ink color is,
@@ -196,7 +191,6 @@ const STR = {
     heroBodyLead: "Создавай, торгуй и расти с ",
     heroBodyTail: " на сделку. Присоединяйся к экосистеме с первого дня.",
     heroFee: "комиссией 1%",
-    heroCta: "Запустить токен",
     mempadSpotlight: "В центре внимания",
     mempadLaunchToken: "Запустить токен",
     tickerBought: "купил", tickerSold: "продал",
@@ -508,7 +502,6 @@ const STR = {
     heroBodyLead: "Create, trade and grow with ",
     heroBodyTail: " per trade. Join the ecosystem from day one.",
     heroFee: "a 1% fee",
-    heroCta: "Launch a token",
     mempadSpotlight: "Spotlight",
     mempadLaunchToken: "Launch token",
     tickerBought: "bought", tickerSold: "sold",
@@ -4323,87 +4316,47 @@ function HomeHero({ onGoTab, onGoCreate }) {
   ];
 
   return (
-    <div className="flex flex-col gap-3" style={{ position: "relative" }}>
-      {/* Тёмно-синее свечение за приветствием. Лежит под стеклом и
-          пробивается сквозь него: без источника света стекло выглядит
-          серой плёнкой, а не стеклом. */}
-      <div style={{
-        position: "absolute", left: "-18%", right: "-18%", top: -60, height: 300,
-        background: `radial-gradient(58% 70% at 30% 30%, ${hexA(HERO_NAVY, 0.75)} 0%, transparent 70%),
-                     radial-gradient(52% 60% at 88% 12%, ${hexA(T.electric, 0.16)} 0%, transparent 68%)`,
-        filter: "blur(6px)", pointerEvents: "none", zIndex: 0,
-      }} />
-
-      {/* Само приветствие — стеклянная плита. Тонкая светлая грань
-          сверху и слева: так падает свет на стекло, и без неё
-          прозрачный прямоугольник читается дырой. */}
-      <div style={{
-        position: "relative", zIndex: 1,
-        borderRadius: 26, padding: "22px 20px 20px",
-        background: `linear-gradient(155deg, ${hexA("#FFFFFF", 0.09)} 0%, ${hexA("#FFFFFF", 0.03)} 42%, ${hexA(HERO_NAVY, 0.28)} 100%)`,
-        backdropFilter: "blur(22px) saturate(1.4)", WebkitBackdropFilter: "blur(22px) saturate(1.4)",
-        border: `1px solid ${hexA("#FFFFFF", 0.14)}`,
-        boxShadow: `0 18px 44px rgba(0,0,0,0.45), inset 0 1px 0 ${hexA("#FFFFFF", 0.22)}`,
-        overflow: "hidden",
-      }}>
-        {/* Блик по верхней кромке — короткий, не во всю ширину: длинный
-            выглядит нарисованной полосой. */}
-        <div style={{
-          position: "absolute", left: "8%", right: "42%", top: 0, height: 1,
-          background: `linear-gradient(90deg, transparent, ${hexA("#FFFFFF", 0.55)}, transparent)`,
-        }} />
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 33, fontWeight: 700, lineHeight: 1.12, letterSpacing: "-0.02em" }}>
+    <div className="flex flex-col gap-4">
+      <div className="relative pt-2 pb-1">
+        {/* Кегли крупнее прежних цифр не случайно: у нынешнего шрифта
+            строчные буквы ниже примерно на седьмую часть при той же
+            высоте прописных, и текст выглядел мельче, чем раньше.
+            Заголовку добавлено меньше — в нём почти одни прописные. */}
+        <div className="relative" style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 700, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
           {t("heroTitle")}
         </div>
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14.5, marginTop: 10, lineHeight: 1.5, maxWidth: 330 }}>
+        <div className="relative" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 15.5, marginTop: 12, lineHeight: 1.55, maxWidth: 330 }}>
           {t("heroBodyLead")}<span className="fx-shine-text" style={{ fontWeight: 600 }}>{t("heroFee")}</span>{t("heroBodyTail")}
         </div>
-        <button
-          onClick={onGoCreate}
-          className="fx-tap flex items-center justify-center gap-2"
-          style={{
-            marginTop: 18, width: "100%", padding: "13px 0", borderRadius: 18,
-            background: `linear-gradient(180deg, ${T.electric} 0%, #E24E14 100%)`,
-            color: PRISM_TEXT, border: "none",
-            fontFamily: displayFont, fontWeight: 700, fontSize: 15.5,
-            boxShadow: `0 10px 26px ${hexA(T.electric, 0.35)}, inset 0 1px 0 ${hexA("#FFFFFF", 0.35)}`,
-          }}
-        >
-          <Rocket size={16} strokeWidth={2.2} /> {t("heroCta")}
-        </button>
       </div>
 
-      {/* Три стеклянные плитки. Прежде это были чёрные кружки — на тёмном
-          фоне от них оставался один значок в пустоте. */}
-      <div className="grid grid-cols-3 gap-2" style={{ position: "relative", zIndex: 1 }}>
-        {actions.map((a) => {
+      <div className="flex items-start justify-around gap-2">
+        {actions.map(a => {
           const isLaunch = a.key === "homeActionLaunch";
           return (
             <button
               key={a.key}
               onClick={a.onClick}
-              className="fx-tap flex flex-col items-center justify-center gap-2"
-              style={{
-                padding: "14px 6px 12px", borderRadius: 20,
-                background: `linear-gradient(160deg, ${hexA("#FFFFFF", 0.08)} 0%, ${hexA(HERO_NAVY, 0.3)} 100%)`,
-                backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
-                border: `1px solid ${hexA("#FFFFFF", 0.1)}`,
-                boxShadow: `0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 ${hexA("#FFFFFF", 0.16)}`,
-                position: "relative", overflow: "hidden",
-              }}
+              className="fx-tap flex flex-col items-center gap-2"
+              style={{ background: "transparent", border: "none" }}
             >
-              <div style={{
-                width: 42, height: 42, borderRadius: 14,
-                background: hexA(T.electric, isLaunch ? 0.18 : 0.1),
-                border: `1px solid ${hexA(T.electric, isLaunch ? 0.5 : 0.28)}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: isLaunch ? `0 0 18px ${hexA(T.electric, 0.35)}` : "none",
-              }}>
-                {isLaunch ? <RocketIconFX /> : <a.icon size={20} strokeWidth={1.8} color={T.electric} />}
+              <div
+                className="fx-card fx-inert"
+                style={{
+                  width: 60, height: 60, borderRadius: "50%",
+                  background: "#000000", border: `1px solid ${T.line}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  position: "relative", overflow: "hidden",
+                }}
+              >
+                <WidgetSparks />
+                {isLaunch ? (
+                  <RocketIconFX />
+                ) : (
+                  <a.icon size={24} strokeWidth={1.6} color={T.turquoise} style={{ position: "relative", zIndex: 1 }} />
+                )}
               </div>
-              <span style={{ fontFamily: bodyFont, fontSize: 12, fontWeight: 500, color: T.ice, textAlign: "center", lineHeight: 1.2 }}>
-                {t(a.key)}
-              </span>
+              <span style={{ fontFamily: bodyFont, fontSize: 12.5, fontWeight: 500, color: T.ice, textAlign: "center", lineHeight: 1.25, maxWidth: 82 }}>{t(a.key)}</span>
             </button>
           );
         })}
@@ -7650,22 +7603,14 @@ function HomeStats() {
   ];
 
   return (
-    <div className="fx-view flex rounded-[22px]" style={{
-      // То же стекло, что у приветствия: иначе полоса выпадает из
-      // экрана плоской плашкой.
-      background: `linear-gradient(160deg, ${hexA("#FFFFFF", 0.07)} 0%, ${hexA(HERO_NAVY, 0.26)} 100%)`,
-      backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
-      border: `1px solid ${hexA("#FFFFFF", 0.1)}`,
-      boxShadow: `0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 ${hexA("#FFFFFF", 0.16)}`,
-      padding: "12px 4px",
-    }}>
+    <div className="fx-view flex rounded-[22px]" style={{ background: T.surface, border: `1px solid ${T.line}`, padding: "12px 4px" }}>
       {ячейки.map((с, i) => (
         <div
           key={с.k}
           className="flex-1 flex flex-col items-center text-center"
           // Разделители между ячейками, а не рамка вокруг каждой: три
           // отдельные карточки на узком экране читаются как три кнопки.
-          style={{ borderLeft: i ? `1px solid ${hexA("#FFFFFF", 0.1)}` : "none", padding: "0 6px" }}
+          style={{ borderLeft: i ? `1px solid ${T.line}` : "none", padding: "0 6px" }}
         >
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 700, lineHeight: 1.1 }}>{с.v}</span>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 3, lineHeight: 1.25 }}>{t(с.k)}</span>
