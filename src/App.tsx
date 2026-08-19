@@ -7204,22 +7204,14 @@ function ChestReveal({ prize, onClose }) {
    бы чужой текст. */
 function glassPane(радиус, { сила = 1 } = {}) {
   return {
-    /* Стекло держится не заливкой, а кромкой и бликом — как у самих
-       листьев. Первый заход был залит белым в десятую долю: за плашкой
-       чаще всего чистая чернота, и матовая плёнка поверх неё давала
-       ровно серый прямоугольник, а не стекло.
-
-       Теперь тело почти прозрачное, а форму задают три вещи: косой блик
-       по верхнему углу, светлая кромка и тонкая линия света по самому
-       верху. Размытие оставлено — когда за плашкой проплывает лист, он
-       уходит в дымку, и это видно. */
-    background: `
-      linear-gradient(118deg, transparent 6%, ${hexA("#FFFFFF", 0.1 * сила)} 17%, transparent 33%),
-      linear-gradient(155deg, ${hexA("#FFFFFF", 0.045 * сила)} 0%, ${hexA("#EAFFF4", 0.022 * сила)} 55%, ${hexA(T.mintGlass, 0.012 * сила)} 100%)`,
+    /* Стекло без бликов: тело почти прозрачное, форму держит одна тонкая
+       кромка. Косой блик и светлая линия по верху отсюда убраны — на
+       мелких плашках они читались не стеклом, а белым свечением. */
+    background: `linear-gradient(155deg, ${hexA("#FFFFFF", 0.04 * сила)} 0%, ${hexA("#EAFFF4", 0.02 * сила)} 55%, ${hexA(T.mintGlass, 0.01 * сила)} 100%)`,
     backdropFilter: "blur(14px) saturate(1.3)",
     WebkitBackdropFilter: "blur(14px) saturate(1.3)",
-    border: `1px solid ${hexA("#DFFFF0", 0.26)}`,
-    boxShadow: `inset 0 1px 0 ${hexA("#FFFFFF", 0.3)}, inset 0 -1px 0 ${hexA("#FFFFFF", 0.05)}, 0 8px 22px rgba(0,0,0,0.5)`,
+    border: `1px solid ${hexA("#DFFFF0", 0.16)}`,
+    boxShadow: "0 8px 22px rgba(0,0,0,0.5)",
     borderRadius: радиус,
   };
 }
@@ -7262,9 +7254,7 @@ function ChestCard({ coins, owned, onOpen }) {
           // оранжевые — заливкой, как раньше, стекло бы перестало быть
           // стеклом.
           border: `1px solid ${hexA(T.electric, canOpen ? 0.6 : 0.2)}`,
-          boxShadow: canOpen
-            ? `inset 0 1px 0 ${hexA("#FFFFFF", 0.24)}, 0 0 20px ${hexA(T.electric, 0.28)}`
-            : `inset 0 1px 0 ${hexA("#FFFFFF", 0.12)}`,
+          boxShadow: canOpen ? `0 0 20px ${hexA(T.electric, 0.28)}` : "none",
           opacity: left > 0 ? 1 : 0.5,
         }}
       >
