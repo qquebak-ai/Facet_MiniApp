@@ -1460,21 +1460,9 @@ const BgLeaf = React.memo(function BgLeaf({ kind, size, flip, seed = 0 }) {
           отличает лист от растения: внутри у него проводка. */}
       <path d={leaf.stem} stroke={T.electric} strokeWidth={1.3} strokeLinecap="round" fill="none" opacity="0.9" />
       {detailed && (
-        <>
-          <g stroke={T.electric} strokeWidth={0.8} strokeLinecap="round" fill="none" opacity="0.75">
-            {leaf.veins.map((v, i) => <path key={i} d={v} />)}
-          </g>
-          {/* Узлы на концах жил. Радиус мелкий: на листе в тридцать
-              точек всё, что крупнее, слипается в кашу. */}
-          <g fill={T.electric} opacity="0.9">
-            {leaf.veins.map((v, i) => {
-              const хвост = v.trim().split(/[ ,]+/).slice(-2).map(Number);
-              return Number.isFinite(хвост[0]) && Number.isFinite(хвост[1])
-                ? <circle key={i} cx={хвост[0]} cy={хвост[1]} r="0.9" />
-                : null;
-            })}
-          </g>
-        </>
+        <g stroke={T.electric} strokeWidth={0.8} strokeLinecap="round" fill="none" opacity="0.75">
+          {leaf.veins.map((v, i) => <path key={i} d={v} />)}
+        </g>
       )}
     </g>
   );
