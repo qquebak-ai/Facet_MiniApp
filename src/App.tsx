@@ -7195,17 +7195,38 @@ function ChestReveal({ prize, onClose }) {
 
 /* Карточка сундука в магазине. Показывает цену и сколько вещей ещё не
    куплено: без этого непонятно, есть ли смысл открывать. */
+/* Стекло — тот же приём, что у фоновых листьев: мятная плёнка, светлее
+   у верхней грани, куда падает свет, тонкая светлая кромка и оранжевое
+   только линиями, как жилы-схема внутри листа.
+
+   Размытие здесь не украшение: и счётчик, и сундук висят над витриной,
+   под ними проезжают карточки, и через просто прозрачную плёнку читался
+   бы чужой текст. */
+function glassPane(радиус, { сила = 1 } = {}) {
+  return {
+    background: `linear-gradient(155deg, ${hexA("#FFFFFF", 0.1 * сила)} 0%, ${hexA(T.mintGlass, 0.07 * сила)} 45%, ${hexA(T.mintGlass, 0.03 * сила)} 100%)`,
+    backdropFilter: "blur(14px) saturate(1.3)",
+    WebkitBackdropFilter: "blur(14px) saturate(1.3)",
+    border: `1px solid ${hexA("#DFFFF0", 0.22)}`,
+    boxShadow: `inset 0 1px 0 ${hexA("#FFFFFF", 0.24)}, 0 8px 22px rgba(0,0,0,0.45)`,
+    borderRadius: радиус,
+  };
+}
+
 function ChestCard({ coins, owned, onOpen }) {
   const left = chestPool(owned).length;
   const canOpen = left > 0 && coins >= CHEST_PRICE;
   return (
     <div
-      className="fx-card rounded-[22px] p-4 flex items-center gap-3"
-      style={{ background: T.surface, border: `1px solid ${hexA(T.electric, 0.35)}` }}
+      className="fx-card p-4 flex items-center gap-3"
+      style={glassPane(22)}
     >
       <div style={{
-        width: 46, height: 46, borderRadius: 14, flexShrink: 0,
-        background: hexA(T.electric, 0.12), border: `1px solid ${hexA(T.electric, 0.4)}`,
+        width: 46, height: 46, flexShrink: 0,
+        ...glassPane(14, { сила: 1.6 }),
+        // Оранжевый — только обводкой и значком: на листьях он тоже
+        // живёт линиями, а не заливкой.
+        border: `1px solid ${hexA(T.electric, 0.45)}`,
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         <Gift size={22} color={T.electric} />
@@ -7225,16 +7246,21 @@ function ChestCard({ coins, owned, onOpen }) {
         className="fx-tap flex items-center gap-1.5 rounded-full"
         style={{
           flexShrink: 0, padding: "9px 14px",
-          background: canOpen ? PRISM : T.surfaceHi,
-          border: canOpen ? "none" : `1px solid ${T.line}`,
-          boxShadow: canOpen ? `0 0 18px ${hexA(T.electric, 0.35)}` : "none",
+          ...glassPane(999, { сила: 1.4 }),
+          // Цена остаётся действием, поэтому кромка и свечение у неё
+          // оранжевые — заливкой, как раньше, стекло бы перестало быть
+          // стеклом.
+          border: `1px solid ${hexA(T.electric, canOpen ? 0.6 : 0.2)}`,
+          boxShadow: canOpen
+            ? `inset 0 1px 0 ${hexA("#FFFFFF", 0.24)}, 0 0 20px ${hexA(T.electric, 0.28)}`
+            : `inset 0 1px 0 ${hexA("#FFFFFF", 0.12)}`,
           opacity: left > 0 ? 1 : 0.5,
         }}
       >
-        <CoinIcon size={17} tone={canOpen ? PRISM_TEXT : T.muted} />
+        <CoinIcon size={17} tone={canOpen ? T.electric : T.muted} />
         <span style={{
           fontFamily: displayFont, fontWeight: 700, fontSize: 16,
-          color: canOpen ? PRISM_TEXT : T.muted, letterSpacing: "-0.01em",
+          color: canOpen ? T.electric : T.muted, letterSpacing: "-0.01em",
         }}>
           {CHEST_PRICE}
         </span>
@@ -7325,8 +7351,11 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, onOpenChest, achiev
       <div style={{ position: "sticky", top: 4, zIndex: 5, alignSelf: "flex-end", marginTop: -59 }}>
         <button
           onClick={onOpenAchievements}
-          className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5"
-          style={{ background: T.surface, border: `1px solid ${hexA(T.electric, 0.45)}`, boxShadow: `0 6px 18px ${hexA(T.bg, 0.85)}` }}
+          className="fx-tap flex items-center gap-1.5 px-3 py-1.5"
+          style={{
+            ...glassPane(999, { сила: 1.4 }),
+            border: `1px solid ${hexA(T.electric, 0.45)}`,
+          }}
         >
           <CoinIcon size={15} />
           <span style={{ fontFamily: monoFont, fontSize: 14.5, fontWeight: 700, color: T.electric }}>{coins}</span>
