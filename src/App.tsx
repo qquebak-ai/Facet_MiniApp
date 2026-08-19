@@ -1090,8 +1090,8 @@ function GlobalStyle() {
       /* Огни боке медленно плывут и дышат — стоячие пятна выдают
          градиент, наклеенный на фон. */
       @keyframes bokehDrift {
-        from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.55; }
-        to   { transform: translate3d(14px, -22px, 0) scale(1.16); opacity: 1; }
+        from { transform: translate3d(0, 0, 0); opacity: 0.5; }
+        to   { transform: translate3d(16px, -26px, 0); opacity: 1; }
       }
       @keyframes moltenDrift {
         from { transform: translate3d(0, 0, 0); }
@@ -1525,10 +1525,10 @@ function CyberGrid({ showStars = true }) {
      от содержимого. */
   const bokeh = useMemo(() => {
     const rnd = seededRand(4711);
-    return Array.from({ length: 14 }, (_, i) => ({
+    return Array.from({ length: 7 }, (_, i) => ({
       left: rnd() * 100,
       top: rnd() * 100,
-      size: 60 + rnd() * 170,
+      size: 120 + rnd() * 200,
       // Оранжевых меньше, чем мятных: оранжевый — акцент приложения, и
       // в фоне его должно быть ровно столько, чтобы он не спорил с
       // кнопками.
@@ -1546,8 +1546,15 @@ function CyberGrid({ showStars = true }) {
           position: "absolute", left: `${b.left}%`, top: `${b.top}%`,
           width: b.size, height: b.size, marginLeft: -b.size / 2, marginTop: -b.size / 2,
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${hexA(b.warm ? T.electric : T.mintGlass, b.opacity)} 0%, ${hexA(b.warm ? T.electric : T.mintGlass, b.opacity * 0.35)} 42%, transparent 70%)`,
-          filter: `blur(${Math.round(b.size / 7)}px)`,
+          // Мягкость даёт сам градиент, а не filter: blur. Размытие
+          // заставляло браузер пересобирать каждое пятно на каждом
+          // кадре — четырнадцать таких пятен съедали по одиннадцать
+          // миллисекунд, и нажатия по нижнему меню начинали теряться.
+          background: `radial-gradient(circle,
+            ${hexA(b.warm ? T.electric : T.mintGlass, b.opacity)} 0%,
+            ${hexA(b.warm ? T.electric : T.mintGlass, b.opacity * 0.6)} 30%,
+            ${hexA(b.warm ? T.electric : T.mintGlass, b.opacity * 0.22)} 55%,
+            transparent 78%)`,
           animation: `bokehDrift ${b.dur}s ease-in-out ${b.delay}s infinite alternate`,
         }} />
       ))}
@@ -5525,6 +5532,14 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
     return <div style={{ position: "relative", width: size, height: size }}>{inner}</div>;
   }
 
+  /* На витрине рамка рисуется в 62 точки, в комментариях — в 36. Вся
+     мелочь там не различима, но продолжает считаться: полтора десятка
+     вещей на экране давали полторы сотни одновременных анимаций, и
+     нажатия по нижнему меню начинали теряться. У мелких копий оставляем
+     столько частиц, чтобы приём читался, — на глаз то же самое. */
+  const крупно = size >= 84;
+  const мало = (n, предел) => (крупно ? n : Math.min(n || 0, предел));
+
   const orbitR = size / 2 + ring * 1.5;
   // Кольцо вырезано маской: в середине у него просто нет пикселей.
   // Одной чёрной серединой поверх обойтись не вышло — на телефоне у
@@ -5556,7 +5571,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
       {/* Занавеси сияния: те же цвета, но размытые и на своей скорости,
           одна навстречу другой. Их наложение и даёт переливы, которых у
           одного кольца быть не может. */}
-      {(f.curtains || []).map((c, i) => (
+      {(крупно ? (f.curtains || []) : (f.curtains || []).slice(0, 1)).map((c, i) => (
         <div key={`cu${i}`} style={{
           position: "absolute", inset: 0, borderRadius: "50%",
           background: `conic-gradient(from ${i * 120}deg, ${c.colors.join(", ")})`,
@@ -5568,7 +5583,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
       ))}
 
       {/* Расслоение цвета у призмы. */}
-      {(f.chroma || []).map((c, i) => (
+      {(крупно ? (f.chroma || []) : (f.chroma || []).slice(0, 1)).map((c, i) => (
         <div key={`ch${i}`} style={{
           // Копии шире самого кольца и смещены наружу: под ним они
           // просто не видны, а по краю дают цветную кайму, как у стекла.
@@ -5603,7 +5618,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
           шумом, а потом медленно поворачивается вместе с ним — бугры и
           языки едут по кромке. Пересчитывать шум на каждом кадре не
           нужно: телефон греется, а на глаз то же самое. */}
-      {f.molten && f.molten.layers.map((L, i) => {
+      {f.molten && (крупно ? f.molten.layers : f.molten.layers.slice(0, 1)).map((L, i) => {
         // Размер в ключе: у маленьких аватарок своя копия фильтра, иначе
         // одна и та же деформация выглядела бы то грубой, то незаметной.
         const uid = `mo${i}-${size}`;
@@ -5721,7 +5736,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
 
       {/* Искры, отстающие от головы кометы: каждая идёт по тому же
           кругу, но с задержкой — и гаснет, не догнав. */}
-      {f.comet && Array.from({ length: f.comet.embers || 0 }).map((_, i) => {
+      {f.comet && Array.from({ length: мало(f.comet.embers || 0, 2) }).map((_, i) => {
         const отставание = (i + 1) * 0.055;
         const с = ring * (1.1 - i * 0.12);
         return (
@@ -5750,7 +5765,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
       )}
 
       {/* круги, расходящиеся наружу; у «пульса» — ударами сердца */}
-      {Array.from({ length: f.waves || 0 }).map((_, i) => (
+      {Array.from({ length: мало(f.waves || 0, 2) }).map((_, i) => (
         <span key={`w${i}`} style={{
           position: "absolute", inset: 0, borderRadius: "50%",
           border: `${Math.max(1, ring * 0.5)}px solid ${hexA(f.glow, 0.55)}`,
@@ -5765,7 +5780,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
           Каждая стартует в своей точке края и уходит наружу по радиусу —
           поэтому поворот задаётся до подъёма, а сам подъём идёт по
           вложенному слою: иначе «вверх» у всех был бы один и тот же. */}
-      {f.rise && Array.from({ length: f.rise.count }).map((_, i) => {
+      {f.rise && Array.from({ length: мало(f.rise.count, 2) }).map((_, i) => {
         const угол = (360 / f.rise.count) * i + (i % 2 ? 18 : 0);
         const с = Math.max(2, ring * (0.7 + (i % 3) * 0.2));
         return (
@@ -5788,7 +5803,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
       })}
 
       {/* Капли: срываются с нижней части кольца и падают. */}
-      {f.drip && Array.from({ length: f.drip.count }).map((_, i) => {
+      {f.drip && Array.from({ length: мало(f.drip.count, 1) }).map((_, i) => {
         const угол = 120 + i * 55;
         const с = Math.max(2, ring * 0.9);
         return (
@@ -5810,7 +5825,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
       })}
 
       {/* Искры, слетающие с кольца по касательной. */}
-      {f.burst && Array.from({ length: f.burst.count }).map((_, i) => {
+      {f.burst && Array.from({ length: мало(f.burst.count, 3) }).map((_, i) => {
         const угол = (360 / f.burst.count) * i + 11;
         const с = Math.max(1.6, ring * 0.62);
         return (
@@ -5837,7 +5852,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
       {/* Иней: короткие иглы по внутреннему краю, вспыхивают вразнобой. */}
       {f.frost && (
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }} aria-hidden>
-          {Array.from({ length: f.frost.count }).map((_, i) => {
+          {Array.from({ length: мало(f.frost.count, 4) }).map((_, i) => {
             // Углы неровные, длины разные: ровный шаг по кругу читается
             // как деления циферблата, а не как наросший иней.
             const a = ((360 / f.frost.count) * i + (i % 3) * 7 - 5) * Math.PI / 180;
@@ -5865,7 +5880,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
       )}
 
       {/* Корона затмения: лучи из-за края, дышат вразнобой. */}
-      {f.corona && Array.from({ length: f.corona.count }).map((_, i) => {
+      {f.corona && Array.from({ length: мало(f.corona.count, 5) }).map((_, i) => {
         const угол = (360 / f.corona.count) * i;
         const дл = ring * (2.2 + (i % 3) * 1.1);
         return (
@@ -5889,7 +5904,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
       {/* Листопад: лист идёт по кругу, крутится вокруг себя и меняет
           размер — то приближается, то уходит вглубь. Половина листьев
           рисуется за аватаркой, половина перед ней. */}
-      {f.leafFall && Array.from({ length: f.leafFall.count }).map((_, i) => {
+      {f.leafFall && Array.from({ length: мало(f.leafFall.count, 3) }).map((_, i) => {
         const с = Math.max(9, Math.round(size * (0.15 + (i % 3) * 0.03)));
         const дл = 13 + (i % 4) * 3.5;
         return (
@@ -6012,7 +6027,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         }} />
       ))}
       {/* мерцающие звёздочки по краю */}
-      {Array.from({ length: f.sparks || 0 }).map((_, i) => {
+      {Array.from({ length: мало(f.sparks || 0, 2) }).map((_, i) => {
         const a = (360 / (f.sparks || 1)) * i;
         const px = Math.cos((a * Math.PI) / 180) * orbitR;
         const py = Math.sin((a * Math.PI) / 180) * orbitR;
@@ -6431,7 +6446,18 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
     <button
       onClick={handle}
       className={`fx-card flex flex-col items-center gap-2.5 rounded-[22px] p-3${equipped ? " fx-picked" : ""}`}
-      style={{ background: T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden", contain: "paint" }}
+      style={{
+        background: T.surface, border: `1px solid ${T.line}`,
+        position: "relative", overflow: "hidden", contain: "paint",
+        // Витрина длинная, а на экране помещается четыре плитки. Всё
+        // остальное браузер до сих пор честно рисовал и анимировал —
+        // два с лишним сотни движущихся слоёв разом, из-за чего нажатия
+        // по нижнему меню отрабатывали через раз. С этим правилом
+        // невидимые плитки не считаются вовсе; размер задан заранее,
+        // чтобы полоса прокрутки не прыгала.
+        contentVisibility: "auto",
+        containIntrinsicSize: "190px 210px",
+      }}
     >
       {/* Некупленное не гасим прозрачностью: предмет видно целиком, на
           то он и витрина, а что он ещё не твой — сказано ценой. */}
@@ -13191,7 +13217,15 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           ].map(({ id, label, icon: Icon, locked }) => {
             const active = tab === id;
             return (
-              <button key={id} onClick={() => goTab(id)} className="fx-tap flex flex-col items-center gap-1.5" style={{ position: "relative" }}>
+              <button
+                key={id}
+                // Отклик отдаём сразу, до перерисовки: тяжёлый экран
+                // строится десятую долю секунды, и без него кажется, что
+                // нажатие не прошло — человек жмёт второй раз.
+                onClick={() => { haptic("light"); goTab(id); }}
+                className="fx-tap flex flex-col items-center gap-1.5"
+                style={{ position: "relative" }}
+              >
                 <Icon size={22} strokeWidth={1.75} color={active ? T.turquoise : T.muted} style={{ transition: `color ${EASE}` }} />
                 {locked && (
                   <div style={{ position: "absolute", top: -3, right: -3, width: 14, height: 14, borderRadius: "50%", background: T.surface, border: `1px solid ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
