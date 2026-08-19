@@ -910,6 +910,38 @@ function useLiveTick() {
   }, []);
   return tick;
 }
+/* Закрытие с анимацией.
+
+   React убирает окно из разметки в тот же кадр, поэтому уход получался
+   рывком: только что было — и нет. Держим последнее значение ещё
+   несколько кадров, пока проигрывается анимация ухода, и лишь потом
+   отпускаем. Возвращает [что показывать, уходит ли] — по второму флагу
+   вешается класс, который и запускает анимацию.
+
+   Срок короткий: закрытие должно быть быстрее открытия, иначе кажется,
+   что окно не отпускает. */
+const CLOSE_MS = 170;
+function useClosing(value, ms = CLOSE_MS) {
+  const [held, setHeld] = useState(value);
+  const [closing, setClosing] = useState(false);
+  const heldRef = useRef(value);
+  heldRef.current = held;
+
+  useEffect(() => {
+    if (value) {
+      setHeld(value);
+      setClosing(false);
+      return;
+    }
+    if (!heldRef.current) return;
+    setClosing(true);
+    const t = setTimeout(() => { setHeld(null); setClosing(false); }, ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+
+  return [value || held, closing];
+}
+
 /* Отклик на нажатие. Внутри Telegram просим у него — это родная
    вибрация клиента, и на iPhone работает только она: navigator.vibrate
    там не поддерживается вовсе, поэтому раньше на айфоне отклика не было
@@ -1344,12 +1376,27 @@ function GlobalStyle() {
          иначе он вдавливался бы отдельно от кнопки, внутри которой
          лежит, и нажатие двоилось. */
       .fx-inert:active { transform: none; }
-      .fx-view { animation: fadeInUp 320ms cubic-bezier(0.16,1,0.3,1) backwards; }
+      /* Появление страницы: 200 мс вместо 320. Полсекунды на переход
+         между вкладками читаются задержкой, а не плавностью — особенно
+         теперь, когда отклик на нажатие приходит сразу. */
+      .fx-view { animation: viewIn 200ms cubic-bezier(0.16,1,0.3,1) backwards; }
+      @keyframes viewIn {
+        from { opacity: 0; transform: translateY(8px) scale(0.994); }
+        to   { opacity: 1; transform: none; }
+      }
       .fx-skeleton { background: linear-gradient(90deg, ${T.surface} 25%, ${T.surfaceHi} 37%, ${T.surface} 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; }
       .fx-chip { transition: border-color ${EASE}, background ${EASE}, color ${EASE}, transform ${SPRING}; }
       .fx-chip:active { transition: border-color ${EASE}, background ${EASE}, color ${EASE}, transform ${PRESS}; }
       .fx-modal-back { animation: fadeIn 220ms ease-out both; }
       .fx-modal-card { animation: scaleIn 260ms cubic-bezier(0.16,1,0.3,1) backwards; }
+      /* Уход: затемнение гаснет, окно проседает вниз и слегка сжимается.
+         Кривая с резким началом — рывок в сторону пальца, а не вязкое
+         сползание. Ровно ${CLOSE_MS} мс: быстрее открытия, иначе окно
+         кажется неотпускающим. */
+      .fx-out.fx-modal-back { animation: backdropOut ${CLOSE_MS}ms ease-in both; }
+      .fx-out .fx-modal-card, .fx-out.fx-modal-card { animation: sheetOut ${CLOSE_MS}ms cubic-bezier(0.4, 0, 0.9, 0.5) both; }
+      @keyframes backdropOut { to { opacity: 0; } }
+      @keyframes sheetOut { to { opacity: 0; transform: translateY(16px) scale(0.985); } }
       .fx-avatar { transition: transform ${SPRING}; }
       .fx-avatar:active { transform: scale(0.96); transition: transform ${PRESS}; }
       .cta-launch { transition: transform ${SPRING}, opacity ${EASE}; }
@@ -8605,7 +8652,10 @@ function parseAmount(str) {
 /* TradeModal — the buy/sell sheet: pick an amount (with quick %/preset
    chips), see the live conversion, pick slippage tolerance, and confirm.
    Shared between the Buy and Sell CTAs so switching tabs mid-flow works. */
-function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance = 0, tonPriceUsd = 0, heldAmount = null, curveState = null }) {
+function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, walletTonBalance = 0, tonPriceUsd = 0, heldAmount = null, curveState = null }) {
+  // Первым делом: остальные хуки читают tradeModal, и объявить его ниже
+  // значит обратиться к нему до создания.
+  const [tradeModal, closing] = useClosing(tradeModalProp);
   const [mode, setMode] = useState(tradeModal ? tradeModal.mode : "buy");
   // Сумму можно подставить снаружи — так после запуска токена открывается
   // готовая покупка ровно на то, что человек ввёл в форме создания.
@@ -8685,7 +8735,7 @@ function TradeModal({ t: token, tradeModal, onClose, onConfirm, walletTonBalance
   }
 
   return (
-    <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
+    <div className={`fx-modal-back${closing ? " fx-out" : ""}`} style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(20)}>
         <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
           <div className="flex items-center gap-2">
@@ -9044,7 +9094,7 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
   }
 
   return (
-    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 80, background: "rgba(0,0,0,0.92)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "calc(20px + var(--tg-inset-top, 0px)) 20px calc(20px + var(--tg-inset-bottom, 0px))", overflowY: "auto" }}>
+    <div className={`fx-modal-back${closing ? " fx-out" : ""}`} style={{ position: "absolute", inset: 0, zIndex: 80, background: "rgba(0,0,0,0.92)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "calc(20px + var(--tg-inset-top, 0px)) 20px calc(20px + var(--tg-inset-bottom, 0px))", overflowY: "auto" }}>
       {error ? (
         <div className="fx-modal-card flex flex-col items-center text-center gap-4" style={{ width: "100%", maxWidth: 340, background: T.surface, border: `1px solid ${T.lineHi}`, borderRadius: 24, padding: 24 }}>
           <div style={{ width: 64, height: 64, clipPath: FACET, background: hexA(T.down, 0.12), border: `1px solid ${hexA(T.down, 0.35)}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -9473,7 +9523,9 @@ function PinKeypad({ onDigit, onBackspace }) {
   );
 }
 
-function PinSetupModal({ mode, currentPin, onClose, onComplete, onDisable, showToast }) {
+function PinSetupModal({ mode: modeProp, currentPin, onClose, onComplete, onDisable, showToast }) {
+  // Первым делом: ниже на mode завязаны и состояние, и эффекты.
+  const [mode, closing] = useClosing(modeProp);
   const [stage, setStage] = useState(mode === "change" || mode === "disable" ? "verify" : "new");
   const [entry, setEntry] = useState("");
   const [firstNew, setFirstNew] = useState("");
@@ -9982,7 +10034,7 @@ function SupportChat({ accountCreated, showToast, onRead }) {
    "Settings" actually opens real, distinct content instead of the
    same placeholder for every item. */
 function SettingsPanel({
-  item, onClose, appSettings, onUpdateSetting,
+  item: itemProp, onClose, appSettings, onUpdateSetting,
   onOpenEditProfile, profile, showToast,
   onTogglePin, onChangePin, insetBottom = 0, insetTop = 0,
   accountCreated, onDeleteAccount, userId, inviteCount = 0, onSupportRead,
@@ -9990,6 +10042,9 @@ function SettingsPanel({
 }) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Окно держится на экране, пока идёт анимация ухода, поэтому и
+  // содержимое берём последнее — иначе на кадр уходило бы пустое.
+  const [item, closing] = useClosing(itemProp);
 
   if (!item) return null;
   const Icon = item.icon;
@@ -10188,7 +10243,7 @@ function SettingsPanel({
   }
 
   return (
-    <div className="fx-modal-back" style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: `0 12px ${insetBottom + 14}px` }} onClick={onClose}>
+    <div className={`fx-modal-back${closing ? " fx-out" : ""}`} style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: `0 12px ${insetBottom + 14}px` }} onClick={onClose}>
       <div
         className="fx-modal-card"
         onClick={(e) => e.stopPropagation()}
@@ -10221,8 +10276,9 @@ function SettingsPanel({
 /* TokenManageSheet — the "Manage" action on a token you created:
    surfaces real controls (copy link, verify, edit info) rather than
    a dead button. */
-function TokenManageSheet({ token, onClose, showToast, onDelete }) {
+function TokenManageSheet({ token: tokenProp, onClose, showToast, onDelete }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [token, closing] = useClosing(tokenProp);
   useEffect(() => { if (token) setConfirmingDelete(false); }, [token]);
   if (!token) return null;
   function copyLink() {
@@ -10231,7 +10287,7 @@ function TokenManageSheet({ token, onClose, showToast, onDelete }) {
     showToast(t("tokenLinkCopied"));
   }
   return (
-    <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
+    <div className={`fx-modal-back${closing ? " fx-out" : ""}`} style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
         <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
         <div className="flex items-center gap-3" style={{ marginTop: -8, marginBottom: 14 }}>
