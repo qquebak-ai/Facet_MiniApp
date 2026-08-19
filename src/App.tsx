@@ -1087,12 +1087,6 @@ function GlobalStyle() {
       /* Расплав течёт под застывшей коркой: двигается не шум, а сама
          светящаяся подложка под ним. Пересчитывать шум каждый кадр
          телефон не обязан — а выглядит одинаково. */
-      /* Огни боке медленно плывут и дышат — стоячие пятна выдают
-         градиент, наклеенный на фон. */
-      @keyframes bokehDrift {
-        from { transform: translate3d(0, 0, 0); opacity: 0.5; }
-        to   { transform: translate3d(16px, -26px, 0); opacity: 1; }
-      }
       @keyframes moltenDrift {
         from { transform: translate3d(0, 0, 0); }
         to   { transform: translate3d(-50%, 0, 0); }
@@ -1519,45 +1513,8 @@ function CyberGrid({ showStars = true }) {
     });
   }, []);
 
-  /* Боке — расфокусированные огни в глубине. Дают воздух между чёрным
-     фоном и листьями: без них лист висит на плоской заливке, и никакой
-     глубины не читается. Медленные и очень тусклые, чтобы не отвлекать
-     от содержимого. */
-  const bokeh = useMemo(() => {
-    const rnd = seededRand(4711);
-    return Array.from({ length: 7 }, (_, i) => ({
-      left: rnd() * 100,
-      top: rnd() * 100,
-      size: 120 + rnd() * 200,
-      // Оранжевых меньше, чем мятных: оранжевый — акцент приложения, и
-      // в фоне его должно быть ровно столько, чтобы он не спорил с
-      // кнопками.
-      warm: rnd() < 0.35,
-      opacity: 0.07 + rnd() * 0.13,
-      dur: 18 + rnd() * 22,
-      delay: -rnd() * 20,
-    }));
-  }, []);
-
   return (
     <div aria-hidden data-bg-fx style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
-      {showStars && bokeh.map((b, i) => (
-        <span key={`bk${i}`} style={{
-          position: "absolute", left: `${b.left}%`, top: `${b.top}%`,
-          width: b.size, height: b.size, marginLeft: -b.size / 2, marginTop: -b.size / 2,
-          borderRadius: "50%",
-          // Мягкость даёт сам градиент, а не filter: blur. Размытие
-          // заставляло браузер пересобирать каждое пятно на каждом
-          // кадре — четырнадцать таких пятен съедали по одиннадцать
-          // миллисекунд, и нажатия по нижнему меню начинали теряться.
-          background: `radial-gradient(circle,
-            ${hexA(b.warm ? T.electric : T.mintGlass, b.opacity)} 0%,
-            ${hexA(b.warm ? T.electric : T.mintGlass, b.opacity * 0.6)} 30%,
-            ${hexA(b.warm ? T.electric : T.mintGlass, b.opacity * 0.22)} 55%,
-            transparent 78%)`,
-          animation: `bokehDrift ${b.dur}s ease-in-out ${b.delay}s infinite alternate`,
-        }} />
-      ))}
       {/* листья. В профиле их гасим: там своя карточка-подложка, и два
           слоя фона друг на друге читаются как шум.
 
