@@ -910,6 +910,27 @@ function useLiveTick() {
   }, []);
   return tick;
 }
+/* Видно ли элемент на экране прямо сейчас.
+
+   В отличие от разовых проверок выше (те нужны, чтобы один раз сходить
+   за данными), эта следит постоянно: витрина длинная, и всё, что уехало
+   за край, должно замирать. Иначе полтора десятка рамок анимируются
+   разом, хотя видно четыре. */
+function useOnScreen(ref, margin = "120px") {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => setVisible(!!(entries[0] && entries[0].isIntersecting)),
+      { rootMargin: margin },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, margin]);
+  return visible;
+}
+
 /* Есть ли у Telegram своя стрелка «назад».
 
    Внутри Telegram её рисует сам клиент в шапке, и вторая такая же
@@ -1400,6 +1421,10 @@ function GlobalStyle() {
       .fx-skeleton { background: linear-gradient(90deg, ${T.surface} 25%, ${T.surfaceHi} 37%, ${T.surface} 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; }
       .fx-chip { transition: border-color ${EASE}, background ${EASE}, color ${EASE}, transform ${SPRING}; }
       .fx-chip:active { transition: border-color ${EASE}, background ${EASE}, color ${EASE}, transform ${PRESS}; }
+      /* Замороженная плитка: всё внутри стоит. Анимации не снимаются, а
+         ставятся на паузу — вернувшись на экран, они продолжают с того
+         же места, и рамка не дёргается заново при каждой прокрутке. */
+      .fx-frozen, .fx-frozen * { animation-play-state: paused !important; }
       .fx-modal-back { animation: fadeIn 220ms ease-out both; }
       .fx-modal-card { animation: scaleIn 260ms cubic-bezier(0.16,1,0.3,1) backwards; }
       /* Уход: затемнение гаснет, окно проседает вниз и слегка сжимается.
@@ -5753,7 +5778,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
           ни число октав дела не меняют: дорого само их количество.
           Поэтому в плитках по 62 точки рамка остаётся прежней, а живой
           край показывается в профиле и на выигрыше из кейса. */}
-      {f.warp && (крупно ? f.warp.layers : []).map((L, i) => {
+      {f.warp && (крупно ? f.warp.layers : f.warp.layers.slice(0, 1)).map((L, i) => {
         // Размер в ключе: у маленьких аватарок своя копия фильтра, иначе
         // одна и та же деформация выглядела бы то грубой, то незаметной.
         const uid = `w${f.id}-${i}-${size}`;
@@ -6737,10 +6762,14 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
     if (!affordable) return onTooPoor && onTooPoor(price);
     return onBuy(kind, item.id);
   }, [owned, affordable, price, onEquip, onBuy, onTooPoor, kind, item.id]);
+  const плитка = useRef(null);
+  const наЭкране = useOnScreen(плитка);
+
   return (
     <button
+      ref={плитка}
       onClick={handle}
-      className={`fx-card flex flex-col items-center gap-2.5 rounded-[22px] p-3${equipped ? " fx-picked" : ""}`}
+      className={`fx-card flex flex-col items-center gap-2.5 rounded-[22px] p-3${equipped ? " fx-picked" : ""}${наЭкране ? "" : " fx-frozen"}`}
       style={{
         background: T.surface, border: `1px solid ${T.line}`,
         position: "relative", overflow: "hidden", contain: "paint",
