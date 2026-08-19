@@ -1087,6 +1087,18 @@ function GlobalStyle() {
       /* Расплав течёт под застывшей коркой: двигается не шум, а сама
          светящаяся подложка под ним. Пересчитывать шум каждый кадр
          телефон не обязан — а выглядит одинаково. */
+      /* Осколок парит и кувыркается — но еле-еле: обломок камня в
+         восходящем потоке, а не пропеллер. */
+      @keyframes shardFloat {
+        from { transform: translate3d(0, 0, 0) rotate(-6deg); opacity: 0.75; }
+        to   { transform: translate3d(6px, -14px, 0) rotate(9deg); opacity: 1; }
+      }
+      /* Клуб дыма поднимается, расходится и тает. */
+      @keyframes smokeRise {
+        0%   { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+        25%  { opacity: 1; }
+        100% { transform: translate3d(10px, -120px, 0) scale(1.5); opacity: 0; }
+      }
       @keyframes moltenDrift {
         from { transform: translate3d(0, 0, 0); }
         to   { transform: translate3d(-50%, 0, 0); }
@@ -4947,9 +4959,19 @@ const PROFILE_CARDS = [
     // верх оставлен пустым под аватарку и ник. Случайная сетка трещин
     // получалась паутиной поверх текста.
     id: "magmaCard", label: { RU: "Магма", EN: "Magma" }, price: 380,
-    base: "linear-gradient(180deg, rgba(122,27,0,0.14) 0%, rgba(255,61,0,0.10) 55%, rgba(255,61,0,0.20) 100%)",
-    crust: { seam: "#FF6B35", hot: "#FFD9A0", deep: "#12060A" },
-    rise: 9, riseColor: "#FFB061",
+    // Не подложка с узором, а сцена: вулканический пейзаж, а на нём —
+    // сущность из обсидиана, внутри которой течёт магма. Аватарка
+    // приходится ей на голову, поэтому плечи и разведены в стороны.
+    base: "linear-gradient(180deg, #0B0406 0%, #1A0709 38%, #3B0A0A 72%, #6B1414 100%)",
+    magma: {
+      stone: "#0C0508",     // обсидиан
+      bordo: "#4A0E0E",     // тень в породе
+      seam: "#FF4D14",      // раскалённая трещина
+      hot: "#FFD27A",       // золото в жерле
+    },
+    obsidian: { edge: "#FF6B35", stone: "#08060A" },
+    rise: 12, riseColor: "#FF8A2D",
+    smoke: 3,
   },
   {
     id: "meteor", label: { RU: "Метеоры", EN: "Meteors" }, price: 220,
@@ -6008,7 +6030,138 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
 /* ProfileCardBg — подложка, которая рисуется за аватаркой и шапкой
    профиля. Абсолютная, ничего не ловит по клику и обрезается по своему
    контейнеру. */
-const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, radius = 24, bleed = 0, top = 0 }) {
+/* Сцена карточки «Магма».
+
+   Собрана как коллекционная карта, а не как фон с узором: сзади
+   вулканический пейзаж, спереди — сущность из обсидиана, внутри которой
+   светится магма. Аватарка человека приходится ей ровно на голову,
+   поэтому плечи разведены, а шея оставлена пустой.
+
+   Всё нарисовано в сетке 100×100 и растягивается по карточке, кроме
+   самой сущности: у неё своя система координат с привязкой к низу —
+   растянутая фигура выглядела бы кривым зеркалом. */
+const MagmaScene = React.memo(function MagmaScene({ c, height, showcase }) {
+  const м = c.magma;
+  const мелко = height < 130;
+  // Хребты: три плана, чем дальше — тем светлее от дымки и ниже
+  // контраст. Ломаные заданы руками: случайные давали то пилу, то
+  // ровную линию.
+  const хребты = [
+    { d: "M0,58 L12,49 L22,54 L34,42 L46,52 L58,44 L70,53 L82,46 L92,53 L100,48 L100,100 L0,100 Z", тон: 0.32, свет: 0.4 },
+    { d: "M0,68 L14,60 L26,66 L40,55 L52,64 L64,57 L78,66 L90,60 L100,66 L100,100 L0,100 Z", тон: 0.65, свет: 0.6 },
+    { d: "M0,80 L16,73 L30,79 L44,71 L58,78 L72,72 L86,79 L100,74 L100,100 L0,100 Z", тон: 0.95, свет: 0.85 },
+  ];
+  // Потоки лавы по склону ближнего хребта.
+  const потоки = ["M22,79 L20,88 L23,96 L21,100", "M58,78 L61,86 L58,93 L60,100", "M86,79 L84,87 L87,94 L85,100"];
+
+  return (
+    <>
+      {/* Зарево из-за хребтов — источник всего света на карточке. */}
+      <div style={{
+        position: "absolute", left: "-10%", right: "-10%", top: "34%", height: "42%",
+        background: `radial-gradient(60% 100% at 50% 100%, ${hexA(м.hot, 0.4)} 0%, ${hexA(м.seam, 0.28)} 32%, transparent 72%)`,
+        filter: "blur(10px)",
+        animation: "moltenBreath 7s ease-in-out infinite",
+      }} />
+
+      <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"
+        style={{ position: "absolute", inset: 0 }} aria-hidden>
+        {хребты.map((х, i) => (
+          <g key={`rg${i}`}>
+            <path d={х.d} fill={i === 2 ? м.stone : м.bordo} fillOpacity={х.тон} />
+            {/* Раскалённая кромка гребня: свет из-за хребта ложится
+                только на верхнюю линию. */}
+            <path d={х.d.split(" L100,100")[0]} fill="none"
+              stroke={м.seam} strokeOpacity={х.свет} strokeWidth={i === 2 ? 0.8 : 0.5}
+              vectorEffect="non-scaling-stroke" />
+          </g>
+        ))}
+        {!мелко && потоки.map((д, i) => (
+          <path key={`fl${i}`} d={д} fill="none" stroke={м.seam} strokeOpacity="0.7"
+            strokeWidth="1.2" strokeLinecap="round" vectorEffect="non-scaling-stroke"
+            style={{ animation: `moltenBreath ${5 + i * 1.3}s ease-in-out ${-i * 1.7}s infinite` }} />
+        ))}
+      </svg>
+
+      {/* Сущность. Плечи, наплечники и грудь — гранёный камень; по
+          сколам идут трещины, в которых видно магму. Голову не рисуем:
+          её место занимает аватарка. */}
+      <svg
+        viewBox="0 0 100 60" preserveAspectRatio="xMidYMax meet"
+        style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: `${Math.min(72, 46 + height / 12)}%` }}
+        aria-hidden
+      >
+        <defs>
+          <linearGradient id={`mg-body-${Math.round(height)}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#241016" />
+            <stop offset="55%" stopColor={м.stone} />
+            <stop offset="100%" stopColor="#050203" />
+          </linearGradient>
+        </defs>
+        {/* Силуэт: широкие плечи, вырез под голову, сколотые края. */}
+        <path
+          d="M50,60 L14,60 L10,46 L18,34 L30,27 L38,22 L40,14 L60,14 L62,22 L70,27 L82,34 L90,46 L86,60 Z"
+          fill={`url(#mg-body-${Math.round(height)})`}
+          stroke={hexA(м.seam, 0.55)} strokeWidth="0.7" strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        {/* Наплечники — отдельные плиты поверх корпуса. */}
+        <path d="M10,46 L18,34 L30,27 L34,38 L24,44 L20,55 Z" fill="#150910" fillOpacity="0.95"
+          stroke={hexA(м.seam, 0.5)} strokeWidth="0.6" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        <path d="M90,46 L82,34 L70,27 L66,38 L76,44 L80,55 Z" fill="#150910" fillOpacity="0.95"
+          stroke={hexA(м.seam, 0.5)} strokeWidth="0.6" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        {/* Контровой свет: зарево бьёт из-за спины, поэтому горит
+            только верхняя кромка силуэта. Без него фигура сливается с
+            пейзажем в одно тёмное пятно. */}
+        <path
+          d="M14,60 L10,46 L18,34 L30,27 L38,22 L40,14 M60,14 L62,22 L70,27 L82,34 L90,46 L86,60"
+          fill="none" stroke={м.hot} strokeOpacity="0.8" strokeWidth="0.9"
+          strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
+          style={{ filter: `drop-shadow(0 0 4px ${hexA(м.seam, 0.8)})` }}
+        />
+
+        {/* Трещины: под камнем течёт магма, поэтому линии не ровные и
+            разгораются вразнобой. */}
+        <g fill="none" strokeLinecap="round" vectorEffect="non-scaling-stroke">
+          {[
+            "M40,20 L44,28 L41,34 L45,42 L43,52",
+            "M60,20 L56,29 L59,35 L55,44 L57,54",
+            "M34,38 L28,44 L30,52",
+            "M66,38 L72,44 L70,52",
+            "M50,26 L50,36 L47,44 L50,56",
+          ].map((д, i) => (
+            <g key={`cr${i}`} style={{ animation: `moltenBreath ${4.5 + i * 0.9}s ease-in-out ${-i * 1.1}s infinite` }}>
+              <path d={д} stroke={м.seam} strokeOpacity="0.75" strokeWidth="3.2" style={{ filter: "blur(1.8px)" }} />
+              <path d={д} stroke={м.hot} strokeOpacity="1" strokeWidth="0.9" />
+            </g>
+          ))}
+        </g>
+      </svg>
+
+      {/* Надпись — только на витрине. В профиле карточка работает фоном
+          под ником и аватаркой, и вторая крупная надпись там лишняя. */}
+      {showcase && (
+        <span style={{
+          position: "absolute", left: 0, right: 0, top: "7%", textAlign: "center",
+          fontFamily: displayFont, fontWeight: 800,
+          fontSize: Math.max(11, Math.round(height * 0.16)),
+          letterSpacing: "0.14em",
+          // Раскалённый металл: тёмный низ, светлая середина, золото по
+          // верхней кромке — и тонкая тень, чтобы буквы стояли на месте,
+          // а не парили.
+          background: `linear-gradient(180deg, ${м.hot} 0%, #FF8A2D 42%, #B33A0C 72%, #5A1206 100%)`,
+          WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+          textShadow: `0 1px 0 rgba(0,0,0,0.6)`,
+          filter: `drop-shadow(0 0 8px ${hexA(м.seam, 0.5)})`,
+        }}>
+          МАГМА
+        </span>
+      )}
+    </>
+  );
+});
+
+const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, radius = 24, bleed = 0, top = 0, showcase = false }) {
   const c = CARD_BY_ID[cardId] || CARD_BY_ID.none;
   const blobs = useMemo(() => {
     const rnd = seededRand(hashSeed(cardId || "none"));
@@ -6051,6 +6204,32 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
       left: rnd() * 100, size: 12 + rnd() * 13, kind: Math.floor(rnd() * 3),
       dx: `${(rnd() - 0.5) * 70}px`, r0: `${rnd() * 360}deg`, r1: `${rnd() * 360 + 180}deg`,
       opacity: 0.45 + rnd() * 0.45, dur: 9 + rnd() * 9, delay: -rnd() * 14,
+    }));
+  }, [cardId]);
+  const shards = useMemo(() => {
+    const rnd = seededRand(hashSeed(`${cardId}-shards`));
+    return Array.from({ length: c.shards || 0 }, () => ({
+      left: 8 + rnd() * 84,
+      // Только над породой: в верхней половине карточки осколкам
+      // взяться неоткуда, там небо — и они висели ни на чём.
+      top: 46 + rnd() * 40,
+      size: 6 + rnd() * 9,
+      rot: rnd() * 360,
+      dur: 11 + rnd() * 12,
+      delay: -rnd() * 14,
+      // Осколок — не ромб, а неровный скол: три-четыре грани разной
+      // длины, иначе получается кристалл из мультфильма.
+      d: `M0,-1 L${(0.5 + rnd() * 0.4).toFixed(2)},${(-0.2 + rnd() * 0.3).toFixed(2)} L${(0.2 + rnd() * 0.3).toFixed(2)},${(0.8 + rnd() * 0.3).toFixed(2)} L${(-0.6 - rnd() * 0.3).toFixed(2)},${(0.3 + rnd() * 0.4).toFixed(2)} Z`,
+    }));
+  }, [cardId]);
+  const smoke = useMemo(() => {
+    const rnd = seededRand(hashSeed(`${cardId}-smoke`));
+    return Array.from({ length: c.smoke || 0 }, () => ({
+      left: 10 + rnd() * 80,
+      size: 90 + rnd() * 120,
+      dur: 16 + rnd() * 14,
+      delay: -rnd() * 18,
+      opacity: 0.16 + rnd() * 0.14,
     }));
   }, [cardId]);
   const field = useMemo(() => (c.crust ? magmaField(`${cardId}-field`) : []), [cardId]);
@@ -6119,57 +6298,54 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
         </svg>
       ))}
 
-      {/* Поле лавы: плиты корки уходят к горизонту. Швы между ними —
-          единственное, что светится; сами плиты почти чёрные, как грани
-          кейса. Над горизонтом зарево, иначе поле обрывается в пустоту. */}
-      {c.crust && (
+      {c.magma && <MagmaScene c={c} height={height} showcase={showcase} />}
+
+      {/* Дым над жерлом: тёмные клубы поднимаются и растворяются. Без
+          них жар читается светом, а не температурой. */}
+      {smoke.map((д, i) => (
+        <span key={`sm${i}`} style={{
+          position: "absolute", left: `${д.left}%`, bottom: "-10%",
+          width: д.size, height: д.size, marginLeft: -д.size / 2,
+          borderRadius: "50%",
+          background: `radial-gradient(circle, rgba(28,16,16,${д.opacity + 0.1}) 0%, rgba(20,10,10,${д.opacity}) 45%, transparent 72%)`,
+          animation: `smokeRise ${д.dur}s ease-in-out ${д.delay}s infinite`,
+        }} />
+      ))}
+
+      {/* Осколки обсидиана: чёрная грань с раскалённой кромкой. */}
+      {shards.map((о, i) => (
+        <svg key={`sh${i}`} width={о.size} height={о.size} viewBox="-1.2 -1.2 2.4 2.4" style={{
+          position: "absolute", left: `${о.left}%`, top: `${о.top}%`,
+          animation: `shardFloat ${о.dur}s ease-in-out ${о.delay}s infinite alternate`,
+        }} aria-hidden>
+          <g transform={`rotate(${о.rot})`}>
+            {/* Скол залит камнем, а раскалена только кромка — тонкой
+                линией. С толстой обводкой и пустой серединой получались
+                вырезанные из бумаги четырёхугольники. */}
+            <path d={о.d} fill="#2A1218" fillOpacity="0.96"
+              stroke={(c.obsidian && c.obsidian.edge) || T.electric} strokeWidth="0.07"
+              strokeLinejoin="round" opacity="0.9" />
+          </g>
+        </svg>
+      ))}
+
+      {/* Рама из обсидиана: тёмный кант по краю и раскалённая прожилка
+          по его внутренней кромке. Кант задан тенью, а не растянутой
+          картинкой: у растянутой ширина по бокам и сверху выходила
+          разной, и рама смотрелась прямоугольником, начерченным по
+          линейке. */}
+      {c.obsidian && (
         <>
-          {/* Небо над полем: марево от жара, поднимающееся кверху. Без
-              него верх карточки — просто пустота, и рисунок кончается
-              на полпути. */}
           <div style={{
-            position: "absolute", left: 0, right: 0, top: 0, height: "56%",
-            background: `linear-gradient(180deg, transparent 0%, ${hexA(c.crust.seam, 0.05)} 45%, ${hexA(c.crust.seam, 0.16)} 100%)`,
+            position: "absolute", inset: 0, borderRadius: radius, pointerEvents: "none",
+            boxShadow: `inset 0 0 0 7px ${c.obsidian.stone}, inset 0 0 22px 8px rgba(0,0,0,0.55)`,
           }} />
-          {/* Зарево на самом горизонте: там, где порода уходит вдаль,
-              свет сливается в полосу — она и продаёт глубину. */}
           <div style={{
-            position: "absolute", left: "-10%", right: "-10%", top: "52%", height: "22%",
-            transform: "translateY(-50%)",
-            background: `radial-gradient(60% 100% at 50% 50%, ${hexA(c.crust.hot, 0.5)} 0%, ${hexA(c.crust.seam, 0.28)} 30%, transparent 70%)`,
-            filter: "blur(9px)",
-            animation: "moltenBreath 7s ease-in-out infinite",
+            position: "absolute", inset: 7, borderRadius: Math.max(0, radius - 5), pointerEvents: "none",
+            border: `1px solid ${hexA(c.obsidian.edge, 0.7)}`,
+            boxShadow: `0 0 10px ${hexA(c.obsidian.edge, 0.3)}, inset 0 0 16px ${hexA(c.obsidian.edge, 0.1)}`,
+            animation: "moltenBreath 6s ease-in-out infinite",
           }} />
-          {/* Свет снизу: ближние швы горят ярче всего. */}
-          <div style={{
-            position: "absolute", left: "-15%", right: "-15%", bottom: 0, height: "46%",
-            background: `radial-gradient(70% 100% at 50% 100%, ${hexA(c.crust.seam, 0.34)} 0%, transparent 72%)`,
-            filter: "blur(12px)",
-            animation: "moltenBreath 9s ease-in-out -3s infinite",
-          }} />
-          <svg
-            width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"
-            style={{ position: "absolute", inset: 0 }} aria-hidden
-          >
-            {field.map((пл, i) => (
-              <g key={`pl${i}`} style={{ animation: `moltenBreath ${пл.dur}s ease-in-out ${пл.delay}s infinite` }}>
-                <path
-                  d={пл.d} fill={c.crust.deep} fillOpacity="0.88"
-                  stroke={c.crust.seam} strokeOpacity={пл.жар}
-                  strokeWidth={0.7 + пл.жар} strokeLinejoin="round"
-                  vectorEffect="non-scaling-stroke"
-                  style={{ filter: `drop-shadow(0 0 ${2 + пл.жар * 4}px ${hexA(c.crust.seam, пл.жар)})` }}
-                />
-                {/* Раскалённая жила по шву — тоньше и светлее обводки:
-                    от этого шов светится изнутри, а не обведён. */}
-                <path
-                  d={пл.d} fill="none" stroke={c.crust.hot}
-                  strokeOpacity={пл.жар * 0.8} strokeWidth="0.6"
-                  strokeLinejoin="round" vectorEffect="non-scaling-stroke"
-                />
-              </g>
-            ))}
-          </svg>
         </>
       )}
 
@@ -6419,7 +6595,7 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
       {/* Некупленное не гасим прозрачностью: предмет видно целиком, на
           то он и витрина, а что он ещё не твой — сказано ценой. */}
       <div style={{ position: "relative", width: "100%", height: 96, borderRadius: 16, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {kind === "card" && <ProfileCardBg cardId={item.id} height={96} radius={16} />}
+        {kind === "card" && <ProfileCardBg cardId={item.id} height={96} radius={16} showcase />}
         <div style={{ position: "relative", zIndex: 1 }}>
           {/* Внутри рамки — просто чёрный кружок: витрина про сам
               предмет, а своя аватарка тут только отвлекает. */}
