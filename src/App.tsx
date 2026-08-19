@@ -46,6 +46,9 @@ const DARK_THEME = {
   up: "#38D39F",
   down: "#FF4D5A",
   warning: "#F5B041",
+  // Стекло фоновых листьев. Мятный тут не украшение, а имя приложения:
+  // на чёрном он читается холодным светом, а не зеленью.
+  mintGlass: "#7FE7C4",
 };
 
 /* White theme: same structural logic, inverted — a paper-white canvas,
@@ -67,6 +70,7 @@ const WHITE_THEME = {
   up: "#1C9A6C",
   down: "#D93A49",
   warning: "#C77A16",
+  mintGlass: "#2F9E7A",
 };
 
 const THEMES = { Dark: DARK_THEME, White: WHITE_THEME };
@@ -1079,6 +1083,12 @@ function GlobalStyle() {
       /* Расплав течёт под застывшей коркой: двигается не шум, а сама
          светящаяся подложка под ним. Пересчитывать шум каждый кадр
          телефон не обязан — а выглядит одинаково. */
+      /* Огни боке медленно плывут и дышат — стоячие пятна выдают
+         градиент, наклеенный на фон. */
+      @keyframes bokehDrift {
+        from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.55; }
+        to   { transform: translate3d(14px, -22px, 0) scale(1.16); opacity: 1; }
+      }
       @keyframes moltenDrift {
         from { transform: translate3d(0, 0, 0); }
         to   { transform: translate3d(-50%, 0, 0); }
@@ -1420,17 +1430,51 @@ const LEAF_KINDS = [
    в десяток путей, а перерисовывать её незачем — движение целиком на
    CSS. Мелкие листья идут без прожилок: на 20 px они превращаются в
    грязь, а не в деталь. */
-const BgLeaf = React.memo(function BgLeaf({ kind, size, flip }) {
+const BgLeaf = React.memo(function BgLeaf({ kind, size, flip, seed = 0 }) {
   const leaf = LEAF_KINDS[kind % LEAF_KINDS.length];
   const detailed = size >= 30;
+  // Идентификаторы разводятся по листу: одинаковые в пределах страницы
+  // браузер сводит к первому, и все листья получили бы одну заливку.
+  const uid = `bl${kind}-${seed}`;
   return (
     <g transform={flip ? "scale(-1,1)" : undefined}>
-      <path d={leaf.stem} stroke={T.electric} strokeWidth={1.5} strokeLinecap="round" fill="none" />
-      <path d={leaf.outline} fill={T.electric} />
+      <defs>
+        {/* Матовое стекло: почти прозрачная пластина, светлее у кромки,
+            куда падает свет, и глуше в глубине. Сплошная заливка цветом
+            давала наклейку, а не стекло. */}
+        <linearGradient id={`g-${uid}`} x1="0.15" y1="0" x2="0.85" y2="1">
+          <stop offset="0%" stopColor="#EAFFF4" stopOpacity="0.42" />
+          <stop offset="45%" stopColor={T.mintGlass} stopOpacity="0.24" />
+          <stop offset="100%" stopColor={T.mintGlass} stopOpacity="0.09" />
+        </linearGradient>
+        {/* Блик по одной стороне — короткий, иначе читается как вторая
+            заливка поверх первой. */}
+        <linearGradient id={`s-${uid}`} x1="0" y1="0" x2="1" y2="0.7">
+          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.34" />
+          <stop offset="38%" stopColor="#FFFFFF" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={leaf.outline} fill={`url(#g-${uid})`} stroke="#DFFFF0" strokeOpacity="0.55" strokeWidth="0.9" />
+      <path d={leaf.outline} fill={`url(#s-${uid})`} />
+      {/* Черенок и жилы — светящаяся схема: линия, а по ней узлы. Это и
+          отличает лист от растения: внутри у него проводка. */}
+      <path d={leaf.stem} stroke={T.electric} strokeWidth={1.3} strokeLinecap="round" fill="none" opacity="0.9" />
       {detailed && (
-        <g stroke={T.bg} strokeWidth={0.9} strokeLinecap="round" fill="none" opacity={0.5}>
-          {leaf.veins.map((v, i) => <path key={i} d={v} />)}
-        </g>
+        <>
+          <g stroke={T.electric} strokeWidth={0.8} strokeLinecap="round" fill="none" opacity="0.75">
+            {leaf.veins.map((v, i) => <path key={i} d={v} />)}
+          </g>
+          {/* Узлы на концах жил. Радиус мелкий: на листе в тридцать
+              точек всё, что крупнее, слипается в кашу. */}
+          <g fill={T.electric} opacity="0.9">
+            {leaf.veins.map((v, i) => {
+              const хвост = v.trim().split(/[ ,]+/).slice(-2).map(Number);
+              return Number.isFinite(хвост[0]) && Number.isFinite(хвост[1])
+                ? <circle key={i} cx={хвост[0]} cy={хвост[1]} r="0.9" />
+                : null;
+            })}
+          </g>
+        </>
       )}
     </g>
   );
@@ -1471,7 +1515,9 @@ function CyberGrid({ showStars = true }) {
         size: 16 + rnd() * 46,
         kind: Math.floor(rnd() * LEAF_KINDS.length),
         flip: rnd() < 0.5,
-        opacity: 0.06 + rnd() * 0.1,
+        // Стекло само по себе бледное: прежние доли задавались под
+        // сплошную заливку, и с ними лист пропадал совсем.
+        opacity: 0.2 + rnd() * 0.26,
         dur,
         delay: -(i / LEAF_COUNT) * dur - rnd() * 4,
         r0: -60 + rnd() * 120,
@@ -1481,8 +1527,38 @@ function CyberGrid({ showStars = true }) {
     });
   }, []);
 
+  /* Боке — расфокусированные огни в глубине. Дают воздух между чёрным
+     фоном и листьями: без них лист висит на плоской заливке, и никакой
+     глубины не читается. Медленные и очень тусклые, чтобы не отвлекать
+     от содержимого. */
+  const bokeh = useMemo(() => {
+    const rnd = seededRand(4711);
+    return Array.from({ length: 14 }, (_, i) => ({
+      left: rnd() * 100,
+      top: rnd() * 100,
+      size: 60 + rnd() * 170,
+      // Оранжевых меньше, чем мятных: оранжевый — акцент приложения, и
+      // в фоне его должно быть ровно столько, чтобы он не спорил с
+      // кнопками.
+      warm: rnd() < 0.35,
+      opacity: 0.07 + rnd() * 0.13,
+      dur: 18 + rnd() * 22,
+      delay: -rnd() * 20,
+    }));
+  }, []);
+
   return (
     <div aria-hidden data-bg-fx style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
+      {showStars && bokeh.map((b, i) => (
+        <span key={`bk${i}`} style={{
+          position: "absolute", left: `${b.left}%`, top: `${b.top}%`,
+          width: b.size, height: b.size, marginLeft: -b.size / 2, marginTop: -b.size / 2,
+          borderRadius: "50%",
+          background: `radial-gradient(circle, ${hexA(b.warm ? T.electric : T.mintGlass, b.opacity)} 0%, ${hexA(b.warm ? T.electric : T.mintGlass, b.opacity * 0.35)} 42%, transparent 70%)`,
+          filter: `blur(${Math.round(b.size / 7)}px)`,
+          animation: `bokehDrift ${b.dur}s ease-in-out ${b.delay}s infinite alternate`,
+        }} />
+      ))}
       {/* листья. В профиле их гасим: там своя карточка-подложка, и два
           слоя фона друг на друге читаются как шум.
 
@@ -1514,7 +1590,7 @@ function CyberGrid({ showStars = true }) {
             backfaceVisibility: "hidden",
           }}
         >
-          <BgLeaf kind={l.kind} size={l.size} flip={l.flip} />
+          <BgLeaf kind={l.kind} size={l.size} flip={l.flip} seed={i} />
         </svg>
       ))}
         </div>
