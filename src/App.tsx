@@ -4785,6 +4785,15 @@ const AVATAR_FRAMES = [
     colors: ["#FF6B35", "#FFC46B", "#FF3D00", "#FF6B35"], spin: 7, glow: "#FF6B35",
     heat: { color: "#FFC46B", dur: 2.4 },
     rise: { count: 5, color: "#FF8A3D", dur: 2.8 },
+    // Огонь: мелкая частая рябь на быстром повороте — язычки пламени
+    // бегут по кромке.
+    warp: {
+      colors: ["#FFE3B0", "#FF6B35", "#7A1B00"],
+      layers: [
+        { scale: 6, dur: 9, width: 5, opacity: 0.9, seed: 5, freq: 0.06 },
+        { scale: 10, dur: 17, width: 2.4, opacity: 0.5, seed: 21, freq: 0.09, reverse: true },
+      ],
+    },
   },
   {
     // Сияние — не полоса цвета, а занавеси, которые идут одна сквозь
@@ -4796,6 +4805,15 @@ const AVATAR_FRAMES = [
       { colors: ["rgba(56,211,159,0)", "#7CE3FF", "rgba(46,107,255,0)", "#B14CFF", "rgba(56,211,159,0)"], dur: 7, blur: 3, opacity: 0.55 },
       { colors: ["rgba(177,76,255,0)", "#38D39F", "rgba(124,227,255,0)", "#2E6BFF", "rgba(177,76,255,0)"], dur: 17, blur: 5, opacity: 0.4, reverse: true },
     ],
+    // Сияние: крупная медленная волна — занавесь колышется целиком, а
+    // не дрожит по краю.
+    warp: {
+      colors: ["#7CE3FF", "#38D39F", "#B14CFF"],
+      layers: [
+        { scale: 14, dur: 26, width: 5, opacity: 0.75, seed: 9, freq: 0.014 },
+        { scale: 20, dur: 40, width: 2.6, opacity: 0.45, seed: 31, freq: 0.02, reverse: true },
+      ],
+    },
   },
   {
     // Металл, а не жёлтая полоска: фаска по внутреннему краю даёт
@@ -4803,6 +4821,14 @@ const AVATAR_FRAMES = [
     id: "gold", label: { RU: "Золото", EN: "Gold" }, price: 260,
     colors: ["#7A5B15", "#FFE9A8", "#C9A227", "#FFF6D5", "#7A5B15"], spin: 13, glow: "#FFD86B",
     metal: { bevel: "#3A2A08", shine: "#FFF6D5", dur: 4.2 },
+    // Расплавленное золото: волна крупная, но очень медленная — тяжёлый
+    // металл течёт, а не колышется.
+    warp: {
+      colors: ["#FFF6D5", "#FFD86B", "#7A5B15"],
+      layers: [
+        { scale: 7, dur: 34, width: 6, opacity: 0.9, seed: 13, freq: 0.02 },
+      ],
+    },
   },
   {
     // Лёд — это грани. По кольцу нарастают короткие иглы инея, каждая
@@ -4812,6 +4838,14 @@ const AVATAR_FRAMES = [
     colors: ["rgba(255,255,255,0.12)", "#FFFFFF", "rgba(255,255,255,0.12)", "#9FD8FF", "rgba(255,255,255,0.12)"],
     spin: 16, glow: "#9FD8FF",
     frost: { count: 9, color: "#DCF2FF", dur: 3.6 },
+    // Лёд: шум с изломами вместо плавного — край получается колючим, а
+    // не волнистым. И почти неподвижным: лёд не течёт.
+    warp: {
+      colors: ["#FFFFFF", "#9FD8FF", "#2B4A63"],
+      layers: [
+        { scale: 8, dur: 60, width: 4.5, opacity: 0.8, seed: 7, freq: 0.05, type: "turbulence", octaves: 2 },
+      ],
+    },
   },
   {
     // Не точки по кругу, а настоящая орбита: два наклонённых эллипса,
@@ -4840,6 +4874,14 @@ const AVATAR_FRAMES = [
     colors: ["rgba(255,255,255,0.08)", "#FFFFFF", "rgba(255,255,255,0.25)", "#CFE8FF", "rgba(255,255,255,0.08)"],
     spin: 24, glow: "#FFFFFF", sparks: 4,
     burst: { count: 8, color: "#FFFFFF", dur: 1.9 },
+    // Разряд: мелкий частый излом на быстром повороте — кромка дрожит,
+    // как дуга между контактами.
+    warp: {
+      colors: ["#FFFFFF", "#CFE8FF", "#3A4A5C"],
+      layers: [
+        { scale: 5, dur: 6, width: 3.4, opacity: 0.85, seed: 11, freq: 0.12, type: "turbulence", octaves: 2 },
+      ],
+    },
   },
   {
     // Кислота: со дна кольца поднимаются пузыри, а снизу срывается
@@ -4848,6 +4890,14 @@ const AVATAR_FRAMES = [
     colors: ["#0F3D2A", "#5BFF9F", "#0F3D2A", "#B6FF3D", "#0F3D2A"], spin: 6, glow: "#5BFF9F",
     rise: { count: 4, color: "#B6FF3D", dur: 3.4, hollow: true },
     drip: { count: 2, color: "#5BFF9F", dur: 4.6 },
+    // Слизь: крупная тягучая волна — край оплывает, а не рябит.
+    warp: {
+      colors: ["#B6FF3D", "#5BFF9F", "#0F3D2A"],
+      layers: [
+        { scale: 13, dur: 19, width: 6, opacity: 0.85, seed: 3, freq: 0.022 },
+        { scale: 18, dur: 31, width: 2.6, opacity: 0.4, seed: 27, freq: 0.035, reverse: true },
+      ],
+    },
   },
   // Дальше — рамки со своим устройством, а не просто с другим набором
   // цветов: у каждой добавлен слой, которого нет у остальных.
@@ -4872,6 +4922,13 @@ const AVATAR_FRAMES = [
     // вращение, встречные — как пробой.
     dashes: { color: "#E6C8FF", dur: 2.8 },
     dashes2: { color: "#7CB0FF", dur: 1.6, reverse: true },
+    // Пробой: самый мелкий и рваный край из всех, на быстром повороте.
+    warp: {
+      colors: ["#E6C8FF", "#B14CFF", "#2E6BFF"],
+      layers: [
+        { scale: 6, dur: 7, width: 3.2, opacity: 0.8, seed: 17, freq: 0.14, type: "turbulence", octaves: 2 },
+      ],
+    },
   },
   {
     // Листья с фона приложения, только облетают аватарку по кругу и
@@ -4892,8 +4949,8 @@ const AVATAR_FRAMES = [
     id: "magma", label: { RU: "Магма", EN: "Magma" }, price: 460,
     colors: ["#2A0A00", "#FF3D00", "#FFC46B", "#FF6B35", "#2A0A00"],
     spin: 34, glow: "#FF5A1F",
-    molten: {
-      hot: "#FFE3B0", mid: "#FF6B35", deep: "#7A1B00",
+    warp: {
+      colors: ["#FFE3B0", "#FF6B35", "#7A1B00"],
       layers: [
         { scale: 9, dur: 15, width: 7, opacity: 0.95, seed: 3, freq: 0.03 },
         { scale: 15, dur: 26, width: 3.5, opacity: 0.55, seed: 17, freq: 0.05, reverse: true },
@@ -4909,6 +4966,14 @@ const AVATAR_FRAMES = [
     // Расслоение цвета: тот же радужный круг двумя тонкими копиями,
     // сдвинутыми по фазе, — как свет, разложенный на краях стекла.
     chroma: [{ dur: 21, opacity: 0.5 }, { dur: 9, opacity: 0.35, reverse: true }],
+    // Стекло: край гуляет медленно и по-разному у каждого цвета — от
+    // этого по кромке идёт расслоение, как в настоящей призме.
+    warp: {
+      layers: [
+        { scale: 9, dur: 23, width: 4, opacity: 0.7, seed: 4, freq: 0.026, colors: ["#FF3D6E", "#FFC46B", "#5BFF9F"] },
+        { scale: 12, dur: 33, width: 3, opacity: 0.6, seed: 19, freq: 0.03, reverse: true, colors: ["#2E6BFF", "#B14CFF", "#FF3D6E"] },
+      ],
+    },
   },
   {
     // Кольца расходятся наружу — но не мерным метрономом, а ударом
@@ -4926,6 +4991,14 @@ const AVATAR_FRAMES = [
     // Корона: лучи по кругу дышат вразнобой, поэтому свет из-за края
     // виден даже там, где сама раскалённая дуга уже прошла.
     corona: { count: 14, color: "#FFB061", dur: 4.4 },
+    // Кромка солнца за диском: медленная крупная волна, только самый
+    // край и раскалён.
+    warp: {
+      colors: ["#FFE9A8", "#FF9A3D", "#08080C"],
+      layers: [
+        { scale: 10, dur: 29, width: 4.5, opacity: 0.85, seed: 23, freq: 0.024 },
+      ],
+    },
   },
 ];
 
@@ -5661,10 +5734,30 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
           шумом, а потом медленно поворачивается вместе с ним — бугры и
           языки едут по кромке. Пересчитывать шум на каждом кадре не
           нужно: телефон греется, а на глаз то же самое. */}
-      {f.molten && (крупно ? f.molten.layers : f.molten.layers.slice(0, 1)).map((L, i) => {
+      {/* Живой край.
+
+          Приём, на котором держалась «Магма», теперь общий: кольцо
+          пропускается через застывший шум и медленно поворачивается
+          вместе с ним, поэтому неровности едут по кромке. Идеальная
+          окружность с точками по краю — это украшение; неровный край —
+          уже вещество, и у каждой рамки оно своё: у огня мелкое и
+          быстрое, у сияния крупное и медленное, у льда редкое и
+          колючее.
+
+          Шум считается один раз, движение даёт поворот — пересчитывать
+          его каждый кадр телефон не обязан, а на глаз то же самое.
+
+          Только для крупных копий. Мерил: полтора десятка таких колец на
+          витрине поднимают кадр с 44 до 86 мс — вдвое, — и это ровно та
+          нагрузка, из-за которой терялись нажатия. Ни область фильтра,
+          ни число октав дела не меняют: дорого само их количество.
+          Поэтому в плитках по 62 точки рамка остаётся прежней, а живой
+          край показывается в профиле и на выигрыше из кейса. */}
+      {f.warp && (крупно ? f.warp.layers : []).map((L, i) => {
         // Размер в ключе: у маленьких аватарок своя копия фильтра, иначе
         // одна и та же деформация выглядела бы то грубой, то незаметной.
-        const uid = `mo${i}-${size}`;
+        const uid = `w${f.id}-${i}-${size}`;
+        const цвета = L.colors || f.warp.colors;
         return (
           <svg
             key={uid} width={size} height={size} viewBox="0 0 100 100"
@@ -5672,14 +5765,19 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
             aria-hidden
           >
             <defs>
-              <filter id={`f-${uid}`} x="-45%" y="-45%" width="190%" height="190%">
-                <feTurbulence type="fractalNoise" baseFrequency={L.freq} numOctaves="3" seed={L.seed} result="n" />
+              {/* Область фильтра ровно под вылет кромки. Прежние минус
+                  сорок пять процентов — это площадь втрое больше самой
+                  рамки, и всю её браузер честно считал. Октав две:
+                  третья на таком размере не видна, а стоит как первые
+                  две вместе. */}
+              <filter id={`f-${uid}`} x="-22%" y="-22%" width="144%" height="144%">
+                <feTurbulence type={L.type || "fractalNoise"} baseFrequency={L.freq} numOctaves={L.octaves || 2} seed={L.seed} result="n" />
                 <feDisplacementMap in="SourceGraphic" in2="n" scale={L.scale} xChannelSelector="R" yChannelSelector="G" />
               </filter>
               <linearGradient id={`g-${uid}`} x1="0" y1="0" x2="0.8" y2="1">
-                <stop offset="0%" stopColor={f.molten.hot} />
-                <stop offset="38%" stopColor={f.molten.mid} />
-                <stop offset="100%" stopColor={f.molten.deep} />
+                {цвета.map((c, k) => (
+                  <stop key={k} offset={`${Math.round((k / (цвета.length - 1)) * 100)}%`} stopColor={c} />
+                ))}
               </linearGradient>
             </defs>
             <g style={{
