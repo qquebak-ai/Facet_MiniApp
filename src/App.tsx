@@ -7204,10 +7204,14 @@ function ChestReveal({ prize, onClose }) {
    бы чужой текст. */
 function glassPane(радиус, { сила = 1 } = {}) {
   return {
-    background: `linear-gradient(155deg, ${hexA("#FFFFFF", 0.1 * сила)} 0%, ${hexA(T.mintGlass, 0.07 * сила)} 45%, ${hexA(T.mintGlass, 0.03 * сила)} 100%)`,
+    // Цвета взяты у самого листа: у него ведущий тон почти белый
+    // (#EAFFF4), а мятный виден только в глубине и очень слабо. Сначала
+    // я залил плашки мятным в полную силу — и они позеленели, хотя
+    // рядом лежали те же листья и зелёными не выглядели.
+    background: `linear-gradient(155deg, ${hexA("#FFFFFF", 0.09 * сила)} 0%, ${hexA("#EAFFF4", 0.05 * сила)} 45%, ${hexA(T.mintGlass, 0.02 * сила)} 100%)`,
     backdropFilter: "blur(14px) saturate(1.3)",
     WebkitBackdropFilter: "blur(14px) saturate(1.3)",
-    border: `1px solid ${hexA("#DFFFF0", 0.22)}`,
+    border: `1px solid ${hexA("#DFFFF0", 0.2)}`,
     boxShadow: `inset 0 1px 0 ${hexA("#FFFFFF", 0.24)}, 0 8px 22px rgba(0,0,0,0.45)`,
     borderRadius: радиус,
   };
