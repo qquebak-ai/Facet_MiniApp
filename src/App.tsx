@@ -910,6 +910,19 @@ function useLiveTick() {
   }, []);
   return tick;
 }
+/* Есть ли у Telegram своя стрелка «назад».
+
+   Внутри Telegram её рисует сам клиент в шапке, и вторая такая же
+   кнопка внутри страницы — это две одинаковые стрелки одна под другой.
+   Снаружи (обычный браузер) шапки нет вовсе, и без своей кнопки с
+   вложенной страницы не выйти. Поэтому не убираем совсем, а прячем
+   ровно там, где есть родная. */
+function hasTelegramBack() {
+  if (typeof window === "undefined") return false;
+  const tg = window.Telegram && window.Telegram.WebApp;
+  return !!(tg && tg.BackButton && typeof tg.BackButton.show === "function" && tg.initData);
+}
+
 /* Закрытие с анимацией.
 
    React убирает окно из разметки в тот же кадр, поэтому уход получался
@@ -4659,9 +4672,11 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
   if (!profile) {
     return (
       <div className="fx-view flex flex-col gap-4">
-        <button onClick={onBack} className="fx-tap self-start flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 14.5, background: T.surface, border: `1px solid ${T.line}` }}>
-          <ChevronLeft size={16} /> {tr("back")}
-        </button>
+        {!hasTelegramBack() && (
+          <button onClick={onBack} className="fx-tap self-start flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 14.5, background: T.surface, border: `1px solid ${T.line}` }}>
+            <ChevronLeft size={16} /> {tr("back")}
+          </button>
+        )}
         <div className="rounded-[22px] p-6 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("profileNotFound")}</span>
         </div>
@@ -4683,11 +4698,13 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
 
         {/* Кнопка занимает свою строку над аватаркой: раньше она висела
             абсолютом в углу и налезала на рамку. */}
-        <div className="flex" style={{ position: "relative", zIndex: 2, width: "100%", justifyContent: "flex-start", marginBottom: 6 }}>
-          <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}>
-            <ChevronLeft size={16} /> {tr("back")}
-          </button>
-        </div>
+        {!hasTelegramBack() && (
+          <div className="flex" style={{ position: "relative", zIndex: 2, width: "100%", justifyContent: "flex-start", marginBottom: 6 }}>
+            <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}>
+              <ChevronLeft size={16} /> {tr("back")}
+            </button>
+          </div>
+        )}
 
         <div style={{ position: "relative", zIndex: 1, lineHeight: 0 }}>
             <AvatarFrame frameId={frame} size={128}>
@@ -6677,7 +6694,7 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
   const done = achievements.filter((a) => a.done).length;
   return (
     <div className="fx-view flex flex-col gap-4 pt-2">
-      {onBack && (
+      {onBack && !hasTelegramBack() && (
         <button onClick={onBack} className="fx-tap flex items-center gap-1 self-start" style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.muted }}>
           <ChevronLeft size={16} /> {t("back")}
         </button>
@@ -8372,7 +8389,9 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
 
       {/* Top bar: back pill + a couple of glass icon buttons on the right */}
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 14.5, background: T.surface, border: `1px solid ${T.line}` }}><ChevronLeft size={16} /> {tr("back")}</button>
+        {hasTelegramBack()
+          ? <span />
+          : <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 14.5, background: T.surface, border: `1px solid ${T.line}` }}><ChevronLeft size={16} /> {tr("back")}</button>}
         <div className="flex items-center gap-2">
           <button onClick={handleShare} className="fx-tap rounded-full p-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}><Share2 size={15} color={T.muted} /></button>
           <button onClick={() => setTfExpanded(v => !v)} className="fx-tap rounded-full p-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}><MoreHorizontal size={15} color={T.muted} /></button>
