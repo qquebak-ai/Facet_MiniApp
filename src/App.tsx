@@ -322,6 +322,13 @@ const STR = {
     supportTooLong: "Слишком длинно: не больше 2000 знаков.",
     supportUndelivered: "Поддержка сейчас недоступна — сообщение не отправилось. Попробуй позже.",
     supportTeam: "Поддержка",
+    commentsTitle: "Обсуждение",
+    commentPlaceholder: "Что думаешь о токене?",
+    commentsEmpty: "Пока тихо. Скажи первое слово.",
+    commentNeedAccount: "Заведи аккаунт, чтобы писать",
+    commentTooFast: "Слишком часто. Подожди пару секунд.",
+    commentTooMany: "На сегодня хватит сообщений.",
+    commentTooLong: "Слишком длинно: не больше 400 знаков.",
     supportFaqLead: "Может, ответ уже здесь. Если нет — напиши нам.",
     supportOther: "Другое — написать в поддержку",
     supportBackToFaq: "Частые вопросы",
@@ -633,6 +640,13 @@ const STR = {
     supportTooLong: "Too long: 2000 characters max.",
     supportUndelivered: "Support is unreachable right now — the message wasn't sent. Try later.",
     supportTeam: "Support",
+    commentsTitle: "Discussion",
+    commentPlaceholder: "What do you think?",
+    commentsEmpty: "Quiet here. Say the first word.",
+    commentNeedAccount: "Create an account to post",
+    commentTooFast: "Too fast. Wait a couple of seconds.",
+    commentTooMany: "That's enough for today.",
+    commentTooLong: "Too long: 400 characters max.",
     supportFaqLead: "The answer might already be here. If not, write to us.",
     supportOther: "Something else — message support",
     supportBackToFaq: "Common questions",
@@ -8197,6 +8211,152 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
 
 const CHART_TOTAL = 140;
 
+/* Обсуждение под токеном.
+
+   Списком идут последние сообщения, свежие сверху. Автор подписан ником
+   и аватаркой в его же рамке — купленная косметика должна быть видна
+   там, где на неё смотрят чужие люди, иначе её незачем покупать.
+
+   Гость читает, но не пишет: строка ввода у него заменена приглашением
+   завести аккаунт. Прятать от него саму ленту нельзя — это половина
+   причины остаться. */
+function TokenComments({ tokenId, currentUserId, onNeedAuth, onOpenProfile, showToast }) {
+  const [items, setItems] = useState(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!tokenId) return;
+    const { data, error } = await supabase.rpc("token_comments_with_authors", { p_token: tokenId, p_limit: 50 });
+    if (!error) setItems(data || []);
+    else setItems([]);
+  }, [tokenId]);
+
+  useEffect(() => { setItems(null); load(); }, [load]);
+
+  async function send() {
+    const text = draft.trim();
+    if (!text || sending) return;
+    if (!currentUserId) { onNeedAuth && onNeedAuth(); return; }
+    setSending(true);
+    const { error } = await supabase.from("token_comments").insert({ token_id: tokenId, user_id: currentUserId, body: text });
+    setSending(false);
+    if (error) {
+      // Ограничения стоят в базе, поэтому и текст берём из её ответа:
+      // «слишком часто» и «слишком длинно» лечатся по-разному.
+      const код = String(error.message || "");
+      showToast(код.includes("too_fast") ? t("commentTooFast")
+        : код.includes("too_many") ? t("commentTooMany")
+        : код.includes("body_check") || код.includes("check constraint") ? t("commentTooLong")
+        : t("saveFailed"));
+      return;
+    }
+    setDraft("");
+    haptic("light");
+    load();
+  }
+
+  async function remove(id) {
+    const { error } = await supabase.from("token_comments").delete().eq("id", id);
+    if (error) { showToast(t("saveFailed")); return; }
+    setItems((prev) => (prev || []).filter((c) => c.id !== id));
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700 }}>{t("commentsTitle")}</span>
+        {items && items.length > 0 && (
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12.5 }}>{items.length}</span>
+        )}
+      </div>
+
+      {currentUserId ? (
+        <div className="flex items-end gap-2">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.slice(0, 400))}
+            placeholder={t("commentPlaceholder")}
+            rows={1}
+            style={{
+              flex: 1, minWidth: 0, resize: "none",
+              fontFamily: bodyFont, fontSize: 16, lineHeight: 1.4, color: T.ice,
+              background: T.surface, border: `1px solid ${T.line}`, borderRadius: 18,
+              padding: "10px 13px", outline: "none",
+            }}
+          />
+          <button
+            onClick={send}
+            disabled={!draft.trim() || sending}
+            className="fx-tap flex items-center justify-center"
+            style={{
+              width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
+              background: draft.trim() && !sending ? PRISM : T.surfaceHi,
+              border: draft.trim() && !sending ? "none" : `1px solid ${T.line}`,
+            }}
+          >
+            <Send size={15} color={draft.trim() && !sending ? PRISM_TEXT : T.muted} />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => onNeedAuth && onNeedAuth()}
+          className="fx-tap w-full rounded-[18px] py-2.5"
+          style={{ background: T.surface, border: `1px dashed ${T.line}`, fontFamily: bodyFont, fontSize: 13.5, color: T.muted }}
+        >
+          {t("commentNeedAccount")}
+        </button>
+      )}
+
+      {items === null ? (
+        <div className="flex items-center justify-center" style={{ height: 70 }}><LeafLoader size={30} /></div>
+      ) : items.length === 0 ? (
+        <div className="rounded-[20px] p-4 text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5 }}>{t("commentsEmpty")}</span>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {items.map((c) => (
+            <div key={c.id} className="flex gap-2.5 rounded-[20px] p-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+              <button
+                onClick={() => onOpenProfile && c.user_id && onOpenProfile(c.user_id)}
+                className="fx-tap"
+                style={{ background: "transparent", border: "none", padding: 0, flexShrink: 0, lineHeight: 0 }}
+              >
+                <AvatarFrame frameId={c.frame_id || "none"} size={36}>
+                  <div style={{
+                    width: "100%", height: "100%", borderRadius: "50%",
+                    background: c.avatar_url ? `center/cover no-repeat url(${c.avatar_url})` : T.surfaceHi,
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+                  }}>
+                    {!c.avatar_url && (c.emoji || "🙂")}
+                  </div>
+                </AvatarFrame>
+              </button>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>
+                    {c.nickname || "—"}
+                  </span>
+                  <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>{fmtSince(c.created_at)}</span>
+                  {c.user_id === currentUserId && (
+                    <button onClick={() => remove(c.id)} className="fx-tap" style={{ background: "transparent", border: "none", marginLeft: "auto", padding: 0 }}>
+                      <Trash2 size={12} color={T.muted} />
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontFamily: bodyFont, color: T.paper, fontSize: 14, lineHeight: 1.45, marginTop: 3, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  {c.body}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey, currentUserId = null, onNeedAuth, onOpenProfile, tonPriceUsd = 0 }) {
   const [tab, setTab] = useState("chart"); // chart | info | tx
   const [chartMode] = useState("mcap"); // always market cap — price toggle removed
@@ -8698,6 +8858,19 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
 
           {token.curveAddress && (
             <TrustPanel token={token} testnet={TON_TESTNET_NETWORK} holders={holdersCount} />
+          )}
+
+          {/* Обсуждение — под признаками честности и над кнопками: сперва
+              человек смотрит, что за токен, потом что о нём говорят, и
+              только после этого решает покупать. */}
+          {token.id && (
+            <TokenComments
+              tokenId={token.id}
+              currentUserId={currentUserId}
+              onNeedAuth={onNeedAuth}
+              onOpenProfile={onOpenProfile}
+              showToast={showToast}
+            />
           )}
 
           {curve && curve.graduated ? null : connected ? (
