@@ -323,6 +323,18 @@ const STR = {
     refShareNote: "С каждого TON, который наторговали приглашённые, тебе идёт 10 монет — доля с комиссии площадки. Монетами, не в TON: комиссию удерживает контракт в цепочке, и поделить её там нельзя.",
     refPayoutCta: "Забрать долю",
     refPayoutGot: "Начислено {n} монет",
+    shareCardTitle: "Карточка токена",
+    shareCardNote: "Картинка с текущими цифрами и твоей ссылкой приглашения. Перешли её в чат — кто откроет, попадёт в приложение по тебе.",
+    shareCardSend: "Отправить картинку",
+    shareCardSave: "Сохранить в галерею",
+    shareCardCopy: "Скопировать ссылку",
+    shareCardSaved: "Картинка сохранена",
+    shareCardFail: "Не получилось собрать картинку",
+    shareCardMcap: "Капитализация",
+    shareCardToDex: "До биржи",
+    shareCardOnDex: "На бирже",
+    shareCardFooter: "Запусти свой мемкоин в Telegram",
+    tokenAgeLabel: "Возраст",
     supportDesc: "Напиши, что случилось. Отвечаем в течение суток — ответ придёт сюда и в Telegram.",
     contactSupport: "Написать в поддержку",
     supportPlaceholder: "Что случилось?",
@@ -655,6 +667,18 @@ const STR = {
     refShareNote: "For every TON your invitees trade you get 10 coins — a share of the platform fee. In coins, not TON: the fee is withheld by the contract on-chain and can't be split there.",
     refPayoutCta: "Claim your share",
     refPayoutGot: "{n} coins credited",
+    shareCardTitle: "Token card",
+    shareCardNote: "An image with live numbers and your invite link. Forward it to a chat — whoever opens it lands in the app through you.",
+    shareCardSend: "Send image",
+    shareCardSave: "Save to gallery",
+    shareCardCopy: "Copy link",
+    shareCardSaved: "Image saved",
+    shareCardFail: "Couldn't render the image",
+    shareCardMcap: "Market cap",
+    shareCardToDex: "To DEX",
+    shareCardOnDex: "On DEX",
+    shareCardFooter: "Launch your memecoin in Telegram",
+    tokenAgeLabel: "Age",
     supportDesc: "Tell us what happened. We reply within a day — here and in Telegram.",
     contactSupport: "Message support",
     supportPlaceholder: "What happened?",
@@ -8758,17 +8782,11 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   // его нет, показывать нечего, но и «нет данных» неправда.
   const chartPending = chartLoading || (!!chartData && chartData.tf === tf && !scaledCandles);
 
-  function handleShare() {
-    const url = `https://mintly.app/token/${token.id}`;
-    if (typeof navigator !== "undefined" && navigator.share) {
-      navigator.share({ title: token.name, url }).catch(() => {});
-    } else if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(url).catch(() => {});
-      showToast(tr("linkCopied"));
-    } else {
-      showToast(tr("linkCopied"));
-    }
-  }
+  // Кнопка «поделиться» открывает карточку картинкой: голая ссылка в
+  // чате не показывает ни цифр, ни лого — превью мини-приложения
+  // Telegram не разворачивает.
+  const [shareOpen, setShareOpen] = useState(false);
+  function handleShare() { haptic("light"); setShareOpen(true); }
   function copyContract() {
     if (!token.tokenAddress) return;
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -8874,6 +8892,14 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   return (
     <div className="fx-view flex flex-col gap-4 pb-4" style={{ position: "relative" }}>
       <TrendFX up={up} seedKey={token.seed} />
+      <TokenShareSheet
+        token={shareOpen ? token : null}
+        curve={curve}
+        holders={holdersCount}
+        userId={currentUserId}
+        onClose={() => setShareOpen(false)}
+        showToast={showToast}
+      />
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: 14 }}>
 
       {/* Top bar: back pill + a couple of glass icon buttons on the right */}
@@ -9168,6 +9194,381 @@ const SLIPPAGE_OPTIONS = [0.5, 1, 3];
 function parseAmount(str) {
   const n = parseFloat(str.replace(",", "."));
   return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/* Карточка токена картинкой.
+ *
+ * Ссылку из приложения и раньше можно было отправить, но в чате она
+ * выглядит серой строкой: превью Telegram не покажет ни цифр, ни лого —
+ * мини-приложение он не разворачивает. Картинка показывает сразу всё:
+ * тикер, капитализацию, движение цены и сколько собрано до биржи.
+ *
+ * Рисуем сами на canvas, а не картинкой с сервера: цифры уже на экране,
+ * гонять их через свою функцию ради превью незачем, да и работает это
+ * без сети. Размер 1080×1350 — Telegram сжимает вложение по длинной
+ * стороне, и с меньшего холста тикер в ленте становится мылом.
+ *
+ * Ссылка внизу — реферальная: карточку переслали, кто-то открыл, и
+ * приглашение засчиталось тому, кто отправил. */
+const SHARE_W = 1080;
+const SHARE_H = 1350;
+
+function shareRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function shareLoadImage(src) {
+  return new Promise((resolve) => {
+    if (!src) { resolve(null); return; }
+    const img = new Image();
+    // Без этого холст «пачкается» чужой картинкой и toBlob отбивается
+    // с ошибкой безопасности. Не отдал заголовки — рисуем эмодзи.
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+async function drawTokenShareCard(canvas, { token, curve, link, holders }) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  canvas.width = SHARE_W;
+  canvas.height = SHARE_H;
+
+  // Шрифт приложения приезжает из сети. Пока он не готов, canvas молча
+  // рисует системным — карточка выходила чужой на вид.
+  try {
+    if (document.fonts && document.fonts.load) {
+      await Promise.all([
+        document.fonts.load("700 92px 'Jost'"),
+        document.fonts.load("400 36px 'Jost'"),
+      ]);
+    }
+  } catch (e) { /* нет так нет */ }
+
+  const logo = await shareLoadImage(token.logoUrl);
+
+  const M = 88;                    // поля
+  const ink = "#FFFFFF";
+  const muted = "#7C828B";
+  const accent = "#FF6B35";
+
+  ctx.fillStyle = "#07080A";
+  ctx.fillRect(0, 0, SHARE_W, SHARE_H);
+  // Два пятна света: тёплое сверху и мятное снизу — те же два цвета, на
+  // которых стоит весь интерфейс.
+  let g = ctx.createRadialGradient(SHARE_W * 0.88, 90, 0, SHARE_W * 0.88, 90, 820);
+  g.addColorStop(0, "rgba(255,107,53,0.30)");
+  g.addColorStop(1, "rgba(255,107,53,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, SHARE_W, SHARE_H);
+  g = ctx.createRadialGradient(60, SHARE_H - 120, 0, 60, SHARE_H - 120, 760);
+  g.addColorStop(0, "rgba(127,231,196,0.14)");
+  g.addColorStop(1, "rgba(127,231,196,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, SHARE_W, SHARE_H);
+
+  ctx.strokeStyle = "rgba(255,255,255,0.10)";
+  ctx.lineWidth = 2;
+  shareRect(ctx, 26, 26, SHARE_W - 52, SHARE_H - 52, 58);
+  ctx.stroke();
+
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left";
+
+  // Шапка
+  ctx.fillStyle = ink;
+  ctx.font = "700 46px 'Jost', sans-serif";
+  ctx.fillText("MINTLY", M, 148);
+  ctx.fillStyle = muted;
+  ctx.font = "400 30px 'Jost', sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText("TON", SHARE_W - M, 146);
+  ctx.textAlign = "left";
+
+  // Аватар токена
+  const A = 220;
+  const ax = M;
+  const ay = 246;
+  ctx.save();
+  shareRect(ctx, ax, ay, A, A, 64);
+  ctx.clip();
+  ctx.fillStyle = "rgba(255,255,255,0.05)";
+  ctx.fillRect(ax, ay, A, A);
+  if (logo) {
+    // Логотипы приходят любой формы: вписываем по короткой стороне,
+    // иначе квадратная рамка режет широкую картинку по краям.
+    const k = Math.max(A / logo.width, A / logo.height);
+    const w = logo.width * k;
+    const h = logo.height * k;
+    ctx.drawImage(logo, ax + (A - w) / 2, ay + (A - h) / 2, w, h);
+  } else {
+    ctx.font = "120px 'Apple Color Emoji', 'Noto Color Emoji', 'Segoe UI Emoji', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillStyle = ink;
+    ctx.fillText(token.emoji || "🪙", ax + A / 2, ay + A / 2 + 44);
+    ctx.textAlign = "left";
+  }
+  ctx.restore();
+  ctx.strokeStyle = "rgba(255,107,53,0.55)";
+  ctx.lineWidth = 3;
+  shareRect(ctx, ax, ay, A, A, 64);
+  ctx.stroke();
+
+  // Тикер и название
+  const tx = ax + A + 44;
+  ctx.fillStyle = ink;
+  ctx.font = "700 88px 'Jost', sans-serif";
+  ctx.fillText(`$${String(token.ticker || "").toUpperCase()}`, tx, ay + 112);
+  ctx.fillStyle = muted;
+  ctx.font = "400 40px 'Jost', sans-serif";
+  const name = String(token.name || "");
+  ctx.fillText(name.length > 18 ? name.slice(0, 17) + "…" : name, tx, ay + 176);
+
+  // Капитализация и движение
+  ctx.fillStyle = muted;
+  ctx.font = "400 32px 'Jost', sans-serif";
+  ctx.fillText(t("shareCardMcap"), M, 626);
+  ctx.fillStyle = ink;
+  ctx.font = "700 112px 'Jost', sans-serif";
+  const mcap = fmtUSD(token.mcapNum);
+  ctx.fillText(mcap, M, 728);
+
+  const change = Number(token.change);
+  if (Number.isFinite(change)) {
+    const up = change >= 0;
+    const label = `${up ? "+" : ""}${change.toFixed(2)}%`;
+    // Ширина числа меряется его же шрифтом: капитализация бывает и
+    // «$980», и «$12.40M», и плашка должна встать вплотную к любой.
+    ctx.font = "700 112px 'Jost', sans-serif";
+    const mw = ctx.measureText(mcap).width;
+    ctx.font = "700 38px 'Jost', sans-serif";
+    const bw = ctx.measureText(label).width + 48;
+    ctx.fillStyle = up ? "rgba(56,211,159,0.16)" : "rgba(255,77,90,0.16)";
+    shareRect(ctx, M + mw + 28, 668, bw, 62, 31);
+    ctx.fill();
+    ctx.fillStyle = up ? "#38D39F" : "#FF4D5A";
+    ctx.fillText(label, M + mw + 52, 710);
+  }
+
+  ctx.fillStyle = muted;
+  ctx.font = "400 34px 'Jost', sans-serif";
+  ctx.fillText(`${fmtPrice(token.price)} ${t("perToken")}`, M, 794);
+
+  // Путь до биржи. Кривая может быть ещё не прочитана — тогда полосы
+  // просто нет, выдумывать проценты нельзя.
+  const barY = 890;
+  const barDrawn = !!(curve && curve.graduationTon);
+  if (barDrawn) {
+    const raised = Number(curve.realTon) / 1e9;
+    const target = Number(curve.graduationTon) / 1e9;
+    const done = curve.graduated || raised >= target;
+    const pct = done ? 1 : Math.max(0, Math.min(1, raised / target));
+    ctx.fillStyle = muted;
+    ctx.font = "400 32px 'Jost', sans-serif";
+    ctx.fillText(done ? t("shareCardOnDex") : t("shareCardToDex"), M, barY - 24);
+    ctx.textAlign = "right";
+    ctx.fillStyle = done ? "#38D39F" : ink;
+    ctx.font = "700 34px 'Jost', sans-serif";
+    ctx.fillText(done ? `${fmtTon(raised)} TON` : `${fmtTon(raised)} / ${fmtTon(target)} TON`, SHARE_W - M, barY - 24);
+    ctx.textAlign = "left";
+
+    const bw = SHARE_W - M * 2;
+    ctx.fillStyle = "rgba(255,255,255,0.07)";
+    shareRect(ctx, M, barY, bw, 26, 13);
+    ctx.fill();
+    const fill = Math.max(26, bw * pct);
+    const fg = ctx.createLinearGradient(M, 0, M + fill, 0);
+    if (done) { fg.addColorStop(0, "#38D39F"); fg.addColorStop(1, "#7FE7C4"); }
+    else { fg.addColorStop(0, "#FF6B35"); fg.addColorStop(1, "#FFA46B"); }
+    ctx.fillStyle = fg;
+    shareRect(ctx, M, barY, fill, 26, 13);
+    ctx.fill();
+  }
+
+  // Три числа в ряд. Стоят они здесь не для красоты: без них у токена
+  // без кривой середина карточки оставалась пустой, а сами цифры —
+  // первое, что смотрят перед покупкой.
+  const cells = [
+    [t("statHolders"), holders == null ? "—" : String(holders)],
+    [t("statVolume24h"), token.vol ? `$${token.vol}` : "—"],
+    [t("tokenAgeLabel"), fmtAge(token.createdAt) || "—"],
+  ];
+  const gap = 18;
+  const cw = (SHARE_W - M * 2 - gap * 2) / 3;
+  // Без полосы до биржи ряд поднимается: иначе под ценой зияет дыра.
+  const cy = barDrawn ? 950 : 890;
+  cells.forEach(([label, value], i) => {
+    const cx = M + (cw + gap) * i;
+    ctx.fillStyle = "rgba(255,255,255,0.05)";
+    shareRect(ctx, cx, cy, cw, 112, 34);
+    ctx.fill();
+    ctx.textAlign = "center";
+    ctx.fillStyle = muted;
+    ctx.font = "400 27px 'Jost', sans-serif";
+    ctx.fillText(label, cx + cw / 2, cy + 44);
+    ctx.fillStyle = ink;
+    ctx.font = "700 40px 'Jost', sans-serif";
+    ctx.fillText(value, cx + cw / 2, cy + 90);
+    ctx.textAlign = "left";
+  });
+
+  // Подвал: ссылка приглашения крупно, под ней зачем её открывать.
+  const fy = SHARE_H - 248;
+  ctx.fillStyle = "rgba(255,255,255,0.05)";
+  shareRect(ctx, M, fy, SHARE_W - M * 2, 108, 40);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,107,53,0.35)";
+  ctx.lineWidth = 2;
+  shareRect(ctx, M, fy, SHARE_W - M * 2, 108, 40);
+  ctx.stroke();
+  ctx.fillStyle = accent;
+  ctx.font = "700 34px 'Jost', sans-serif";
+  ctx.textAlign = "center";
+  const short = String(link).replace(/^https?:\/\//, "");
+  ctx.fillText(short.length > 42 ? short.slice(0, 41) + "…" : short, SHARE_W / 2, fy + 68);
+  ctx.fillStyle = muted;
+  ctx.font = "400 32px 'Jost', sans-serif";
+  ctx.fillText(t("shareCardFooter"), SHARE_W / 2, fy + 172);
+  ctx.textAlign = "left";
+}
+
+/* Шторка с готовой карточкой: сверху то, что уйдёт в чат, снизу три
+   действия. Отправка идёт системным окном «поделиться» — оно кладёт
+   картинку прямо в чат Telegram; там, где такого окна нет, файл просто
+   сохраняется, и переслать его человек может сам. */
+function TokenShareSheet({ token: tokenProp, curve, holders, userId, onClose, showToast }) {
+  // Пока шторка уезжает, токена в пропсах уже нет — держим последний,
+  // иначе на кадрах закрытия рисовать нечего и всё падает.
+  const [token, closing] = useClosing(tokenProp);
+  const canvasRef = useRef(null);
+  const blobRef = useRef(null);
+  const [ready, setReady] = useState(false);
+  const link = referralLink(userId) || `https://t.me/${TG_BOT}`;
+  // Состояние кривой страница перечитывает по таймеру и каждый раз даёт
+  // новый объект. Пересобирать картинку из-за этого незачем — следим за
+  // самими числами.
+  const curveRef = useRef(curve);
+  curveRef.current = curve;
+  const raisedKey = curve ? `${curve.realTon}/${curve.graduationTon}/${curve.graduated}` : "";
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    setReady(false);
+    (async () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      try {
+        await drawTokenShareCard(canvas, { token, curve: curveRef.current, link, holders });
+        if (cancelled) return;
+        await new Promise((resolve) => canvas.toBlob((b) => { blobRef.current = b; resolve(); }, "image/png"));
+        if (!cancelled) setReady(!!blobRef.current);
+      } catch (e) {
+        if (!cancelled) showToast(t("shareCardFail"));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token, raisedKey, holders, link, showToast]);
+
+  if (!token) return null;
+
+  const file = () => {
+    const b = blobRef.current;
+    if (!b) return null;
+    try { return new File([b], `mintly-${token.ticker || "token"}.png`, { type: "image/png" }); }
+    catch (e) { return null; }
+  };
+
+  function saveFile() {
+    const b = blobRef.current;
+    if (!b) { showToast(t("shareCardFail")); return; }
+    const url = URL.createObjectURL(b);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `mintly-${token.ticker || "token"}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    showToast(t("shareCardSaved"));
+  }
+
+  async function send() {
+    haptic("light");
+    const f = file();
+    if (f && navigator.canShare && navigator.canShare({ files: [f] })) {
+      try {
+        await navigator.share({ files: [f], text: link });
+        return;
+      } catch (e) {
+        // Человек закрыл окно сам — это не ошибка и «сохранили» тут врать
+        // не надо.
+        if (e && e.name === "AbortError") return;
+      }
+    }
+    saveFile();
+  }
+
+  function copyLink() {
+    if (navigator.clipboard) navigator.clipboard.writeText(link).catch(() => {});
+    showToast(t("linkCopied"));
+  }
+
+  // Шторку открывает страница токена, а у неё своя система координат:
+  // без портала подложка легла бы внутрь прокручиваемой страницы и
+  // поехала бы вместе с ней.
+  const sheet = (
+    <div className={`fx-modal-back${closing ? " fx-out" : ""}`} style={{ ...SHEET_BACK, position: "fixed", zIndex: 300 }} onClick={onClose}>
+      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(18, { paddingBottom: 22 })}>
+        <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{t("shareCardTitle")}</span>
+          <button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button>
+        </div>
+        <canvas
+          ref={canvasRef}
+          style={{ display: "block", width: "100%", borderRadius: 20, background: T.surfaceHi, aspectRatio: "1080 / 1350", opacity: ready ? 1 : 0.4, transition: "opacity 220ms ease" }}
+        />
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.45, margin: "10px 2px 0" }}>
+          {t("shareCardNote")}
+        </p>
+        <button
+          onClick={send}
+          disabled={!ready}
+          className="fx-tap w-full flex items-center justify-center gap-2 rounded-[18px] py-3 mt-3"
+          style={{ background: T.electric, color: "#0D1117", fontFamily: displayFont, fontWeight: 700, fontSize: 14.5, opacity: ready ? 1 : 0.5 }}
+        >
+          <Send size={15} /> {t("shareCardSend")}
+        </button>
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={saveFile}
+            disabled={!ready}
+            className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-[18px] py-2.5"
+            style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, color: T.ice, fontFamily: displayFont, fontWeight: 700, fontSize: 13, opacity: ready ? 1 : 0.5 }}
+          >
+            <ImageIcon size={14} color={T.muted} /> {t("shareCardSave")}
+          </button>
+          <button
+            onClick={copyLink}
+            className="fx-tap flex-1 flex items-center justify-center gap-1.5 rounded-[18px] py-2.5"
+            style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, color: T.ice, fontFamily: displayFont, fontWeight: 700, fontSize: 13 }}
+          >
+            <Copy size={14} color={T.muted} /> {t("shareCardCopy")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return typeof document !== "undefined" ? createPortal(sheet, document.body) : sheet;
 }
 
 /* TradeModal — the buy/sell sheet: pick an amount (with quick %/preset
