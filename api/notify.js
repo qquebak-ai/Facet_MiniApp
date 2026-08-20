@@ -199,6 +199,36 @@ export default async function handler(req, res) {
       }
     }
 
+    // Держателям — свои вехи. Владельцу приложение писало давно, а
+    // тому, кто просто купил чужой токен, не приходило ничего: ни
+    // «вышел на биржу», ни «прошёл половину пути». Начинается это с
+    // первой же покупки — держатель определяется по своим сделкам.
+    const событие = curve.graduated ? "closed" : pct >= 90 ? "almost" : pct >= 50 ? "half" : null;
+    if (событие) {
+      const { data: holders } = await admin.rpc("token_holders", { p_token: tok.id });
+      for (const h of holders || []) {
+        if (!h.telegram_id || h.user_id === tok.owner_id) continue; // владельцу уже написали
+        const { data: было } = await admin
+          .from("holder_notify")
+          .select("event")
+          .eq("user_id", h.user_id)
+          .eq("token_id", tok.id)
+          .eq("event", событие)
+          .maybeSingle();
+        if (было) continue;
+        const текст = событие === "closed"
+          ? `<b>${label}</b> вышел на биржу 🎉\nТвои токены никуда не делись — торговля продолжается там.`
+          : событие === "almost"
+            ? `<b>${label}</b> почти на бирже: ${pct.toFixed(0)}% пути\nОсталось ${fmt(Math.max(0, target - curve.realTon))} TON`
+            : `<b>${label}</b> прошёл половину пути до биржи\nВ кривой ${fmt(curve.realTon)} из ${fmt(target)} TON`;
+        if (await tell(h.telegram_id, текст)) sent += 1;
+        await admin.from("holder_notify").upsert(
+          { user_id: h.user_id, token_id: tok.id, event: событие },
+          { onConflict: "user_id,token_id,event" },
+        );
+      }
+    }
+
     await admin.from("token_notify").upsert(next, { onConflict: "token_id" });
   }
 

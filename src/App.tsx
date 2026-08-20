@@ -199,6 +199,16 @@ const STR = {
     mempadLaunchToken: "Запустить токен",
     tickerBought: "купил", tickerSold: "продал",
     sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionWallet: "Кошелёк",
+    feedTitle: "Прямо сейчас",
+    feedSub: "Что происходит на площадке",
+    feedTrade: "{who} купил {ticker} на {ton} TON",
+    feedLaunch: "{who} запустил {ticker}",
+    topTitle: "Топ",
+    topTokens: "Токены",
+    topCreators: "Создатели",
+    topRaised: "собрано {ton} TON",
+    topOnDex: "уже на бирже",
+    topLaunched: "{n} токенов · {ton} TON",
     statLaunched24: "запусков за сутки",
     statRaised: "TON в токенах",
     statGraduated: "вышли на биржу",
@@ -517,6 +527,16 @@ const STR = {
     mempadLaunchToken: "Launch token",
     tickerBought: "bought", tickerSold: "sold",
     sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionWallet: "Wallet",
+    feedTitle: "Right now",
+    feedSub: "What's happening here",
+    feedTrade: "{who} bought {ticker} for {ton} TON",
+    feedLaunch: "{who} launched {ticker}",
+    topTitle: "Top",
+    topTokens: "Tokens",
+    topCreators: "Creators",
+    topRaised: "{ton} TON raised",
+    topOnDex: "already on a DEX",
+    topLaunched: "{n} tokens · {ton} TON",
     statLaunched24: "launches today",
     statRaised: "TON in tokens",
     statGraduated: "reached a DEX",
@@ -8097,12 +8117,148 @@ function HomeStats() {
   );
 }
 
-function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken }) {
+/* Лента событий площадки.
+
+   Кто что купил и какие токены только что запустили — в одном списке,
+   свежее сверху. Без неё главная показывает предложение что-то сделать,
+   но не показывает, что здесь вообще кто-то есть.
+
+   Свои сделки закрыты политикой «вижу только своё», и это правильно:
+   портфель чужим не показывают. Наружу отдаёт функция базы, которая
+   сама выбирает, что можно показать, — ник, тикер, сторона, сумма и
+   время. Ни адресов, ни размеров чужих портфелей. */
+function ActivityFeed() {
+  const [items, setItems] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => supabase.rpc("recent_activity", { p_limit: 8 }).then(
+      ({ data, error }) => { if (!cancelled && !error) setItems(data || []); },
+      () => {},
+    );
+    load();
+    // Раз в полминуты: лента должна оживать сама, но опрашивать чаще —
+    // тратить связь ради строчки, которая и так подождёт.
+    const t = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+
+  if (!items || !items.length) return null;
+
+  return (
+    <div className="fx-view">
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("feedTitle")}</span>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("feedSub")}</span>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {items.map((с, i) => (
+          <div key={`${с.at}-${i}`} className="flex items-center gap-2 rounded-[18px] px-3 py-2"
+            style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+              background: с.kind === "launch" ? T.electric : Number(с.ton) >= 0 ? T.up : T.up,
+            }} />
+            <span className="truncate" style={{ fontFamily: bodyFont, color: T.paper, fontSize: 13, flex: 1, minWidth: 0 }}>
+              {с.kind === "launch"
+                ? tf("feedLaunch", { who: с.nickname || "—", ticker: с.ticker || "?" })
+                : tf("feedTrade", { who: с.nickname || "—", ticker: с.ticker || "?", ton: fmtTon(Number(с.ton) || 0) })}
+            </span>
+            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5, flexShrink: 0 }}>{fmtSince(с.at)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* Топ: токены по собранному и создатели по сумме собранного их
+   токенами. Соревнование — самый дешёвый способ вернуть человека
+   завтра, а числа для него уже считает обработчик уведомлений. */
+function Leaderboard({ onOpenToken, onOpenProfile }) {
+  const [data, setData] = useState(null);
+  const [tab, setTab] = useState("tokens");
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.rpc("leaderboard", { p_limit: 5 }).then(
+      ({ data: d, error }) => { if (!cancelled && !error) setData(d); },
+      () => {},
+    );
+    return () => { cancelled = true; };
+  }, []);
+
+  const токены = (data && data.tokens) || [];
+  const создатели = (data && data.creators) || [];
+  if (!токены.length && !создатели.length) return null;
+  const список = tab === "tokens" ? токены : создатели;
+
+  return (
+    <div className="fx-view">
+      <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("topTitle")}</span>
+        <div className="flex gap-1">
+          {[["tokens", "topTokens"], ["creators", "topCreators"]].map(([id, ключ]) => (
+            <button key={id} onClick={() => setTab(id)} className="fx-tap rounded-full px-3 py-1"
+              style={{
+                fontFamily: bodyFont, fontSize: 12,
+                background: tab === id ? T.ice : "transparent",
+                color: tab === id ? T.bg : T.muted,
+                border: `1px solid ${tab === id ? T.ice : T.line}`,
+              }}>
+              {t(ключ)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {список.map((э, i) => (
+          <button
+            key={э.id || i}
+            onClick={() => (tab === "tokens" ? onOpenToken && onOpenToken(э) : onOpenProfile && onOpenProfile(э.id))}
+            className="fx-card fx-tap w-full flex items-center gap-3 rounded-[20px] p-2.5 text-left"
+            style={{ background: T.surface, border: `1px solid ${T.line}`, animationDelay: `${i * 40}ms` }}
+          >
+            {/* Место числом, а не медалью: медали читаются наградой, а
+                это просто порядок. */}
+            <span style={{ fontFamily: monoFont, color: i === 0 ? T.electric : T.muted, fontSize: 13, fontWeight: 700, width: 16, flexShrink: 0 }}>{i + 1}</span>
+            {tab === "tokens" ? (
+              <TokenAvatar size={34} src={э.logo_url}>{э.emoji}</TokenAvatar>
+            ) : (
+              <AvatarFrame frameId={э.frame_id || "none"} size={34}>
+                <div style={{
+                  width: "100%", height: "100%", borderRadius: "50%",
+                  background: э.avatar_url ? `center/cover no-repeat url(${э.avatar_url})` : T.surfaceHi,
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+                }}>{!э.avatar_url && (э.emoji || "🙂")}</div>
+              </AvatarFrame>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>
+                {tab === "tokens" ? `$${э.ticker}` : (э.nickname || "—")}
+              </div>
+              <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 2 }}>
+                {tab === "tokens"
+                  ? (э.graduated ? t("topOnDex") : tf("topRaised", { ton: fmtTon(Number(э.raised) || 0) }))
+                  : tf("topLaunched", { n: э.launched, ton: fmtTon(Number(э.raised) || 0) })}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile }) {
   return (
     <div className="flex flex-col gap-4" style={{ paddingBottom: 12 }}>
       <HomeHero onGoTab={onGoTab} onGoCreate={onGoCreate} />
       <HomeStats />
+      <ActivityFeed />
       <AlmostListed tokens={curveTokens} onOpen={onOpenToken} />
+      <Leaderboard onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} />
     </div>
   );
 }
@@ -13719,7 +13875,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             can still scroll clear of it. */}
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), paddingBottom: 116 + insetBottom }} key={view}>
           <KeepAlive show={view === "home"}>
-            <HomeView onGoTab={goTab} onGoCreate={openCreate} curveTokens={communityTokens} onOpenToken={openToken} />
+            <HomeView onGoTab={goTab} onGoCreate={openCreate} curveTokens={communityTokens} onOpenToken={openToken} onOpenProfile={openUserProfile} />
           </KeepAlive>
           <KeepAlive show={view === "mempad"}>
             <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />
