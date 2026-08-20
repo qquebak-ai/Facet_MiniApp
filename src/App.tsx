@@ -795,18 +795,33 @@ const PRESS = "70ms cubic-bezier(0.4, 0, 1, 1)";
    присылает отступы событиями), поэтому он кладёт их в переменные
    --tg-inset-bottom/--tg-inset-top, а шторки берут их отсюда. Сверху
    ограничиваем высоту так, чтобы шапка шторки не уезжала под чёлку. */
+/* Общий вид нижних шторок.
+ *
+ * Раньше шторка шла во всю ширину и упиралась в края экрана, а нижний
+ * отступ безопасной зоны добавлялся внутрь карточки — на телефонах с
+ * закруглёнными углами она оказывалась подрезанной, и выглядело это
+ * криво. Часть окон (настройки, покупка сундука) уже была сделана
+ * иначе — плавающей карточкой с полями по бокам, — и два вида шторок
+ * ходили по приложению вперемешку.
+ *
+ * Теперь вид один: карточка не касается стенок, отступы и безопасную
+ * зону держит подложка, а скругление у карточки со всех сторон. */
 const SHEET_BACK = {
   position: "absolute", inset: 0, background: "rgba(0,0,0,0.75)",
   backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
-  display: "flex", alignItems: "flex-end",
+  display: "flex", alignItems: "flex-end", justifyContent: "center",
+  padding: "0 12px calc(12px + var(--tg-inset-bottom, 0px))",
+  paddingTop: "var(--tg-inset-top, 0px)",
 };
 function sheetCard(pad = 22, extra = {}) {
   return {
-    width: "100%", background: T.surface, border: `1px solid ${T.lineHi}`,
-    borderRadius: "22px 22px 0 0",
+    width: "100%", maxWidth: 440,
+    background: T.surface, border: `1px solid ${T.lineHi}`,
+    borderRadius: 26,
     padding: pad,
-    paddingBottom: `calc(${pad}px + var(--tg-inset-bottom, 0px))`,
-    maxHeight: "calc(100% - var(--tg-inset-top, 0px) - 24px)",
+    // Высоту ограничивает подложка: она уже вычла и чёлку, и нижнюю
+    // зону, поэтому здесь достаточно «во всю доступную».
+    maxHeight: "100%",
     overflowY: "auto",
     WebkitOverflowScrolling: "touch",
     ...extra,
@@ -9736,7 +9751,7 @@ function PinSetupModal({ mode: modeProp, currentPin, onClose, onComplete, onDisa
 
   return (
     <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 70, background: "rgba(0,0,0,0.82)" }} onClick={onClose}>
-      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22, { paddingBottom: "calc(34px + var(--tg-inset-bottom, 0px))" })}>
+      <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22, { paddingBottom: 30 })}>
         <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
         <div className="flex flex-col items-center text-center gap-1" style={{ marginTop: -8 }}>
           <MintlyFrame size={52} glow={`${T.electric}55`}><Lock size={20} color={T.electric} /></MintlyFrame>
