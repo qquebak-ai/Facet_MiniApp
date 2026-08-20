@@ -319,6 +319,10 @@ const STR = {
     referralDesc: "Приглашай друзей — получай монеты за каждого, кто заведёт аккаунт по твоей ссылке. Тратить их можно в магазине.",
     refPerFriend: "За каждого друга",
     refEarned: "Заработано монет",
+    refVolume: "Оборот друзей",
+    refShareNote: "С каждого TON, который наторговали приглашённые, тебе идёт 10 монет — доля с комиссии площадки. Монетами, не в TON: комиссию удерживает контракт в цепочке, и поделить её там нельзя.",
+    refPayoutCta: "Забрать долю",
+    refPayoutGot: "Начислено {n} монет",
     supportDesc: "Напиши, что случилось. Отвечаем в течение суток — ответ придёт сюда и в Telegram.",
     contactSupport: "Написать в поддержку",
     supportPlaceholder: "Что случилось?",
@@ -647,6 +651,10 @@ const STR = {
     referralDesc: "Invite friends — earn coins for everyone who signs up through your link. Spend them in the shop.",
     refPerFriend: "Per friend",
     refEarned: "Coins earned",
+    refVolume: "Friends' volume",
+    refShareNote: "For every TON your invitees trade you get 10 coins — a share of the platform fee. In coins, not TON: the fee is withheld by the contract on-chain and can't be split there.",
+    refPayoutCta: "Claim your share",
+    refPayoutGot: "{n} coins credited",
     supportDesc: "Tell us what happened. We reply within a day — here and in Telegram.",
     contactSupport: "Message support",
     supportPlaceholder: "What happened?",
@@ -10546,6 +10554,64 @@ function SupportChat({ accountCreated, showToast, onRead }) {
 /* SettingsPanel — a lightweight bottom-sheet used so every row under
    "Settings" actually opens real, distinct content instead of the
    same placeholder for every item. */
+/* Доля с комиссий приглашённых.
+
+   За друга и раньше давали монеты — разово, за сам факт регистрации.
+   Приводить того, кто торгует, это не мотивировало никак: привёл и
+   забыл. Теперь с оборота друзей капает дальше.
+
+   Чем это не является — сказано прямо в подписи: TON никуда не
+   переводится. Комиссию удерживает контракт кривой и отправляет на
+   кошелёк площадки ещё в цепочке, поделить её там между людьми нельзя.
+   Поэтому доля идёт монетами, и обещать «процент с комиссий в TON» я
+   не стал. */
+function ReferralShare({ showToast }) {
+  const [state, setState] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    // Тот же вызов и считает, и начисляет: спрашивать «сколько там» и
+    // забирать отдельными кнопками незачем — забрать всё равно захотят.
+    const { data, error } = await supabase.rpc("referral_claim");
+    if (!error && data && data.ok) setState(data);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function claim() {
+    if (busy) return;
+    setBusy(true);
+    const { data, error } = await supabase.rpc("referral_claim");
+    setBusy(false);
+    if (error || !data || !data.ok) { showToast(t("saveFailed")); return; }
+    setState(data);
+    if (data.coins > 0) { haptic("success"); showToast(tf("refPayoutGot", { n: data.coins })); }
+  }
+
+  if (!state) return null;
+  const оборот = Number(state.volume) || 0;
+
+  return (
+    <div className="mt-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
+      <div className="flex items-center justify-between">
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{t("refVolume")}</span>
+        <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 15, fontWeight: 700 }}>{fmtTon(оборот)} TON</span>
+      </div>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.45, marginTop: 6 }}>
+        {t("refShareNote")}
+      </p>
+      <button
+        onClick={claim}
+        disabled={busy}
+        className="fx-tap w-full flex items-center justify-center gap-1.5 rounded-[16px] py-2.5 mt-2"
+        style={{ background: T.surface, border: `1px solid ${hexA(T.electric, 0.4)}`, fontFamily: displayFont, fontWeight: 700, fontSize: 13.5, color: T.electric }}
+      >
+        <CoinIcon size={14} /> {t("refPayoutCta")}
+      </button>
+    </div>
+  );
+}
+
 function SettingsPanel({
   item: itemProp, onClose, appSettings, onUpdateSetting,
   onOpenEditProfile, profile, showToast,
@@ -10733,6 +10799,11 @@ function SettingsPanel({
               <CoinIcon size={16} /> {coinsFromInvites(inviteCount)}
             </span>
           </div>
+          {/* Доля с комиссий друзей. Стоит после счёта приглашённых:
+              сперва человек видит, сколько привёл, потом — что с этого
+              капает дальше. */}
+          <ReferralShare showToast={showToast} />
+
           <div className="flex items-center gap-2 mt-2 rounded-[20px] px-3 py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
             <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12.5, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{refLink || "—"}</span>
             <button onClick={copyReferral} className="fx-tap" disabled={!refLink}><Copy size={14} color={T.muted} /></button>
