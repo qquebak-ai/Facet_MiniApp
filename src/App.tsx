@@ -2318,7 +2318,33 @@ function addressForNetwork(raw) {
 // Теперь запросы стоят в очереди по одному, а не соревнуются. У очереди
 // есть приоритет: то, что человек видит прямо сейчас (график и состояние
 // открытого токена), идёт вперёд ленты.
-const TONAPI_MIN_GAP_MS = 180;
+/* Пауза между запросами к tonapi.
+ *
+ * Держать её постоянной нельзя: без ключа сервис пускает считанные
+ * запросы в минуту, ключ «для фронтенда» — ровно один в секунду, а на
+ * платном тарифе можно куда чаще. Поэтому пауза подстраивается сама:
+ * после каждого отказа растёт, после спокойной работы возвращается к
+ * базовой. Так экран не упирается в 429 и не тормозит там, где лимит
+ * позволяет больше. */
+const TONAPI_BASE_GAP_MS = 180;
+const TONAPI_MAX_GAP_MS = 1400;
+let TONAPI_MIN_GAP_MS = TONAPI_BASE_GAP_MS;
+let подрядУдачных = 0;
+
+function отказПоЛимиту() {
+  подрядУдачных = 0;
+  TONAPI_MIN_GAP_MS = Math.min(TONAPI_MAX_GAP_MS, Math.round(TONAPI_MIN_GAP_MS * 1.8) + 120);
+}
+
+function запросПрошёл() {
+  подрядУдачных += 1;
+  // Возвращаемся не сразу: пара удачных ответов подряд ещё ничего не
+  // значит, а прыгающая пауза снова упрётся в лимит.
+  if (подрядУдачных >= 8 && TONAPI_MIN_GAP_MS > TONAPI_BASE_GAP_MS) {
+    подрядУдачных = 0;
+    TONAPI_MIN_GAP_MS = Math.max(TONAPI_BASE_GAP_MS, Math.round(TONAPI_MIN_GAP_MS * 0.7));
+  }
+}
 const TON_PRIORITY = { chart: 3, token: 2, feed: 1, background: 0 };
 let tonapiLastRequestAt = 0;
 const tonQueue = [];
@@ -2338,10 +2364,15 @@ async function tonPump() {
       try {
         let res = await fetch(job.url, withKey(job.init));
         if (res.status === 429) {
+          отказПоЛимиту();
           const retryAfter = Number(res.headers.get("Retry-After")) || 0;
           await sleep(Math.min(6000, retryAfter ? retryAfter * 1000 : 1500));
           tonapiLastRequestAt = Date.now();
           res = await fetch(job.url, withKey(job.init));
+          if (res.status === 429) отказПоЛимиту();
+          else запросПрошёл();
+        } else {
+          запросПрошёл();
         }
         job.resolve(res);
       } catch (err) {
