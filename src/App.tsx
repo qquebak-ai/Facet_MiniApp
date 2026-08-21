@@ -10082,8 +10082,11 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
         </div>
       ) : !done ? (
         <div className="fx-modal-card flex flex-col items-center text-center gap-5" style={{ width: "100%", maxWidth: 340 }}>
-          <div style={{ width: 64, height: 64, clipPath: FACET, background: T.surfaceHi, border: `1px solid ${T.lineHi}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <RefreshCw size={26} color={T.electric} style={{ animation: "spin360 1.1s linear infinite" }} />
+          {/* Голая крутилка, без гранёной плашки: она тут ничего не
+              значила, а на пустом экране читалась как оборванная
+              картинка. */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 64 }}>
+            <RefreshCw size={30} color={T.electric} style={{ animation: "spin360 1.1s linear infinite" }} />
           </div>
           <div>
             <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700 }}>
