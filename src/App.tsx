@@ -2336,12 +2336,12 @@ async function tonPump() {
       if (wait > 0) await sleep(wait);
       tonapiLastRequestAt = Date.now();
       try {
-        let res = await fetch(job.url, job.init);
+        let res = await fetch(job.url, withKey(job.init));
         if (res.status === 429) {
           const retryAfter = Number(res.headers.get("Retry-After")) || 0;
           await sleep(Math.min(6000, retryAfter ? retryAfter * 1000 : 1500));
           tonapiLastRequestAt = Date.now();
-          res = await fetch(job.url, job.init);
+          res = await fetch(job.url, withKey(job.init));
         }
         job.resolve(res);
       } catch (err) {
@@ -2351,6 +2351,19 @@ async function tonPump() {
   } finally {
     tonBusy = false;
   }
+}
+
+/* Ключ tonapi. Без него сервис пускает считанные запросы в минуту на
+   адрес, и при открытии приложения пачка обращений — состояние кривой,
+   свечи, метаданные, балансы — упирается в 429: цена и график тогда
+   просто не приезжают. Ключ кладётся в переменную сборки
+   VITE_TONAPI_KEY и подставляется во все запросы разом. */
+const TONAPI_TOKEN = String(import.meta.env.VITE_TONAPI_KEY || "").trim();
+
+function withKey(init) {
+  if (!TONAPI_TOKEN) return init;
+  const было = (init && init.headers) || {};
+  return { ...(init || {}), headers: { ...было, Authorization: `Bearer ${TONAPI_TOKEN}` } };
 }
 
 function tonFetch(url, init, priority = TON_PRIORITY.feed) {
