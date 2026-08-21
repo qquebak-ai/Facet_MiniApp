@@ -177,14 +177,18 @@ async function handlePrivateQuestion(message, from) {
   await tg("sendMessage", { chat_id: message.chat.id, text: ответ });
 }
 
-/* Кнопки под карточкой токена. Мини-приложение открывается прямо из
-   сообщения только в личке с ботом: в группах Telegram кнопку web_app
-   не пускает, поэтому туда идёт обычная ссылка на бота, а он уже
-   открывает приложение на нужном токене. */
-function tokenButtons(card, вЛичке) {
+/* Кнопки под карточкой токена.
+ *
+ * Кнопка web_app живёт только в сообщениях, которые бот отправляет сам
+ * в личной переписке с собой. В подсказке её быть не может: сообщение
+ * уходит от имени человека, и Telegram отбивает такой ответ целиком —
+ * снаружи это выглядит как «ничего не нашлось». Поэтому во всё, что
+ * рождается из подсказки, идёт обычная ссылка на бота, а приложение
+ * открывает уже он. */
+function tokenButtons(card, своё) {
   return {
     inline_keyboard: [[
-      вЛичке
+      своё
         ? { text: "📈 Открыть график", web_app: { url: card.link } }
         : { text: "📈 Открыть график", url: card.botLink },
     ]],
@@ -195,7 +199,6 @@ function tokenButtons(card, вЛичке) {
    Пустой запрос показывает те токены, что собрали больше всех. */
 async function handleInline(query) {
   const текст = String(query.query || "").trim();
-  const вЛичке = query.chat_type === "sender" || query.chat_type === "private";
 
   // В переписке двух людей бота нет, и команды со слэшем туда не
   // доходят — Telegram их ему не передаёт. Поэтому те же слова
@@ -282,7 +285,7 @@ async function handleInline(query) {
       parse_mode: "HTML",
       link_preview_options: { is_disabled: true },
     },
-    reply_markup: tokenButtons(c, вЛичке),
+    reply_markup: tokenButtons(c, false),
   }));
 
   await tg("answerInlineQuery", {
@@ -302,7 +305,9 @@ const результатовНет = (r) => !r || !r.length;
 /* Команда в чате или в личке: /token PRSM, /p EQ…, /top. */
 async function handleTokenCommand(message, запрос) {
   const chat = message.chat || {};
-  const вЛичке = chat.type === "private";
+  // Личка с ботом — единственное место, где Telegram пускает кнопку,
+  // открывающую мини-приложение прямо из сообщения.
+  const своё = chat.type === "private";
   const текст = String(запрос || "").trim();
 
   if (!текст) {
@@ -335,7 +340,7 @@ async function handleTokenCommand(message, запрос) {
     text: ещё ? `${card.text}\n\nТакже нашлось: ${ещё}` : card.text,
     parse_mode: "HTML",
     link_preview_options: { is_disabled: true },
-    reply_markup: tokenButtons(card, вЛичке),
+    reply_markup: tokenButtons(card, своё),
   });
 }
 
