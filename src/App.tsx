@@ -453,6 +453,7 @@ const STR = {
     insufficientTon: "Не хватает TON: на кошельке {have}, нужно {need} с газом",
     tokenSaveFailed: "Токен создан в сети, но не сохранился: {reason}. Попробуем ещё раз при следующем запуске.",
     tokenSaveRecovered: "Токен {ticker} дописан в приложение",
+    openingWallet: "Открываем кошелёк…",
     boughtToast: "Куплено ≈ {receive} ${ticker} за {pay} {unit}",
     txCancelled: "Транзакция отменена или не прошла",
     insufficientSellAmount: "Недостаточно токенов для продажи этой суммы",
@@ -802,6 +803,7 @@ const STR = {
     insufficientTon: "Not enough TON: wallet has {have}, need {need} incl. gas",
     tokenSaveFailed: "Token is live on-chain but wasn't saved: {reason}. We'll retry on next launch.",
     tokenSaveRecovered: "Token {ticker} added to the app",
+    openingWallet: "Opening your wallet…",
     boughtToast: "Bought ≈ {receive} ${ticker} for {pay} {unit}",
     txCancelled: "Transaction cancelled or failed",
     insufficientSellAmount: "Not enough tokens to sell this amount",
@@ -14191,6 +14193,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setToken(t && t.price == null ? localTokenToFeedShape(t) : t);
     setView("token");
   }
+  // Пришли из чата прямо за подписью: интерфейс в этот момент не нужен,
+  // человек ждёт окно кошелька и ничего больше.
+  const [сразуВКошелёк, setСразуВКошелёк] = useState(false);
+
   // Токен, который создался в сети, но не записался в базу. Пробуем
   // дописать его при каждом входе: сессия к этому моменту свежая, и
   // чаще всего со второго раза всё проходит.
@@ -14286,7 +14292,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           try {
             сразу = new URLSearchParams(window.location.search).get("auto") === "1";
           } catch (e) { /* адрес без параметров */ }
-          if (сразу) setTimeout(() => автопокупка(сумма), 600);
+          if (сразу) { setСразуВКошелёк(true); setTimeout(() => автопокупка(сумма), 300); }
           else setTimeout(() => setTradeModal({ mode: "buy", prefill: сумма }), 400);
         } else if (продажа) setTimeout(() => setTradeModal({ mode: "sell" }), 400);
         return;
@@ -14436,11 +14442,20 @@ const FEE_PERCENT = 0.01; // 1% комиссии
      кошелёк не подключён, показываем обычное окно: там есть кнопка
      подключения. */
   async function автопокупка(сумма) {
-    if (!walletAddress) { setTradeModal({ mode: "buy", prefill: сумма }); return; }
+    if (!walletAddress) { setСразуВКошелёк(false); setTradeModal({ mode: "buy", prefill: сумма }); return; }
     // Оценка нужна только для строчки «куплено ≈ N»: точную цифру всё
     // равно решит кривая в момент исполнения.
     const оценка = (tokensForTon(сумма) || {}).tokens || 0;
-    await confirmTrade("buy", String(сумма), String(оценка), "TON", сумма, оценка);
+    try {
+      await confirmTrade("buy", String(сумма), String(оценка), "TON", сумма, оценка);
+    } finally {
+      setСразуВКошелёк(false);
+      // Пришли из чата ровно за подписью — делать в приложении больше
+      // нечего, закрываем его и оставляем человека там, откуда он
+      // пришёл.
+      const wa = typeof window !== "undefined" && window.Telegram && window.Telegram.WebApp;
+      if (wa && wa.close) setTimeout(() => wa.close(), 1200);
+    }
   }
 
   async function confirmTrade(mode, payAmount, receiveAmount, unit, rawAmount, rawEstimate) {
@@ -14625,6 +14640,19 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
       {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast key={toastSeq} toast={toast} insetTop={insetTop} leaving={toastLeaving} />
+
+      {/* Проход в кошелёк из чата. Приложение здесь — только мостик к
+          TonConnect: показывать за эту секунду ленту и графики незачем,
+          человек ждёт окно подписи. */}
+      {сразуВКошелёк && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 250, background: T.bg,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14,
+        }}>
+          <RefreshCw size={30} color={T.electric} style={{ animation: "spin360 1.1s linear infinite" }} />
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14.5 }}>{t("openingWallet")}</span>
+        </div>
+      )}
 
       {pinLocked && appSettings.pinEnabled && pinCode && (
         <PinLockScreen pin={pinCode} profile={profile} onUnlock={() => setPinLocked(false)} onForgot={forgotPin} />
