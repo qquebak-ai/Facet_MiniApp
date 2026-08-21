@@ -451,6 +451,8 @@ const STR = {
     connectWalletTrade: "Подключи TON-кошелёк, чтобы торговать",
     rateLoadingRetry: "Курс TON ещё загружается, попробуй через секунду",
     insufficientTon: "Не хватает TON: на кошельке {have}, нужно {need} с газом",
+    tokenSaveFailed: "Токен создан в сети, но не сохранился: {reason}. Попробуем ещё раз при следующем запуске.",
+    tokenSaveRecovered: "Токен {ticker} дописан в приложение",
     boughtToast: "Куплено ≈ {receive} ${ticker} за {pay} {unit}",
     txCancelled: "Транзакция отменена или не прошла",
     insufficientSellAmount: "Недостаточно токенов для продажи этой суммы",
@@ -798,6 +800,8 @@ const STR = {
     connectWalletTrade: "Connect a TON wallet to trade",
     rateLoadingRetry: "TON rate is still loading, try again in a second",
     insufficientTon: "Not enough TON: wallet has {have}, need {need} incl. gas",
+    tokenSaveFailed: "Token is live on-chain but wasn't saved: {reason}. We'll retry on next launch.",
+    tokenSaveRecovered: "Token {ticker} added to the app",
     boughtToast: "Bought ≈ {receive} ${ticker} for {pay} {unit}",
     txCancelled: "Transaction cancelled or failed",
     insufficientSellAmount: "Not enough tokens to sell this amount",
@@ -11389,6 +11393,34 @@ function telegramUser() {
   return (wa && wa.initDataUnsafe && wa.initDataUnsafe.user) || null;
 }
 
+/* Токены, которые создались в сети, но не записались в базу.
+ *
+ * Контракт уже развёрнут и деньги потрачены — потерять такой токен
+ * из-за одной неудачной записи нельзя. Складываем его в телефон и
+ * дописываем в базу при следующем запуске приложения, когда сессия
+ * наверняка живая. */
+const LOST_TOKENS_KEY = "mintly_lost_tokens";
+
+function сохранитьПотерянный(строка) {
+  try {
+    const было = JSON.parse(localStorage.getItem(LOST_TOKENS_KEY) || "[]");
+    if (было.some((t) => t && t.address === строка.address)) return;
+    localStorage.setItem(LOST_TOKENS_KEY, JSON.stringify([...было, строка].slice(-10)));
+  } catch (e) { /* localStorage недоступен */ }
+}
+
+function потерянныеТокены() {
+  try { return JSON.parse(localStorage.getItem(LOST_TOKENS_KEY) || "[]") || []; }
+  catch (e) { return []; }
+}
+
+function забытьПотерянный(address) {
+  try {
+    const было = потерянныеТокены().filter((t) => t && t.address !== address);
+    localStorage.setItem(LOST_TOKENS_KEY, JSON.stringify(было));
+  } catch (e) { /* localStorage недоступен */ }
+}
+
 // Ссылка приглашения. Имя бота и мини-приложения знает только тот, кто
 // заводил бота, поэтому берём их из переменных окружения сборки. Если их
 // не задали — показываем хотя бы сам код, чтобы экран не был пустым.
@@ -13871,31 +13903,39 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       return;
     }
 
-    const { data: row, error } = await supabase
-      .from("tokens")
-      .insert({
-        owner_id: userId,
-        name: result.name,
-        ticker: result.ticker,
-        logo_url: result.logoUrl || null,
-        supply: result.supply,
-        buy_amount: result.buyAmount,
-        buy_tokens: result.buyTokens || 0,
-        address: result.address,
-        pool_address: result.poolAddress || null,
-        curve_address: result.curveAddress || null,
-        curve_jetton_wallet: result.curveJettonWallet || null,
-        creator_wallet: result.creatorWallet || null,
-        explorer_url: result.explorerUrl || null,
-        category: result.category || null,
-        network: result.network || (TON_TESTNET ? "testnet" : "mainnet"),
-      })
-      .select()
-      .single();
+    const строка = {
+      owner_id: userId,
+      name: result.name,
+      ticker: result.ticker,
+      logo_url: result.logoUrl || null,
+      supply: result.supply,
+      buy_amount: result.buyAmount,
+      buy_tokens: result.buyTokens || 0,
+      address: result.address,
+      pool_address: result.poolAddress || null,
+      curve_address: result.curveAddress || null,
+      curve_jetton_wallet: result.curveJettonWallet || null,
+      creator_wallet: result.creatorWallet || null,
+      explorer_url: result.explorerUrl || null,
+      category: result.category || null,
+      network: result.network || (TON_TESTNET ? "testnet" : "mainnet"),
+    };
+
+    // Токен уже в сети — потерять его из-за одной неудачной записи
+    // нельзя. Поэтому: попытка, обновление сессии и вторая попытка, а
+    // если и она не прошла — кладём в телефон и досохраняем при
+    // следующем запуске приложения.
+    let { data: row, error } = await supabase.from("tokens").insert(строка).select().single();
+    if (error) {
+      console.warn("[mintly] первая попытка сохранить токен не прошла:", error.message);
+      await supabase.auth.refreshSession().catch(() => {});
+      ({ data: row, error } = await supabase.from("tokens").insert(строка).select().single());
+    }
 
     if (error || !row) {
       console.error("[mintly] failed to save token to Supabase:", error);
-      showToast(t("deleteFailedToast"));
+      сохранитьПотерянный(строка);
+      showToast(tf("tokenSaveFailed", { reason: (error && error.message) || "нет ответа базы" }));
       return;
     }
 
@@ -14151,6 +14191,35 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setToken(t && t.price == null ? localTokenToFeedShape(t) : t);
     setView("token");
   }
+  // Токен, который создался в сети, но не записался в базу. Пробуем
+  // дописать его при каждом входе: сессия к этому моменту свежая, и
+  // чаще всего со второго раза всё проходит.
+  useEffect(() => {
+    if (!userId) return;
+    const потерянные = потерянныеТокены();
+    if (!потерянные.length) return;
+    (async () => {
+      for (const строка of потерянные) {
+        const { data, error } = await supabase
+          .from("tokens")
+          .insert({ ...строка, owner_id: userId })
+          .select()
+          .single();
+        // Дубликат — значит запись всё-таки прошла в прошлый раз:
+        // забываем и молчим, человеку об этом знать незачем.
+        if (!error && data) {
+          забытьПотерянный(строка.address);
+          showToast(tf("tokenSaveRecovered", { ticker: строка.ticker }));
+          loadMyTokens(userId);
+          loadCommunityTokens();
+        } else if (error && error.code === "23505") {
+          забытьПотерянный(строка.address);
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
   // Ссылка на токен из чата. Карточку из бота открывают двумя путями:
   // прямой ссылкой на приложение с «?token=<id>» и меткой запуска
   // «tok_<id>» — её Telegram отдаёт, когда мини-приложение открыли
