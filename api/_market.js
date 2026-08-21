@@ -371,6 +371,8 @@ export async function tokenCard(token) {
     // кнопку, которую контракт отобьёт, — врать. Такой токен торгуется
     // дальше в приложении, оттуда и идёт сделка.
     curve: state && !state.graduated ? token.curve_address || null : null,
+    jetton: token.token_address || null,
+    ticker: тикер,
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=tok_${token.id}`,
     thumb: token.logo_url || null,
   };
