@@ -42,6 +42,7 @@
 
 import { SUPPORT_CHAT_ID, adminClient, acceptQuestion, deliverAnswer } from "./_support.js";
 import { searchAll, cardFor, cardByRef, свежийГрафик, findTokens, trendingExternal, looksLikeAddress } from "./_market.js";
+import { buyLink, БЫСТРЫЕ_СУММЫ } from "./_trade.js";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -193,7 +194,31 @@ function tokenButtons(card, своё) {
   // живёт своей жизнью, а сообщение, отправленное час назад, врёт.
   // В callback_data влезает 64 байта, поэтому там только вид и ключ.
   const обновить = card.ref ? [{ text: "🔄 Обновить", callback_data: `r:${card.ref}` }] : [];
-  return { inline_keyboard: [[открыть, ...обновить]] };
+
+  // Торговля. У токена на кривой покупка собирается ссылкой в кошелёк —
+  // отсюда лишний шаг с выбором суммы; у токена с биржи покупать нечего
+  // собирать, там своп на самой бирже.
+  const ряды = [[открыть, ...обновить]];
+  if (card.swap) ряды.push([{ text: "💸 Купить", url: card.swap }]);
+  else if (card.curve && card.ref) ряды.push([{ text: "💸 Купить", callback_data: `b:${card.ref}` }]);
+
+  return { inline_keyboard: ряды };
+}
+
+/* Второй ряд кнопок: суммы покупки. Каждая — готовая ссылка в кошелёк,
+   где уже проставлены адрес кривой, сумма и тело сообщения. Подписывает
+   человек, бот в цепочку не ходит и ключей не знает. */
+function buyButtons(card, своё) {
+  const суммы = БЫСТРЫЕ_СУММЫ
+    .map((n) => ({ text: `${n} TON`, url: buyLink(card.curve, n) }))
+    .filter((b) => b.url);
+  const низ = [
+    своё
+      ? { text: "Своя сумма", web_app: { url: card.link } }
+      : { text: "Своя сумма", url: card.botLink },
+    { text: "← Назад", callback_data: `x:${card.ref}` },
+  ];
+  return { inline_keyboard: суммы.length ? [суммы, низ] : [низ] };
 }
 
 /* Перерисовка по нажатию «обновить». Работает и для сообщения из
@@ -201,20 +226,39 @@ function tokenButtons(card, своё) {
    обычного ответа на команду. */
 async function handleCallback(cb) {
   const данные = String(cb.data || "");
-  const m = данные.match(/^r:([pt]):(.+)$/);
+  const m = данные.match(/^([rbx]):([pt]):(.+)$/);
   if (!m) {
     await tg("answerCallbackQuery", { callback_query_id: cb.id });
     return;
   }
+  const действие = m[1];
 
   let card = null;
-  try { card = await cardByRef(m[1], m[2]); } catch (err) { card = null; }
+  try { card = await cardByRef(m[2], m[3]); } catch (err) { card = null; }
   if (!card) {
     await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Не получилось обновить — источник не ответил" });
     return;
   }
 
   const своё = !!(cb.message && cb.message.chat && cb.message.chat.type === "private");
+
+  // Выбор суммы и возврат обратно меняют только кнопки: перерисовывать
+  // текст с картинкой ради этого — лишняя секунда ожидания и лишний
+  // поход в цепочку.
+  if (действие === "b" || действие === "x") {
+    const кнопки = действие === "b" ? buyButtons(card, своё) : tokenButtons(card, своё);
+    const цель = cb.inline_message_id
+      ? { inline_message_id: cb.inline_message_id }
+      : cb.message ? { chat_id: cb.message.chat.id, message_id: cb.message.message_id } : null;
+    if (!цель) { await tg("answerCallbackQuery", { callback_query_id: cb.id }); return; }
+    await tg("editMessageReplyMarkup", { ...цель, reply_markup: кнопки });
+    await tg("answerCallbackQuery", {
+      callback_query_id: cb.id,
+      text: действие === "b" ? "Выбери сумму — подпишешь в кошельке" : "",
+    });
+    return;
+  }
+
   const тело = {
     text: card.text,
     parse_mode: "HTML",
