@@ -386,7 +386,30 @@ export default async function handler(req, res) {
   // Настройка идёт обычной ссылкой в браузере, поэтому GET здесь
   // разрешён — но только со знанием секрета.
   if (req.method === "GET") {
-    const asked = new URL(req.url, "https://x").searchParams.get("setup");
+    const параметры = new URL(req.url, "https://x").searchParams;
+    // Проверка поиска: видно, что нашлось у себя, что на бирже и чем
+    // биржа ответила. Без этого пустой список в чате не отличить от
+    // отказа источника.
+    if (параметры.get("probe")) {
+      if (!WEBHOOK_SECRET || параметры.get("probe") !== WEBHOOK_SECRET) return res.status(401).json({ error: "bad_secret" });
+      const q = параметры.get("q") || "NOT";
+      const { findExternal, gtLast } = await import("./_market.js");
+      let свои = [];
+      let ошибкаСвоих = null;
+      try { свои = await findTokens(q, 5); } catch (err) { ошибкаСвоих = err && err.message; }
+      let чужие = [];
+      let ошибкаЧужих = null;
+      try { чужие = await findExternal(q, 5); } catch (err) { ошибкаЧужих = err && err.message; }
+      return res.status(200).json({
+        запрос: q,
+        свои: свои.map((t) => t.ticker),
+        ошибкаСвоих,
+        биржа: чужие.map((t) => `${t.ticker} ${t.name}`),
+        ошибкаЧужих,
+        последнийЗапросКБирже: gtLast,
+      });
+    }
+    const asked = параметры.get("setup");
     if (!WEBHOOK_SECRET) return res.status(500).json({ error: "no_webhook_secret" });
     if (asked !== WEBHOOK_SECRET) return res.status(401).json({ error: "bad_secret" });
     if (!BOT_TOKEN) return res.status(500).json({ error: "server_not_configured" });

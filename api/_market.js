@@ -74,12 +74,22 @@ export function priceFromState(state) {
   return Number(резервTon) / Number(резервТокенов);
 }
 
+// Последний ответ биржи — для проверки связи: с облачного адреса
+// источник может отвечать отказом, и снаружи это выглядит одинаково с
+// «ничего не нашлось».
+export const gtLast = { path: null, status: null, error: null };
+
 async function gt(path) {
+  gtLast.path = path;
+  gtLast.status = null;
+  gtLast.error = null;
   try {
     const res = await fetch(`${GT}${path}`, { headers: { Accept: "application/json" } });
+    gtLast.status = res.status;
     if (!res.ok) return null;
     return await res.json();
   } catch (err) {
+    gtLast.error = (err && err.message) || String(err);
     return null;
   }
 }
