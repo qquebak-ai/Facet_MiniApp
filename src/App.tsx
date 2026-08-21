@@ -14248,6 +14248,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       сумма = Number(new URLSearchParams(window.location.search).get("buy")) || 0;
     } catch (e) { /* адрес без параметров */ }
     if (!сумма && метка.includes("~")) сумма = Number(метка.split("~")[1]) || 0;
+    let продажа = false;
+    try {
+      продажа = new URLSearchParams(window.location.search).get("sell") === "1";
+    } catch (e) { /* адрес без параметров */ }
 
     const свой = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     if (!свой && !пул) return;
@@ -14257,11 +14261,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         const { data } = await supabase.from("tokens").select("*").eq("id", id).maybeSingle();
         if (!data) return;
         openToken(localTokenToFeedShape(mapTokenRow(data)));
-        // Из бота можно прийти сразу за покупкой: «?token=…&buy=5»
-        // открывает окно сделки с уже вписанной суммой. Это запасной
-        // путь к тому же самому — через кошелёк по ссылке или здесь,
-        // через подключённый TonConnect.
+        // Из бота приходят сразу за сделкой: «?token=…&buy=5» открывает
+        // покупку с вписанной суммой, «&sell=1» — продажу. Подпись идёт
+        // здесь, через подключённый кошелёк: ссылку с телом сообщения
+        // кошельки открывают как простой перевод, и контракт его
+        // отбивает.
         if (сумма > 0) setTimeout(() => setTradeModal({ mode: "buy", prefill: сумма }), 400);
+        else if (продажа) setTimeout(() => setTradeModal({ mode: "sell" }), 400);
         return;
       }
       const карточка = await fetchPoolByAddress(пул);
