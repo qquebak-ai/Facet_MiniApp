@@ -92,11 +92,19 @@ function роутерИProxy(sim) {
 }
 
 /* Готовая покупка: куда, сколько и с каким телом сообщения. */
-export async function свопТонВЖетон({ jetton, tonAmount, userWallet, допуск = 0.02 }) {
+export async function свопТонВЖетон({ jetton, tonAmount, userWallet, допуск = 0.01 }) {
   if (TESTNET) return null;
   if (!jetton || !userWallet || !(tonAmount > 0)) return null;
-  const sim = await симуляция(jetton, tonAmount, допуск);
+  let sim = await симуляция(jetton, tonAmount, допуск);
   if (!sim) return null;
+  // Биржа сама говорит, какой запас нужен этому пулу. Если он больше
+  // нашего, пересчитываем: со слишком тесным допуском сделка сорвётся в
+  // кошельке, и человек решит, что сломан бот.
+  const нужен = Number(sim.recommended_slippage_tolerance) || 0;
+  if (нужен > допуск) {
+    const точнее = await симуляция(jetton, tonAmount, нужен);
+    if (точнее) sim = точнее;
+  }
 
   let адресПокупателя;
   try {
@@ -129,6 +137,10 @@ export async function свопТонВЖетон({ jetton, tonAmount, userWallet
 
   const decimals = Number(sim.ask_jetton_decimals ?? 9);
   return {
+    // Доля комиссии в процентах — так её и читают. Числом в токенах она
+    // выглядела как половина покупки, хотя это одна сотая.
+    процентКомиссии: Number(sim.fee_percent) * 100 || 0,
+    запасПроцентов: Number(sim.slippage_tolerance) * 100 || 0,
     to: tx.to.toString(),
     value: tx.value.toString(),
     body: tx.body.toBoc().toString("base64"),
