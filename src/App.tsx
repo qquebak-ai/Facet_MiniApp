@@ -14092,6 +14092,31 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setToken(t && t.price == null ? localTokenToFeedShape(t) : t);
     setView("token");
   }
+  // Ссылка на токен из чата. Карточку из бота открывают двумя путями:
+  // прямой ссылкой на приложение с «?token=<id>» и меткой запуска
+  // «tok_<id>» — её Telegram отдаёт, когда мини-приложение открыли
+  // кнопкой из личной переписки. Без этого человек попадал на главную и
+  // искал токен, про который ему только что прислали карточку.
+  const открытыйИзСсылки = useRef(false);
+  useEffect(() => {
+    if (открытыйИзСсылки.current) return;
+    let id = "";
+    try {
+      id = new URLSearchParams(window.location.search).get("token") || "";
+    } catch (e) { /* адрес без параметров */ }
+    if (!id) {
+      const метка = telegramStartParam();
+      if (метка.startsWith("tok_")) id = метка.slice(4);
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return;
+    открытыйИзСсылки.current = true;
+    (async () => {
+      const { data } = await supabase.from("tokens").select("*").eq("id", id).maybeSingle();
+      if (data) openToken(localTokenToFeedShape(mapTokenRow(data)));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function goTab(name) { setTab(name); setView(name); }
   // Создание — отдельная страница, а не вкладка: пункт из нижнего меню
   // убран, поэтому tab не трогаем — подсветка остаётся на том разделе,

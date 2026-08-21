@@ -10,7 +10,19 @@
  * пришёл от такого-то». Когда человек заведёт профиль, вход возьмёт её
  * оттуда. Метка живёт до первого использования.
  *
- * Второе — поддержка. Бот носит переписку в обе стороны: вопрос из лички
+ * Второе — токены. Бот отвечает на команды в любом чате, куда его
+ * добавили («/token PRSM», «/top»), и работает подсказкой в чужих
+ * чатах, где его нет вовсе: «@MintlyAppbot PRSM» собирает карточку с
+ * ценой, движением за сутки, мини-графиком и путём до биржи. Чтобы
+ * подсказки заработали, режим нужно включить у @BotFather:
+ *   /setinline → выбрать бота → написать текст подсказки, например
+ *   «тикер или адрес токена».
+ * Список команд там же: /setcommands →
+ *   token - карточка токена по тикеру или адресу
+ *   top - какие токены собрали больше всех
+ *   help - что умеет бот
+ *
+ * Третье — поддержка. Бот носит переписку в обе стороны: вопрос из лички
  * складывает в базу и пересылает в чат команды, а ответ команды —
  * реплаем на пересланный вопрос — возвращает человеку в личку и в
  * приложение (см. api/_support.js и supabase_support.sql).
@@ -29,6 +41,7 @@
  */
 
 import { SUPPORT_CHAT_ID, adminClient, acceptQuestion, deliverAnswer } from "./_support.js";
+import { findTokens, tokenCard, looksLikeAddress } from "./_market.js";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -42,9 +55,20 @@ const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 // поэтому короткое имя мини-приложения в BotFather для приглашений уже
 // не требуется.
 const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
+// Имя бота нужно самим сообщениям: в группах кнопка «открыть» ведёт не в
+// приложение, а в личку с ботом — web_app-кнопки Telegram пускает только
+// туда.
+const TG_BOT = String(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "").trim();
 
 const REF_PREFIX = "ref_";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const TOKEN_PREFIX = "tok_";
+function tokenFromPayload(payload) {
+  if (typeof payload !== "string" || !payload.startsWith(TOKEN_PREFIX)) return null;
+  const id = payload.slice(TOKEN_PREFIX.length).trim();
+  return UUID_RE.test(id) ? id : null;
+}
 
 function inviterFromPayload(payload) {
   if (typeof payload !== "string" || !payload.startsWith(REF_PREFIX)) return null;
@@ -153,6 +177,154 @@ async function handlePrivateQuestion(message, from) {
   await tg("sendMessage", { chat_id: message.chat.id, text: ответ });
 }
 
+/* Кнопки под карточкой токена. Мини-приложение открывается прямо из
+   сообщения только в личке с ботом: в группах Telegram кнопку web_app
+   не пускает, поэтому туда идёт обычная ссылка на бота, а он уже
+   открывает приложение на нужном токене. */
+function tokenButtons(card, вЛичке) {
+  return {
+    inline_keyboard: [[
+      вЛичке
+        ? { text: "📈 Открыть график", web_app: { url: card.link } }
+        : { text: "📈 Открыть график", url: card.botLink },
+    ]],
+  };
+}
+
+/* Подсказка в любом чате: «@бот PRSM» или «@бот EQ…».
+   Пустой запрос показывает те токены, что собрали больше всех. */
+async function handleInline(query) {
+  const текст = String(query.query || "").trim();
+  const вЛичке = query.chat_type === "sender" || query.chat_type === "private";
+  let найдено = [];
+  try {
+    найдено = await findTokens(текст, 8);
+  } catch (err) {
+    console.warn("[bot] inline search failed:", err && err.message);
+  }
+
+  // Сводку собираем только для первых трёх: каждая — это поход в
+  // цепочку, а ответить Telegram нужно быстро. Остальные показываем
+  // строкой, цифры человек увидит, когда выберет.
+  const карточки = [];
+  for (const токен of найдено) {
+    if (карточки.length < 3) {
+      карточки.push(await tokenCard(токен));
+    } else {
+      карточки.push({
+        title: `$${String(токен.ticker || "").toUpperCase()} — ${токен.name || ""}`,
+        description: "Открыть карточку",
+        text: `${токен.emoji || "🪙"} <b>${токен.name || ""}</b>  $${String(токен.ticker || "").toUpperCase()}`,
+        link: `${APP_URL}?token=${токен.id}`,
+        botLink: `https://t.me/${TG_BOT}?start=tok_${токен.id}`,
+        thumb: токен.logo_url || null,
+      });
+    }
+  }
+
+  const results = карточки.map((c, i) => ({
+    type: "article",
+    id: String(i),
+    title: c.title,
+    description: c.description,
+    thumbnail_url: c.thumb || undefined,
+    input_message_content: {
+      message_text: c.text,
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: true },
+    },
+    reply_markup: tokenButtons(c, вЛичке),
+  }));
+
+  await tg("answerInlineQuery", {
+    inline_query_id: query.id,
+    results,
+    // Кэш короткий: цена меняется с каждой сделкой, и вчерашняя
+    // подсказка врала бы прямо в чужом чате.
+    cache_time: 20,
+    is_personal: false,
+    button: результатовНет(results)
+      ? { text: "Ничего не нашлось — открыть Mintly", web_app: { url: APP_URL } }
+      : undefined,
+  });
+}
+const результатовНет = (r) => !r || !r.length;
+
+/* Команда в чате или в личке: /token PRSM, /p EQ…, /top. */
+async function handleTokenCommand(message, запрос) {
+  const chat = message.chat || {};
+  const вЛичке = chat.type === "private";
+  const текст = String(запрос || "").trim();
+
+  if (!текст) {
+    await tg("sendMessage", {
+      chat_id: chat.id,
+      reply_to_message_id: message.message_id,
+      text: `Напиши тикер или адрес: <code>/token PRSM</code>\nИли прямо в любом чате: <code>@${TG_BOT} PRSM</code>`,
+      parse_mode: "HTML",
+    });
+    return;
+  }
+
+  const найдено = await findTokens(текст, 5);
+  if (!найдено.length) {
+    await tg("sendMessage", {
+      chat_id: chat.id,
+      reply_to_message_id: message.message_id,
+      text: looksLikeAddress(текст)
+        ? "Такого токена в Mintly нет. Здесь видно только запущенное через приложение."
+        : "Ничего не нашлось. Проверь тикер или пришли адрес контракта.",
+    });
+    return;
+  }
+
+  const card = await tokenCard(найдено[0]);
+  // Нашлось несколько — остальные перечисляем строкой, чтобы человек не
+  // гадал, тот ли токен ему показали.
+  const ещё = найдено.slice(1, 5).map((t) => `$${String(t.ticker || "").toUpperCase()}`).join(" · ");
+  await tg("sendMessage", {
+    chat_id: chat.id,
+    reply_to_message_id: message.message_id,
+    text: ещё ? `${card.text}\n\nТакже нашлось: ${ещё}` : card.text,
+    parse_mode: "HTML",
+    link_preview_options: { is_disabled: true },
+    reply_markup: tokenButtons(card, вЛичке),
+  });
+}
+
+async function handleTop(message) {
+  const chat = message.chat || {};
+  const найдено = await findTokens("", 5);
+  if (!найдено.length) {
+    await tg("sendMessage", { chat_id: chat.id, text: "Пока ни одного токена." });
+    return;
+  }
+  const строки = найдено.map((t, i) => `${i + 1}. ${t.emoji || "🪙"} <b>$${String(t.ticker || "").toUpperCase()}</b> — ${t.name || ""}`);
+  await tg("sendMessage", {
+    chat_id: chat.id,
+    reply_to_message_id: message.message_id,
+    text: `Токены Mintly\n\n${строки.join("\n")}\n\nПодробнее: <code>/token ТИКЕР</code>`,
+    parse_mode: "HTML",
+    reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", url: `https://t.me/${TG_BOT}?start=open` }]] },
+  });
+}
+
+async function handleHelp(message) {
+  await tg("sendMessage", {
+    chat_id: (message.chat || {}).id,
+    text: [
+      "Что умеет бот:",
+      "",
+      `<code>@${TG_BOT} PRSM</code> — карточка токена прямо в любом чате, бота добавлять не нужно`,
+      "<code>/token PRSM</code> или адрес контракта — цена, движение, путь до биржи",
+      "<code>/top</code> — какие токены собрали больше всех",
+      "",
+      "В личке можно просто написать вопрос — это поддержка.",
+    ].join("\n"),
+    parse_mode: "HTML",
+  });
+}
+
 function welcome(chatId) {
   // Кнопка открывает приложение прямо из чата, минуя короткое имя
   // мини-приложения: если оно не задано в BotFather, ссылка вида
@@ -189,7 +361,7 @@ async function setup(req, res) {
     const set = await tgCall("setWebhook", {
       url,
       secret_token: WEBHOOK_SECRET,
-      allowed_updates: ["message"],
+      allowed_updates: ["message", "inline_query"],
     });
     const info = await tgCall("getWebhookInfo");
     return res.status(set.ok ? 200 : 502).json({
@@ -233,6 +405,12 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
+  // Подсказка из чужого чата: бота там нет, есть только упоминание.
+  if (update.inline_query) {
+    await handleInline(update.inline_query);
+    return res.status(200).json({ ok: true });
+  }
+
   // Правки чужих сообщений разбирать нечего: ответ уже ушёл, а вопрос
   // уже в чате команды.
   const message = update.message;
@@ -249,6 +427,31 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
+  // Команды про токены работают везде: и в личке, и в группе, куда
+  // бота добавили. Суффикс «@имя_бота» Telegram дописывает сам, когда в
+  // группе несколько ботов.
+  const команда = text.match(/^\/([a-z_]+)(?:@([\w_]+))?(?:\s+([\s\S]*))?$/i);
+  if (команда) {
+    const имя = команда[1].toLowerCase();
+    const кому = команда[2];
+    // Команда, адресованная другому боту, — не наше дело.
+    if (!кому || кому.toLowerCase() === TG_BOT.toLowerCase()) {
+      const хвост = команда[3] || "";
+      if (имя === "token" || имя === "t" || имя === "price" || имя === "p") {
+        await handleTokenCommand(message, хвост);
+        return res.status(200).json({ ok: true });
+      }
+      if (имя === "top") {
+        await handleTop(message);
+        return res.status(200).json({ ok: true });
+      }
+      if (имя === "help") {
+        await handleHelp(message);
+        return res.status(200).json({ ok: true });
+      }
+    }
+  }
+
   // Служебный чат команды: всё, что здесь пишут реплаем, — ответы людям.
   if (SUPPORT_CHAT_ID && String(chat.id) === String(SUPPORT_CHAT_ID)) {
     await handleTeamReply(message);
@@ -262,6 +465,19 @@ export default async function handler(req, res) {
   }
 
   const payload = text.slice("/start".length).trim();
+
+  // Ссылка на конкретный токен: так открываются карточки, отправленные
+  // в группы, — там кнопка web_app недоступна и ведёт сюда.
+  const токен = tokenFromPayload(payload);
+  if (токен) {
+    await tg("sendMessage", {
+      chat_id: message.chat.id,
+      text: "Открываю токен в Mintly.",
+      reply_markup: { inline_keyboard: [[{ text: "📈 Открыть график", web_app: { url: `${APP_URL}?token=${токен}` } }]] },
+    });
+    return res.status(200).json({ ok: true });
+  }
+
   const inviter = inviterFromPayload(payload);
 
   if (inviter) {
