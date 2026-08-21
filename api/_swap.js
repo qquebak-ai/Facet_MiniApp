@@ -21,6 +21,11 @@ import { DEX, pTON } from "@ston-fi/sdk";
 
 const STON_API = "https://api.ston.fi/v1";
 
+// Биржа живёт только в боевой сети. В тестовой своп собирать не из
+// чего, и честнее сказать это прямо, чем отдать ссылку, которая ничего
+// не купит.
+const TESTNET = process.env.TON_TESTNET !== "0";
+
 // Кошелёк площадки. Тот же, что получает комиссию с кривой.
 const FEE_ADDRESS = process.env.FEE_ADDRESS || "UQClGN5huzz-Z3bwgxr7GOPe5Jyi8PNKbsNnDFKFNGbjusvT";
 
@@ -88,6 +93,7 @@ function роутерИProxy(sim) {
 
 /* Готовая покупка: куда, сколько и с каким телом сообщения. */
 export async function свопТонВЖетон({ jetton, tonAmount, userWallet, допуск = 0.02 }) {
+  if (TESTNET) return null;
   if (!jetton || !userWallet || !(tonAmount > 0)) return null;
   const sim = await симуляция(jetton, tonAmount, допуск);
   if (!sim) return null;

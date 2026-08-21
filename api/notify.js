@@ -43,7 +43,10 @@ const CRON_SECRET = process.env.CRON_SECRET;
 // у токенов из тестовой сети состояние лежит на testnet.tonapi.io и на
 // боевом узле его нет. Приложение работает в боевой сети, поэтому и
 // здесь она по умолчанию; тестовая включается явно — TON_TESTNET=1.
-const TESTNET = process.env.TON_TESTNET === "1";
+// Сеть задаётся одним переключателем на всё приложение (см.
+// TON_TESTNET_NETWORK в src/App.tsx). Здесь по умолчанию тестовая —
+// вернуть боевую можно переменной окружения TON_TESTNET=0.
+const TESTNET = process.env.TON_TESTNET !== "0";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
 
 // Сколько токенов проверяем за один заход. Ограничение не про базу, а

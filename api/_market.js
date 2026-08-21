@@ -13,7 +13,10 @@
 
 import { adminClient } from "./_support.js";
 
-const TESTNET = process.env.TON_TESTNET === "1";
+// Сеть задаётся одним переключателем на всё приложение (см.
+// TON_TESTNET_NETWORK в src/App.tsx). Здесь по умолчанию тестовая —
+// вернуть боевую можно переменной окружения TON_TESTNET=0.
+const TESTNET = process.env.TON_TESTNET !== "0";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
 export const NETWORK = TESTNET ? "testnet" : "mainnet";
 
@@ -139,6 +142,9 @@ function поCatalog(json) {
    пулам, поэтому один и тот же токен приходит несколько раз — оставляем
    пул с самой большой ликвидностью, он и есть настоящий рынок. */
 export async function findExternal(query, limit = 5) {
+  // В тестовой сети бирж нет вовсе: показывать их токены значило бы
+  // предлагать сделку, которую негде провести.
+  if (TESTNET) return [];
   const q = String(query || "").trim().replace(/^\$/, "");
   if (!q) return [];
   const json = await gt(`/search/pools?query=${encodeURIComponent(q)}&network=${GT_NETWORK}&include=base_token,dex`);
@@ -166,6 +172,7 @@ export async function findExternal(query, limit = 5) {
 
 /* То, что торгуют прямо сейчас, — та же лента, что на главной. */
 export async function trendingExternal(limit = 5) {
+  if (TESTNET) return [];
   const json = await gt(`/networks/${GT_NETWORK}/trending_pools?include=base_token,dex`);
   if (!json || !Array.isArray(json.data)) return [];
   const { tokensById, dexById } = поCatalog(json);

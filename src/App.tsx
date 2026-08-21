@@ -450,7 +450,7 @@ const STR = {
     accountDeleteFailed: "Не удалось удалить аккаунт — база не дала. Ты остался в аккаунте.",
     connectWalletTrade: "Подключи TON-кошелёк, чтобы торговать",
     rateLoadingRetry: "Курс TON ещё загружается, попробуй через секунду",
-    insufficientTon: "Недостаточно TON на кошельке для этой суммы",
+    insufficientTon: "Не хватает TON: на кошельке {have}, нужно {need} с газом",
     boughtToast: "Куплено ≈ {receive} ${ticker} за {pay} {unit}",
     txCancelled: "Транзакция отменена или не прошла",
     insufficientSellAmount: "Недостаточно токенов для продажи этой суммы",
@@ -797,7 +797,7 @@ const STR = {
     accountDeleteFailed: "Could not delete the account — the database refused. You are still signed in.",
     connectWalletTrade: "Connect a TON wallet to trade",
     rateLoadingRetry: "TON rate is still loading, try again in a second",
-    insufficientTon: "Not enough TON in wallet for this amount",
+    insufficientTon: "Not enough TON: wallet has {have}, need {need} incl. gas",
     boughtToast: "Bought ≈ {receive} ${ticker} for {pay} {unit}",
     txCancelled: "Transaction cancelled or failed",
     insufficientSellAmount: "Not enough tokens to sell this amount",
@@ -2245,13 +2245,17 @@ async function fetchTokenInfo(tokenAddress) {
 const TONAPI_MAINNET_BASE = "https://tonapi.io";
 
 // Сеть, в которой приложение запускает и торгует своими токенами.
-// Отдельно от TONAPI_MAINNET_BASE выше: общая лента всегда читалась из
-// mainnet, а собственные контракты жили в тестнете. Теперь и они в
-// боевой сети — деньги настоящие. Внутри компонента есть TON_TESTNET, он
-// берёт значение отсюда: сеть задана в одном месте, и от неё зависит
-// всё — адреса API, эксплорер, проверка сети кошелька, какие токены
+// Отдельно от TONAPI_MAINNET_BASE выше: общая лента с бирж всегда
+// читается из mainnet — в тестнете бирж попросту нет, — а собственные
+// контракты сейчас в тестовой сети, чтобы обкатать торговлю без
+// настоящих денег. Внутри компонента есть TON_TESTNET, он берёт
+// значение отсюда: сеть задана в одном месте, и от неё зависит всё —
+// адреса API, эксплорер, проверка сети кошелька, какие токены
 // показывать в ленте.
-const TON_TESTNET_NETWORK = false;
+//
+// Обратно в боевую сеть — сменить на false здесь и убрать TON_TESTNET
+// из переменных окружения Vercel (там же живёт серверная половина).
+const TON_TESTNET_NETWORK = true;
 
 /* Адреса площадки в записи текущей сети.
  *
@@ -14316,7 +14320,15 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       if (!(tonPriceUsd > 0)) { showToast(t("rateLoadingRetry")); return; }
       const totalTon = rawAmount;
       const spendableTon = Math.max(0, tonBalance - NETWORK_FEE_TON);
-      if (totalTon > spendableTon) { showToast(t("insufficientTon")); return; }
+      // Цифрами, а не общими словами: человек должен сразу видеть,
+      // сколько не хватает, и не идти проверять кошелёк отдельно.
+      if (totalTon > spendableTon) {
+        showToast(tf("insufficientTon", {
+          have: `${tonBalance.toFixed(3)} TON`,
+          need: `${(totalTon + NETWORK_FEE_TON).toFixed(2)} TON`,
+        }));
+        return;
+      }
       const feeTon = totalTon * FEE_PERCENT;
       const mainTon = totalTon - feeTon;
 

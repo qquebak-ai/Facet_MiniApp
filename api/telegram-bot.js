@@ -43,7 +43,7 @@
  */
 
 import { SUPPORT_CHAT_ID, adminClient, deliverAnswer } from "./_support.js";
-import { searchAll, cardFor, cardByRef, свежийГрафик, findTokens, trendingExternal, looksLikeAddress } from "./_market.js";
+import { searchAll, cardFor, cardByRef, свежийГрафик, findTokens, trendingExternal, looksLikeAddress, NETWORK } from "./_market.js";
 import { buyLink, оценкаПокупки, БЫСТРЫЕ_СУММЫ } from "./_trade.js";
 import { кошелёкПоTelegram, привязатьКошелёк, балансTon, жетоны, жетонныйКошелёк, ссылкаПродажи, нормальныйАдрес } from "./_wallet.js";
 import { свопТонВЖетон, ссылкаСвопа } from "./_swap.js";
@@ -64,6 +64,13 @@ const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
 // приложение, а в личку с ботом — web_app-кнопки Telegram пускает только
 // туда.
 const TG_BOT = String(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "").trim();
+
+// В тестовой сети бирж нет, поэтому виден только Mintly. Без этой
+// строки пустой ответ выглядел бы поломкой.
+const ТЕСТОВАЯ = NETWORK === "testnet";
+const ПОДСКАЗКА_СЕТИ = ТЕСТОВАЯ
+  ? "\n\nСейчас приложение в тестовой сети: здесь видны только токены Mintly, бирж в ней нет."
+  : "";
 
 const REF_PREFIX = "ref_";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -254,6 +261,12 @@ async function handleBuyCommand(message, хвост) {
     return;
   }
 
+  const мало = await неХватает(message.from.id, сумма + 0.15);
+  if (мало) {
+    await tg("sendMessage", { chat_id: message.chat.id, text: мало, parse_mode: "HTML" });
+    return;
+  }
+
   // На кривой сделку собираем сами, на бирже — её же маршрутом, и там
   // нужен адрес кошелька покупателя.
   let ссылка = null;
@@ -323,6 +336,17 @@ async function продажа(chatId, telegramId, токен, сколько) {
     raw = хочет > кошелёк.raw ? кошелёк.raw : хочет;
   }
 
+  // На продажу тоже нужны TON: перевод жетонов оплачивается газом.
+  const балансВладельца = await балансTon(владелец);
+  if (балансВладельца != null && балансВладельца < 0.25) {
+    await tg("sendMessage", {
+      chat_id: chatId,
+      text: `Не хватает TON на газ: на кошельке <b>${балансВладельца.toFixed(3)}</b>, для продажи нужно около <b>0.25</b>.`,
+      parse_mode: "HTML",
+    });
+    return;
+  }
+
   const ссылка = ссылкаПродажи({ jettonWallet: кошелёк.wallet, curve: токен.curve, owner: владелец, raw });
   if (!ссылка) {
     await tg("sendMessage", { chat_id: chatId, text: "Не получилось собрать продажу. Попробуй в приложении." });
@@ -370,6 +394,26 @@ async function handleSellCommand(message, хвост) {
   }
   const card = await cardFor(строка);
   await продажа(message.chat.id, message.from.id, card, части[1] || "all");
+}
+
+/* Хватает ли TON на сделку. Отвечает строкой с объяснением или null,
+   если всё в порядке: покупка без денег отбивается уже в кошельке, но
+   там человек видит только «недостаточно средств» без единой цифры. */
+async function неХватает(telegramId, нужно) {
+  const профиль = await кошелёкПоTelegram(telegramId);
+  const адрес = профиль && профиль.wallet_address ? нормальныйАдрес(профиль.wallet_address) : null;
+  // Кошелёк не привязан — проверять нечего, а мешать покупке нельзя:
+  // подпишет тем кошельком, который откроется по ссылке.
+  if (!адрес) return null;
+  const баланс = await балансTon(адрес);
+  if (баланс == null) return null;
+  if (баланс >= нужно) return null;
+  return [
+    "Не хватает TON.",
+    "",
+    `На кошельке <b>${баланс.toFixed(3)}</b>, нужно <b>${нужно.toFixed(2)}</b> — с газом.`,
+    `<code>${адрес}</code>`,
+  ].join("\n");
 }
 
 /* Расчёт покупки на бирже. Числа берём у самой биржи: и ожидаемый
@@ -462,6 +506,19 @@ async function handleCallback(cb) {
     const сумма = Number(m[4]) || 0;
     if (!сумма) {
       await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Не получилось собрать покупку" });
+      return;
+    }
+
+    // Пустой кошелёк — самый частый повод, по которому сделка не
+    // проходит. Говорим об этом здесь, цифрами, а не отправляем человека
+    // выяснять это в кошельке.
+    const мало = await неХватает(cb.from.id, сумма + 0.15);
+    if (мало) {
+      await tg("answerCallbackQuery", {
+        callback_query_id: cb.id,
+        show_alert: true,
+        text: мало.replace(/<[^>]+>/g, ""),
+      });
       return;
     }
 
@@ -834,7 +891,10 @@ async function handleInline(query) {
     cache_time: 20,
     is_personal: false,
     button: результатовНет(results)
-      ? { text: "Ничего не нашлось — открыть Mintly", web_app: { url: APP_URL } }
+      ? {
+        text: ТЕСТОВАЯ ? "Пусто — тестовая сеть, открыть Mintly" : "Ничего не нашлось — открыть Mintly",
+        web_app: { url: APP_URL },
+      }
       : undefined,
   });
 }
@@ -863,7 +923,9 @@ async function handleTokenCommand(message, запрос) {
     await tg("sendMessage", {
       chat_id: chat.id,
       reply_to_message_id: message.message_id,
-      text: "Ничего не нашлось — ни в Mintly, ни на биржах TON. Проверь тикер или пришли адрес контракта.",
+      text: (ТЕСТОВАЯ
+        ? "Ничего не нашлось. Проверь тикер или пришли адрес контракта."
+        : "Ничего не нашлось — ни в Mintly, ни на биржах TON. Проверь тикер или пришли адрес контракта.") + ПОДСКАЗКА_СЕТИ,
     });
     return;
   }
@@ -892,7 +954,7 @@ async function handleTop(message) {
   const чужие = свои.length >= 5 ? [] : await trendingExternal(5 - свои.length).catch(() => []);
   const найдено = [...свои, ...чужие];
   if (!найдено.length) {
-    await tg("sendMessage", { chat_id: chat.id, text: "Пока пусто — ни одного токена." });
+    await tg("sendMessage", { chat_id: chat.id, text: `Пока пусто — ни одного токена.${ПОДСКАЗКА_СЕТИ}` });
     return;
   }
   const строки = найдено.map((t, i) => {
