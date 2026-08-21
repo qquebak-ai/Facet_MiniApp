@@ -154,6 +154,20 @@ async function handleTeamReply(message) {
   });
 }
 
+/* Метка запуска для ссылки «t.me/бот?start=…».
+ *
+ * Telegram пускает в неё только буквы, цифры, «_» и «-»: ни точки, ни
+ * «~» там быть не может — с ними команда до бота просто не доходит, и
+ * человек попадает в пустой чат. Поэтому сумма едет целым числом
+ * сотых и стоит перед ключом: в адресе токена «_» встречается сам по
+ * себе, и разделитель в конце было бы не отличить.
+ */
+function меткаПокупки(ref, сумма) {
+  const сотые = Math.max(0, Math.round(Number(сумма) * 100));
+  const ключ = String(ref || "").replace(":", "_");
+  return сотые > 0 ? `buy_x${сотые}_${ключ}` : `buy_${ключ}`;
+}
+
 /* Кнопки под карточкой токена.
  *
  * Кнопка web_app живёт только в сообщениях, которые бот отправляет сам
@@ -290,7 +304,7 @@ async function handleBuyCommand(message, хвост) {
   const вЛичке = message.chat.type === "private";
   const ряды = [[вЛичке
     ? { text: `💳 Купить · ${сумма} TON`, web_app: { url: `${card.link}&buy=${сумма}` } }
-    : { text: `💳 Купить · ${сумма} TON`, url: `https://t.me/${TG_BOT}?start=buy_${card.ref.replace(":", "_")}~${сумма}` }]];
+    : { text: `💳 Купить · ${сумма} TON`, url: `https://t.me/${TG_BOT}?start=${меткаПокупки(card.ref, сумма)}` }]];
   await tg("sendMessage", {
     chat_id: message.chat.id,
     text: текст,
@@ -560,7 +574,7 @@ async function handleCallback(cb) {
     // уходит целиком, и та же покупка проходит.
     const подпись = своё
       ? { text: `💳 Купить · ${сумма} TON`, web_app: { url: `${card.link}&buy=${сумма}` } }
-      : { text: `💳 Купить · ${сумма} TON`, url: `https://t.me/${TG_BOT}?start=buy_${card.ref.replace(":", "_")}~${сумма}` };
+      : { text: `💳 Купить · ${сумма} TON`, url: `https://t.me/${TG_BOT}?start=${меткаПокупки(card.ref, сумма)}` };
 
     // Своп собран под кошелёк того, кто нажал: оставлять такую ссылку в
     // общем чате нельзя — следующий заплатит своими TON, а токены уйдут
@@ -768,7 +782,7 @@ async function inlineBuy(query, части) {
       reply_markup: { inline_keyboard: [
         // В чужом чате web_app-кнопки нет, поэтому ведём к боту: он
         // откроет приложение с этой же суммой.
-        [{ text: `💳 Купить · ${сумма} TON`, url: `https://t.me/${TG_BOT}?start=buy_${card.ref.replace(":", "_")}~${сумма}` }],
+        [{ text: `💳 Купить · ${сумма} TON`, url: `https://t.me/${TG_BOT}?start=${меткаПокупки(card.ref, сумма)}` }],
         [{ text: "← К токену", callback_data: `x:${card.ref}` }],
       ] },
     }
@@ -1361,10 +1375,14 @@ export default async function handler(req, res) {
   // Пришли из чужого чата по кнопке «Торговать»: показываем карточку
   // сразу с торговым меню — за этим и шли.
   if (payload.startsWith("buy_")) {
-    // В метке может ехать и сумма: «buy_t_<id>~5».
-    const [сырое, суммаТекст] = payload.slice(4).split("~");
-    const сумма = Number(суммаТекст) || 0;
-    const хвост = сырое;
+    // «buy_x50_t_<id>» — сумма в сотых впереди, дальше вид и ключ.
+    let хвост = payload.slice(4);
+    let сумма = 0;
+    const сСуммой = хвост.match(/^x(\d+)_([\s\S]+)$/);
+    if (сСуммой) {
+      сумма = Number(сСуммой[1]) / 100;
+      хвост = сСуммой[2];
+    }
     const вид = хвост.startsWith("p_") ? "p" : хвост.startsWith("t_") ? "t" : null;
     const ключ = вид ? хвост.slice(2) : null;
     if (вид && ключ) {

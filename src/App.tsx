@@ -14239,7 +14239,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       пул = new URLSearchParams(window.location.search).get("pool") || "";
     } catch (e) { /* адрес без параметров */ }
     const метка = telegramStartParam();
-    if (!id && метка.startsWith("tok_")) id = метка.slice(4).split("~")[0];
+    if (!id && метка.startsWith("tok_")) id = метка.slice(4);
+    if (!id && метка.startsWith("buy_")) {
+      const m = метка.match(/^buy_(?:x\d+_)?t_([0-9a-f-]{36})$/i);
+      if (m) id = m[1];
+    }
     if (!пул && метка.startsWith("pool_")) пул = метка.slice(5);
 
     // Сумма покупки из ссылки — необязательная.
@@ -14247,7 +14251,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     try {
       сумма = Number(new URLSearchParams(window.location.search).get("buy")) || 0;
     } catch (e) { /* адрес без параметров */ }
-    if (!сумма && метка.includes("~")) сумма = Number(метка.split("~")[1]) || 0;
+    // Из бота метка приходит без точек и «~»: сумма едет сотыми, вида
+    // «buy_x50_t_<id>». Сам бот открывает приложение уже с «?buy=»,
+    // поэтому здесь достаточно этого разбора для прямых ссылок.
+    if (!сумма && метка.startsWith("buy_x")) {
+      const m = метка.match(/^buy_x(\d+)_/);
+      if (m) сумма = Number(m[1]) / 100;
+    }
     let продажа = false;
     try {
       продажа = new URLSearchParams(window.location.search).get("sell") === "1";
