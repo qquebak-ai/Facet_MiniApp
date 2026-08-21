@@ -11498,85 +11498,85 @@ async function signInWithTelegram(nickname) {
    и больше нигде: в магазине плитка отвечала сразу за покупку и за
    примерку, и одно нажатие делало то одно, то другое. */
 function LookPicker({ cosmetics, owned, onEquip, focus }) {
-  const рамкиРяд = useRef(null);
-  const картыРяд = useRef(null);
+  // Из магазина сюда приходят с уже выбранным видом вещи: нажали на
+  // карточку — открылась вкладка карточек, а не рамок.
+  const [tab, setTab] = useState(focus === "card" ? "card" : "frame");
+  const блок = useRef(null);
   useEffect(() => {
     if (!focus) return;
+    setTab(focus === "card" ? "card" : "frame");
     // Окно редактирования длинное, и примерка внизу: без подводки
     // человек попадал бы на аватарку и ник, а пришёл он не за ними.
     const id = setTimeout(() => {
-      const цель = (focus === "card" ? картыРяд : рамкиРяд).current;
-      if (цель && цель.scrollIntoView) цель.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (блок.current && блок.current.scrollIntoView) блок.current.scrollIntoView({ block: "center", behavior: "smooth" });
     }, 220);
     return () => clearTimeout(id);
   }, [focus]);
-
-  // Рамки и карточки показываем разом, двумя рядами: переключатель
-  // прятал половину вещей и заставлял помнить, что где лежит, — а
-  // вещей у человека и так по горсти.
-  const ряды = [
-    { kind: "frame", label: t("shopTabFrames"), ref: рамкиРяд, все: AVATAR_FRAMES },
-    { kind: "card", label: t("shopTabCards"), ref: картыРяд, все: PROFILE_CARDS },
-  ];
+  const все = tab === "frame" ? AVATAR_FRAMES : PROFILE_CARDS;
   // Бесплатное доступно всегда — им же и снимают надетое.
-  const своё = (kind, все) => все.filter((it) => !(it.price > 0) || (owned && owned.has(ownedKey(kind, it.id))));
-  const естьЧто = ряды.some(({ kind, все }) => своё(kind, все).length > 1);
+  const мои = все.filter((it) => !(it.price > 0) || (owned && owned.has(ownedKey(tab, it.id))));
+  const надето = cosmetics[tab] || "none";
 
   return (
-    <div className="mt-4">
-      <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{t("editLookTitle")}</span>
-      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.4, marginTop: 4 }}>
-        {естьЧто ? t("editLookHint") : t("editLookEmpty")}
+    <div className="mt-4" ref={блок}>
+      <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{t("editLookTitle")}</span>
+        <div className="flex items-center gap-1.5">
+          {[["frame", t("shopTabFrames")], ["card", t("shopTabCards")]].map(([id, label]) => {
+            const active = tab === id;
+            return (
+              <button key={id} onClick={() => setTab(id)} className="fx-tap fx-chip rounded-full px-3 py-1"
+                style={{
+                  fontFamily: bodyFont, fontSize: 12.5, fontWeight: 600,
+                  background: active ? T.ice : "transparent", color: active ? T.bg : T.muted,
+                  border: `1px solid ${active ? T.ice : T.line}`,
+                }}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.4, marginBottom: 10 }}>
+        {мои.length > 1 ? t("editLookHint") : t("editLookEmpty")}
       </p>
-
-      {ряды.map(({ kind, label, ref, все }, ряд) => {
-        const мои = своё(kind, все);
-        const надето = cosmetics[kind] || "none";
-        // Второй ряд трогается, когда первый почти закончил: иначе обе
-        // волны идут разом и «по очереди» не читается.
-        const задержка = ряд * 140;
-        return (
-          <div key={kind} ref={ref} style={{ marginTop: 12 }}>
-            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{label}</span>
-            {/* Ряд прокручивается вбок: вещей со временем становится
-                много, а сетка на всю ширину отодвинула бы кнопку
-                «Сохранить» за экран. */}
-            <div className="no-scrollbar flex gap-2 overflow-x-auto" style={{ paddingBottom: 2, marginTop: 6 }}>
-              {мои.map((it, i) => {
-                const выбрано = надето === it.id;
-                return (
-                  <button
-                    key={it.id}
-                    onClick={() => { haptic("light"); onEquip(kind, it.id); }}
-                    className="fx-tap fx-look-in flex flex-col items-center gap-1.5 rounded-[18px] p-2"
-                    style={{
-                      flex: "0 0 auto", width: 84,
-                      background: T.bg, border: `1px solid ${выбрано ? hexA(T.electric, 0.55) : T.line}`,
-                      position: "relative", overflow: "hidden",
-                      // Волна слева направо. Дальше десятой плитки задержку
-                      // не копим: последняя иначе выезжала бы через секунду
-                      // после того, как ряд уже прокрутили руками.
-                      animationDelay: `${задержка + Math.min(i, 9) * 45}ms`,
-                    }}
-                  >
-                    <div style={{ position: "relative", width: "100%", height: 54, borderRadius: 12, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {kind === "card" && <ProfileCardBg cardId={it.id} height={54} radius={12} showcase />}
-                      <div style={{ position: "relative", zIndex: 1 }}>
-                        <AvatarFrame frameId={kind === "frame" ? it.id : "none"} size={38}>
-                          <div style={{ width: "100%", height: "100%", background: T.bg }} />
-                        </AvatarFrame>
-                      </div>
-                    </div>
-                    <span style={{ fontFamily: bodyFont, fontSize: 11, color: выбрано ? T.electric : T.muted, textAlign: "center", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
-                      {pickLabel(it.label)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+      {/* Ряд прокручивается вбок: вещей со временем становится много, а
+          сетка на всю ширину отодвинула бы кнопку «Сохранить» за экран.
+          key по вкладке — чтобы волна появления шла заново на каждом
+          переключении, а не только при открытии окна. */}
+      <div key={tab} className="no-scrollbar flex gap-2 overflow-x-auto" style={{ paddingBottom: 2 }}>
+        {мои.map((it, i) => {
+          const выбрано = надето === it.id;
+          return (
+            <button
+              key={it.id}
+              onClick={() => { haptic("light"); onEquip(tab, it.id); }}
+              className="fx-tap fx-look-in flex flex-col items-center gap-1.5 rounded-[18px] p-2"
+              style={{
+                flex: "0 0 auto", width: 84,
+                background: T.bg, border: `1px solid ${выбрано ? hexA(T.electric, 0.55) : T.line}`,
+                position: "relative", overflow: "hidden",
+                // Волна слева направо. Дальше десятой плитки задержку не
+                // копим: последняя иначе выезжала бы через секунду после
+                // того, как ряд уже прокрутили руками.
+                animationDelay: `${Math.min(i, 9) * 45}ms`,
+              }}
+            >
+              <div style={{ position: "relative", width: "100%", height: 54, borderRadius: 12, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {tab === "card" && <ProfileCardBg cardId={it.id} height={54} radius={12} showcase />}
+                <div style={{ position: "relative", zIndex: 1 }}>
+                  <AvatarFrame frameId={tab === "frame" ? it.id : "none"} size={38}>
+                    <div style={{ width: "100%", height: "100%", background: T.bg }} />
+                  </AvatarFrame>
+                </div>
+              </div>
+              <span style={{ fontFamily: bodyFont, fontSize: 11, color: выбрано ? T.electric : T.muted, textAlign: "center", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
+                {pickLabel(it.label)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
