@@ -8229,31 +8229,53 @@ function AlmostListed({ tokens = [], onOpen }) {
 /* Три числа под приветствием: сколько запущено за сутки, сколько TON
    лежит в живых кривых и сколько токенов дошло до биржи.
 
-   Считает их база одним вызовом (см. supabase_platform_stats.sql):
-   собранное и вышедшие на биржу хранятся в служебной таблице, закрытой
-   от браузера, а тянуть состояние двух десятков кривых с цепочки ради
-   строки на главной — верный способ упереться в лимиты tonapi.
+   Запуски считает база (см. supabase_platform_stats.sql) — их она знает
+   точно. А вот собранное и вышедшие на биржу лежат там же, куда их
+   пишет обход кривых по расписанию, и между обходами отставали на
+   сутки: свежий токен уже собрал полтона, а на главной висел ноль.
+   Поэтому оба числа берутся из ленты, которая читает кривые напрямую,
+   и обновляются вместе с ней. Если лента ещё не дочитана (её обогащение
+   ограничено, чтобы не упереться в лимиты tonapi), показываем большее
+   из двух — занизить витрину хуже, чем отстать.
 
    Пока не запущено ни одного токена, полоса не показывается вовсе: ряд
    нулей на главной говорит о месте хуже, чем его отсутствие. */
-function HomeStats() {
+function HomeStats({ live = [] }) {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
-    supabase.rpc("platform_stats", { p_network: CURRENT_NETWORK }).then(({ data, error }) => {
+    const прочитать = () => supabase.rpc("platform_stats", { p_network: CURRENT_NETWORK }).then(({ data, error }) => {
       if (cancelled || error || !data) return;
       setStats(data);
     }, () => {});
-    return () => { cancelled = true; };
+    прочитать();
+    // Запуски за сутки меняются от чужих действий, а не от наших —
+    // перечитываем их сами, иначе цифра застынет на моменте открытия.
+    const id = setInterval(() => { if (document.visibilityState === "visible") прочитать(); }, 60000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
+
+  const живые = useMemo(() => {
+    const ряд = (live || []).filter((tok) => tok && tok.raisedTon != null);
+    if (!ряд.length) return null;
+    return {
+      // В кривой лежит только то, что не ушло на биржу: закрытая кривая
+      // отдаёт собранное площадке.
+      raisedTon: ряд.filter((tok) => !tok.graduated).reduce((s, tok) => s + (Number(tok.raisedTon) || 0), 0),
+      graduated: ряд.filter((tok) => tok.graduated).length,
+    };
+  }, [live]);
 
   if (!stats || !(Number(stats.launched) > 0)) return null;
 
+  const собрано = живые ? Math.max(живые.raisedTon, Number(stats.raisedTon) || 0) : Number(stats.raisedTon) || 0;
+  const наБирже = живые ? Math.max(живые.graduated, Number(stats.graduated) || 0) : Number(stats.graduated) || 0;
+
   const ячейки = [
     { v: String(stats.launched24 || 0), k: "statLaunched24" },
-    { v: fmtTon(Number(stats.raisedTon) || 0), k: "statRaised" },
-    { v: String(stats.graduated || 0), k: "statGraduated" },
+    { v: fmtTon(собрано), k: "statRaised" },
+    { v: String(наБирже), k: "statGraduated" },
   ];
 
   return (
@@ -8436,7 +8458,7 @@ function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenPr
   return (
     <div className="flex flex-col gap-4" style={{ paddingBottom: 12 }}>
       <HomeHero onGoTab={onGoTab} onGoCreate={onGoCreate} />
-      <HomeStats />
+      <HomeStats live={curveTokens} />
       <ActivityFeed />
       <AlmostListed tokens={curveTokens} onOpen={onOpenToken} />
       <Leaderboard onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} live={curveTokens} />
@@ -13432,6 +13454,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         // Для тонкой шкалы в ленте: сколько собрано и сколько нужно.
         raisedTon: Number(m.state.realTon) / 1e9,
         graduationTon: Number(m.state.graduationTon) / 1e9,
+        // Закрытая кривая — это «вышел на биржу». Витрине на главной
+        // это число нужно живым, а не таким, каким его записал ночной
+        // обход.
+        graduated: !!m.state.graduated,
       });
     });
     if (!priced.size) return;
@@ -13454,6 +13480,20 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const need = communityTokens.filter((tok) => tok.curveAddress && tok.graduationTon == null);
     if (!need.length) return;
     enrichCurveMarkets(need);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tonPriceUsd, communityTokens]);
+
+  // Кривые перечитываются и сами по себе: цифры на главной и в ленте
+  // иначе застывали бы на том, что было в момент открытия приложения.
+  // Раз в две минуты и только на видимой вкладке — чаще незачем, а в
+  // фоне это просто расход лимита tonapi.
+  useEffect(() => {
+    if (!(tonPriceUsd > 0)) return;
+    const id = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      enrichCurveMarkets(communityTokens.filter((tok) => tok.curveAddress));
+    }, 120000);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tonPriceUsd, communityTokens]);
 
