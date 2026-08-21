@@ -21,6 +21,14 @@ export const NETWORK = TESTNET ? "testnet" : "mainnet";
 
 export const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
 
+/* Метка свежести для ссылки на картинку. Telegram кэширует превью по
+   адресу надолго: без неё в чате неделю висел бы график недельной
+   давности. Шаг в пять минут — компромисс: картинка не устаревает
+   заметно, но и не перерисовывается на каждый просмотр. */
+function свежесть() {
+  return Math.floor(Date.now() / 300000);
+}
+
 // Витрина приложения показывает не только запущенное здесь: лента
 // «Мемпада» приходит из GeckoTerminal, и в чате бот обязан находить то
 // же самое. Ключа этот источник не требует, но и щедрым не бывает —
@@ -391,6 +399,7 @@ export async function tokenCard(token) {
     title: `$${тикер} — ${имя}`,
     description: описание,
     link: `${APP_URL}?token=${token.id}`,
+    chart: `${APP_URL}/api/chart?token=${token.id}&t=${свежесть()}`,
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=tok_${token.id}`,
     thumb: token.logo_url || null,
   };
@@ -430,6 +439,7 @@ export async function externalCard(token) {
     title: `$${token.ticker} — ${token.name}`,
     description: `${fmtUsd(token.priceUsd)} · ${знак}${token.change24.toFixed(1)}% · ликвидность ${fmtUsd(token.liqUsd)}`,
     link: `${APP_URL}?pool=${token.pool_address}`,
+    chart: `${APP_URL}/api/chart?pool=${token.pool_address}&t=${свежесть()}`,
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=pool_${token.pool_address}`,
     thumb: token.logo_url || null,
   };

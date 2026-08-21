@@ -283,7 +283,12 @@ async function handleInline(query) {
     input_message_content: {
       message_text: c.text,
       parse_mode: "HTML",
-      link_preview_options: { is_disabled: true },
+      // График едет отдельной картинкой поверх текста: так его видно
+      // сразу, без единого касания. Ссылку задаём явно — в самом тексте
+      // её нет, и искать первую попавшуюся Telegram не должен.
+      link_preview_options: c.chart
+        ? { url: c.chart, prefer_large_media: true, show_above_text: true }
+        : { is_disabled: true },
     },
     reply_markup: tokenButtons(c, false),
   }));
@@ -339,7 +344,9 @@ async function handleTokenCommand(message, запрос) {
     reply_to_message_id: message.message_id,
     text: ещё ? `${card.text}\n\nТакже нашлось: ${ещё}` : card.text,
     parse_mode: "HTML",
-    link_preview_options: { is_disabled: true },
+    link_preview_options: card.chart
+      ? { url: card.chart, prefer_large_media: true, show_above_text: true }
+      : { is_disabled: true },
     reply_markup: tokenButtons(card, своё),
   });
 }
