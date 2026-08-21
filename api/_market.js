@@ -142,9 +142,6 @@ function поCatalog(json) {
    пулам, поэтому один и тот же токен приходит несколько раз — оставляем
    пул с самой большой ликвидностью, он и есть настоящий рынок. */
 export async function findExternal(query, limit = 5) {
-  // В тестовой сети бирж нет вовсе: показывать их токены значило бы
-  // предлагать сделку, которую негде провести.
-  if (TESTNET) return [];
   const q = String(query || "").trim().replace(/^\$/, "");
   if (!q) return [];
   const json = await gt(`/search/pools?query=${encodeURIComponent(q)}&network=${GT_NETWORK}&include=base_token,dex`);
@@ -172,7 +169,6 @@ export async function findExternal(query, limit = 5) {
 
 /* То, что торгуют прямо сейчас, — та же лента, что на главной. */
 export async function trendingExternal(limit = 5) {
-  if (TESTNET) return [];
   const json = await gt(`/networks/${GT_NETWORK}/trending_pools?include=base_token,dex`);
   if (!json || !Array.isArray(json.data)) return [];
   const { tokensById, dexById } = поCatalog(json);
@@ -410,6 +406,10 @@ export async function externalCard(token) {
   ];
   строки.push("");
   строки.push(`Объём 24ч ${fmtUsd(token.volUsd)} · Ликвидность ${fmtUsd(token.liqUsd)}${token.dex ? ` · ${escape(token.dex)}` : ""}`);
+  // Смотреть биржевые токены можно из любой сети — цифры читаются из
+  // mainnet. А вот купить из тестовой не выйдет: кошелёк подключён к
+  // другой сети, и подписать такую сделку нечем.
+  if (TESTNET) строки.push("\n<i>Сделка доступна только в боевой сети — сейчас приложение в тестовой.</i>");
   if (token.token_address) строки.push(`\n<code>${escape(token.token_address)}</code>`);
 
   return {
@@ -418,7 +418,9 @@ export async function externalCard(token) {
     description: `${fmtUsd(token.priceUsd)} · ${знак}${token.change24.toFixed(1)}% · ликвидность ${fmtUsd(token.liqUsd)}`,
     ticker: token.ticker,
     // Адрес самого жетона нужен для покупки: своп собирается по нему.
-    jetton: token.token_address || null,
+    // В тестовой сети его не отдаём — покупать нечем, и кнопка торговли
+    // просто не появится.
+    jetton: TESTNET ? null : token.token_address || null,
     link: `${APP_URL}?pool=${token.pool_address}`,
     chart: `${APP_URL}/api/chart?pool=${token.pool_address}&t=${свежесть()}`,
     ref: `p:${token.pool_address}`,
