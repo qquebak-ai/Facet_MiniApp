@@ -21,6 +21,13 @@ export const NETWORK = TESTNET ? "testnet" : "mainnet";
 
 export const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
 
+// Витрина приложения показывает не только запущенное здесь: лента
+// «Мемпада» приходит из GeckoTerminal, и в чате бот обязан находить то
+// же самое. Ключа этот источник не требует, но и щедрым не бывает —
+// поэтому на один ответ уходит не больше пары запросов.
+const GT = "https://api.geckoterminal.com/api/v2";
+const GT_NETWORK = "ton";
+
 // Адрес TON в любом из принятых написаний: EQ/UQ/kQ/0Q и 46 знаков
 // base64url. Годится, чтобы отличить адрес от тикера, а разбирать его
 // по-настоящему тут незачем — сверка идёт по строке в базе.
@@ -65,6 +72,114 @@ export function priceFromState(state) {
   const резервТокенов = state.virtualTokens - state.tokensSold;
   if (резервТокенов <= 0n) return 0;
   return Number(резервTon) / Number(резервТокенов);
+}
+
+async function gt(path) {
+  try {
+    const res = await fetch(`${GT}${path}`, { headers: { Accept: "application/json" } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+/* Пул GeckoTerminal к общему виду. Поля те же, что читает лента в
+   приложении (см. fetchPoolsPage в src/App.tsx). */
+function poolToToken(row, tokensById, dexById) {
+  const a = row.attributes || {};
+  const bt = (row.relationships && row.relationships.base_token && row.relationships.base_token.data && tokensById.get(row.relationships.base_token.data.id)) || {};
+  const dex = (row.relationships && row.relationships.dex && row.relationships.dex.data && dexById.get(row.relationships.dex.data.id)) || {};
+  const имя = bt.name || String(a.name || "TOKEN/TON").split("/")[0].trim();
+  const цена = parseFloat(a.base_token_price_usd) || 0;
+  if (!a.address || !(цена > 0)) return null;
+  return {
+    external: true,
+    id: row.id,
+    pool_address: a.address,
+    token_address: bt.address || null,
+    name: имя,
+    ticker: String(bt.symbol || имя || "TOKEN").toUpperCase().slice(0, 12),
+    logo_url: bt.image_url && !String(bt.image_url).includes("missing") ? bt.image_url : null,
+    emoji: "🪙",
+    priceUsd: цена,
+    mcapUsd: parseFloat(a.market_cap_usd) || parseFloat(a.fdv_usd) || 0,
+    change24: parseFloat(a.price_change_percentage && a.price_change_percentage.h24) || 0,
+    volUsd: parseFloat(a.volume_usd && a.volume_usd.h24) || 0,
+    liqUsd: parseFloat(a.reserve_in_usd) || 0,
+    dex: dex.name || null,
+    created_at: a.pool_created_at || null,
+  };
+}
+
+function поCatalog(json) {
+  const included = (json && json.included) || [];
+  const tokensById = new Map(included.filter((x) => x.type === "token").map((x) => [x.id, x.attributes || {}]));
+  const dexById = new Map(included.filter((x) => x.type === "dex").map((x) => [x.id, x.attributes || {}]));
+  return { tokensById, dexById };
+}
+
+/* Поиск по бирже: тикер, название или адрес. GeckoTerminal ищет по
+   пулам, поэтому один и тот же токен приходит несколько раз — оставляем
+   пул с самой большой ликвидностью, он и есть настоящий рынок. */
+export async function findExternal(query, limit = 5) {
+  const q = String(query || "").trim().replace(/^\$/, "");
+  if (!q) return [];
+  const json = await gt(`/search/pools?query=${encodeURIComponent(q)}&network=${GT_NETWORK}&include=base_token,dex`);
+  if (!json || !Array.isArray(json.data)) return [];
+  const { tokensById, dexById } = поCatalog(json);
+  const лучшие = new Map();
+  for (const row of json.data) {
+    const t = poolToToken(row, tokensById, dexById);
+    if (!t) continue;
+    const ключ = t.token_address || t.ticker;
+    const было = лучшие.get(ключ);
+    if (!было || t.liqUsd > было.liqUsd) лучшие.set(ключ, t);
+  }
+  // Точное совпадение тикера — вперёд: по запросу «NOT» человек ждёт
+  // Notcoin, а не «Not Meme» с чуть большей ликвидностью.
+  const точно = q.toLowerCase();
+  return [...лучшие.values()]
+    .sort((a, b) => {
+      const ta = a.ticker.toLowerCase() === точно ? 0 : 1;
+      const tb = b.ticker.toLowerCase() === точно ? 0 : 1;
+      return ta - tb || b.liqUsd - a.liqUsd;
+    })
+    .slice(0, limit);
+}
+
+/* То, что торгуют прямо сейчас, — та же лента, что на главной. */
+export async function trendingExternal(limit = 5) {
+  const json = await gt(`/networks/${GT_NETWORK}/trending_pools?include=base_token,dex`);
+  if (!json || !Array.isArray(json.data)) return [];
+  const { tokensById, dexById } = поCatalog(json);
+  const лучшие = new Map();
+  for (const row of json.data) {
+    const t = poolToToken(row, tokensById, dexById);
+    if (!t) continue;
+    const ключ = t.token_address || t.ticker;
+    if (!лучшие.has(ключ)) лучшие.set(ключ, t);
+  }
+  return [...лучшие.values()].slice(0, limit);
+}
+
+/* Один пул по адресу — для ссылок вида «?pool=…». */
+export async function poolByAddress(address) {
+  const json = await gt(`/networks/${GT_NETWORK}/pools/${address}?include=base_token,dex`);
+  if (!json || !json.data) return null;
+  const { tokensById, dexById } = поCatalog(json);
+  return poolToToken(json.data, tokensById, dexById);
+}
+
+/* График внешнего токена — из часовых свечей биржи. */
+async function externalSpark(poolAddress) {
+  const json = await gt(`/networks/${GT_NETWORK}/pools/${poolAddress}/ohlcv/hour?aggregate=1&limit=24&currency=usd&token=base`);
+  const list = json && json.data && json.data.attributes && json.data.attributes.ohlcv_list;
+  if (!Array.isArray(list) || list.length < 2) return "";
+  // Свечи приходят от свежих к старым — разворачиваем, иначе график
+  // читался бы задом наперёд.
+  const точки = list.slice().reverse().map((c) => ({ price: Number(c[4]) || 0 })).filter((p) => p.price > 0);
+  return sparkline(точки, 14);
 }
 
 /* Поиск. Адрес ищем точным совпадением, всё остальное — по тикеру и
@@ -269,4 +384,60 @@ export async function tokenCard(token) {
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=tok_${token.id}`,
     thumb: token.logo_url || null,
   };
+}
+
+
+function fmtUsd(n) {
+  const v = Number(n) || 0;
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
+  if (v >= 1) return `$${v.toFixed(2)}`;
+  if (v > 0) return `$${v.toFixed(9).replace(/(\.\d*?)0+$/, "$1")}`;
+  return "—";
+}
+
+/* Карточка токена, который в приложении просто показывается: своей
+   кривой у него нет, все цифры — с биржи, поэтому и путь до листинга
+   тут не при чём, он уже там. */
+export async function externalCard(token) {
+  const график = await externalSpark(token.pool_address);
+  const знак = token.change24 >= 0 ? "+" : "";
+  const стрелка = token.change24 > 0 ? "▲" : token.change24 < 0 ? "▼" : "•";
+  const строки = [
+    `${token.emoji || "🪙"} <b>${escape(token.name)}</b>  $${escape(token.ticker)}`,
+    "",
+    `Цена   <code>${fmtUsd(token.priceUsd)}</code>`,
+    `Капа   <code>${fmtUsd(token.mcapUsd)}</code>   ${стрелка} ${знак}${token.change24.toFixed(2)}% за 24ч`,
+  ];
+  if (график) строки.push(`График <code>${график}</code>`);
+  строки.push("");
+  строки.push(`Объём 24ч ${fmtUsd(token.volUsd)} · Ликвидность ${fmtUsd(token.liqUsd)}${token.dex ? ` · ${escape(token.dex)}` : ""}`);
+  if (token.token_address) строки.push(`\n<code>${escape(token.token_address)}</code>`);
+
+  return {
+    text: строки.join("\n"),
+    title: `$${token.ticker} — ${token.name}`,
+    description: `${fmtUsd(token.priceUsd)} · ${знак}${token.change24.toFixed(1)}% · ликвидность ${fmtUsd(token.liqUsd)}`,
+    link: `${APP_URL}?pool=${token.pool_address}`,
+    botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=pool_${token.pool_address}`,
+    thumb: token.logo_url || null,
+  };
+}
+
+/* Общий вход: сперва своё, потом биржа. Свои токены впереди намеренно —
+   бот всё-таки про Mintly, и запущенное здесь должно находиться первым. */
+export async function searchAll(query, limit = 8) {
+  const свои = await findTokens(query, limit).catch(() => []);
+  if (свои.length >= limit || !String(query || "").trim()) return свои;
+  const чужие = await findExternal(query, limit - свои.length).catch(() => []);
+  // Один и тот же токен мог и запуститься здесь, и уехать на биржу:
+  // показываем его один раз, своей карточкой.
+  const адреса = new Set(свои.map((t) => t.token_address).filter(Boolean));
+  return [...свои, ...чужие.filter((t) => !t.token_address || !адреса.has(t.token_address))];
+}
+
+/* Карточка для любого из двух видов. */
+export function cardFor(token) {
+  return token.external ? externalCard(token) : tokenCard(token);
 }

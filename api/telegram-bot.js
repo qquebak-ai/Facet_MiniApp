@@ -41,7 +41,7 @@
  */
 
 import { SUPPORT_CHAT_ID, adminClient, acceptQuestion, deliverAnswer } from "./_support.js";
-import { findTokens, tokenCard, looksLikeAddress } from "./_market.js";
+import { searchAll, cardFor, findTokens, trendingExternal, looksLikeAddress } from "./_market.js";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -198,7 +198,7 @@ async function handleInline(query) {
   const вЛичке = query.chat_type === "sender" || query.chat_type === "private";
   let найдено = [];
   try {
-    найдено = await findTokens(текст, 8);
+    найдено = await searchAll(текст, 8);
   } catch (err) {
     console.warn("[bot] inline search failed:", err && err.message);
   }
@@ -209,14 +209,16 @@ async function handleInline(query) {
   const карточки = [];
   for (const токен of найдено) {
     if (карточки.length < 3) {
-      карточки.push(await tokenCard(токен));
+      карточки.push(await cardFor(токен));
     } else {
+      const адрес = токен.external ? `pool=${токен.pool_address}` : `token=${токен.id}`;
+      const метка = токен.external ? `pool_${токен.pool_address}` : `tok_${токен.id}`;
       карточки.push({
         title: `$${String(токен.ticker || "").toUpperCase()} — ${токен.name || ""}`,
         description: "Открыть карточку",
         text: `${токен.emoji || "🪙"} <b>${токен.name || ""}</b>  $${String(токен.ticker || "").toUpperCase()}`,
-        link: `${APP_URL}?token=${токен.id}`,
-        botLink: `https://t.me/${TG_BOT}?start=tok_${токен.id}`,
+        link: `${APP_URL}?${адрес}`,
+        botLink: `https://t.me/${TG_BOT}?start=${метка}`,
         thumb: токен.logo_url || null,
       });
     }
@@ -266,19 +268,17 @@ async function handleTokenCommand(message, запрос) {
     return;
   }
 
-  const найдено = await findTokens(текст, 5);
+  const найдено = await searchAll(текст, 5);
   if (!найдено.length) {
     await tg("sendMessage", {
       chat_id: chat.id,
       reply_to_message_id: message.message_id,
-      text: looksLikeAddress(текст)
-        ? "Такого токена в Mintly нет. Здесь видно только запущенное через приложение."
-        : "Ничего не нашлось. Проверь тикер или пришли адрес контракта.",
+      text: "Ничего не нашлось — ни в Mintly, ни на биржах TON. Проверь тикер или пришли адрес контракта.",
     });
     return;
   }
 
-  const card = await tokenCard(найдено[0]);
+  const card = await cardFor(найдено[0]);
   // Нашлось несколько — остальные перечисляем строкой, чтобы человек не
   // гадал, тот ли токен ему показали.
   const ещё = найдено.slice(1, 5).map((t) => `$${String(t.ticker || "").toUpperCase()}`).join(" · ");
@@ -294,16 +294,23 @@ async function handleTokenCommand(message, запрос) {
 
 async function handleTop(message) {
   const chat = message.chat || {};
-  const найдено = await findTokens("", 5);
+  // Сперва запущенное в Mintly, потом лента бирж — ровно тем же
+  // порядком, каким это видно на главной.
+  const свои = await findTokens("", 5).catch(() => []);
+  const чужие = свои.length >= 5 ? [] : await trendingExternal(5 - свои.length).catch(() => []);
+  const найдено = [...свои, ...чужие];
   if (!найдено.length) {
-    await tg("sendMessage", { chat_id: chat.id, text: "Пока ни одного токена." });
+    await tg("sendMessage", { chat_id: chat.id, text: "Пока пусто — ни одного токена." });
     return;
   }
-  const строки = найдено.map((t, i) => `${i + 1}. ${t.emoji || "🪙"} <b>$${String(t.ticker || "").toUpperCase()}</b> — ${t.name || ""}`);
+  const строки = найдено.map((t, i) => {
+    const хвост = t.external ? " · с биржи" : "";
+    return `${i + 1}. ${t.emoji || "🪙"} <b>$${String(t.ticker || "").toUpperCase()}</b> — ${t.name || ""}${хвост}`;
+  });
   await tg("sendMessage", {
     chat_id: chat.id,
     reply_to_message_id: message.message_id,
-    text: `Токены Mintly\n\n${строки.join("\n")}\n\nПодробнее: <code>/token ТИКЕР</code>`,
+    text: `${строки.join("\n")}\n\nПодробнее: <code>/token ТИКЕР</code>`,
     parse_mode: "HTML",
     reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", url: `https://t.me/${TG_BOT}?start=open` }]] },
   });
@@ -476,6 +483,20 @@ export default async function handler(req, res) {
       reply_markup: { inline_keyboard: [[{ text: "📈 Открыть график", web_app: { url: `${APP_URL}?token=${токен}` } }]] },
     });
     return res.status(200).json({ ok: true });
+  }
+
+  // Токен с биржи: у него нет своей строки в базе, поэтому в ссылке
+  // едет адрес пула.
+  if (payload.startsWith("pool_")) {
+    const пул = payload.slice(5).trim();
+    if (looksLikeAddress(пул)) {
+      await tg("sendMessage", {
+        chat_id: message.chat.id,
+        text: "Открываю токен в Mintly.",
+        reply_markup: { inline_keyboard: [[{ text: "📈 Открыть график", web_app: { url: `${APP_URL}?pool=${пул}` } }]] },
+      });
+      return res.status(200).json({ ok: true });
+    }
   }
 
   const inviter = inviterFromPayload(payload);

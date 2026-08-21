@@ -2112,19 +2112,14 @@ async function fetchTonMemePools(limit = 18, pages = 1) {
   return collected.length ? collected.slice(0, limit) : null;
 }
 
-async function fetchPoolsPage(page) {
-  try {
-    // include=base_token,dex pulls the actual token record (real name,
-    // symbol, on-chain address, logo image_url) and the DEX the pool
-    // trades on, for every pool in one request.
-    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/trending_pools?page=${page}&include=base_token,dex`);
-    if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
-    const json = await res.json();
-    const rows = json?.data || [];
-    const included = json?.included || [];
-    const tokensById = new Map(included.filter(x => x.type === "token").map(x => [x.id, x.attributes || {}]));
-    const dexById = new Map(included.filter(x => x.type === "dex").map(x => [x.id, x.attributes || {}]));
-    return rows.map((row) => {
+/* Разбор ответа GeckoTerminal в карточки ленты. Вынесен отдельно,
+   потому что тем же путём идёт и один пул, открытый по ссылке из бота. */
+function normalizePools(json) {
+  const rows = json?.data || [];
+  const included = json?.included || [];
+  const tokensById = new Map(included.filter(x => x.type === "token").map(x => [x.id, x.attributes || {}]));
+  const dexById = new Map(included.filter(x => x.type === "dex").map(x => [x.id, x.attributes || {}]));
+  return rows.map((row) => {
       const a = row.attributes || {};
       const baseTokenId = row.relationships?.base_token?.data?.id;
       const dexId = row.relationships?.dex?.data?.id;
@@ -2168,9 +2163,42 @@ async function fetchPoolsPage(page) {
         dexName: dex.name || (dexId ? dexId.replace(/[-_]/g, ".").replace(/\b\w/g, c => c.toUpperCase()) : null),
         createdAt: a.pool_created_at || null,
       };
-    }).filter(t => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING);
+  }).filter(t => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING);
+}
+
+async function fetchPoolsPage(page) {
+  try {
+    // include=base_token,dex pulls the actual token record (real name,
+    // symbol, on-chain address, logo image_url) and the DEX the pool
+    // trades on, for every pool in one request.
+    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/trending_pools?page=${page}&include=base_token,dex`);
+    if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
+    return normalizePools(await res.json());
   } catch (err) {
     return null; // caller keeps showing the last successfully fetched list
+  }
+}
+
+/* Один пул по адресу. Нужен для ссылок из бота: карточку токена с биржи
+   присылают в чат, и при открытии его ещё нет в ленте — она грузится
+   пачками и до нужного токена может не дойти вовсе. */
+async function fetchPoolByAddress(poolAddress) {
+  if (!poolAddress) return null;
+  try {
+    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}?include=base_token,dex`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    // Одиночный пул приходит объектом. Пустой ответ или список вместо
+    // него — не наш случай, и отдавать это в разбор ленты нельзя: он
+    // ждёт готовую строку пула и падает на первом же поле.
+    const строка = json && json.data;
+    if (!строка || Array.isArray(строка) || !строка.id) return null;
+    // Дальше разбор ровно тот же, что и у ленты.
+    const один = normalizePools({ data: [строка], included: json.included || [] });
+    return один.length ? один[0] : null;
+  } catch (err) {
+    console.warn("[mintly] не удалось прочитать пул:", err && err.message);
+    return null;
   }
 }
 
@@ -14104,15 +14132,27 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     try {
       id = new URLSearchParams(window.location.search).get("token") || "";
     } catch (e) { /* адрес без параметров */ }
-    if (!id) {
-      const метка = telegramStartParam();
-      if (метка.startsWith("tok_")) id = метка.slice(4);
-    }
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return;
+    // Токены с биржи своей строки в базе не имеют, поэтому в ссылке
+    // едет адрес пула — по нему карточка догружается с той же биржи.
+    let пул = "";
+    try {
+      пул = new URLSearchParams(window.location.search).get("pool") || "";
+    } catch (e) { /* адрес без параметров */ }
+    const метка = telegramStartParam();
+    if (!id && метка.startsWith("tok_")) id = метка.slice(4);
+    if (!пул && метка.startsWith("pool_")) пул = метка.slice(5);
+
+    const свой = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!свой && !пул) return;
     открытыйИзСсылки.current = true;
     (async () => {
-      const { data } = await supabase.from("tokens").select("*").eq("id", id).maybeSingle();
-      if (data) openToken(localTokenToFeedShape(mapTokenRow(data)));
+      if (свой) {
+        const { data } = await supabase.from("tokens").select("*").eq("id", id).maybeSingle();
+        if (data) openToken(localTokenToFeedShape(mapTokenRow(data)));
+        return;
+      }
+      const карточка = await fetchPoolByAddress(пул);
+      if (карточка) openToken(карточка);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
