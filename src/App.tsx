@@ -10034,11 +10034,15 @@ const LAUNCH_STEPS = [
 ];
 
 function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepIndex, done, error, result, onClose, onRetry, onViewToken }) {
+  // Окно держится на экране, пока идёт анимация ухода: разметка ниже
+  // помечает себя классом закрытия, и без этого значения экран запуска
+  // падал на первом же открытии.
+  const [видно, closing] = useClosing(open);
   const [copied, setCopied] = useState(false);
   const [logCopied, setLogCopied] = useState(false);
   useEffect(() => { if (open) setCopied(false); }, [open]);
 
-  if (!open) return null;
+  if (!видно) return null;
 
   function copyAddr() {
     const addr = result && result.address;
