@@ -201,7 +201,10 @@ export async function findTokens(query, limit = 8) {
   const admin = adminClient();
   if (!admin) return [];
   const q = String(query || "").trim().replace(/^\$/, "");
-  const колонки = "id, name, ticker, emoji, logo_url, token_address, curve_address, created_at, owner_id";
+  // Колонки ровно те, что есть в таблице: адрес жетона называется
+  // «address», отдельного поля под эмодзи нет вовсе. Лишнее имя здесь
+  // роняет весь запрос, и поиск молча возвращает пустоту.
+  const колонки = "id, name, ticker, logo_url, address, curve_address, created_at, owner_id";
 
   let ряд;
   if (looksLikeAddress(q)) {
@@ -209,7 +212,7 @@ export async function findTokens(query, limit = 8) {
       .from("tokens")
       .select(колонки)
       .eq("network", NETWORK)
-      .or(`token_address.eq.${q},curve_address.eq.${q}`)
+      .or(`address.eq.${q},curve_address.eq.${q}`)
       .limit(limit);
     ряд = data || [];
   } else if (q) {
@@ -342,12 +345,14 @@ export async function tokenCard(token) {
   const полоса = "█".repeat(Math.round(доля * делений)) + "░".repeat(делений - Math.round(доля * делений));
 
   const имя = escape(token.name || token.ticker || "?");
+  // Своего эмодзи у токенов нет — в приложении им рисуется ракета.
+  const значок = token.logo_url ? "🪙" : "🚀";
   const тикер = escape(String(token.ticker || "").toUpperCase());
   const знак = движение >= 0 ? "+" : "";
   const стрелка = движение > 0 ? "▲" : движение < 0 ? "▼" : "•";
 
   const строки = [
-    `${token.emoji || "🪙"} <b>${имя}</b>  $${тикер}`,
+    `${значок} <b>${имя}</b>  $${тикер}`,
     "",
     `Цена   <code>${fmtPrice(цена)}</code>`,
     `Капа   <code>${fmtTon(капа)} TON</code>   ${стрелка} ${знак}${движение.toFixed(2)}% за 24ч`,
@@ -361,7 +366,7 @@ export async function tokenCard(token) {
   строки.push("");
   строки.push(`Оборот 24ч ${fmtTon(оборот)} TON · Сделок ${история.length} · Возраст ${fmtAge(token.created_at)}`);
   if (выпуск > 0) строки.push(`Продано ${fmtCount(выпуск)} из ${fmtCount(state ? nano(state.tokensForSale) : 0)} токенов`);
-  if (token.token_address) строки.push(`\n<code>${escape(token.token_address)}</code>`);
+  if (token.address) строки.push(`\n<code>${escape(token.address)}</code>`);
 
   const описание = state
     ? `${fmtPrice(цена)} · ${знак}${движение.toFixed(1)}% · ${fmtTon(собрано)}/${fmtTon(цель)} TON`
@@ -378,7 +383,7 @@ export async function tokenCard(token) {
     // кнопку, которую контракт отобьёт, — врать. Такой токен торгуется
     // дальше в приложении, оттуда и идёт сделка.
     curve: state && !state.graduated ? token.curve_address || null : null,
-    jetton: token.token_address || null,
+    jetton: token.address || null,
     ticker: тикер,
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=tok_${token.id}`,
     thumb: token.logo_url || null,
@@ -410,7 +415,7 @@ export async function externalCard(token) {
   ];
   строки.push("");
   строки.push(`Объём 24ч ${fmtUsd(token.volUsd)} · Ликвидность ${fmtUsd(token.liqUsd)}${token.dex ? ` · ${escape(token.dex)}` : ""}`);
-  if (token.token_address) строки.push(`\n<code>${escape(token.token_address)}</code>`);
+  if (token.address) строки.push(`\n<code>${escape(token.address)}</code>`);
 
   return {
     text: строки.join("\n"),
@@ -437,7 +442,7 @@ export async function searchAll(query, limit = 8) {
   const чужие = await findExternal(query, limit - свои.length).catch(() => []);
   // Один и тот же токен мог и запуститься здесь, и уехать на биржу:
   // показываем его один раз, своей карточкой.
-  const адреса = new Set(свои.map((t) => t.token_address).filter(Boolean));
+  const адреса = new Set(свои.map((t) => t.address).filter(Boolean));
   return [...свои, ...чужие.filter((t) => !t.token_address || !адреса.has(t.token_address))];
 }
 
@@ -458,7 +463,7 @@ export async function cardByRef(вид, ключ) {
   if (!admin) return null;
   const { data } = await admin
     .from("tokens")
-    .select("id, name, ticker, emoji, logo_url, token_address, curve_address, created_at, owner_id")
+    .select("id, name, ticker, logo_url, address, curve_address, created_at, owner_id")
     .eq("id", ключ)
     .maybeSingle();
   return data ? tokenCard(data) : null;

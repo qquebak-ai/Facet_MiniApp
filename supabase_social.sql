@@ -47,7 +47,7 @@ revoke all on function public.token_holders(uuid) from public;
 -- показывает, что площадка живая. Поэтому наружу отдаёт функция,
 -- которая сама выбирает, что можно показать: ник, тикер, сторона,
 -- сумма и время. Ни адресов, ни размеров чужих портфелей.
-create or replace function public.recent_activity(p_limit integer default 12)
+create or replace function public.recent_activity(p_limit integer default 12, p_network text default null)
 returns table (
   kind text,
   nickname text,
@@ -70,7 +70,10 @@ as $$
       join public.profiles p on p.id = t.user_id
       left join public.tokens tk on tk.id = t.token_id
      where t.created_at > now() - interval '48 hours'
-       and coalesce(tk.network, 'mainnet') = 'mainnet'
+       -- Сеть приходит из приложения: оно знает, в какой сейчас
+       -- работает. Пусто — показываем всё, так функция остаётся
+       -- пригодной и для проверок руками.
+       and (p_network is null or coalesce(tk.network, 'mainnet') = p_network)
     union all
     select 'launch'::text, p.nickname, tk.ticker,
            -- Через проверку, а не просто приведением: в строке может
@@ -81,13 +84,14 @@ as $$
            tk.created_at
       from public.tokens tk
       join public.profiles p on p.id = tk.owner_id
-     where tk.network = 'mainnet' and tk.created_at > now() - interval '48 hours'
+     where (p_network is null or tk.network = p_network)
+       and tk.created_at > now() - interval '48 hours'
   ) s
   order by at desc
   limit least(greatest(coalesce(p_limit, 12), 1), 30);
 $$;
-revoke all on function public.recent_activity(integer) from public;
-grant execute on function public.recent_activity(integer) to anon, authenticated;
+revoke all on function public.recent_activity(integer, text) from public;
+grant execute on function public.recent_activity(integer, text) to anon, authenticated;
 
 
 -- 3. Топ.
@@ -96,7 +100,7 @@ grant execute on function public.recent_activity(integer) to anon, authenticated
 -- токенами. Собранное берётся из token_notify: обработчик уведомлений
 -- и так обходит кривые раз в несколько минут, и держать ради витрины
 -- отдельный обход цепочки незачем.
-create or replace function public.leaderboard(p_limit integer default 5)
+create or replace function public.leaderboard(p_limit integer default 5, p_network text default null)
 returns json
 language sql
 stable
@@ -106,12 +110,14 @@ as $$
   select json_build_object(
     'tokens', coalesce((
       select json_agg(x) from (
-        select tk.id, tk.ticker, tk.name, tk.logo_url, tk.emoji,
+        -- Своего эмодзи у токена нет: в приложении ему рисуется ракета,
+        -- а тут хватает логотипа.
+        select tk.id, tk.ticker, tk.name, tk.logo_url,
                coalesce(n.last_real_ton, 0) as raised,
                coalesce(n.sent_closed, false) as graduated
           from public.tokens tk
           left join public.token_notify n on n.token_id = tk.id
-         where tk.network = 'mainnet'
+         where (p_network is null or tk.network = p_network)
          order by coalesce(n.last_real_ton, 0) desc, tk.created_at desc
          limit least(greatest(coalesce(p_limit, 5), 1), 20)
       ) x), '[]'::json),
@@ -123,15 +129,15 @@ as $$
           from public.tokens tk
           join public.profiles p on p.id = tk.owner_id
           left join public.token_notify n on n.token_id = tk.id
-         where tk.network = 'mainnet'
+         where (p_network is null or tk.network = p_network)
          group by p.id, p.nickname, p.avatar_url, p.emoji, p.frame_id
          order by coalesce(sum(n.last_real_ton), 0) desc, count(tk.id) desc
          limit least(greatest(coalesce(p_limit, 5), 1), 20)
       ) y), '[]'::json)
   );
 $$;
-revoke all on function public.leaderboard(integer) from public;
-grant execute on function public.leaderboard(integer) to anon, authenticated;
+revoke all on function public.leaderboard(integer, text) from public;
+grant execute on function public.leaderboard(integer, text) to anon, authenticated;
 
 
 -- 4. Доля с комиссий приглашённых.

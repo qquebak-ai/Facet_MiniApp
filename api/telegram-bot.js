@@ -881,7 +881,7 @@ async function handleInline(query) {
         ref: токен.external ? `p:${токен.pool_address}` : `t:${токен.id}`,
         title: `$${String(токен.ticker || "").toUpperCase()} — ${токен.name || ""}`,
         description: "Открыть карточку",
-        text: `${токен.emoji || "🪙"} <b>${токен.name || ""}</b>  $${String(токен.ticker || "").toUpperCase()}`,
+        text: `${токен.emoji || (токен.external ? "🪙" : "🚀")} <b>${токен.name || ""}</b>  $${String(токен.ticker || "").toUpperCase()}`,
         link: `${APP_URL}?${адрес}`,
         botLink: `https://t.me/${TG_BOT}?start=${метка}`,
         thumb: токен.logo_url || null,
@@ -984,7 +984,7 @@ async function handleTop(message) {
   }
   const строки = найдено.map((t, i) => {
     const хвост = t.external ? " · с биржи" : "";
-    return `${i + 1}. ${t.emoji || "🪙"} <b>$${String(t.ticker || "").toUpperCase()}</b> — ${t.name || ""}${хвост}`;
+    return `${i + 1}. ${t.emoji || (t.external ? "🪙" : "🚀")} <b>$${String(t.ticker || "").toUpperCase()}</b> — ${t.name || ""}${хвост}`;
   });
   await tg("sendMessage", {
     chat_id: chat.id,

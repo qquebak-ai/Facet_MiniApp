@@ -13,7 +13,7 @@
 -- этого достаточно, а тянуть состояние двух десятков кривых из браузера
 -- ради строки на главной — верный способ упереться в лимиты tonapi.
 
-create or replace function public.platform_stats()
+create or replace function public.platform_stats(p_network text default null)
 returns json
 language sql
 stable
@@ -24,10 +24,11 @@ as $$
     -- Запуски за сутки: то, что показывает, живо ли место сегодня.
     'launched24', (
       select count(*) from public.tokens
-       where network = 'mainnet' and created_at > now() - interval '24 hours'
+       where (p_network is null or network = p_network)
+         and created_at > now() - interval '24 hours'
     ),
     'launched', (
-      select count(*) from public.tokens where network = 'mainnet'
+      select count(*) from public.tokens where (p_network is null or network = p_network)
     ),
     -- Собрано во всех живых кривых. Это не оборот, а именно то, что
     -- сейчас лежит в контрактах и выплачивается продающим.
@@ -35,7 +36,7 @@ as $$
       select sum(n.last_real_ton)
         from public.token_notify n
         join public.tokens t on t.id = n.token_id
-       where t.network = 'mainnet' and not n.sent_closed
+       where (p_network is null or t.network = p_network) and not n.sent_closed
     ), 0),
     -- Дошли до биржи. Отметку ставит тот же обработчик, когда видит
     -- закрытую кривую.
@@ -43,12 +44,12 @@ as $$
       select count(*)
         from public.token_notify n
         join public.tokens t on t.id = n.token_id
-       where t.network = 'mainnet' and n.sent_closed
+       where (p_network is null or t.network = p_network) and n.sent_closed
     )
   );
 $$;
 
-revoke all on function public.platform_stats() from public;
+revoke all on function public.platform_stats(text) from public;
 -- Главную видят и те, кто ещё не завёл аккаунт, — иначе витрина пуста
 -- ровно для тех, кого она должна привлекать.
-grant execute on function public.platform_stats() to anon, authenticated;
+grant execute on function public.platform_stats(text) to anon, authenticated;

@@ -8154,7 +8154,7 @@ function HomeStats() {
 
   useEffect(() => {
     let cancelled = false;
-    supabase.rpc("platform_stats").then(({ data, error }) => {
+    supabase.rpc("platform_stats", { p_network: CURRENT_NETWORK }).then(({ data, error }) => {
       if (cancelled || error || !data) return;
       setStats(data);
     }, () => {});
@@ -8202,7 +8202,7 @@ function ActivityFeed() {
 
   useEffect(() => {
     let cancelled = false;
-    const load = () => supabase.rpc("recent_activity", { p_limit: 8 }).then(
+    const load = () => supabase.rpc("recent_activity", { p_limit: 8, p_network: CURRENT_NETWORK }).then(
       ({ data, error }) => { if (!cancelled && !error) setItems(data || []); },
       () => {},
     );
@@ -8251,7 +8251,7 @@ function Leaderboard({ onOpenToken, onOpenProfile }) {
 
   useEffect(() => {
     let cancelled = false;
-    supabase.rpc("leaderboard", { p_limit: 5 }).then(
+    supabase.rpc("leaderboard", { p_limit: 5, p_network: CURRENT_NETWORK }).then(
       ({ data: d, error }) => { if (!cancelled && !error) setData(d); },
       () => {},
     );
