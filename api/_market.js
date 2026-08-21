@@ -6,11 +6,9 @@
  * прочитать состояние кривой с цепочки, добрать историю сделок из своей
  * базы и сложить текст, который не стыдно отправить в чужой чат.
  *
- * Почему не картинка с настоящим графиком: рисовать её на сервере не на
- * чем — своего холста в Node нет, а тянуть ради этого браузер в функцию
- * дороже, чем сам ответ. Вместо этого график набран блочными символами:
- * он читается в любом клиенте Telegram, не грузится и не ломается, а
- * настоящий график в двух касаниях — по кнопке под сообщением.
+ * Графика в тексте нет: он идёт картинкой над сообщением (см.
+ * api/chart.js), и дублировать его блочными символами значило бы
+ * показывать одно и то же дважды.
  */
 
 import { adminClient } from "./_support.js";
@@ -189,17 +187,6 @@ export async function poolByAddress(address) {
   return poolToToken(json.data, tokensById, dexById);
 }
 
-/* График внешнего токена — из часовых свечей биржи. */
-async function externalSpark(poolAddress) {
-  const json = await gt(`/networks/${GT_NETWORK}/pools/${poolAddress}/ohlcv/hour?aggregate=1&limit=24&currency=usd&token=base`);
-  const list = json && json.data && json.data.attributes && json.data.attributes.ohlcv_list;
-  if (!Array.isArray(list) || list.length < 2) return "";
-  // Свечи приходят от свежих к старым — разворачиваем, иначе график
-  // читался бы задом наперёд.
-  const точки = list.slice().reverse().map((c) => ({ price: Number(c[4]) || 0 })).filter((p) => p.price > 0);
-  return sparkline(точки, 14);
-}
-
 /* Поиск. Адрес ищем точным совпадением, всё остальное — по тикеру и
    названию. Порядок: сперва точное совпадение тикера, потом остальные,
    свежие выше. */
@@ -276,25 +263,6 @@ async function tradeHistory(tokenId) {
     .filter(Boolean);
 }
 
-const БЛОКИ = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
-
-/* График строкой. Столбиков всегда одинаковое число: ряд разной длины в
-   ленте чата выглядит обрывком, а не графиком. */
-export function sparkline(points, ширина = 14) {
-  if (!points || points.length < 2) return "";
-  const шаг = points.length / ширина;
-  const ряд = [];
-  for (let i = 0; i < ширина; i++) {
-    const кусок = points.slice(Math.floor(i * шаг), Math.max(Math.floor((i + 1) * шаг), Math.floor(i * шаг) + 1));
-    if (!кусок.length) { ряд.push(ряд.length ? ряд[ряд.length - 1] : points[0].price); continue; }
-    ряд.push(кусок[кусок.length - 1].price);
-  }
-  const мин = Math.min(...ряд);
-  const макс = Math.max(...ряд);
-  if (!(макс > мин)) return БЛОКИ[3].repeat(ширина);
-  return ряд.map((v) => БЛОКИ[Math.min(7, Math.floor(((v - мин) / (макс - мин)) * 7.999))]).join("");
-}
-
 export function fmtTon(n) {
   const v = Number(n) || 0;
   if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
@@ -362,7 +330,6 @@ export async function tokenCard(token) {
   const движение = старт > 0 && цена > 0 ? ((цена - старт) / старт) * 100 : 0;
   const оборот = заСутки.reduce((s, p) => s + p.ton, 0);
 
-  const график = sparkline(история.length >= 2 ? история : [], 14);
   const доля = цель > 0 ? Math.max(0, Math.min(1, собрано / цель)) : 0;
   const делений = 12;
   const полоса = "█".repeat(Math.round(доля * делений)) + "░".repeat(делений - Math.round(доля * делений));
@@ -378,7 +345,6 @@ export async function tokenCard(token) {
     `Цена   <code>${fmtPrice(цена)}</code>`,
     `Капа   <code>${fmtTon(капа)} TON</code>   ${стрелка} ${знак}${движение.toFixed(2)}% за 24ч`,
   ];
-  if (график) строки.push(`График <code>${график}</code>`);
   if (цель > 0) {
     строки.push("");
     строки.push(state && state.graduated
@@ -425,7 +391,6 @@ function fmtUsd(n) {
    кривой у него нет, все цифры — с биржи, поэтому и путь до листинга
    тут не при чём, он уже там. */
 export async function externalCard(token) {
-  const график = await externalSpark(token.pool_address);
   const знак = token.change24 >= 0 ? "+" : "";
   const стрелка = token.change24 > 0 ? "▲" : token.change24 < 0 ? "▼" : "•";
   const строки = [
@@ -434,7 +399,6 @@ export async function externalCard(token) {
     `Цена   <code>${fmtUsd(token.priceUsd)}</code>`,
     `Капа   <code>${fmtUsd(token.mcapUsd)}</code>   ${стрелка} ${знак}${token.change24.toFixed(2)}% за 24ч`,
   ];
-  if (график) строки.push(`График <code>${график}</code>`);
   строки.push("");
   строки.push(`Объём 24ч ${fmtUsd(token.volUsd)} · Ликвидность ${fmtUsd(token.liqUsd)}${token.dex ? ` · ${escape(token.dex)}` : ""}`);
   if (token.token_address) строки.push(`\n<code>${escape(token.token_address)}</code>`);
