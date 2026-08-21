@@ -366,6 +366,7 @@ const STR = {
     accountLabel: "Аккаунт",
     loginTab: "Войти", createTab: "Создать аккаунт",
     changeAvatarHint: "Нажми, чтобы заменить",
+    addAvatarHint: "Нажми, чтобы добавить фото",
     editHint: "Никнейм обязателен, остальное можно заполнить позже.",
     loginHint: "Войди в свой аккаунт по почте и паролю.",
     createHint: "Никнейм, почта и пароль обязательны, остальное можно заполнить позже.",
@@ -712,6 +713,7 @@ const STR = {
     accountLabel: "Account",
     loginTab: "Log in", createTab: "Create account",
     changeAvatarHint: "Tap to replace",
+    addAvatarHint: "Tap to add a photo",
     editHint: "Nickname is required, everything else can be filled in later.",
     loginHint: "Log in to your account with email and password.",
     createHint: "Nickname, email and password are required, everything else can be filled in later.",
@@ -11899,12 +11901,38 @@ async function uploadAvatarIfNeeded(userId) {
         </p>
 
         {!isLogin && (
+          // При редактировании аватарка стоит в надетой рамке и на
+          // надетой карточке: выбор внизу окна меняет её тут же, и
+          // примерять вслепую, а потом идти смотреть в профиль, больше
+          // не нужно. При создании аккаунта косметики ещё нет — там
+          // остаётся голый кружок.
           <div className="flex flex-col items-center gap-1.5" style={{ marginBottom: 16 }}>
             <input ref={avatarInputRef} type="file" accept="image/*" onChange={onPickAvatar} style={{ display: "none" }} />
-            <button onClick={() => avatarInputRef.current && avatarInputRef.current.click()} className="fx-tap flex flex-col items-center justify-center gap-1 overflow-hidden" style={{ width: 84, height: 84, borderRadius: "50%", background: avatarUrl ? `center/cover no-repeat url(${avatarUrl})` : T.bg, border: avatarUrl ? `1.5px solid ${T.lineHi}` : `1px dashed ${T.lineHi}`, fontSize: 34 }}>
-              {!avatarUrl && previewEmoji}
-            </button>
-            {avatarUrl && <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{t("changeAvatarHint")}</span>}
+            {isEdit && onEquip ? (
+              <div style={{ position: "relative", width: "100%", height: 132, borderRadius: 20, overflow: "hidden", background: T.bg, border: `1px solid ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <ProfileCardBg cardId={cosmetics.card} height={132} radius={20} />
+                <button
+                  onClick={() => avatarInputRef.current && avatarInputRef.current.click()}
+                  className="fx-tap fx-avatar"
+                  style={{ position: "relative", zIndex: 1 }}
+                >
+                  <AvatarFrame frameId={cosmetics.frame} size={92}>
+                    <div style={{
+                      width: "100%", height: "100%", fontSize: 34,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: avatarUrl ? `center/cover no-repeat url(${avatarUrl})` : T.bg,
+                    }}>
+                      {!avatarUrl && previewEmoji}
+                    </div>
+                  </AvatarFrame>
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => avatarInputRef.current && avatarInputRef.current.click()} className="fx-tap flex flex-col items-center justify-center gap-1 overflow-hidden" style={{ width: 84, height: 84, borderRadius: "50%", background: avatarUrl ? `center/cover no-repeat url(${avatarUrl})` : T.bg, border: avatarUrl ? `1.5px solid ${T.lineHi}` : `1px dashed ${T.lineHi}`, fontSize: 34 }}>
+                {!avatarUrl && previewEmoji}
+              </button>
+            )}
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5 }}>{avatarUrl ? t("changeAvatarHint") : t("addAvatarHint")}</span>
           </div>
         )}
 
