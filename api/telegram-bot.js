@@ -42,7 +42,7 @@
 
 import { SUPPORT_CHAT_ID, adminClient, acceptQuestion, deliverAnswer } from "./_support.js";
 import { searchAll, cardFor, cardByRef, свежийГрафик, findTokens, trendingExternal, looksLikeAddress } from "./_market.js";
-import { buyLink, БЫСТРЫЕ_СУММЫ } from "./_trade.js";
+import { buyLink, оценкаПокупки, БЫСТРЫЕ_СУММЫ } from "./_trade.js";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -199,8 +199,16 @@ function tokenButtons(card, своё) {
   // отсюда лишний шаг с выбором суммы; у токена с биржи покупать нечего
   // собирать, там своп на самой бирже.
   const ряды = [[открыть, ...обновить]];
-  if (card.swap) ряды.push([{ text: "💸 Купить", url: card.swap }]);
-  else if (card.curve && card.ref) ряды.push([{ text: "💸 Купить", callback_data: `b:${card.ref}` }]);
+  if (card.swap) {
+    ряды.push([{ text: "💸 Купить", url: card.swap }]);
+  } else if (card.curve && card.ref) {
+    // В чужом чате торговать негде: суммы, расчёт и подпись — это
+    // разговор, а разговор у бота бывает только в личке. Поэтому оттуда
+    // кнопка ведёт к боту, а торговое меню открывается уже там.
+    ряды.push([своё
+      ? { text: "💸 Торговать", callback_data: `b:${card.ref}` }
+      : { text: "💸 Торговать", url: `https://t.me/${TG_BOT}?start=buy_${card.ref.replace(":", "_")}` }]);
+  }
 
   return { inline_keyboard: ряды };
 }
@@ -209,16 +217,36 @@ function tokenButtons(card, своё) {
    где уже проставлены адрес кривой, сумма и тело сообщения. Подписывает
    человек, бот в цепочку не ходит и ключей не знает. */
 function buyButtons(card, своё) {
-  const суммы = БЫСТРЫЕ_СУММЫ
-    .map((n) => ({ text: `${n} TON`, url: buyLink(card.curve, n) }))
-    .filter((b) => b.url);
+  // Сумма ведёт не сразу в кошелёк, а на расчёт: сколько токенов
+  // придёт, сколько уйдёт на комиссию и газ. Подписывать вслепую
+  // человек не должен.
+  const суммы = БЫСТРЫЕ_СУММЫ.map((n) => ({ text: `${n} TON`, callback_data: `q:${card.ref}:${n}` }));
   const низ = [
     своё
       ? { text: "Своя сумма", web_app: { url: card.link } }
       : { text: "Своя сумма", url: card.botLink },
     { text: "← Назад", callback_data: `x:${card.ref}` },
   ];
-  return { inline_keyboard: суммы.length ? [суммы, низ] : [низ] };
+  return { inline_keyboard: [суммы, низ] };
+}
+
+/* Расчёт покупки: что человек увидит перед тем, как открыть кошелёк. */
+async function сообщениеПокупки(card, сумма) {
+  const { curveState } = await import("./_market.js");
+  const state = await curveState(card.curve);
+  const о = state ? оценкаПокупки(state, сумма) : null;
+  const шт = о ? о.токенов : 0;
+  const тикер = card.title.replace(/^\$/, "").split(" ")[0];
+  const строки = [
+    `<b>Покупка ${тикер}</b>`,
+    "",
+    `Платишь <b>${о ? о.всегоTon.toFixed(2) : сумма} TON</b>`,
+    о ? `Получишь ≈ <b>${шт >= 1000 ? Math.round(шт).toLocaleString("ru-RU") : шт.toFixed(2)}</b> токенов` : "Кривая не ответила — цифры уточнит кошелёк",
+    о ? `Комиссия площадки ${о.комиссияTon.toFixed(3)} TON · газ ${о.газTon.toFixed(2)} TON` : "",
+    "",
+    "Сумма может немного разойтись: пока идёт подпись, кто-то успевает купить раньше. Нужна защита от проскальзывания — покупай в приложении.",
+  ].filter(Boolean);
+  return строки.join("\n");
 }
 
 /* Перерисовка по нажатию «обновить». Работает и для сообщения из
@@ -226,7 +254,8 @@ function buyButtons(card, своё) {
    обычного ответа на команду. */
 async function handleCallback(cb) {
   const данные = String(cb.data || "");
-  const m = данные.match(/^([rbx]):([pt]):(.+)$/);
+  // «q» несёт ещё и сумму: q:t:<id>:5
+  const m = данные.match(/^([rbxq]):([pt]):([^:]+)(?::(\d+(?:\.\d+)?))?$/);
   if (!m) {
     await tg("answerCallbackQuery", { callback_query_id: cb.id });
     return;
@@ -245,6 +274,33 @@ async function handleCallback(cb) {
   // Выбор суммы и возврат обратно меняют только кнопки: перерисовывать
   // текст с картинкой ради этого — лишняя секунда ожидания и лишний
   // поход в цепочку.
+  // Расчёт покупки: отдельным сообщением, чтобы карточка с графиком
+  // осталась на месте — к ней ещё вернутся.
+  if (действие === "q") {
+    const сумма = Number(m[4]) || 0;
+    const ссылка = buyLink(card.curve, сумма);
+    if (!ссылка || !сумма) {
+      await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Не получилось собрать покупку" });
+      return;
+    }
+    const текст = await сообщениеПокупки(card, сумма);
+    const куда = cb.message ? cb.message.chat.id : (cb.from && cb.from.id);
+    if (куда) {
+      await tg("sendMessage", {
+        chat_id: куда,
+        text: текст,
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+        reply_markup: { inline_keyboard: [
+          [{ text: `💳 Подписать в кошельке · ${сумма} TON`, url: ссылка }],
+          [{ text: "← К токену", callback_data: `x:${card.ref}` }],
+        ] },
+      });
+    }
+    await tg("answerCallbackQuery", { callback_query_id: cb.id });
+    return;
+  }
+
   if (действие === "b" || действие === "x") {
     const кнопки = действие === "b" ? buyButtons(card, своё) : tokenButtons(card, своё);
     const цель = cb.inline_message_id
@@ -663,6 +719,32 @@ export default async function handler(req, res) {
       reply_markup: { inline_keyboard: [[{ text: "📈 Открыть график", web_app: { url: `${APP_URL}?token=${токен}` } }]] },
     });
     return res.status(200).json({ ok: true });
+  }
+
+  // Пришли из чужого чата по кнопке «Торговать»: показываем карточку
+  // сразу с торговым меню — за этим и шли.
+  if (payload.startsWith("buy_")) {
+    const хвост = payload.slice(4);
+    const вид = хвост.startsWith("p_") ? "p" : хвост.startsWith("t_") ? "t" : null;
+    const ключ = вид ? хвост.slice(2) : null;
+    if (вид && ключ) {
+      let card = null;
+      try { card = await cardByRef(вид, ключ); } catch (err) { card = null; }
+      if (card) {
+        await tg("sendMessage", {
+          chat_id: message.chat.id,
+          text: card.text,
+          parse_mode: "HTML",
+          link_preview_options: card.chart
+            ? { url: card.chart, prefer_large_media: true, show_above_text: true }
+            : { is_disabled: true },
+          reply_markup: card.curve ? buyButtons(card, true) : tokenButtons(card, true),
+        });
+        return res.status(200).json({ ok: true });
+      }
+      await tg("sendMessage", { chat_id: message.chat.id, text: "Не получилось открыть токен — источник не ответил. Попробуй ещё раз." });
+      return res.status(200).json({ ok: true });
+    }
   }
 
   // Токен с биржи: у него нет своей строки в базе, поэтому в ссылке

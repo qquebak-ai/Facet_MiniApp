@@ -64,6 +64,34 @@ export function swapLink(tokenAddress, dex) {
   return `https://app.ston.fi/swap?ft=TON&tt=${tokenAddress}`;
 }
 
+/* Сколько токенов вернёт кривая за столько-то TON. Формула — та же, что
+   в контракте и в приложении (tokensOutFor): резервы перемножаются,
+   произведение держится постоянным. Комиссию площадки и газ вычитаем до
+   расчёта, иначе обещанное разойдётся с тем, что придёт на кошелёк. */
+export function tokensOutFor(state, tonIn) {
+  if (!state || tonIn <= 0n) return 0n;
+  const tonReserve = state.virtualTon + state.realTon;
+  const tokenReserve = state.virtualTokens - state.tokensSold;
+  const k = tonReserve * tokenReserve;
+  const out = tokenReserve - k / (tonReserve + tonIn);
+  return out > 0n ? out : 0n;
+}
+
+/* Оценка покупки на указанную сумму: сколько уйдёт на газ и комиссию и
+   сколько токенов останется человеку. */
+export function оценкаПокупки(state, tonAmount, feeBps = 100n) {
+  const всего = toNano(String(tonAmount));
+  const комиссия = (всего * feeBps) / 10000n;
+  const чисто = всего - комиссия;
+  const токенов = tokensOutFor(state, чисто);
+  return {
+    всегоTon: Number(всего + GAS_BUY_OVERHEAD) / 1e9,
+    комиссияTon: Number(комиссия) / 1e9,
+    газTon: Number(GAS_BUY_OVERHEAD) / 1e9,
+    токенов: Number(токенов) / 1e9,
+  };
+}
+
 // Суммы для быстрой покупки. Ровно три: длинный ряд кнопок в чате
 // выглядит как форма, а не как «купить и пойти дальше».
 export const БЫСТРЫЕ_СУММЫ = [1, 5, 10];
