@@ -196,9 +196,49 @@ function tokenButtons(card, вЛичке) {
 async function handleInline(query) {
   const текст = String(query.query || "").trim();
   const вЛичке = query.chat_type === "sender" || query.chat_type === "private";
+
+  // В переписке двух людей бота нет, и команды со слэшем туда не
+  // доходят — Telegram их ему не передаёт. Поэтому те же слова
+  // понимаются и здесь: «@бот top» работает как «/top».
+  const слово = текст.toLowerCase();
+  if (слово === "help" || слово === "помощь" || слово === "?") {
+    await tg("answerInlineQuery", {
+      inline_query_id: query.id,
+      cache_time: 300,
+      results: [{
+        type: "article",
+        id: "help",
+        title: "Что умеет бот",
+        description: "Тикер или адрес токена — и в чат уходит его карточка",
+        input_message_content: {
+          message_text: [
+            "<b>Mintly в чате</b>",
+            "",
+            `<code>@${TG_BOT} PRSM</code> — карточка токена: цена, движение за сутки, график, путь до биржи`,
+            `<code>@${TG_BOT} EQ…</code> — то же по адресу контракта`,
+            `<code>@${TG_BOT} top</code> — что торгуют прямо сейчас`,
+            "",
+            "Ищет и токены Mintly, и всё, что торгуется на биржах TON.",
+          ].join("\n"),
+          parse_mode: "HTML",
+          link_preview_options: { is_disabled: true },
+        },
+        reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", url: `https://t.me/${TG_BOT}?start=open` }]] },
+      }],
+    });
+    return;
+  }
+
+  // «top» — то же, что пустой запрос: показать самое заметное.
+  const запрос = (слово === "top" || слово === "топ") ? "" : текст;
+
   let найдено = [];
   try {
-    найдено = await searchAll(текст, 8);
+    найдено = await searchAll(запрос, 8);
+    if (!запрос) {
+      const { trendingExternal } = await import("./_market.js");
+      if (найдено.length < 8) найдено = [...найдено, ...await trendingExternal(8 - найдено.length).catch(() => [])];
+    }
   } catch (err) {
     console.warn("[bot] inline search failed:", err && err.message);
   }
@@ -330,6 +370,7 @@ async function handleHelp(message) {
       "Что умеет бот:",
       "",
       `<code>@${TG_BOT} PRSM</code> — карточка токена прямо в любом чате, бота добавлять не нужно`,
+      `<code>@${TG_BOT} top</code> — то же, что /top, но работает и в переписке с человеком`,
       "<code>/token PRSM</code> или адрес контракта — цена, движение, путь до биржи",
       "<code>/top</code> — какие токены собрали больше всех",
       "",
