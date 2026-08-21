@@ -12768,20 +12768,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const walletAddress = wallet ? Address.parse(wallet.account.address).toString({ bounceable: false }) : "";
   const walletAddressShort = walletAddress ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : "";
 
-  // Адрес подключённого кошелька уходит в профиль: по нему бот в
-  // переписке показывает баланс и собирает продажу. Ключей это не
-  // касается — адрес и так виден в любом обозревателе цепочки.
-  useEffect(() => {
-    if (!userId || !walletAddress) return;
-    supabase
-      .from("profiles")
-      .update({ wallet_address: walletAddress })
-      .eq("id", userId)
-      .then(({ error }) => {
-        if (error) console.warn("[mintly] не удалось сохранить кошелёк:", error.message);
-      });
-  }, [userId, walletAddress]);
-
   // Реальный баланс TON — подтягиваем с публичного API tonapi.io по
   // адресу подключённого кошелька (не требует ключа для базовых запросов,
   // но без ключа лимит очень низкий — см. TONAPI_KEY выше).
@@ -12970,6 +12956,22 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [profile, setProfile] = useState(EMPTY_PROFILE);
   const [authChecked, setAuthChecked] = useState(false);
   const [userId, setUserId] = useState(null);
+
+  // Адрес подключённого кошелька уходит в профиль: по нему бот в
+  // переписке показывает баланс и собирает продажу. Ключей это не
+  // касается — адрес и так виден в любом обозревателе цепочки. Эффект
+  // стоит здесь, а не рядом с самим адресом: userId объявлен только
+  // сейчас, и обращение к нему выше валит приложение на загрузке.
+  useEffect(() => {
+    if (!userId || !walletAddress) return;
+    supabase
+      .from("profiles")
+      .update({ wallet_address: walletAddress })
+      .eq("id", userId)
+      .then(({ error }) => {
+        if (error) console.warn("[mintly] не удалось сохранить кошелёк:", error.message);
+      });
+  }, [userId, walletAddress]);
 
   // Сколько человек пришло по своей ссылке. Считается по профилям, где
   // стоит связь с этим пользователем: то есть по тем, кто действительно
