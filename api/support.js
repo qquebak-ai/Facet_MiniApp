@@ -122,7 +122,7 @@ export default async function handler(req, res) {
   // будет показать, кроме внутреннего id.
   const кто = profile || { id: user.id, nickname: null, telegram_id: null };
 
-  const итог = await acceptQuestion(admin, { profile: кто, body: text, source: "app" });
+  const итог = await acceptQuestion(admin, { profile: кто, body: text });
   if (!итог.ok) {
     const код = итог.error;
     const статус = код === "too_fast" || код === "too_many" ? 429

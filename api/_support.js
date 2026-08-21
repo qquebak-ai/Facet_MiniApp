@@ -1,5 +1,5 @@
-/* Общая часть поддержки: её используют оба входа — обработчик из
- * приложения (api/support.js) и бот (api/telegram-bot.js).
+/* Общая часть поддержки. Вопросы принимает только приложение
+ * (api/support.js); бот носит обратную половину — ответы команды.
  *
  * Файл начинается с подчёркивания, поэтому Vercel не делает из него
  * отдельный адрес: это библиотека, а не обработчик.
@@ -72,14 +72,14 @@ export function esc(s) {
 
 /* Принять вопрос от человека.
  *
- * Одна дорога для обоих входов — из приложения и из лички бота. Записать
- * в базу и переслать команде порознь нельзя: сообщение, попавшее только
- * в базу, никто не прочитает, а попавшее только в чат — не покажется
- * человеку в приложении, и он напишет второй раз.
+ * Вход один — раздел поддержки в приложении. Записать в базу и
+ * переслать команде порознь нельзя: сообщение, попавшее только в базу,
+ * никто не прочитает, а попавшее только в чат — не покажется человеку в
+ * приложении, и он напишет второй раз.
  *
  * Возвращает { ok } либо { ok: false, error } с кодом, который вызывающая
  * сторона переводит в понятный текст. */
-export async function acceptQuestion(admin, { profile, body, source }) {
+export async function acceptQuestion(admin, { profile, body }) {
   const text = String(body || "").trim();
   if (!text) return { ok: false, error: "empty" };
   if (text.length > MAX_LEN) return { ok: false, error: "too_long" };
@@ -108,7 +108,7 @@ export async function acceptQuestion(admin, { profile, body, source }) {
     .single();
   if (error) return { ok: false, error: "store_failed", detail: error.message };
 
-  const доставка = await forwardToTeam(admin, { profile, text, source, first: было.length === 0 });
+  const доставка = await forwardToTeam(admin, { profile, text, first: было.length === 0 });
   if (!доставка.ok) {
     // Вопрос, которого никто не прочитает, хуже неотправленного: человек
     // будет ждать ответа, а его никто не увидит. Убираем запись — тогда
@@ -124,7 +124,7 @@ export async function acceptQuestion(admin, { profile, body, source }) {
  * Шапка нужна не для красоты: отвечающий видит ник, ссылку на человека в
  * Telegram и внутренний id — этого хватает, чтобы найти профиль, не
  * переспрашивая. */
-async function forwardToTeam(admin, { profile, text, source, first }) {
+async function forwardToTeam(admin, { profile, text, first }) {
   if (!SUPPORT_CHAT_ID) {
     console.error("[support] SUPPORT_CHAT_ID не задан — вопросы отправлять некуда");
     return { ok: false, detail: "SUPPORT_CHAT_ID не задан" };
@@ -133,8 +133,9 @@ async function forwardToTeam(admin, { profile, text, source, first }) {
   const ссылка = profile.telegram_id
     ? `<a href="tg://user?id=${profile.telegram_id}">написать напрямую</a>`
     : "";
-  const откуда = source === "bot" ? "из чата бота" : "из приложения";
-  const шапка = `🆘 <b>${кто}</b> · ${откуда}${first ? " · первое обращение" : ""}\n<code>${esc(profile.id)}</code>${ссылка ? ` · ${ссылка}` : ""}`;
+  // Источник у вопросов теперь один: раздел поддержки в приложении. В
+  // переписке с ботом их не принимают — там вопрос не к чему привязать.
+  const шапка = `🆘 <b>${кто}</b>${first ? " · первое обращение" : ""}\n<code>${esc(profile.id)}</code>${ссылка ? ` · ${ссылка}` : ""}`;
 
   const ответ = await tg("sendMessage", {
     chat_id: SUPPORT_CHAT_ID,
