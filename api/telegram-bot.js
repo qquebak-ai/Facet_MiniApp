@@ -41,7 +41,7 @@
  */
 
 import { SUPPORT_CHAT_ID, adminClient, acceptQuestion, deliverAnswer } from "./_support.js";
-import { searchAll, cardFor, findTokens, trendingExternal, looksLikeAddress } from "./_market.js";
+import { searchAll, cardFor, cardByRef, свежийГрафик, findTokens, trendingExternal, looksLikeAddress } from "./_market.js";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -186,13 +186,59 @@ async function handlePrivateQuestion(message, from) {
  * рождается из подсказки, идёт обычная ссылка на бота, а приложение
  * открывает уже он. */
 function tokenButtons(card, своё) {
-  return {
-    inline_keyboard: [[
-      своё
-        ? { text: "📈 Открыть график", web_app: { url: card.link } }
-        : { text: "📈 Открыть график", url: card.botLink },
-    ]],
+  const открыть = своё
+    ? { text: "📈 Открыть в Mintly", web_app: { url: card.link } }
+    : { text: "📈 Открыть в Mintly", url: card.botLink };
+  // «Обновить» перерисовывает и текст, и картинку прямо в чате: цена
+  // живёт своей жизнью, а сообщение, отправленное час назад, врёт.
+  // В callback_data влезает 64 байта, поэтому там только вид и ключ.
+  const обновить = card.ref ? [{ text: "🔄 Обновить", callback_data: `r:${card.ref}` }] : [];
+  return { inline_keyboard: [[открыть, ...обновить]] };
+}
+
+/* Перерисовка по нажатию «обновить». Работает и для сообщения из
+   подсказки (у него нет чата — только inline_message_id), и для
+   обычного ответа на команду. */
+async function handleCallback(cb) {
+  const данные = String(cb.data || "");
+  const m = данные.match(/^r:([pt]):(.+)$/);
+  if (!m) {
+    await tg("answerCallbackQuery", { callback_query_id: cb.id });
+    return;
+  }
+
+  let card = null;
+  try { card = await cardByRef(m[1], m[2]); } catch (err) { card = null; }
+  if (!card) {
+    await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Не получилось обновить — источник не ответил" });
+    return;
+  }
+
+  const своё = !!(cb.message && cb.message.chat && cb.message.chat.type === "private");
+  const тело = {
+    text: card.text,
+    parse_mode: "HTML",
+    link_preview_options: card.chart
+      ? { url: свежийГрафик(card.chart), prefer_large_media: true, show_above_text: true }
+      : { is_disabled: true },
+    reply_markup: tokenButtons(card, своё),
   };
+  if (cb.inline_message_id) тело.inline_message_id = cb.inline_message_id;
+  else if (cb.message) {
+    тело.chat_id = cb.message.chat.id;
+    тело.message_id = cb.message.message_id;
+  } else {
+    await tg("answerCallbackQuery", { callback_query_id: cb.id });
+    return;
+  }
+
+  const ответ = await tgCall("editMessageText", тело);
+  // «Ничего не изменилось» — не сбой: за минуту цена могла не дрогнуть.
+  const без = !ответ.ok && String(ответ.description || "").includes("not modified");
+  await tg("answerCallbackQuery", {
+    callback_query_id: cb.id,
+    text: ответ.ok ? "Обновлено" : без ? "Без изменений" : "Не получилось обновить",
+  });
 }
 
 /* Подсказка в любом чате: «@бот PRSM» или «@бот EQ…».
@@ -264,6 +310,7 @@ async function handleInline(query) {
       const адрес = токен.external ? `pool=${токен.pool_address}` : `token=${токен.id}`;
       const метка = токен.external ? `pool_${токен.pool_address}` : `tok_${токен.id}`;
       карточки.push({
+        ref: токен.external ? `p:${токен.pool_address}` : `t:${токен.id}`,
         title: `$${String(токен.ticker || "").toUpperCase()} — ${токен.name || ""}`,
         description: "Открыть карточку",
         text: `${токен.emoji || "🪙"} <b>${токен.name || ""}</b>  $${String(токен.ticker || "").toUpperCase()}`,
@@ -428,7 +475,7 @@ async function setup(req, res) {
     const set = await tgCall("setWebhook", {
       url,
       secret_token: WEBHOOK_SECRET,
-      allowed_updates: ["message", "inline_query"],
+      allowed_updates: ["message", "inline_query", "callback_query"],
     });
     const info = await tgCall("getWebhookInfo");
     return res.status(set.ok ? 200 : 502).json({
@@ -492,6 +539,12 @@ export default async function handler(req, res) {
   } catch (err) {
     // Ответ всегда успешный: на ошибку Telegram будет слать это же
     // обновление снова и снова.
+    return res.status(200).json({ ok: true });
+  }
+
+  // Нажали «обновить» под карточкой.
+  if (update.callback_query) {
+    await handleCallback(update.callback_query);
     return res.status(200).json({ ok: true });
   }
 

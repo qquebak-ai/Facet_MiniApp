@@ -400,6 +400,7 @@ export async function tokenCard(token) {
     description: описание,
     link: `${APP_URL}?token=${token.id}`,
     chart: `${APP_URL}/api/chart?token=${token.id}&t=${свежесть()}`,
+    ref: `t:${token.id}`,
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=tok_${token.id}`,
     thumb: token.logo_url || null,
   };
@@ -440,6 +441,7 @@ export async function externalCard(token) {
     description: `${fmtUsd(token.priceUsd)} · ${знак}${token.change24.toFixed(1)}% · ликвидность ${fmtUsd(token.liqUsd)}`,
     link: `${APP_URL}?pool=${token.pool_address}`,
     chart: `${APP_URL}/api/chart?pool=${token.pool_address}&t=${свежесть()}`,
+    ref: `p:${token.pool_address}`,
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=pool_${token.pool_address}`,
     thumb: token.logo_url || null,
   };
@@ -460,4 +462,29 @@ export async function searchAll(query, limit = 8) {
 /* Карточка для любого из двух видов. */
 export function cardFor(token) {
   return token.external ? externalCard(token) : tokenCard(token);
+}
+
+/* Пересобрать карточку по короткой метке из кнопки «обновить».
+   В callback_data помещается 64 байта, поэтому там только вид и
+   опознаватель: «p» — пул на бирже, «t» — токен Mintly. */
+export async function cardByRef(вид, ключ) {
+  if (вид === "p") {
+    const пул = await poolByAddress(ключ);
+    return пул ? externalCard(пул) : null;
+  }
+  const admin = adminClient();
+  if (!admin) return null;
+  const { data } = await admin
+    .from("tokens")
+    .select("id, name, ticker, emoji, logo_url, token_address, curve_address, created_at, owner_id")
+    .eq("id", ключ)
+    .maybeSingle();
+  return data ? tokenCard(data) : null;
+}
+
+/* Ссылка на картинку с меткой текущей секунды. Нужна ровно там, где
+   человек сам попросил обновить: обычная пятиминутная метка вернула бы
+   ту же картинку из кэша Telegram, и кнопка выглядела бы сломанной. */
+export function свежийГрафик(chart) {
+  return String(chart || "").replace(/&t=\d+/, `&t=${Date.now()}`);
 }
