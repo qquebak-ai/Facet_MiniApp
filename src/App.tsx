@@ -8332,7 +8332,7 @@ function ActivityFeed() {
 /* Топ: токены по собранному и создатели по сумме собранного их
    токенами. Соревнование — самый дешёвый способ вернуть человека
    завтра, а числа для него уже считает обработчик уведомлений. */
-function Leaderboard({ onOpenToken, onOpenProfile }) {
+function Leaderboard({ onOpenToken, onOpenProfile, live = [] }) {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState("tokens");
 
@@ -8345,7 +8345,31 @@ function Leaderboard({ onOpenToken, onOpenProfile }) {
     return () => { cancelled = true; };
   }, []);
 
-  const токены = (data && data.tokens) || [];
+  // Собранное в базу пишет обработчик уведомлений, а ходит он раз в
+  // сутки: у свежего токена там ноль, хотя кривая уже собрала. Лента на
+  // этом же экране читает кривые напрямую — берём цифру оттуда, если
+  // токен в ней есть, и заново раскладываем по местам, иначе первым
+  // остался бы тот, у кого просто раньше отработал обход.
+  const свежие = useMemo(() => {
+    const покривой = new Map();
+    (live || []).forEach((tok) => {
+      if (tok && tok.id != null) покривой.set(String(tok.id), tok);
+    });
+    const ряд = ((data && data.tokens) || []).map((э) => {
+      const св = покривой.get(String(э.id));
+      if (!св) return э;
+      return {
+        ...э,
+        raised: св.raisedTon != null ? св.raisedTon : э.raised,
+        // Логотип у ленты бывает свежее: она добирает его из цепочки,
+        // когда в базе пусто.
+        logo_url: э.logo_url || св.logoUrl || null,
+      };
+    });
+    return покривой.size ? ряд.slice().sort((a, b) => (Number(b.raised) || 0) - (Number(a.raised) || 0)) : ряд;
+  }, [data, live]);
+
+  const токены = свежие;
   const создатели = (data && data.creators) || [];
   if (!токены.length && !создатели.length) return null;
   const список = tab === "tokens" ? токены : создатели;
@@ -8415,7 +8439,7 @@ function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenPr
       <HomeStats />
       <ActivityFeed />
       <AlmostListed tokens={curveTokens} onOpen={onOpenToken} />
-      <Leaderboard onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} />
+      <Leaderboard onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} live={curveTokens} />
     </div>
   );
 }
