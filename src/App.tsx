@@ -13304,7 +13304,46 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       .eq("network", CURRENT_NETWORK)
       .order("created_at", { ascending: false });
     if (error) { console.error("[mintly] failed to load tokens from Supabase:", error); return; }
-    setMyTokens((data || []).map(mapTokenRow));
+    const rows = (data || []).map(mapTokenRow);
+    setMyTokens(rows);
+    дополнитьЛоготипы(rows);
+  }
+
+  /* Логотипы, которых нет в базе.
+   *
+   * У токенов, запущенных до того, как приложение стало брать ссылку
+   * прямо с запуска, поле пустое — в ленте вместо картинки ракета. В
+   * цепочке логотип при этом лежит всегда: метаданные уезжают в
+   * хранилище раньше выпуска. Добираем их разом для всего списка и
+   * подставляем в оба (лента и «мои»), а своим токенам заодно
+   * дописываем ссылку в базу — тогда картинку увидят и остальные, и
+   * бот, а не только эта вкладка.
+   */
+  const логотипыДобраны = useRef(new Set());
+  async function дополнитьЛоготипы(rows) {
+    const без = (rows || [])
+      .filter((tok) => !tok.logoUrl && tok.address && !логотипыДобраны.current.has(tok.id))
+      .slice(0, 12);
+    if (!без.length) return;
+    без.forEach((tok) => логотипыДобраны.current.add(tok.id));
+    const мета = await Promise.all(без.map((tok) => fetchJettonMeta(tok.address, TON_TESTNET)));
+    const найдено = new Map();
+    без.forEach((tok, i) => {
+      const img = мета[i] && мета[i].image;
+      if (img) найдено.set(tok.id, img);
+    });
+    if (!найдено.size) return;
+    const подставить = (prev) => prev.map((tok) => (найдено.has(tok.id) ? { ...tok, logoUrl: найдено.get(tok.id) } : tok));
+    setCommunityTokens(подставить);
+    setMyTokens(подставить);
+    if (!userId) return;
+    for (const tok of без) {
+      const img = найдено.get(tok.id);
+      // Править чужую строку не даст политика — пробуем только свои.
+      if (img && tok.ownerId === userId) {
+        await supabase.from("tokens").update({ logo_url: img }).eq("id", tok.id);
+      }
+    }
   }
 
   // Public feed for the mempad's "Новые" tab — every token launched by
@@ -13328,6 +13367,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const rows = (data || []).map(mapTokenRow);
     setCommunityTokens(rows);
     setCommunityLoaded(true);
+    дополнитьЛоготипы(rows);
 
     // Все рыночные числа берём у самих кривых: цену, капитализацию,
     // объём и изменение за сутки. Ограничиваем количество запросов —
