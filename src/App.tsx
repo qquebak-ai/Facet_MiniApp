@@ -454,6 +454,9 @@ const STR = {
     tokenSaveFailed: "Токен создан в сети, но не сохранился: {reason}. Попробуем ещё раз при следующем запуске.",
     tokenSaveRecovered: "Токен {ticker} дописан в приложение",
     openingWallet: "Открываем кошелёк…",
+    openingWalletHint: "Кошелёк покажет готовую сделку — останется подтвердить.",
+    openWalletCta: "Открыть кошелёк",
+    changeAmountCta: "Изменить сумму",
     boughtToast: "Куплено ≈ {receive} ${ticker} за {pay} {unit}",
     txCancelled: "Транзакция отменена или не прошла",
     insufficientSellAmount: "Недостаточно токенов для продажи этой суммы",
@@ -804,6 +807,9 @@ const STR = {
     tokenSaveFailed: "Token is live on-chain but wasn't saved: {reason}. We'll retry on next launch.",
     tokenSaveRecovered: "Token {ticker} added to the app",
     openingWallet: "Opening your wallet…",
+    openingWalletHint: "Your wallet will show the prepared transaction — just confirm it.",
+    openWalletCta: "Open wallet",
+    changeAmountCta: "Change amount",
     boughtToast: "Bought ≈ {receive} ${ticker} for {pay} {unit}",
     txCancelled: "Transaction cancelled or failed",
     insufficientSellAmount: "Not enough tokens to sell this amount",
@@ -14199,6 +14205,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // асинхронно, и сразу после запуска адреса ещё нет.
   const [сразуВКошелёк, setСразуВКошелёк] = useState(false);
   const [ждётПодписи, setЖдётПодписи] = useState(0);
+  // Что именно покупаем — только для надписи на экране ожидания: сама
+  // сумма уходит из ждётПодписи и обнуляется, как только подпись ушла.
+  const [ждётПокупкиСумма, setЖдётПокупкиСумма] = useState(0);
+  const [ждётПокупкиТокен, setЖдётПокупкиТокен] = useState("");
 
   // Токен, который создался в сети, но не записался в базу. Пробуем
   // дописать его при каждом входе: сессия к этому моменту свежая, и
@@ -14295,7 +14305,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           try {
             сразу = new URLSearchParams(window.location.search).get("auto") === "1";
           } catch (e) { /* адрес без параметров */ }
-          if (сразу) { setСразуВКошелёк(true); setЖдётПодписи(сумма); }
+          if (сразу) {
+            setСразуВКошелёк(true);
+            setЖдётПодписи(сумма);
+            setЖдётПокупкиСумма(сумма);
+            setЖдётПокупкиТокен(String(data.ticker || "").toUpperCase());
+          }
           else setTimeout(() => setTradeModal({ mode: "buy", prefill: сумма }), 400);
         } else if (продажа) setTimeout(() => setTradeModal({ mode: "sell" }), 400);
         return;
@@ -14664,7 +14679,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           а на тех, где острова нет, рамка выглядела случайной деталью. */}
       {rocketFlying && <LaunchRocket variant={rocketVariant} />}
       <CyberGrid showStars={view !== "profile" && view !== "user"} />
-      {!bootHidden && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
+      {/* Пришли за подписью — заставка только задерживает: человек ждёт
+          кошелёк, а не знакомство с приложением. */}
+      {!bootHidden && !сразуВКошелёк && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast key={toastSeq} toast={toast} insetTop={insetTop} leaving={toastLeaving} />
 
       {/* Проход в кошелёк из чата. Приложение здесь — только мостик к
@@ -14673,10 +14690,32 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       {сразуВКошелёк && (
         <div style={{
           position: "absolute", inset: 0, zIndex: 250, background: T.bg,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          gap: 12, padding: "0 28px",
         }}>
           <RefreshCw size={30} color={T.electric} style={{ animation: "spin360 1.1s linear infinite" }} />
-          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14.5 }}>{t("openingWallet")}</span>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 700 }}>
+            {ждётПокупкиТокен ? `${ждётПокупкиСумма} TON · ${ждётПокупкиТокен}` : t("openingWallet")}
+          </span>
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, textAlign: "center", lineHeight: 1.45 }}>
+            {t("openingWalletHint")}
+          </span>
+          {/* Кнопка на случай, если кошелёк не отозвался сам: нажатие
+              зовёт его ещё раз. Ждать вслепую человек не должен. */}
+          <button
+            onClick={() => { const с = ждётПодписи || ждётПокупкиСумма; if (с > 0) { setЖдётПодписи(0); автопокупка(с); } }}
+            className="fx-tap w-full rounded-[20px] py-3 mt-2"
+            style={{ maxWidth: 320, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}
+          >
+            {t("openWalletCta")}
+          </button>
+          <button
+            onClick={() => { const с = ждётПодписи || ждётПокупкиСумма; setЖдётПодписи(0); setСразуВКошелёк(false); setTradeModal({ mode: "buy", prefill: с || undefined }); }}
+            className="fx-tap"
+            style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, marginTop: 2 }}
+          >
+            {t("changeAmountCta")}
+          </button>
         </div>
       )}
 
