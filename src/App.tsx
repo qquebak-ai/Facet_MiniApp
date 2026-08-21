@@ -1520,6 +1520,13 @@ function GlobalStyle() {
       .fx-out .fx-modal-card, .fx-out.fx-modal-card { animation: sheetOut ${CLOSE_MS}ms cubic-bezier(0.4, 0, 0.9, 0.5) both; }
       @keyframes backdropOut { to { opacity: 0; } }
       @keyframes sheetOut { to { opacity: 0; transform: translateY(16px) scale(0.985); } }
+      /* Появление вещей в примерке: одна за другой слева направо. */
+      @keyframes lookIn {
+        from { opacity: 0; transform: translateX(-14px) scale(0.92); }
+        to   { opacity: 1; transform: none; }
+      }
+      .fx-look-in { animation: lookIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+      @media (prefers-reduced-motion: reduce) { .fx-look-in { animation: none; } }
       .fx-avatar { transition: transform ${SPRING}; }
       .fx-avatar:active { transform: scale(0.96); transition: transform ${PRESS}; }
       .cta-launch { transition: transform ${SPRING}, opacity ${EASE}; }
@@ -11522,9 +11529,12 @@ function LookPicker({ cosmetics, owned, onEquip, focus }) {
         {естьЧто ? t("editLookHint") : t("editLookEmpty")}
       </p>
 
-      {ряды.map(({ kind, label, ref, все }) => {
+      {ряды.map(({ kind, label, ref, все }, ряд) => {
         const мои = своё(kind, все);
         const надето = cosmetics[kind] || "none";
+        // Второй ряд трогается, когда первый почти закончил: иначе обе
+        // волны идут разом и «по очереди» не читается.
+        const задержка = ряд * 140;
         return (
           <div key={kind} ref={ref} style={{ marginTop: 12 }}>
             <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{label}</span>
@@ -11532,17 +11542,21 @@ function LookPicker({ cosmetics, owned, onEquip, focus }) {
                 много, а сетка на всю ширину отодвинула бы кнопку
                 «Сохранить» за экран. */}
             <div className="no-scrollbar flex gap-2 overflow-x-auto" style={{ paddingBottom: 2, marginTop: 6 }}>
-              {мои.map((it) => {
+              {мои.map((it, i) => {
                 const выбрано = надето === it.id;
                 return (
                   <button
                     key={it.id}
                     onClick={() => { haptic("light"); onEquip(kind, it.id); }}
-                    className="fx-tap flex flex-col items-center gap-1.5 rounded-[18px] p-2"
+                    className="fx-tap fx-look-in flex flex-col items-center gap-1.5 rounded-[18px] p-2"
                     style={{
                       flex: "0 0 auto", width: 84,
                       background: T.bg, border: `1px solid ${выбрано ? hexA(T.electric, 0.55) : T.line}`,
                       position: "relative", overflow: "hidden",
+                      // Волна слева направо. Дальше десятой плитки задержку
+                      // не копим: последняя иначе выезжала бы через секунду
+                      // после того, как ряд уже прокрутили руками.
+                      animationDelay: `${задержка + Math.min(i, 9) * 45}ms`,
                     }}
                   >
                     <div style={{ position: "relative", width: "100%", height: 54, borderRadius: 12, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
