@@ -12724,6 +12724,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // лимит API), поэтому обычный опрос обновляет только первую страницу,
     // а остальное освежается раз в пару минут.
     async function poll(deep) {
+      // В тестовой сети лента бирж не нужна: те токены живут в боевой,
+      // купить их отсюда нельзя, а вперемешку со своими они только
+      // путают, в какой сети человек находится.
+      if (TON_TESTNET_NETWORK) { setTokensLoading(false); return; }
       const live = deep
         ? await fetchTonMemePools(FEED_LIMIT, FEED_PAGES)
         : await fetchTonMemePools(20, 1);

@@ -69,7 +69,7 @@ const TG_BOT = String(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "").tr
 // строки пустой ответ выглядел бы поломкой.
 const ТЕСТОВАЯ = NETWORK === "testnet";
 const ПОДСКАЗКА_СЕТИ = ТЕСТОВАЯ
-  ? "\n\nСейчас приложение в тестовой сети: токены с бирж видно, но купить их отсюда нельзя."
+  ? "\n\nСейчас приложение в тестовой сети: здесь видны только токены Mintly, бирж в ней нет."
   : "";
 
 const REF_PREFIX = "ref_";
@@ -894,7 +894,7 @@ async function handleInline(query) {
     is_personal: false,
     button: результатовНет(results)
       ? {
-        text: "Ничего не нашлось — открыть Mintly",
+        text: ТЕСТОВАЯ ? "Пусто — тестовая сеть, открыть Mintly" : "Ничего не нашлось — открыть Mintly",
         web_app: { url: APP_URL },
       }
       : undefined,
