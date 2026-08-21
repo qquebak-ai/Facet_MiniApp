@@ -146,6 +146,678 @@ async function handleTeamReply(message) {
   });
 }
 
+/* Кнопки под карточкой токена.
+ *
+ * Кнопка web_app живёт только в сообщениях, которые бот отправляет сам
+ * в личной переписке с собой. В подсказке её быть не может: сообщение
+ * уходит от имени человека, и Telegram отбивает такой ответ целиком —
+ * снаружи это выглядит как «ничего не нашлось». Поэтому во всё, что
+ * рождается из подсказки, идёт обычная ссылка на бота, а приложение
+ * открывает уже он. */
+function tokenButtons(card, своё) {
+  // Сделка идёт либо через кривую, либо через приложение — мимо Mintly
+  // бот торговать не отправляет: комиссия площадки живёт в самой
+  // сделке, и ссылка на чужую биржу уводила бы человека вместе с ней.
+  const торг = card.curve && card.ref
+    ? (своё
+        // В чужом чате торговать негде: суммы, расчёт и подпись — это
+        // разговор, а разговор у бота бывает только в личке.
+        ? { text: "💸 Торговать", callback_data: `b:${card.ref}` }
+        : { text: "💸 Торговать", url: `https://t.me/${TG_BOT}?start=buy_${card.ref.replace(":", "_")}` })
+    : (своё
+        ? { text: "💸 Торговать", web_app: { url: card.link } }
+        : { text: "💸 Торговать", url: card.botLink });
+
+  // «Обновить» перерисовывает и текст, и картинку прямо в чате: цена
+  // живёт своей жизнью, а сообщение, отправленное час назад, врёт.
+  // В callback_data влезает 64 байта, поэтому там только вид и ключ.
+  const обновить = card.ref ? [{ text: "🔄 Обновить", callback_data: `r:${card.ref}` }] : [];
+
+  return { inline_keyboard: [[торг, ...обновить]] };
+}
+
+/* Второй ряд кнопок: суммы покупки. Каждая — готовая ссылка в кошелёк,
+   где уже проставлены адрес кривой, сумма и тело сообщения. Подписывает
+   человек, бот в цепочку не ходит и ключей не знает. */
+function buyButtons(card, своё) {
+  // Сумма ведёт не сразу в кошелёк, а на расчёт: сколько токенов
+  // придёт, сколько уйдёт на комиссию и газ. Подписывать вслепую
+  // человек не должен.
+  const суммы = БЫСТРЫЕ_СУММЫ.map((n) => ({ text: `${n} TON`, callback_data: `q:${card.ref}:${n}` }));
+  const низ = [
+    своё
+      ? { text: "Своя сумма", web_app: { url: card.link } }
+      : { text: "Своя сумма", url: card.botLink },
+    { text: "← Назад", callback_data: `x:${card.ref}` },
+  ];
+  // Продажа отдельным рядом: она требует кошелька и своего расчёта, и
+  // мешать её с суммами покупки — верный способ нажать не то. В чужом
+  // чате она уводит к боту: остаток и адрес — не то, что показывают
+  // посреди общей переписки.
+  const продать = своё
+    ? { text: "📉 Продать", callback_data: `s:${card.ref}` }
+    : { text: "📉 Продать", url: `https://t.me/${TG_BOT}?start=buy_${card.ref.replace(":", "_")}` };
+  return { inline_keyboard: [суммы, [продать], низ] };
+}
+
+/* Покупка командой: /buy PRSM 5 — тикер или адрес, потом сумма в TON.
+   Без суммы показываем меню, а не отказ: человек мог просто не знать
+   формата. */
+async function handleBuyCommand(message, хвост) {
+  const части = String(хвост || "").trim().split(/\s+/).filter(Boolean);
+  const запрос = части[0] || "";
+  const сумма = Number(String(части[1] || "").replace(",", "."));
+
+  if (!запрос) {
+    await tg("sendMessage", {
+      chat_id: message.chat.id,
+      text: "Что покупаем? <code>/buy PRSM 5</code> — тикер или адрес и сумма в TON.",
+      parse_mode: "HTML",
+    });
+    return;
+  }
+
+  const найдено = await searchAll(запрос, 1);
+  if (!найдено.length) {
+    await tg("sendMessage", { chat_id: message.chat.id, text: "Такого токена нет ни в Mintly, ни на биржах TON." });
+    return;
+  }
+  const card = await cardFor(найдено[0]);
+
+  // Кривой нет — сделка идёт в приложении, там же и комиссия площадки.
+  if (!card.curve) {
+    await tg("sendMessage", {
+      chat_id: message.chat.id,
+      text: `${card.text}\n\nЭтот токен торгуется в приложении.`,
+      parse_mode: "HTML",
+      link_preview_options: card.chart ? { url: card.chart, prefer_large_media: true, show_above_text: true } : { is_disabled: true },
+      reply_markup: tokenButtons(card, message.chat.type === "private"),
+    });
+    return;
+  }
+
+  if (!(сумма > 0)) {
+    await tg("sendMessage", {
+      chat_id: message.chat.id,
+      text: `${card.text}\n\nСколько берём? Выбери сумму или напиши: <code>/buy ${запрос} 5</code>`,
+      parse_mode: "HTML",
+      link_preview_options: card.chart ? { url: card.chart, prefer_large_media: true, show_above_text: true } : { is_disabled: true },
+      reply_markup: buyButtons(card, message.chat.type === "private"),
+    });
+    return;
+  }
+
+  const ссылка = buyLink(card.curve, сумма);
+  await tg("sendMessage", {
+    chat_id: message.chat.id,
+    text: await сообщениеПокупки(card, сумма),
+    parse_mode: "HTML",
+    link_preview_options: { is_disabled: true },
+    reply_markup: { inline_keyboard: [[{ text: `💳 Подписать в кошельке · ${сумма} TON`, url: ссылка }]] },
+  });
+}
+
+/* Ядро продажи: собрать ссылку по кошельку человека и показать, сколько
+   уходит. Одним путём идут и команда, и кнопка под карточкой. */
+async function продажа(chatId, telegramId, токен, сколько) {
+  const профиль = await кошелёкПоTelegram(telegramId);
+  const владелец = профиль && профиль.wallet_address ? нормальныйАдрес(профиль.wallet_address) : null;
+  if (!владелец) {
+    await handleWallet(chatId, telegramId);
+    return;
+  }
+  if (!токен || !токен.curve || !токен.jetton) {
+    await tg("sendMessage", {
+      chat_id: chatId,
+      text: "Продать отсюда можно только токен Mintly, который ещё на кривой. Остальное — в приложении.",
+    });
+    return;
+  }
+
+  const кошелёк = await жетонныйКошелёк(владелец, токен.jetton);
+  if (!кошелёк || !(кошелёк.raw > 0n)) {
+    await tg("sendMessage", { chat_id: chatId, text: `На кошельке нет $${токен.ticker}.` });
+    return;
+  }
+
+  const всего = Number(кошелёк.raw) / 10 ** кошелёк.decimals;
+  let raw = кошелёк.raw;
+  const слово = String(сколько || "").toLowerCase();
+  if (слово && слово !== "all" && слово !== "всё" && слово !== "все") {
+    const n = Number(слово.replace(",", "."));
+    if (!(n > 0)) {
+      await tg("sendMessage", { chat_id: chatId, text: "Сколько продаём? Число или «all»." });
+      return;
+    }
+    // Больше, чем лежит, не продаём: контракт такое просто отобьёт.
+    const хочет = BigInt(Math.floor(n * 10 ** кошелёк.decimals));
+    raw = хочет > кошелёк.raw ? кошелёк.raw : хочет;
+  }
+
+  const ссылка = ссылкаПродажи({ jettonWallet: кошелёк.wallet, curve: токен.curve, owner: владелец, raw });
+  if (!ссылка) {
+    await tg("sendMessage", { chat_id: chatId, text: "Не получилось собрать продажу. Попробуй в приложении." });
+    return;
+  }
+
+  const штук = Number(raw) / 10 ** кошелёк.decimals;
+  const число = (v) => (v >= 1000 ? Math.round(v).toLocaleString("ru-RU") : v.toFixed(2));
+  await tg("sendMessage", {
+    chat_id: chatId,
+    text: [
+      `<b>Продажа $${токен.ticker}</b>`,
+      "",
+      `Продаёшь <b>${число(штук)}</b> из ${число(всего)}`,
+      "TON придёт на тот же кошелёк, комиссию удержит кривая.",
+      "",
+      "Сумма зависит от того, кто успеет продать раньше. Нужна защита от проскальзывания — продавай в приложении.",
+    ].join("\n"),
+    parse_mode: "HTML",
+    link_preview_options: { is_disabled: true },
+    reply_markup: { inline_keyboard: [[{ text: "💳 Подписать в кошельке", url: ссылка }]] },
+  });
+}
+
+/* Продажа командой: /sell PRSM 100 или /sell PRSM all. */
+async function handleSellCommand(message, хвост) {
+  const части = String(хвост || "").trim().split(/\s+/).filter(Boolean);
+  const запрос = части[0] || "";
+  if (!запрос) {
+    await tg("sendMessage", {
+      chat_id: message.chat.id,
+      text: "Что продаём? <code>/sell PRSM 100</code> или <code>/sell PRSM all</code>.",
+      parse_mode: "HTML",
+    });
+    return;
+  }
+  const найдено = await searchAll(запрос, 1);
+  const строка = найдено[0];
+  if (!строка || строка.external) {
+    await tg("sendMessage", {
+      chat_id: message.chat.id,
+      text: "Продать отсюда можно только токен Mintly, который ещё на кривой. Остальное — в приложении.",
+    });
+    return;
+  }
+  const card = await cardFor(строка);
+  await продажа(message.chat.id, message.from.id, card, части[1] || "all");
+}
+
+/* Расчёт покупки: что человек увидит перед тем, как открыть кошелёк. */
+async function сообщениеПокупки(card, сумма) {
+  const { curveState } = await import("./_market.js");
+  const state = await curveState(card.curve);
+  const о = state ? оценкаПокупки(state, сумма) : null;
+  const шт = о ? о.токенов : 0;
+  const тикер = card.title.replace(/^\$/, "").split(" ")[0];
+  const строки = [
+    `<b>Покупка ${тикер}</b>`,
+    "",
+    `Платишь <b>${о ? о.всегоTon.toFixed(2) : сумма} TON</b>`,
+    о ? `Получишь ≈ <b>${шт >= 1000 ? Math.round(шт).toLocaleString("ru-RU") : шт.toFixed(2)}</b> токенов` : "Кривая не ответила — цифры уточнит кошелёк",
+    о ? `Комиссия площадки ${о.комиссияTon.toFixed(3)} TON · газ ${о.газTon.toFixed(2)} TON` : "",
+    "",
+    "Сумма может немного разойтись: пока идёт подпись, кто-то успевает купить раньше. Нужна защита от проскальзывания — покупай в приложении.",
+  ].filter(Boolean);
+  return строки.join("\n");
+}
+
+/* Перерисовка по нажатию «обновить». Работает и для сообщения из
+   подсказки (у него нет чата — только inline_message_id), и для
+   обычного ответа на команду. */
+async function handleCallback(cb) {
+  const данные = String(cb.data || "");
+
+  // Кнопки главного меню: у них своих токенов нет, только действие.
+  if (данные === "w:") {
+    await handleWallet(cb.message ? cb.message.chat.id : cb.from.id, cb.from.id);
+    await tg("answerCallbackQuery", { callback_query_id: cb.id });
+    return;
+  }
+  if (данные === "top:") {
+    await handleTop({ chat: { id: cb.message ? cb.message.chat.id : cb.from.id }, message_id: undefined });
+    await tg("answerCallbackQuery", { callback_query_id: cb.id });
+    return;
+  }
+
+  // «q» несёт ещё и сумму: q:t:<id>:5
+  const m = данные.match(/^([rbxqs]):([pt]):([^:]+)(?::(\d+(?:\.\d+)?))?$/);
+  if (!m) {
+    await tg("answerCallbackQuery", { callback_query_id: cb.id });
+    return;
+  }
+  const действие = m[1];
+
+  let card = null;
+  try { card = await cardByRef(m[2], m[3]); } catch (err) { card = null; }
+  if (!card) {
+    await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Не получилось обновить — источник не ответил" });
+    return;
+  }
+
+  const своё = !!(cb.message && cb.message.chat && cb.message.chat.type === "private");
+
+  // Выбор суммы и возврат обратно меняют только кнопки: перерисовывать
+  // текст с картинкой ради этого — лишняя секунда ожидания и лишний
+  // поход в цепочку.
+  // Продажа: столько же шагов, сколько у покупки, но сумма считается от
+  // того, что реально лежит на кошельке.
+  if (действие === "s") {
+    const куда = cb.message ? cb.message.chat.id : (cb.from && cb.from.id);
+    await tg("answerCallbackQuery", { callback_query_id: cb.id });
+    if (куда) await продажа(куда, cb.from.id, card, "all");
+    return;
+  }
+
+  // Расчёт покупки: отдельным сообщением, чтобы карточка с графиком
+  // осталась на месте — к ней ещё вернутся.
+  if (действие === "q") {
+    const сумма = Number(m[4]) || 0;
+    const ссылка = buyLink(card.curve, сумма);
+    if (!ссылка || !сумма) {
+      await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Не получилось собрать покупку" });
+      return;
+    }
+    const текст = await сообщениеПокупки(card, сумма);
+    const куда = cb.message ? cb.message.chat.id : (cb.from && cb.from.id);
+    if (куда) {
+      await tg("sendMessage", {
+        chat_id: куда,
+        text: текст,
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+        reply_markup: { inline_keyboard: [
+          [{ text: `💳 Подписать в кошельке · ${сумма} TON`, url: ссылка }],
+          [{ text: "← К токену", callback_data: `x:${card.ref}` }],
+        ] },
+      });
+    }
+    await tg("answerCallbackQuery", { callback_query_id: cb.id });
+    return;
+  }
+
+  if (действие === "b" || действие === "x") {
+    const кнопки = действие === "x"
+      ? tokenButtons(card, своё)
+      : buyButtons(card, своё);
+    const цель = cb.inline_message_id
+      ? { inline_message_id: cb.inline_message_id }
+      : cb.message ? { chat_id: cb.message.chat.id, message_id: cb.message.message_id } : null;
+    if (!цель) { await tg("answerCallbackQuery", { callback_query_id: cb.id }); return; }
+    // «Назад» из расчёта возвращает не только кнопки, но и саму
+    // карточку: текст к этому моменту уже заменён расчётом покупки.
+    if (действие === "x") {
+      await tg("editMessageText", {
+        ...цель,
+        text: card.text,
+        parse_mode: "HTML",
+        link_preview_options: card.chart
+          ? { url: свежийГрафик(card.chart), prefer_large_media: true, show_above_text: true }
+          : { is_disabled: true },
+        reply_markup: кнопки,
+      });
+    } else {
+      await tg("editMessageReplyMarkup", { ...цель, reply_markup: кнопки });
+    }
+    await tg("answerCallbackQuery", {
+      callback_query_id: cb.id,
+      text: действие === "b" ? "Выбери сумму — подпишешь в кошельке" : "",
+    });
+    return;
+  }
+
+  const тело = {
+    text: card.text,
+    parse_mode: "HTML",
+    link_preview_options: card.chart
+      ? { url: свежийГрафик(card.chart), prefer_large_media: true, show_above_text: true }
+      : { is_disabled: true },
+    reply_markup: tokenButtons(card, своё),
+  };
+  if (cb.inline_message_id) тело.inline_message_id = cb.inline_message_id;
+  else if (cb.message) {
+    тело.chat_id = cb.message.chat.id;
+    тело.message_id = cb.message.message_id;
+  } else {
+    await tg("answerCallbackQuery", { callback_query_id: cb.id });
+    return;
+  }
+
+  const ответ = await tgCall("editMessageText", тело);
+  // «Ничего не изменилось» — не сбой: за минуту цена могла не дрогнуть.
+  const без = !ответ.ok && String(ответ.description || "").includes("not modified");
+  await tg("answerCallbackQuery", {
+    callback_query_id: cb.id,
+    text: ответ.ok ? "Обновлено" : без ? "Без изменений" : "Не получилось обновить",
+  });
+}
+
+/* Покупка через упоминание: «@бот buy PRSM 5».
+ *
+ * Ссылка на подпись здесь публична намеренно — она ничем не привязана к
+ * отправителю: это просто покупка на кривой, и подписывает её тот, кто
+ * нажмёт, своим кошельком. Продажа так работать не может, поэтому её
+ * отправляют в личку.
+ */
+async function inlineBuy(query, части) {
+  const запрос = части[0] || "";
+  const сумма = Number(String(части[1] || "").replace(",", "."));
+
+  if (!запрос) {
+    await tg("answerInlineQuery", {
+      inline_query_id: query.id,
+      cache_time: 60,
+      results: [{
+        type: "article",
+        id: "buy-help",
+        title: "Покупка: укажи токен",
+        description: `@${TG_BOT} buy PRSM 5`,
+        input_message_content: {
+          message_text: `Покупка через бота: <code>@${TG_BOT} buy ТИКЕР СУММА</code>`,
+          parse_mode: "HTML",
+        },
+      }],
+    });
+    return;
+  }
+
+  let найдено = [];
+  try { найдено = await searchAll(запрос, 1); } catch (err) { найдено = []; }
+  if (!найдено.length) {
+    await tg("answerInlineQuery", { inline_query_id: query.id, cache_time: 20, results: [] });
+    return;
+  }
+
+  const card = await cardFor(найдено[0]);
+  // Кривой нет — покупать нечего собирать, сделка идёт в приложении.
+  if (!card.curve) {
+    await tg("answerInlineQuery", {
+      inline_query_id: query.id,
+      cache_time: 20,
+      results: [{
+        type: "article",
+        id: "buy-app",
+        title: `$${card.ticker || ""} — торгуется в приложении`,
+        description: "Отправить карточку токена",
+        thumbnail_url: card.thumb || undefined,
+        input_message_content: {
+          message_text: card.text,
+          parse_mode: "HTML",
+          link_preview_options: card.chart
+            ? { url: card.chart, prefer_large_media: true, show_above_text: true }
+            : { is_disabled: true },
+        },
+        reply_markup: tokenButtons(card, false),
+      }],
+    });
+    return;
+  }
+
+  // Сумма названа — сразу расчёт и подпись. Не названа — карточка с
+  // рядом сумм, выбор доделает человек прямо в чате.
+  const результат = сумма > 0
+    ? {
+      type: "article",
+      id: `buy-${сумма}`,
+      title: `Купить $${card.ticker || ""} на ${сумма} TON`,
+      description: "Расчёт и подпись в кошельке",
+      thumbnail_url: card.thumb || undefined,
+      input_message_content: {
+        message_text: await сообщениеПокупки(card, сумма),
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+      },
+      reply_markup: { inline_keyboard: [
+        [{ text: `💳 Подписать в кошельке · ${сумма} TON`, url: buyLink(card.curve, сумма) }],
+        [{ text: "← К токену", callback_data: `x:${card.ref}` }],
+      ] },
+    }
+    : {
+      type: "article",
+      id: "buy-pick",
+      title: `Купить $${card.ticker || ""}`,
+      description: "Выбрать сумму в чате",
+      thumbnail_url: card.thumb || undefined,
+      input_message_content: {
+        message_text: card.text,
+        parse_mode: "HTML",
+        link_preview_options: card.chart
+          ? { url: card.chart, prefer_large_media: true, show_above_text: true }
+          : { is_disabled: true },
+      },
+      reply_markup: buyButtons(card, false),
+    };
+
+  await tg("answerInlineQuery", { inline_query_id: query.id, cache_time: 15, results: [результат] });
+}
+
+/* Подсказка в любом чате: «@бот PRSM» или «@бот EQ…».
+   Пустой запрос показывает те токены, что собрали больше всех. */
+async function handleInline(query) {
+  const текст = String(query.query || "").trim();
+
+  // В переписке двух людей бота нет, и команды со слэшем туда не
+  // доходят — Telegram их ему не передаёт. Поэтому те же слова
+  // понимаются и здесь: «@бот top» работает как «/top».
+  const слово = текст.toLowerCase();
+  if (слово === "help" || слово === "помощь" || слово === "?") {
+    await tg("answerInlineQuery", {
+      inline_query_id: query.id,
+      cache_time: 300,
+      results: [{
+        type: "article",
+        id: "help",
+        title: "Что умеет бот",
+        description: "Тикер или адрес токена — и в чат уходит его карточка",
+        input_message_content: {
+          message_text: [
+            "<b>Mintly в чате</b>",
+            "",
+            `<code>@${TG_BOT} PRSM</code> — карточка токена: цена, движение за сутки, график, путь до биржи`,
+            `<code>@${TG_BOT} EQ…</code> — то же по адресу контракта`,
+            `<code>@${TG_BOT} top</code> — что торгуют прямо сейчас`,
+            `<code>@${TG_BOT} buy PRSM 5</code> — покупка: расчёт и подпись в кошельке`,
+            `<code>@${TG_BOT} sell</code> и <code>@${TG_BOT} wallet</code> — продажа и кошелёк, в личке с ботом`,
+            "",
+            "Ищет и токены Mintly, и всё, что торгуется на биржах TON.",
+          ].join("\n"),
+          parse_mode: "HTML",
+          link_preview_options: { is_disabled: true },
+        },
+        reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", url: `https://t.me/${TG_BOT}?start=open` }]] },
+      }],
+    });
+    return;
+  }
+
+  // Команды через упоминание: «@бот buy PRSM 5». Со слэшем они доходят
+  // только туда, где бот есть, а упоминание работает в любом чате.
+  const слова = текст.split(/\s+/).filter(Boolean);
+  const первое = (слова[0] || "").toLowerCase();
+
+  if (первое === "buy" || первое === "купить") {
+    await inlineBuy(query, слова.slice(1));
+    return;
+  }
+  if (первое === "sell" || первое === "продать" || первое === "wallet" || первое === "кошелёк" || первое === "кошелек") {
+    // И продажа, и кошелёк — это личное: адрес и остаток нельзя
+    // выкладывать в чужой чат. Такие запросы уводим в личку с ботом.
+    const продажа = первое !== "wallet" && первое !== "кошелёк" && первое !== "кошелек";
+    await tg("answerInlineQuery", {
+      inline_query_id: query.id,
+      cache_time: 5,
+      is_personal: true,
+      results: [],
+      button: {
+        text: продажа ? "Продажа — открыть у бота" : "Кошелёк — открыть у бота",
+        start_parameter: продажа ? "sell" : "wallet",
+      },
+    });
+    return;
+  }
+
+  // «top» — то же, что пустой запрос: показать самое заметное.
+  const запрос = (слово === "top" || слово === "топ") ? "" : текст;
+
+  let найдено = [];
+  try {
+    найдено = await searchAll(запрос, 8);
+    if (!запрос) {
+      const { trendingExternal } = await import("./_market.js");
+      if (найдено.length < 8) найдено = [...найдено, ...await trendingExternal(8 - найдено.length).catch(() => [])];
+    }
+  } catch (err) {
+    console.warn("[bot] inline search failed:", err && err.message);
+  }
+
+  // Сводку собираем только для первых трёх: каждая — это поход в
+  // цепочку, а ответить Telegram нужно быстро. Остальные показываем
+  // строкой, цифры человек увидит, когда выберет.
+  const карточки = [];
+  for (const токен of найдено) {
+    let подробно = null;
+    if (карточки.length < 3) {
+      // Сводка идёт в цепочку и на биржу — любая из них может не
+      // ответить. Молчать всем списком из-за одного токена нельзя:
+      // тогда в чате пусто, будто ничего не нашлось.
+      try { подробно = await cardFor(токен); } catch (err) { подробно = null; }
+    }
+    if (подробно) {
+      карточки.push(подробно);
+    } else {
+      const адрес = токен.external ? `pool=${токен.pool_address}` : `token=${токен.id}`;
+      const метка = токен.external ? `pool_${токен.pool_address}` : `tok_${токен.id}`;
+      карточки.push({
+        ref: токен.external ? `p:${токен.pool_address}` : `t:${токен.id}`,
+        title: `$${String(токен.ticker || "").toUpperCase()} — ${токен.name || ""}`,
+        description: "Открыть карточку",
+        text: `${токен.emoji || "🪙"} <b>${токен.name || ""}</b>  $${String(токен.ticker || "").toUpperCase()}`,
+        link: `${APP_URL}?${адрес}`,
+        botLink: `https://t.me/${TG_BOT}?start=${метка}`,
+        thumb: токен.logo_url || null,
+      });
+    }
+  }
+
+  const results = карточки.map((c, i) => ({
+    type: "article",
+    id: String(i),
+    title: c.title,
+    description: c.description,
+    thumbnail_url: c.thumb || undefined,
+    input_message_content: {
+      message_text: c.text,
+      parse_mode: "HTML",
+      // График едет отдельной картинкой поверх текста: так его видно
+      // сразу, без единого касания. Ссылку задаём явно — в самом тексте
+      // её нет, и искать первую попавшуюся Telegram не должен.
+      link_preview_options: c.chart
+        ? { url: c.chart, prefer_large_media: true, show_above_text: true }
+        : { is_disabled: true },
+    },
+    reply_markup: tokenButtons(c, false),
+  }));
+
+  await tg("answerInlineQuery", {
+    inline_query_id: query.id,
+    results,
+    // Кэш короткий: цена меняется с каждой сделкой, и вчерашняя
+    // подсказка врала бы прямо в чужом чате.
+    cache_time: 20,
+    is_personal: false,
+    button: результатовНет(results)
+      ? { text: "Ничего не нашлось — открыть Mintly", web_app: { url: APP_URL } }
+      : undefined,
+  });
+}
+const результатовНет = (r) => !r || !r.length;
+
+/* Команда в чате или в личке: /token PRSM, /p EQ…, /top. */
+async function handleTokenCommand(message, запрос) {
+  const chat = message.chat || {};
+  // Личка с ботом — единственное место, где Telegram пускает кнопку,
+  // открывающую мини-приложение прямо из сообщения.
+  const своё = chat.type === "private";
+  const текст = String(запрос || "").trim();
+
+  if (!текст) {
+    await tg("sendMessage", {
+      chat_id: chat.id,
+      reply_to_message_id: message.message_id,
+      text: `Напиши тикер или адрес: <code>/token PRSM</code>\nИли прямо в любом чате: <code>@${TG_BOT} PRSM</code>`,
+      parse_mode: "HTML",
+    });
+    return;
+  }
+
+  const найдено = await searchAll(текст, 5);
+  if (!найдено.length) {
+    await tg("sendMessage", {
+      chat_id: chat.id,
+      reply_to_message_id: message.message_id,
+      text: "Ничего не нашлось — ни в Mintly, ни на биржах TON. Проверь тикер или пришли адрес контракта.",
+    });
+    return;
+  }
+
+  const card = await cardFor(найдено[0]);
+  // Нашлось несколько — остальные перечисляем строкой, чтобы человек не
+  // гадал, тот ли токен ему показали.
+  const ещё = найдено.slice(1, 5).map((t) => `$${String(t.ticker || "").toUpperCase()}`).join(" · ");
+  await tg("sendMessage", {
+    chat_id: chat.id,
+    reply_to_message_id: message.message_id,
+    text: ещё ? `${card.text}\n\nТакже нашлось: ${ещё}` : card.text,
+    parse_mode: "HTML",
+    link_preview_options: card.chart
+      ? { url: card.chart, prefer_large_media: true, show_above_text: true }
+      : { is_disabled: true },
+    reply_markup: tokenButtons(card, своё),
+  });
+}
+
+async function handleTop(message) {
+  const chat = message.chat || {};
+  // Сперва запущенное в Mintly, потом лента бирж — ровно тем же
+  // порядком, каким это видно на главной.
+  const свои = await findTokens("", 5).catch(() => []);
+  const чужие = свои.length >= 5 ? [] : await trendingExternal(5 - свои.length).catch(() => []);
+  const найдено = [...свои, ...чужие];
+  if (!найдено.length) {
+    await tg("sendMessage", { chat_id: chat.id, text: "Пока пусто — ни одного токена." });
+    return;
+  }
+  const строки = найдено.map((t, i) => {
+    const хвост = t.external ? " · с биржи" : "";
+    return `${i + 1}. ${t.emoji || "🪙"} <b>$${String(t.ticker || "").toUpperCase()}</b> — ${t.name || ""}${хвост}`;
+  });
+  await tg("sendMessage", {
+    chat_id: chat.id,
+    reply_to_message_id: message.message_id,
+    text: `${строки.join("\n")}\n\nПодробнее: <code>/token ТИКЕР</code>`,
+    parse_mode: "HTML",
+    reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", url: `https://t.me/${TG_BOT}?start=open` }]] },
+  });
+}
+
+async function handleHelp(message) {
+  await tg("sendMessage", {
+    chat_id: (message.chat || {}).id,
+    text: [
+      "Что умеет бот:",
+      "",
+      `<code>@${TG_BOT} PRSM</code> — карточка токена прямо в любом чате, бота добавлять не нужно`,
+      `<code>@${TG_BOT} top</code> — то же, что /top, но работает и в переписке с человеком`,
+      `<code>@${TG_BOT} buy PRSM 5</code> — покупка прямо в чате`,
+      "<code>/token PRSM</code> или адрес контракта — цена, движение, путь до биржи",
+      "<code>/top</code> — какие токены собрали больше всех",
+      "",
+      "В личке можно просто написать вопрос — это поддержка.",
+    ].join("\n"),
+    parse_mode: "HTML",
+  });
+}
+
 /* Главное меню бота. Всё, что человек делает в переписке, начинается
    отсюда: найти токен, посмотреть кошелёк, открыть приложение. */
 function menuButtons() {
