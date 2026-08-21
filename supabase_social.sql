@@ -61,15 +61,24 @@ security definer
 set search_path = public
 as $$
   select * from (
+    -- Суммы приводим к одному типу руками: ton_amount в сделках —
+    -- число, а buy_amount у токена лежит строкой (форму заполняет
+    -- человек), и union их не сводит.
     select 'trade'::text as kind, p.nickname, coalesce(tk.ticker, t.ticker) as ticker,
-           t.ton_amount as ton, t.created_at as at
+           t.ton_amount::double precision as ton, t.created_at as at
       from public.trades t
       join public.profiles p on p.id = t.user_id
       left join public.tokens tk on tk.id = t.token_id
      where t.created_at > now() - interval '48 hours'
        and coalesce(tk.network, 'mainnet') = 'mainnet'
     union all
-    select 'launch'::text, p.nickname, tk.ticker, tk.buy_amount, tk.created_at
+    select 'launch'::text, p.nickname, tk.ticker,
+           -- Через проверку, а не просто приведением: в строке может
+           -- оказаться что угодно, и один кривой токен ронял бы всю ленту.
+           case when btrim(tk.buy_amount::text) ~ '^[0-9]+([.,][0-9]+)?$'
+                then replace(btrim(tk.buy_amount::text), ',', '.')::double precision
+                else null end,
+           tk.created_at
       from public.tokens tk
       join public.profiles p on p.id = tk.owner_id
      where tk.network = 'mainnet' and tk.created_at > now() - interval '48 hours'
