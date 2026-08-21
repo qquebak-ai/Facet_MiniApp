@@ -14318,12 +14318,27 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     showToast(t("pinResetToast"));
   }
 
-  function openToken(t) {
+  async function openToken(t) {
+    if (!t) return;
+    // Топ приходит из RPC leaderboard: там только тикер, логотип и
+    // собранное — ни адреса жетона, ни кривой. Открытый по такой
+    // строке экран токена оставался пустым: читать цену, график и
+    // держателей не у чего. Достаём полную запись — сперва из уже
+    // загруженной ленты, а если её там нет, то из базы.
+    if (!t.tokenAddress && !t.address && t.id) {
+      const полный = [...communityTokens, ...myTokens].find((x) => x.id === t.id);
+      if (полный) {
+        t = полный;
+      } else {
+        const { data } = await supabase.from("tokens").select("*").eq("id", t.id).maybeSingle();
+        if (data) t = mapTokenRow(data);
+      }
+    }
     // Токены сообщества хранятся в базе строкой, где нет ни цены, ни
     // объёма — их считает кривая, и приходят они отдельно. В таком виде
     // карточка попадала прямо на экран токена, и он падал на первом же
     // обращении к цене. Приводим к общему виду ленты.
-    setToken(t && t.price == null ? localTokenToFeedShape(t) : t);
+    setToken(t.price == null ? localTokenToFeedShape(t) : t);
     setView("token");
   }
   // Пришли из чата прямо за подписью: интерфейс в этот момент не нужен,
