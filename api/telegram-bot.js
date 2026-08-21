@@ -44,8 +44,8 @@
 
 import { SUPPORT_CHAT_ID, adminClient, deliverAnswer } from "./_support.js";
 import { searchAll, cardFor, cardByRef, свежийГрафик, findTokens, trendingExternal, looksLikeAddress, NETWORK } from "./_market.js";
-import { оценкаПокупки, БЫСТРЫЕ_СУММЫ } from "./_trade.js";
-import { кошелёкПоTelegram, привязатьКошелёк, балансTon, жетоны, жетонныйКошелёк, нормальныйАдрес } from "./_wallet.js";
+import { buyLink, оценкаПокупки, БЫСТРЫЕ_СУММЫ } from "./_trade.js";
+import { кошелёкПоTelegram, привязатьКошелёк, балансTon, жетоны, жетонныйКошелёк, ссылкаПродажи, нормальныйАдрес } from "./_wallet.js";
 import { свопТонВЖетон, ссылкаСвопа } from "./_swap.js";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -284,6 +284,7 @@ async function handleBuyCommand(message, хвост) {
   let ссылка = null;
   let текст = null;
   if (card.curve) {
+    ссылка = buyLink(card.curve, сумма);
     текст = await сообщениеПокупки(card, сумма);
   } else {
     const профиль = await кошелёкПоTelegram(message.from.id);
@@ -302,9 +303,12 @@ async function handleBuyCommand(message, хвост) {
   }
 
   const вЛичке = message.chat.type === "private";
-  const ряды = [[вЛичке
-    ? { text: `💳 Купить · ${сумма} TON`, web_app: { url: `${card.link}&buy=${сумма}` } }
-    : { text: `💳 Купить · ${сумма} TON`, url: `https://t.me/${TG_BOT}?start=${меткаПокупки(card.ref, сумма)}` }]];
+  const ряды = [
+    [вЛичке
+      ? { text: `💳 Купить · ${сумма} TON`, web_app: { url: `${card.link}&buy=${сумма}&auto=1` } }
+      : { text: `💳 Купить · ${сумма} TON`, url: `https://t.me/${TG_BOT}?start=${меткаПокупки(card.ref, сумма)}` }],
+  ];
+  if (ссылка) ряды.push([{ text: "Открыть в кошельке", url: ссылка }]);
   await tg("sendMessage", {
     chat_id: message.chat.id,
     text: текст,
@@ -352,6 +356,7 @@ async function продажа(chatId, telegramId, токен, сколько) {
   }
 
   const idТокена = String(токен.ref || "").split(":")[1] || "";
+  let ссылкаНаПродажу = null;
 
   // На продажу тоже нужны TON: перевод жетонов оплачивается газом.
   const балансВладельца = await балансTon(владелец);
@@ -363,6 +368,8 @@ async function продажа(chatId, telegramId, токен, сколько) {
     });
     return;
   }
+
+  ссылкаНаПродажу = ссылкаПродажи({ jettonWallet: кошелёк.wallet, curve: токен.curve, owner: владелец, raw });
 
   const штук = Number(raw) / 10 ** кошелёк.decimals;
   const число = (v) => (v >= 1000 ? Math.round(v).toLocaleString("ru-RU") : v.toFixed(2));
@@ -377,7 +384,10 @@ async function продажа(chatId, telegramId, токен, сколько) {
     ].join("\n"),
     parse_mode: "HTML",
     link_preview_options: { is_disabled: true },
-    reply_markup: { inline_keyboard: [[{ text: "💳 Продать в приложении", web_app: { url: `${APP_URL}?token=${idТокена}&sell=1` } }]] },
+    reply_markup: { inline_keyboard: [
+      ...(ссылкаНаПродажу ? [[{ text: "💳 Подписать в кошельке", url: ссылкаНаПродажу }]] : []),
+      [{ text: "Продать в приложении", web_app: { url: `${APP_URL}?token=${idТокена}&sell=1` } }],
+    ] },
   });
 }
 
@@ -541,7 +551,7 @@ async function handleCallback(cb) {
     let ссылка = null;
     let текст = null;
     if (card.curve) {
-      // Ссылка тут больше не нужна: подпись идёт в приложении.
+      ссылка = buyLink(card.curve, сумма);
       текст = await сообщениеПокупки(card, сумма);
     } else {
       // Биржевой токен: маршрут свопа строится под кошелёк покупателя,
@@ -564,17 +574,20 @@ async function handleCallback(cb) {
       ссылка = ссылкаСвопа(своп);
       текст = сообщениеСвопа(card, сумма, своп);
     }
-    // Подпись идёт в приложении, а не ссылкой в кошелёк.
-    //
-    // Ссылку вида app.tonkeeper.com/transfer/…?amount=…&bin=… кошелёк
-    // открывает как обычный перевод: тело сообщения он не разбирает.
-    // В цепочке это видно прямо — приходили переводы с пустым op и
-    // отказом 130 «неизвестная операция», деньги возвращались, а
-    // человек видел «Неуспешно». Через TonConnect в приложении тело
-    // уходит целиком, и та же покупка проходит.
+    // Первой кнопкой — сразу кошелёк: человек нажимает и видит готовую
+    // транзакцию, без промежуточных экранов. Тело сообщения кодируется
+    // base64url без выравнивания, как требует спецификация ton-ссылок:
+    // обычный base64 кошелёк не разбирал и отправлял пустой перевод,
+    // который контракт отбивал.
     const подпись = своё
-      ? { text: `💳 Купить · ${сумма} TON`, web_app: { url: `${card.link}&buy=${сумма}` } }
+      ? { text: `💳 Купить · ${сумма} TON`, web_app: { url: `${card.link}&buy=${сумма}&auto=1` } }
       : { text: `💳 Купить · ${сумма} TON`, url: `https://t.me/${TG_BOT}?start=${меткаПокупки(card.ref, сумма)}` };
+    // Запасной путь на случай, если кошелёк всё же откроет пустой
+    // перевод: та же сделка внутри приложения, через TonConnect.
+    // Запасной путь — ссылка прямо в кошелёк. Telegram открывает её во
+    // встроенном браузере, и параметры до кошелька доходят не всегда,
+    // поэтому она вторая, а не первая.
+    const вПриложении = ссылка ? { text: "Открыть в кошельке", url: ссылка } : null;
 
     // Своп собран под кошелёк того, кто нажал: оставлять такую ссылку в
     // общем чате нельзя — следующий заплатит своими TON, а токены уйдут
@@ -597,6 +610,7 @@ async function handleCallback(cb) {
 
     const кнопки = { inline_keyboard: [
       [подпись],
+      ...(вПриложении ? [[вПриложении]] : []),
       [{ text: "← К токену", callback_data: `x:${card.ref}` }],
     ] };
     // Сообщение из подсказки живёт в чужом чате, куда бот писать не
@@ -780,9 +794,10 @@ async function inlineBuy(query, части) {
         link_preview_options: { is_disabled: true },
       },
       reply_markup: { inline_keyboard: [
-        // В чужом чате web_app-кнопки нет, поэтому ведём к боту: он
-        // откроет приложение с этой же суммой.
+        // В чужом чате web_app-кнопки нет, поэтому через бота: он
+        // откроет приложение с этой же суммой и позовёт кошелёк.
         [{ text: `💳 Купить · ${сумма} TON`, url: `https://t.me/${TG_BOT}?start=${меткаПокупки(card.ref, сумма)}` }],
+        [{ text: "Открыть в кошельке", url: buyLink(card.curve, сумма) }],
         [{ text: "← К токену", callback_data: `x:${card.ref}` }],
       ] },
     }
@@ -1392,7 +1407,8 @@ export default async function handler(req, res) {
         // Сумму назвали заранее — открываем сразу подпись, без выбора.
         const кнопки = сумма > 0 && card.curve
           ? { inline_keyboard: [
-            [{ text: `💳 Купить · ${сумма} TON`, web_app: { url: `${card.link}&buy=${сумма}` } }],
+            [{ text: `💳 Купить · ${сумма} TON`, web_app: { url: `${card.link}&buy=${сумма}&auto=1` } }],
+            [{ text: "Открыть в кошельке", url: buyLink(card.curve, сумма) }],
             [{ text: "Другая сумма", callback_data: `b:${card.ref}` }],
           ] }
           : (card.curve || card.jetton) ? buyButtons(card, true) : tokenButtons(card, true);

@@ -14276,8 +14276,19 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         // здесь, через подключённый кошелёк: ссылку с телом сообщения
         // кошельки открывают как простой перевод, и контракт его
         // отбивает.
-        if (сумма > 0) setTimeout(() => setTradeModal({ mode: "buy", prefill: сумма }), 400);
-        else if (продажа) setTimeout(() => setTradeModal({ mode: "sell" }), 400);
+        if (сумма > 0) {
+          // «auto=1» — пришли прямо за подписью: окно сделки не
+          // показываем, сразу зовём кошелёк. Telegram открывает
+          // ton-ссылки во встроенном браузере, и до кошелька они не
+          // доходят; TonConnect же вызывает его напрямую, поэтому путь
+          // «кнопка в чате → окно кошелька» проходит только так.
+          let сразу = false;
+          try {
+            сразу = new URLSearchParams(window.location.search).get("auto") === "1";
+          } catch (e) { /* адрес без параметров */ }
+          if (сразу) setTimeout(() => автопокупка(сумма), 600);
+          else setTimeout(() => setTradeModal({ mode: "buy", prefill: сумма }), 400);
+        } else if (продажа) setTimeout(() => setTradeModal({ mode: "sell" }), 400);
         return;
       }
       const карточка = await fetchPoolByAddress(пул);
@@ -14418,6 +14429,18 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     }).then(({ error }) => {
       if (error) console.warn("[mintly] не удалось записать сделку:", error.message);
     });
+  }
+
+  /* Покупка одним касанием из чата: сумма уже названа, окно сделки не
+     нужно — сразу собираем транзакцию и отдаём её кошельку. Если
+     кошелёк не подключён, показываем обычное окно: там есть кнопка
+     подключения. */
+  async function автопокупка(сумма) {
+    if (!walletAddress) { setTradeModal({ mode: "buy", prefill: сумма }); return; }
+    // Оценка нужна только для строчки «куплено ≈ N»: точную цифру всё
+    // равно решит кривая в момент исполнения.
+    const оценка = (tokensForTon(сумма) || {}).tokens || 0;
+    await confirmTrade("buy", String(сумма), String(оценка), "TON", сумма, оценка);
   }
 
   async function confirmTrade(mode, payAmount, receiveAmount, unit, rawAmount, rawEstimate) {
