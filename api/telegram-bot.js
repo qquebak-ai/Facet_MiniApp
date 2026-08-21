@@ -187,49 +187,30 @@ async function handlePrivateQuestion(message, from) {
  * рождается из подсказки, идёт обычная ссылка на бота, а приложение
  * открывает уже он. */
 function tokenButtons(card, своё) {
-  const открыть = своё
-    ? { text: "📈 Открыть в Mintly", web_app: { url: card.link } }
-    : { text: "📈 Открыть в Mintly", url: card.botLink };
+  // Сделка идёт либо через кривую, либо через приложение — мимо Mintly
+  // бот торговать не отправляет: комиссия площадки живёт в самой
+  // сделке, и ссылка на чужую биржу уводила бы человека вместе с ней.
+  const торг = card.curve && card.ref
+    ? (своё
+        // В чужом чате торговать негде: суммы, расчёт и подпись — это
+        // разговор, а разговор у бота бывает только в личке.
+        ? { text: "💸 Торговать", callback_data: `b:${card.ref}` }
+        : { text: "💸 Торговать", url: `https://t.me/${TG_BOT}?start=buy_${card.ref.replace(":", "_")}` })
+    : (своё
+        ? { text: "💸 Торговать", web_app: { url: card.link } }
+        : { text: "💸 Торговать", url: card.botLink });
+
   // «Обновить» перерисовывает и текст, и картинку прямо в чате: цена
   // живёт своей жизнью, а сообщение, отправленное час назад, врёт.
   // В callback_data влезает 64 байта, поэтому там только вид и ключ.
   const обновить = card.ref ? [{ text: "🔄 Обновить", callback_data: `r:${card.ref}` }] : [];
 
-  // Торговля всегда идёт через бота, а не мимо него: у токена на кривой
-  // там выбор суммы и расчёт, у токена с биржи — переход на саму биржу,
-  // но с объяснением, почему подпись именно там.
-  const ряды = [[открыть, ...обновить]];
-  if (card.ref && (card.swap || card.curve)) {
-    // В чужом чате торговать негде: суммы, расчёт и подпись — это
-    // разговор, а разговор у бота бывает только в личке. Поэтому оттуда
-    // кнопка ведёт к боту, а торговое меню открывается уже там.
-    ряды.push([своё
-      ? { text: "💸 Торговать", callback_data: `b:${card.ref}` }
-      : { text: "💸 Торговать", url: `https://t.me/${TG_BOT}?start=buy_${card.ref.replace(":", "_")}` }]);
-  }
-
-  return { inline_keyboard: ряды };
+  return { inline_keyboard: [[торг, ...обновить]] };
 }
 
 /* Второй ряд кнопок: суммы покупки. Каждая — готовая ссылка в кошелёк,
    где уже проставлены адрес кривой, сумма и тело сообщения. Подписывает
    человек, бот в цепочку не ходит и ключей не знает. */
-/* Меню для токена с биржи. Маршрут свопа строит сама биржа: чтобы
-   собрать его здесь, нужен адрес кошелька человека, а бот его не знает
-   — кошелёк подключают в приложении, не в переписке. Поэтому подпись
-   уходит туда, где маршрут и считают. */
-function swapButtons(card, своё) {
-  return {
-    inline_keyboard: [
-      [{ text: "💳 Купить на бирже", url: card.swap }],
-      [
-        своё ? { text: "📈 Открыть в Mintly", web_app: { url: card.link } } : { text: "📈 Открыть в Mintly", url: card.botLink },
-        { text: "← Назад", callback_data: `x:${card.ref}` },
-      ],
-    ],
-  };
-}
-
 function buyButtons(card, своё) {
   // Сумма ведёт не сразу в кошелёк, а на расчёт: сколько токенов
   // придёт, сколько уйдёт на комиссию и газ. Подписывать вслепую
@@ -318,7 +299,7 @@ async function handleCallback(cb) {
   if (действие === "b" || действие === "x") {
     const кнопки = действие === "x"
       ? tokenButtons(card, своё)
-      : card.swap ? swapButtons(card, своё) : buyButtons(card, своё);
+      : buyButtons(card, своё);
     const цель = cb.inline_message_id
       ? { inline_message_id: cb.inline_message_id }
       : cb.message ? { chat_id: cb.message.chat.id, message_id: cb.message.message_id } : null;
@@ -326,9 +307,7 @@ async function handleCallback(cb) {
     await tg("editMessageReplyMarkup", { ...цель, reply_markup: кнопки });
     await tg("answerCallbackQuery", {
       callback_query_id: cb.id,
-      text: действие !== "b" ? ""
-        : card.swap ? "Токен торгуется на бирже — подпись там"
-        : "Выбери сумму — подпишешь в кошельке",
+      text: действие === "b" ? "Выбери сумму — подпишешь в кошельке" : "",
     });
     return;
   }
@@ -756,7 +735,7 @@ export default async function handler(req, res) {
           link_preview_options: card.chart
             ? { url: card.chart, prefer_large_media: true, show_above_text: true }
             : { is_disabled: true },
-          reply_markup: card.curve ? buyButtons(card, true) : card.swap ? swapButtons(card, true) : tokenButtons(card, true),
+          reply_markup: card.curve ? buyButtons(card, true) : tokenButtons(card, true),
         });
         return res.status(200).json({ ok: true });
       }

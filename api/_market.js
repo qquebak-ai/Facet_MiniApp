@@ -14,7 +14,6 @@
  */
 
 import { adminClient } from "./_support.js";
-import { swapLink } from "./_trade.js";
 
 const TESTNET = process.env.TON_TESTNET === "1";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
@@ -403,10 +402,9 @@ export async function tokenCard(token) {
     chart: `${APP_URL}/api/chart?token=${token.id}&t=${свежесть()}`,
     ref: `t:${token.id}`,
     // Закрытая кривая не принимает ни покупок, ни продаж: показывать
-    // кнопку, которую контракт отобьёт, — врать. Такой токен уже на
-    // бирже, туда и отправляем.
+    // кнопку, которую контракт отобьёт, — врать. Такой токен торгуется
+    // дальше в приложении, оттуда и идёт сделка.
     curve: state && !state.graduated ? token.curve_address || null : null,
-    swap: state && state.graduated ? swapLink(token.token_address, null) : null,
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=tok_${token.id}`,
     thumb: token.logo_url || null,
   };
@@ -448,7 +446,6 @@ export async function externalCard(token) {
     link: `${APP_URL}?pool=${token.pool_address}`,
     chart: `${APP_URL}/api/chart?pool=${token.pool_address}&t=${свежесть()}`,
     ref: `p:${token.pool_address}`,
-    swap: swapLink(token.token_address, token.dex),
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=pool_${token.pool_address}`,
     thumb: token.logo_url || null,
   };

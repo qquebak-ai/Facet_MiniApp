@@ -55,15 +55,6 @@ export function buyLink(curveAddress, tonAmount) {
   return `https://app.tonkeeper.com/transfer/${адрес}?amount=${сумма.toString()}&bin=${encodeURIComponent(тело)}`;
 }
 
-/* Своп на бирже для токенов, которые в приложении просто показываются.
-   Кривой у них нет, покупка идёт там же, где идёт торговля. */
-export function swapLink(tokenAddress, dex) {
-  if (!tokenAddress) return null;
-  const имя = String(dex || "").toLowerCase();
-  if (имя.includes("dedust")) return `https://dedust.io/swap/TON/${tokenAddress}`;
-  return `https://app.ston.fi/swap?ft=TON&tt=${tokenAddress}`;
-}
-
 /* Сколько токенов вернёт кривая за столько-то TON. Формула — та же, что
    в контракте и в приложении (tokensOutFor): резервы перемножаются,
    произведение держится постоянным. Комиссию площадки и газ вычитаем до
