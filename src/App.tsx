@@ -135,12 +135,15 @@ const STR = {
     bootStepAuth: "Вход в аккаунт", bootStepFeed: "Лента покупок",
     bootStepTokens: "Токены сообщества", bootStepRate: "Курс TON",
     shopTabFrames: "Рамки", shopTabCards: "Карточки",
-    shopEquip: "Надеть", shopEquipped: "Надето",
+    shopEquip: "Надеть", shopEquipped: "Надето", shopOwned: "Куплено",
+    shopEquipHint: "Надеть можно в профиле — «Редактировать профиль»",
+    editLookTitle: "Внешний вид", editLookHint: "Надень купленную рамку и карточку. Остальное — в магазине.",
+    editLookEmpty: "Пока нечего надевать — рамки и карточки покупаются в магазине",
     shopNotEnough: "Не хватает {n} монет — закрой достижение",
     shopBuyFor: "Купить за {n}",
     shopLeftAfter: "Останется после покупки",
     shopNoItem: "Этой вещи ещё нет в каталоге — напиши в поддержку",
-    shopBought: "{name} — куплено и надето",
+    shopBought: "{name} — куплено",
     shopCoinsHint: "Монеты приходят за достижения и за приглашённых друзей. Тратить их можно только здесь.",
     shopLockedTitle: "Магазин закрыт",
     shopLockedBody: "Рамки и карточки надеваются на профиль, а монеты приходят за достижения. Войди, чтобы всё это стало твоим.",
@@ -479,12 +482,15 @@ const STR = {
     bootStepAuth: "Signing in", bootStepFeed: "Buy feed",
     bootStepTokens: "Community tokens", bootStepRate: "TON rate",
     shopTabFrames: "Frames", shopTabCards: "Cards",
-    shopEquip: "Equip", shopEquipped: "Equipped",
+    shopEquip: "Equip", shopEquipped: "Equipped", shopOwned: "Owned",
+    shopEquipHint: "Equip it in your profile — \"Edit profile\"",
+    editLookTitle: "Look", editLookHint: "Put on a frame and a card you own. Buying happens in the shop.",
+    editLookEmpty: "Nothing to put on yet — frames and cards are bought in the shop",
     shopNotEnough: "{n} coins short — close an achievement",
     shopBuyFor: "Buy for {n}",
     shopLeftAfter: "Left after this",
     shopNoItem: "This item isn't in the catalogue yet — message support",
-    shopBought: "{name} — bought and equipped",
+    shopBought: "{name} — bought",
     shopCoinsHint: "Coins come from achievements and invited friends. They're only spent here.",
     shopLockedTitle: "Shop is locked",
     shopLockedBody: "Frames and cards go on your profile, and coins come from achievements. Sign in to make them yours.",
@@ -6838,12 +6844,15 @@ function BootSplash({ steps, done, insetTop = 0 }) {
    предмета меняются ровно две карточки из десятка, а остальные — со всеми
    своими размытиями и анимациями — вообще не перерисовываются. Раньше
    перерисовывались все, и оранжевая рамка появлялась с задержкой. */
-const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, price, affordable, onEquip, onBuy, onTooPoor }) {
+/* Витрина только продаёт. Надеть купленное можно в профиле, кнопкой
+   «Редактировать профиль»: примерка — это про себя, а не про кассу, и
+   раньше два действия жили на одной плитке и путались между собой. */
+const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, price, affordable, onOwnedTap, onBuy, onTooPoor }) {
   const handle = useCallback(() => {
-    if (owned) return onEquip(kind, item.id);
+    if (owned) return onOwnedTap && onOwnedTap();
     if (!affordable) return onTooPoor && onTooPoor(price);
     return onBuy(kind, item.id);
-  }, [owned, affordable, price, onEquip, onBuy, onTooPoor, kind, item.id]);
+  }, [owned, affordable, price, onOwnedTap, onBuy, onTooPoor, kind, item.id]);
   const плитка = useRef(null);
   const наЭкране = useOnScreen(плитка);
 
@@ -6883,7 +6892,7 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
       </div>
       {owned ? (
         <span style={{ fontFamily: bodyFont, fontSize: 12, color: equipped ? T.electric : T.muted, textAlign: "center", lineHeight: 1.3 }}>
-          {equipped ? t("shopEquipped") : t("shopEquip")}
+          {equipped ? t("shopEquipped") : t("shopOwned")}
         </span>
       ) : (
         <span className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 12.5, fontWeight: 700, color: affordable ? T.electric : T.muted }}>
@@ -7719,20 +7728,14 @@ function ChestCard({ coins, owned, onOpen }) {
   );
 }
 
-function ShopView({ cosmetics, owned, coins, onEquip, onBuy, onOpenChest, achievementsReady = true, onOpenAchievements, showToast, accountCreated = false, onOpenLogin }) {
+function ShopView({ cosmetics, owned, coins, onBuy, onOpenChest, achievementsReady = true, onOpenAchievements, showToast, accountCreated = false, onOpenLogin }) {
   const [tab, setTab] = useState("frames");
-  // Нажатие отмечается сразу здесь, не дожидаясь, пока выбор дойдёт до
-  // состояния всего приложения и вернётся обратно пропсом. Рамка при
-  // этом появляется в том же кадре, что и само нажатие.
-  const [pending, setPending] = useState(null); // { kind, id }
-  // Обработчик через ссылку: сам onEquip создаётся заново при каждой
-  // перерисовке приложения, и мемоизация карточек была бы бесполезна.
-  const equipRef = useRef(onEquip);
-  useEffect(() => { equipRef.current = onEquip; });
-  const equip = useCallback((kind, id) => {
-    setPending({ kind, id });
-    equipRef.current(kind, id);
-  }, []);
+  // Нажатие на уже купленное только подсказывает, где его надеть.
+  // Обработчик через ссылку: showToast создаётся заново при каждой
+  // перерисовке приложения, и мемоизация плиток была бы бесполезна.
+  const hintRef = useRef(null);
+  hintRef.current = () => { haptic("light"); if (showToast) showToast(t("shopEquipHint")); };
+  const ownedTap = useCallback(() => hintRef.current(), []);
   // Нажатие на некупленный предмет открывает окно подтверждения, а не
   // списывает монеты сразу.
   const [confirming, setConfirming] = useState(null); // { kind, id }
@@ -7754,12 +7757,7 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, onOpenChest, achiev
   const tooPoor = useCallback((price) => tooPoorRef.current(price), []);
   const items = tab === "frames" ? AVATAR_FRAMES : PROFILE_CARDS;
   const kind = tab === "frames" ? "frame" : "card";
-  const equippedId = pending && pending.kind === kind ? pending.id : cosmetics[kind];
-  // Выбор доехал — своя пометка больше не нужна, дальше показываем то,
-  // что действительно надето.
-  useEffect(() => {
-    if (pending && cosmetics[pending.kind] === pending.id) setPending(null);
-  }, [cosmetics, pending]);
+  const equippedId = cosmetics[kind];
 
   // Без аккаунта магазин закрыт целиком: монеты копятся за достижения,
   // а достижения считаются по профилю — купить и надеть тут нечего и
@@ -7851,7 +7849,7 @@ function ShopView({ cosmetics, owned, coins, onEquip, onBuy, onOpenChest, achiev
               owned={isOwned}
               price={price}
               affordable={coins >= price}
-              onEquip={equip}
+              onOwnedTap={ownedTap}
               onBuy={buy}
               onTooPoor={tooPoor}
             />
@@ -11491,7 +11489,75 @@ async function signInWithTelegram(nickname) {
    "edit"   — profile fields only, no password, updates the existing row
    When not in "edit" mode, a segmented tab lets the user flip between
    login/create without closing the sheet — that's the "красивое меню". */
-function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAddress, onChangeNickname }) {
+/* Выбор рамки и карточки из купленных. Стоит в «Редактировать профиль»
+   и больше нигде: в магазине плитка отвечала сразу за покупку и за
+   примерку, и одно нажатие делало то одно, то другое. */
+function LookPicker({ cosmetics, owned, onEquip }) {
+  const [tab, setTab] = useState("frame");
+  const все = tab === "frame" ? AVATAR_FRAMES : PROFILE_CARDS;
+  // Бесплатное доступно всегда — им же и снимают надетое.
+  const мои = все.filter((it) => !(it.price > 0) || (owned && owned.has(ownedKey(tab, it.id))));
+  const надето = cosmetics[tab] || "none";
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{t("editLookTitle")}</span>
+        <div className="flex items-center gap-1.5">
+          {[["frame", t("shopTabFrames")], ["card", t("shopTabCards")]].map(([id, label]) => {
+            const active = tab === id;
+            return (
+              <button key={id} onClick={() => setTab(id)} className="fx-tap fx-chip rounded-full px-3 py-1"
+                style={{
+                  fontFamily: bodyFont, fontSize: 12.5, fontWeight: 600,
+                  background: active ? T.ice : "transparent", color: active ? T.bg : T.muted,
+                  border: `1px solid ${active ? T.ice : T.line}`,
+                }}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.4, marginBottom: 10 }}>
+        {мои.length > 1 ? t("editLookHint") : t("editLookEmpty")}
+      </p>
+      {/* Ряд прокручивается вбок: вещей со временем становится много, а
+          сетка на всю ширину отодвинула бы кнопку «Сохранить» за экран. */}
+      <div className="no-scrollbar flex gap-2 overflow-x-auto" style={{ paddingBottom: 2 }}>
+        {мои.map((it) => {
+          const выбрано = надето === it.id;
+          return (
+            <button
+              key={it.id}
+              onClick={() => { haptic("light"); onEquip(tab, it.id); }}
+              className="fx-tap flex flex-col items-center gap-1.5 rounded-[18px] p-2"
+              style={{
+                flex: "0 0 auto", width: 84,
+                background: T.bg, border: `1px solid ${выбрано ? hexA(T.electric, 0.55) : T.line}`,
+                position: "relative", overflow: "hidden",
+              }}
+            >
+              <div style={{ position: "relative", width: "100%", height: 54, borderRadius: 12, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {tab === "card" && <ProfileCardBg cardId={it.id} height={54} radius={12} showcase />}
+                <div style={{ position: "relative", zIndex: 1 }}>
+                  <AvatarFrame frameId={tab === "frame" ? it.id : "none"} size={38}>
+                    <div style={{ width: "100%", height: "100%", background: T.bg }} />
+                  </AvatarFrame>
+                </div>
+              </div>
+              <span style={{ fontFamily: bodyFont, fontSize: 11, color: выбрано ? T.electric : T.muted, textAlign: "center", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
+                {pickLabel(it.label)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAddress, onChangeNickname, cosmetics = { frame: "none", card: "none" }, owned, onEquip }) {
   const isEdit = mode === "edit";
   const [tgBusy, setTgBusy] = useState(false);
   const [tgError, setTgError] = useState("");
@@ -11880,6 +11946,11 @@ async function uploadAvatarIfNeeded(userId) {
           )}
           {!isLogin && <Field label={t("bioLabel")} placeholder={t("bioPlaceholder")} area value={bio} onChange={(e) => setBio(e.target.value)} />}
         </div>
+
+        {/* Примерка. Магазин только продаёт, а надевают купленное здесь:
+            рядом с аватаркой и ником, то есть там, где человек и так
+            решает, как он выглядит. */}
+        {isEdit && onEquip && <LookPicker cosmetics={cosmetics} owned={owned} onEquip={onEquip} />}
         {serverError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 13, marginTop: 10, display: "block" }}>{serverError}</span>}
         <button onClick={handleSubmit} disabled={submitting} className="fx-tap w-full rounded-[20px] py-3 mt-5" style={{ background: canSubmit ? PRISM : T.surfaceHi, color: canSubmit ? PRISM_TEXT : T.muted, fontFamily: displayFont, fontWeight: 700, fontSize: 15, boxShadow: canSubmit ? `0 0 22px ${glow(0.28)}` : "none", opacity: submitting ? 0.6 : 1 }}>
           {submitting ? t("submittingText") : isEdit ? t("saveChanges") : isLogin ? t("loginCta") : t("createAccountShort")}
@@ -13565,7 +13636,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         : code === "already_owned" ? t("cosmeticApplied")
         : code === "no_item" ? t("shopNoItem")
         : t("saveFailed"));
-      if (code === "already_owned") equipCosmetic(kind, id, true);
       return;
     }
     const next = new Set(owned);
@@ -13573,10 +13643,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setOwned(next);
     setCoinsSpentTotal((v) => v + price);
     if (typeof data.balance === "number") setServerBalance(data.balance);
-    // Купленное сразу и надеваем: отдельное нажатие «а теперь примерь»
-    // ничего не решает, а лишний шаг раздражает. Своего сообщения
-    // «надето» тут не нужно — про покупку скажем одной строкой ниже.
-    equipCosmetic(kind, id, true);
+    // Надевать сами не лезем: примерка живёт в «Редактировать
+    // профиль», и покупка, которая молча меняет вид, — это ровно то
+    // разделение, которое здесь и наводится.
     const item = (kind === "frame" ? FRAME_BY_ID : CARD_BY_ID)[id];
     showToast(tf("shopBought", { name: pickLabel(item ? item.label : null) || id }));
   }
@@ -13611,8 +13680,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // Что выпало из сундука: показывается в отдельном окне с анимацией.
   const [chestPrize, setChestPrize] = useState(null);
 
-  // Открыть сундук: списываем цену, выдаём случайную вещь из тех, что
-  // ещё не куплены, и сразу надеваем — как при обычной покупке.
+  // Открыть сундук: списываем цену и выдаём случайную вещь из тех, что
+  // ещё не куплены. Надеть её, как и любую покупку, можно в профиле.
   async function openChest() {
     if (coins < CHEST_PRICE) {
       showToast(tf("shopNotEnough", { n: CHEST_PRICE - coins }));
@@ -13633,7 +13702,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     setOwned(next);
     setCoinsSpentTotal((v) => v + CHEST_PRICE);
     if (typeof data.balance === "number") setServerBalance(data.balance);
-    equipCosmetic(data.kind, data.id, true);
     const item = (data.kind === "frame" ? FRAME_BY_ID : CARD_BY_ID)[data.id];
     // Вместо строчки внизу экрана — окно с открытием: ради этой секунды
     // сундук и покупают.
@@ -14282,7 +14350,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       )}
 
       <ConnectModal open={connectModalOpen} onClose={() => setConnectModalOpen(false)} onConnect={() => tonConnectUI.openModal()} />
-      <AuthModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} onSubmit={submitProfile} initial={profile} mode={profileModalMode} walletAddress={walletAddress} onChangeNickname={changeNickname} />
+      <AuthModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} onSubmit={submitProfile} initial={profile} mode={profileModalMode} walletAddress={walletAddress} onChangeNickname={changeNickname} cosmetics={cosmetics} owned={owned} onEquip={equipCosmetic} />
       <SettingsPanel
         item={settingsItem}
         onClose={() => setSettingsItem(null)}
@@ -14366,7 +14434,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               cosmetics={cosmetics}
               owned={owned}
               coins={coins}
-              onEquip={equipCosmetic}
               onBuy={buyCosmetic}
               onOpenChest={openChest}
               achievementsReady={achievementsReady}
