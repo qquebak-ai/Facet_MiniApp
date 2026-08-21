@@ -140,7 +140,7 @@ export async function свопТонВЖетон({ jetton, tonAmount, userWallet
     // Комиссии пулов и запас на проскальзывание наружу больше не идут:
     // в чате их читают как мелкий шрифт. Остаётся то, что видно в
     // кошельке, — сколько списывается и сколько придёт.
-    to: tx.to.toString(),
+    to: tx.to.toString({ bounceable: true }),
     value: tx.value.toString(),
     body: tx.body.toBoc().toString("base64"),
     получит: Number(sim.ask_units || 0) / 10 ** decimals,
@@ -156,5 +156,6 @@ export async function свопТонВЖетон({ jetton, tonAmount, userWallet
 /* Ссылка в кошелёк для собранной сделки. */
 export function ссылкаСвопа(tx) {
   if (!tx) return null;
-  return `https://app.tonkeeper.com/transfer/${tx.to}?amount=${tx.value}&bin=${encodeURIComponent(tx.body)}`;
+  const boc = String(tx.body).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `https://app.tonkeeper.com/transfer/${tx.to}?amount=${tx.value}&bin=${boc}`;
 }

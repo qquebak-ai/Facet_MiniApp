@@ -131,5 +131,10 @@ export function ссылкаПродажи({ jettonWallet, curve, owner, raw }) 
   } catch (err) {
     return null;
   }
-  return `https://app.tonkeeper.com/transfer/${jettonWallet}?amount=${SELL_VALUE.toString()}&bin=${encodeURIComponent(тело.toBoc().toString("base64"))}`;
+  // Тот же приём, что и в покупке: base64url и bounceable-адрес, иначе
+  // кошелёк шлёт перевод без тела и сделка отбивается.
+  const boc = тело.toBoc().toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  let кудa;
+  try { кудa = Address.parse(jettonWallet).toString({ bounceable: true }); } catch (err) { return null; }
+  return `https://app.tonkeeper.com/transfer/${кудa}?amount=${SELL_VALUE.toString()}&bin=${boc}`;
 }

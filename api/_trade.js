@@ -46,13 +46,23 @@ export function buyLink(curveAddress, tonAmount) {
   if (!curveAddress || !(tonAmount > 0)) return null;
   let адрес;
   try {
-    адрес = Address.parse(curveAddress).toString({ bounceable: false });
+    // Адрес кривой — обязательно bounceable («EQ…»). На
+    // non-bounceable контракт не вернёт деньги, если сообщение ему не
+    // подойдёт, а само сообщение кошелёк отправит как простой перевод.
+    адрес = Address.parse(curveAddress).toString({ bounceable: true });
   } catch (err) {
     return null;
   }
   const сумма = toNano(String(tonAmount)) + GAS_BUY_OVERHEAD;
-  const тело = buyBody().toBoc().toString("base64");
-  return `https://app.tonkeeper.com/transfer/${адрес}?amount=${сумма.toString()}&bin=${encodeURIComponent(тело)}`;
+  return `https://app.tonkeeper.com/transfer/${адрес}?amount=${сумма.toString()}&bin=${base64url(buyBody())}`;
+}
+
+/* Тело сообщения для ссылки. Обычный base64 сюда не годится: плюсы и
+   косые черты в адресной строке переживают не все кошельки, и вместо
+   покупки уходит пустой перевод — контракт его отбивает, а человек
+   видит «Неуспешно». */
+export function base64url(cell) {
+  return cell.toBoc().toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 /* Сколько токенов вернёт кривая за столько-то TON. Формула — та же, что
