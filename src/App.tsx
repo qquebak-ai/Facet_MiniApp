@@ -136,7 +136,6 @@ const STR = {
     bootStepTokens: "Токены сообщества", bootStepRate: "Курс TON",
     shopTabFrames: "Рамки", shopTabCards: "Карточки",
     shopEquip: "Надеть", shopEquipped: "Надето", shopOwned: "Куплено",
-    shopEquipHint: "Надеть можно в профиле — «Редактировать профиль»",
     editLookTitle: "Внешний вид", editLookHint: "Надень купленную рамку и карточку. Остальное — в магазине.",
     editLookEmpty: "Пока нечего надевать — рамки и карточки покупаются в магазине",
     shopNotEnough: "Не хватает {n} монет — закрой достижение",
@@ -483,7 +482,6 @@ const STR = {
     bootStepTokens: "Community tokens", bootStepRate: "TON rate",
     shopTabFrames: "Frames", shopTabCards: "Cards",
     shopEquip: "Equip", shopEquipped: "Equipped", shopOwned: "Owned",
-    shopEquipHint: "Equip it in your profile — \"Edit profile\"",
     editLookTitle: "Look", editLookHint: "Put on a frame and a card you own. Buying happens in the shop.",
     editLookEmpty: "Nothing to put on yet — frames and cards are bought in the shop",
     shopNotEnough: "{n} coins short — close an achievement",
@@ -6849,7 +6847,7 @@ function BootSplash({ steps, done, insetTop = 0 }) {
    раньше два действия жили на одной плитке и путались между собой. */
 const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, price, affordable, onOwnedTap, onBuy, onTooPoor }) {
   const handle = useCallback(() => {
-    if (owned) return onOwnedTap && onOwnedTap();
+    if (owned) return onOwnedTap && onOwnedTap(kind);
     if (!affordable) return onTooPoor && onTooPoor(price);
     return onBuy(kind, item.id);
   }, [owned, affordable, price, onOwnedTap, onBuy, onTooPoor, kind, item.id]);
@@ -7728,14 +7726,14 @@ function ChestCard({ coins, owned, onOpen }) {
   );
 }
 
-function ShopView({ cosmetics, owned, coins, onBuy, onOpenChest, achievementsReady = true, onOpenAchievements, showToast, accountCreated = false, onOpenLogin }) {
+function ShopView({ cosmetics, owned, coins, onBuy, onOpenLook, onOpenChest, achievementsReady = true, onOpenAchievements, showToast, accountCreated = false, onOpenLogin }) {
   const [tab, setTab] = useState("frames");
-  // Нажатие на уже купленное только подсказывает, где его надеть.
-  // Обработчик через ссылку: showToast создаётся заново при каждой
-  // перерисовке приложения, и мемоизация плиток была бы бесполезна.
-  const hintRef = useRef(null);
-  hintRef.current = () => { haptic("light"); if (showToast) showToast(t("shopEquipHint")); };
-  const ownedTap = useCallback(() => hintRef.current(), []);
+  // Нажатие на уже купленное открывает примерку в «Редактировать
+  // профиль» — сразу на нужной вкладке. Витрина не надевает ничего
+  // сама, но и не отвечает бесполезной подсказкой.
+  const lookRef = useRef(null);
+  lookRef.current = (kind) => { haptic("light"); if (onOpenLook) onOpenLook(kind); };
+  const ownedTap = useCallback((kind) => lookRef.current(kind), []);
   // Нажатие на некупленный предмет открывает окно подтверждения, а не
   // списывает монеты сразу.
   const [confirming, setConfirming] = useState(null); // { kind, id }
@@ -11492,15 +11490,28 @@ async function signInWithTelegram(nickname) {
 /* Выбор рамки и карточки из купленных. Стоит в «Редактировать профиль»
    и больше нигде: в магазине плитка отвечала сразу за покупку и за
    примерку, и одно нажатие делало то одно, то другое. */
-function LookPicker({ cosmetics, owned, onEquip }) {
-  const [tab, setTab] = useState("frame");
+function LookPicker({ cosmetics, owned, onEquip, focus }) {
+  // Из магазина сюда приходят с уже выбранным видом вещи: нажали на
+  // карточку — открылась вкладка карточек, а не рамок.
+  const [tab, setTab] = useState(focus === "card" ? "card" : "frame");
+  const блок = useRef(null);
+  useEffect(() => {
+    if (!focus) return;
+    setTab(focus === "card" ? "card" : "frame");
+    // Окно редактирования длинное, и примерка внизу: без подводки
+    // человек попадал бы на аватарку и ник, а пришёл он не за ними.
+    const id = setTimeout(() => {
+      if (блок.current && блок.current.scrollIntoView) блок.current.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 220);
+    return () => clearTimeout(id);
+  }, [focus]);
   const все = tab === "frame" ? AVATAR_FRAMES : PROFILE_CARDS;
   // Бесплатное доступно всегда — им же и снимают надетое.
   const мои = все.filter((it) => !(it.price > 0) || (owned && owned.has(ownedKey(tab, it.id))));
   const надето = cosmetics[tab] || "none";
 
   return (
-    <div className="mt-4">
+    <div className="mt-4" ref={блок}>
       <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{t("editLookTitle")}</span>
         <div className="flex items-center gap-1.5">
@@ -11557,7 +11568,7 @@ function LookPicker({ cosmetics, owned, onEquip }) {
   );
 }
 
-function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAddress, onChangeNickname, cosmetics = { frame: "none", card: "none" }, owned, onEquip }) {
+function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAddress, onChangeNickname, cosmetics = { frame: "none", card: "none" }, owned, onEquip, lookFocus = null }) {
   const isEdit = mode === "edit";
   const [tgBusy, setTgBusy] = useState(false);
   const [tgError, setTgError] = useState("");
@@ -11950,7 +11961,7 @@ async function uploadAvatarIfNeeded(userId) {
         {/* Примерка. Магазин только продаёт, а надевают купленное здесь:
             рядом с аватаркой и ником, то есть там, где человек и так
             решает, как он выглядит. */}
-        {isEdit && onEquip && <LookPicker cosmetics={cosmetics} owned={owned} onEquip={onEquip} />}
+        {isEdit && onEquip && <LookPicker cosmetics={cosmetics} owned={owned} onEquip={onEquip} focus={lookFocus} />}
         {serverError && <span style={{ fontFamily: bodyFont, color: T.rose, fontSize: 13, marginTop: 10, display: "block" }}>{serverError}</span>}
         <button onClick={handleSubmit} disabled={submitting} className="fx-tap w-full rounded-[20px] py-3 mt-5" style={{ background: canSubmit ? PRISM : T.surfaceHi, color: canSubmit ? PRISM_TEXT : T.muted, fontFamily: displayFont, fontWeight: 700, fontSize: 15, boxShadow: canSubmit ? `0 0 22px ${glow(0.28)}` : "none", opacity: submitting ? 0.6 : 1 }}>
           {submitting ? t("submittingText") : isEdit ? t("saveChanges") : isLogin ? t("loginCta") : t("createAccountShort")}
@@ -13235,6 +13246,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
 
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileModalMode, setProfileModalMode] = useState("create");
+  // Какую вкладку примерки открыть, когда в профиль пришли из магазина.
+  const [lookFocus, setLookFocus] = useState(null);
   const [settingsItem, setSettingsItem] = useState(null);
   const [manageToken_, setManageToken_] = useState(null);
   const [tradeModal, setTradeModal] = useState(null); // { mode: 'buy' | 'sell' }
@@ -14096,7 +14109,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   }
 
   function openCreateProfile() { setProfileModalMode("create"); setProfileModalOpen(true); }
-  function openEditProfile() { setProfileModalMode("edit"); setProfileModalOpen(true); }
+  function openEditProfile() { setLookFocus(null); setProfileModalMode("edit"); setProfileModalOpen(true); }
+  // Из магазина: то же окно, но открытое ради примерки.
+  function openLookFromShop(kind) { setLookFocus(kind); setProfileModalMode("edit"); setProfileModalOpen(true); }
   function submitProfile(data) {
     setProfile(data);
     setAccountCreated(true);
@@ -14350,7 +14365,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       )}
 
       <ConnectModal open={connectModalOpen} onClose={() => setConnectModalOpen(false)} onConnect={() => tonConnectUI.openModal()} />
-      <AuthModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} onSubmit={submitProfile} initial={profile} mode={profileModalMode} walletAddress={walletAddress} onChangeNickname={changeNickname} cosmetics={cosmetics} owned={owned} onEquip={equipCosmetic} />
+      <AuthModal open={profileModalOpen} onClose={() => { setProfileModalOpen(false); setLookFocus(null); }} onSubmit={submitProfile} initial={profile} mode={profileModalMode} walletAddress={walletAddress} onChangeNickname={changeNickname} cosmetics={cosmetics} owned={owned} onEquip={equipCosmetic} lookFocus={lookFocus} />
       <SettingsPanel
         item={settingsItem}
         onClose={() => setSettingsItem(null)}
@@ -14435,6 +14450,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               owned={owned}
               coins={coins}
               onBuy={buyCosmetic}
+              onOpenLook={openLookFromShop}
               onOpenChest={openChest}
               achievementsReady={achievementsReady}
               onOpenAchievements={() => setView("achievements")}
