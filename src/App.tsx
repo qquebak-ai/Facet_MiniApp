@@ -5,7 +5,7 @@ import {
   Wallet, Home as HomeIcon, PlusCircle, User, ChevronLeft, Share2, Star,
   ShieldCheck, ShieldAlert, Globe, Globe2, Send, Twitter, Image as ImageIcon, Upload,
   Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, MoreHorizontal, HeartCrack,
-  Settings as SettingsIcon, Lock, Gift, LifeBuoy,
+  Lock, Gift, LifeBuoy,
   FileText, CheckCircle2, RefreshCw, X,
   Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown, Bell
 } from "lucide-react";
@@ -4387,8 +4387,9 @@ const NICKNAME_PRICE = 500;
    нужны, когда торговля пошла и сообщений становится слишком много. */
 const NOTIFY_THRESHOLDS = [0.05, 0.5, 1, 5, 10, 50];
 
+// Пункта «Профиль» здесь нет: «Редактировать профиль» и так стоит на
+// самом экране профиля, а удаление аккаунта переехало в «Безопасность».
 const SETTINGS_ITEMS = [
-  { key: "profile", icon: SettingsIcon, tKey: "profileSettings" },
   { key: "security", icon: Lock, tKey: "security" },
   { key: "notify", icon: Bell, tKey: "notifyTitle" },
   { key: "language", icon: Globe2, tKey: "langTitle" },
@@ -11015,7 +11016,7 @@ function ReferralShare({ showToast }) {
 
 function SettingsPanel({
   item: itemProp, onClose, appSettings, onUpdateSetting,
-  onOpenEditProfile, profile, showToast,
+  profile, showToast,
   onTogglePin, onChangePin, insetBottom = 0, insetTop = 0,
   accountCreated, onDeleteAccount, userId, inviteCount = 0, onSupportRead,
   notifyPrefs = { buys: true, minTon: 0.05, progress: true }, onUpdateNotify,
@@ -11029,7 +11030,6 @@ function SettingsPanel({
   if (!item) return null;
   const Icon = item.icon;
 
-  function openEditFromSettings() { onClose(); onOpenEditProfile(); }
   async function confirmDeleteAccount() {
     setDeleting(true);
     await onDeleteAccount();
@@ -11055,15 +11055,23 @@ function SettingsPanel({
 
   let body = null;
   switch (item.key) {
-    case "profile":
+    case "security":
       body = (
-        <>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, textAlign: "center" }}>
-            {t("editProfileDesc")}
-          </p>
-          <button onClick={openEditFromSettings} className="fx-tap w-full rounded-[20px] py-3 mt-4" style={{ background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15 }}>
-            {t("editProfile")}
+        <div className="mt-2">
+          <SettingsRow label={t("pinRow")} sub={t("pinRowSub")}>
+            <ToggleSwitch on={appSettings.pinEnabled} onChange={onTogglePin} />
+          </SettingsRow>
+          <button
+            onClick={() => { if (appSettings.pinEnabled) onChangePin(); else showToast(t("enablePinFirst")); }}
+            className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-3"
+            style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: appSettings.pinEnabled ? T.ice : T.muted, opacity: appSettings.pinEnabled ? 1 : 0.55 }}
+          >
+            <Lock size={14} color={T.muted} /> {t("changePinCta")}
           </button>
+          {/* Удаление аккаунта переехало сюда из «Профиля»: пункт с
+              одной кнопкой «Редактировать» дублировал такую же кнопку на
+              самом экране профиля, а удаление по смыслу и так о
+              безопасности. */}
           {accountCreated && (
             <button
               onClick={() => setDeleteConfirmOpen(true)}
@@ -11094,22 +11102,6 @@ function SettingsPanel({
               </div>
             </div>
           )}
-        </>
-      );
-      break;
-    case "security":
-      body = (
-        <div className="mt-2">
-          <SettingsRow label={t("pinRow")} sub={t("pinRowSub")}>
-            <ToggleSwitch on={appSettings.pinEnabled} onChange={onTogglePin} />
-          </SettingsRow>
-          <button
-            onClick={() => { if (appSettings.pinEnabled) onChangePin(); else showToast(t("enablePinFirst")); }}
-            className="fx-tap w-full flex items-center justify-center gap-2 rounded-[20px] py-3 mt-3"
-            style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: appSettings.pinEnabled ? T.ice : T.muted, opacity: appSettings.pinEnabled ? 1 : 0.55 }}
-          >
-            <Lock size={14} color={T.muted} /> {t("changePinCta")}
-          </button>
         </div>
       );
       break;
@@ -14298,7 +14290,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         onUpdateSetting={updateAppSetting}
         insetBottom={insetBottom}
         insetTop={insetTop}
-        onOpenEditProfile={openEditProfile}
         profile={profile}
         showToast={showToast}
         onTogglePin={handleTogglePin}
