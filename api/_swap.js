@@ -1,0 +1,143 @@
+/* Покупка токена с биржи через бота.
+ *
+ * У токенов из ленты своей кривой нет — они торгуются на Ston.fi.
+ * Собрать такую сделку сложнее, чем покупку на кривой: маршрут зависит
+ * от пула, версии роутера и адреса кошелька покупателя. Поэтому путь
+ * такой: спрашиваем у биржи маршрут и ожидаемый выход, собираем
+ * транзакцию её же SDK и отдаём человеку ссылкой в кошелёк. Подписывает
+ * он сам, ключей мы по-прежнему не касаемся.
+ *
+ * Комиссия площадки идёт реферальным механизмом биржи: на роутерах
+ * второй версии её размер задаём сами (1%, как и на своей кривой), на
+ * первой — Ston.fi платит по своим правилам. Отдельным сообщением, как
+ * это делает приложение, здесь взять нельзя: universal link кошелька
+ * несёт ровно одну транзакцию, и второе подтверждение человек просто не
+ * нажмёт.
+ */
+
+import { Address } from "@ton/core";
+import { TonClient } from "@ton/ton";
+import { DEX, pTON } from "@ston-fi/sdk";
+
+const STON_API = "https://api.ston.fi/v1";
+
+// Кошелёк площадки. Тот же, что получает комиссию с кривой.
+const FEE_ADDRESS = process.env.FEE_ADDRESS || "UQClGN5huzz-Z3bwgxr7GOPe5Jyi8PNKbsNnDFKFNGbjusvT";
+
+// Доля площадки в сотых долях процента: 100 = 1%. Больше биржа не
+// пропускает, да и брать больше своей кривой было бы странно.
+const REFERRAL_BPS = 100;
+
+// Узел цепочки для расчёта адресов жетонных кошельков. Без ключа
+// toncenter пускает считанные запросы в минуту — на бота хватает, но
+// ключ в окружении лишним не будет.
+const TONCENTER = process.env.TONCENTER_URL || "https://toncenter.com/api/v2/jsonRPC";
+const TONCENTER_KEY = process.env.TONCENTER_API_KEY || undefined;
+
+/* Маршрут и ожидаемый выход. Слippage закладываем в min_ask_units сама
+   биржа — мы лишь передаём допуск. */
+export async function симуляция(jetton, tonAmount, допуск = 0.02) {
+  const units = BigInt(Math.round(Number(tonAmount) * 1e9));
+  const параметры = new URLSearchParams({
+    offer_address: "EQCM3B12QK1e4yZSf8GtBRT0aLMNyEsBc_DhVfRRtOEffLez", // pTON
+    ask_address: jetton,
+    units: units.toString(),
+    slippage_tolerance: String(допуск),
+    dex_v2: "true",
+  });
+  try {
+    const res = await fetch(`${STON_API}/swap/simulate?${параметры}`, { method: "POST" });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json || !json.router_address) return null;
+    return json;
+  } catch (err) {
+    return null;
+  }
+}
+
+function роутерИProxy(sim) {
+  const r = sim.router || {};
+  const major = Number(r.major_version) || 1;
+  const minor = Number(r.minor_version) || 0;
+  const ptonМастер = r.pton_master_address;
+  const ptonВерсия = String(r.pton_version || "1.0");
+
+  if (major === 2 && minor >= 2) {
+    return {
+      router: DEX.v2_2.Router.create(sim.router_address),
+      proxy: ptonВерсия.startsWith("2") ? pTON.v2_1.create(ptonМастер) : pTON.v1.create(ptonМастер),
+      реферал: true,
+    };
+  }
+  if (major === 2) {
+    return {
+      router: DEX.v2_1.Router.create(sim.router_address),
+      proxy: ptonВерсия.startsWith("2") ? pTON.v2_1.create(ptonМастер) : pTON.v1.create(ptonМастер),
+      реферал: true,
+    };
+  }
+  return {
+    router: DEX.v1.Router.create(sim.router_address),
+    proxy: pTON.v1.create(ptonМастер),
+    // У первой версии размер реферальной доли задаёт сам протокол —
+    // передаём только адрес.
+    реферал: false,
+  };
+}
+
+/* Готовая покупка: куда, сколько и с каким телом сообщения. */
+export async function свопТонВЖетон({ jetton, tonAmount, userWallet, допуск = 0.02 }) {
+  if (!jetton || !userWallet || !(tonAmount > 0)) return null;
+  const sim = await симуляция(jetton, tonAmount, допуск);
+  if (!sim) return null;
+
+  let адресПокупателя;
+  try {
+    адресПокупателя = Address.parse(userWallet).toString({ bounceable: false });
+  } catch (err) {
+    return null;
+  }
+
+  const client = new TonClient({ endpoint: TONCENTER, apiKey: TONCENTER_KEY });
+  const { router, proxy, реферал } = роутерИProxy(sim);
+  const открытый = client.open(router);
+
+  const параметры = {
+    userWalletAddress: адресПокупателя,
+    proxyTon: proxy,
+    offerAmount: BigInt(Math.round(Number(tonAmount) * 1e9)),
+    askJettonAddress: jetton,
+    minAskAmount: BigInt(sim.min_ask_units || 1),
+    referralAddress: FEE_ADDRESS,
+  };
+  if (реферал) параметры.referralValue = REFERRAL_BPS;
+
+  let tx;
+  try {
+    tx = await открытый.getSwapTonToJettonTxParams(параметры);
+  } catch (err) {
+    console.warn("[swap] не удалось собрать своп:", err && err.message);
+    return null;
+  }
+
+  const decimals = Number(sim.ask_jetton_decimals ?? 9);
+  return {
+    to: tx.to.toString(),
+    value: tx.value.toString(),
+    body: tx.body.toBoc().toString("base64"),
+    получит: Number(sim.ask_units || 0) / 10 ** decimals,
+    минимум: Number(sim.min_ask_units || 0) / 10 ** decimals,
+    курс: Number(sim.swap_rate) || 0,
+    влияние: Number(sim.price_impact) || 0,
+    комиссияБиржи: Number(sim.fee_units || 0) / 10 ** decimals,
+    доляПлощадки: реферал ? REFERRAL_BPS / 100 : null,
+    версияРоутера: `${(sim.router || {}).major_version || 1}.${(sim.router || {}).minor_version || 0}`,
+  };
+}
+
+/* Ссылка в кошелёк для собранной сделки. */
+export function ссылкаСвопа(tx) {
+  if (!tx) return null;
+  return `https://app.tonkeeper.com/transfer/${tx.to}?amount=${tx.value}&bin=${encodeURIComponent(tx.body)}`;
+}

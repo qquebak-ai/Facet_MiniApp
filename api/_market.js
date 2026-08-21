@@ -410,6 +410,8 @@ export async function externalCard(token) {
     title: `$${token.ticker} — ${token.name}`,
     description: `${fmtUsd(token.priceUsd)} · ${знак}${token.change24.toFixed(1)}% · ликвидность ${fmtUsd(token.liqUsd)}`,
     ticker: token.ticker,
+    // Адрес самого жетона нужен для покупки: своп собирается по нему.
+    jetton: token.token_address || null,
     link: `${APP_URL}?pool=${token.pool_address}`,
     chart: `${APP_URL}/api/chart?pool=${token.pool_address}&t=${свежесть()}`,
     ref: `p:${token.pool_address}`,

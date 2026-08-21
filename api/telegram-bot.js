@@ -46,6 +46,7 @@ import { SUPPORT_CHAT_ID, adminClient, deliverAnswer } from "./_support.js";
 import { searchAll, cardFor, cardByRef, свежийГрафик, findTokens, trendingExternal, looksLikeAddress } from "./_market.js";
 import { buyLink, оценкаПокупки, БЫСТРЫЕ_СУММЫ } from "./_trade.js";
 import { кошелёкПоTelegram, привязатьКошелёк, балансTon, жетоны, жетонныйКошелёк, ссылкаПродажи, нормальныйАдрес } from "./_wallet.js";
+import { свопТонВЖетон, ссылкаСвопа } from "./_swap.js";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -158,7 +159,8 @@ function tokenButtons(card, своё) {
   // Сделка идёт либо через кривую, либо через приложение — мимо Mintly
   // бот торговать не отправляет: комиссия площадки живёт в самой
   // сделке, и ссылка на чужую биржу уводила бы человека вместе с ней.
-  const торг = card.curve && card.ref
+  const торгуемый = card.curve || card.jetton;
+  const торг = торгуемый && card.ref
     ? (своё
         // В чужом чате торговать негде: суммы, расчёт и подпись — это
         // разговор, а разговор у бота бывает только в личке.
@@ -194,10 +196,14 @@ function buyButtons(card, своё) {
   // мешать её с суммами покупки — верный способ нажать не то. В чужом
   // чате она уводит к боту: остаток и адрес — не то, что показывают
   // посреди общей переписки.
-  const продать = своё
-    ? { text: "📉 Продать", callback_data: `s:${card.ref}` }
-    : { text: "📉 Продать", url: `https://t.me/${TG_BOT}?start=buy_${card.ref.replace(":", "_")}` };
-  return { inline_keyboard: [суммы, [продать], низ] };
+  // Продажа через бота есть только у токенов на кривой: у биржевого её
+  // маршрут строится от жетонного кошелька и проще идёт в приложении.
+  const продать = card.curve
+    ? [[своё
+        ? { text: "📉 Продать", callback_data: `s:${card.ref}` }
+        : { text: "📉 Продать", url: `https://t.me/${TG_BOT}?start=buy_${card.ref.replace(":", "_")}` }]]
+    : [];
+  return { inline_keyboard: [суммы, ...продать, низ] };
 }
 
 /* Покупка командой: /buy PRSM 5 — тикер или адрес, потом сумма в TON.
@@ -224,8 +230,9 @@ async function handleBuyCommand(message, хвост) {
   }
   const card = await cardFor(найдено[0]);
 
-  // Кривой нет — сделка идёт в приложении, там же и комиссия площадки.
-  if (!card.curve) {
+  // Кривой нет и адреса жетона тоже — торговать нечем, остаётся
+  // приложение.
+  if (!card.curve && !card.jetton) {
     await tg("sendMessage", {
       chat_id: message.chat.id,
       text: `${card.text}\n\nЭтот токен торгуется в приложении.`,
@@ -247,10 +254,32 @@ async function handleBuyCommand(message, хвост) {
     return;
   }
 
-  const ссылка = buyLink(card.curve, сумма);
+  // На кривой сделку собираем сами, на бирже — её же маршрутом, и там
+  // нужен адрес кошелька покупателя.
+  let ссылка = null;
+  let текст = null;
+  if (card.curve) {
+    ссылка = buyLink(card.curve, сумма);
+    текст = await сообщениеПокупки(card, сумма);
+  } else {
+    const профиль = await кошелёкПоTelegram(message.from.id);
+    const кошелёк = профиль && профиль.wallet_address ? нормальныйАдрес(профиль.wallet_address) : null;
+    if (!кошелёк) {
+      await handleWallet(message.chat.id, message.from.id);
+      return;
+    }
+    const своп = await свопТонВЖетон({ jetton: card.jetton, tonAmount: сумма, userWallet: кошелёк });
+    if (!своп) {
+      await tg("sendMessage", { chat_id: message.chat.id, text: "Биржа не ответила — попробуй ещё раз." });
+      return;
+    }
+    ссылка = ссылкаСвопа(своп);
+    текст = сообщениеСвопа(card, сумма, своп);
+  }
+
   await tg("sendMessage", {
     chat_id: message.chat.id,
-    text: await сообщениеПокупки(card, сумма),
+    text: текст,
     parse_mode: "HTML",
     link_preview_options: { is_disabled: true },
     reply_markup: { inline_keyboard: [[{ text: `💳 Подписать в кошельке · ${сумма} TON`, url: ссылка }]] },
@@ -343,6 +372,24 @@ async function handleSellCommand(message, хвост) {
   await продажа(message.chat.id, message.from.id, card, части[1] || "all");
 }
 
+/* Расчёт покупки на бирже. Числа берём у самой биржи: и ожидаемый
+   выход, и минимум с учётом проскальзывания — считать их у себя значит
+   расходиться с тем, что произойдёт на самом деле. */
+function сообщениеСвопа(card, сумма, своп) {
+  const число = (v) => (v >= 1000 ? Math.round(v).toLocaleString("ru-RU") : v.toFixed(4).replace(/\.?0+$/, ""));
+  return [
+    `<b>Покупка ${card.ticker || ""}</b>`,
+    "",
+    `Платишь <b>${сумма} TON</b>`,
+    `Получишь ≈ <b>${число(своп.получит)}</b>, не меньше ${число(своп.минимум)}`,
+    своп.доляПлощадки
+      ? `Комиссия площадки ${своп.доляПлощадки}% · комиссия биржи ${число(своп.комиссияБиржи)}`
+      : `Комиссия биржи ${число(своп.комиссияБиржи)}`,
+    "",
+    "Сделка идёт через Ston.fi. Подпишешь в кошельке — токены придут туда же.",
+  ].join("\n");
+}
+
 /* Расчёт покупки: что человек увидит перед тем, как открыть кошелёк. */
 async function сообщениеПокупки(card, сумма) {
   const { curveState } = await import("./_market.js");
@@ -413,23 +460,80 @@ async function handleCallback(cb) {
   // осталась на месте — к ней ещё вернутся.
   if (действие === "q") {
     const сумма = Number(m[4]) || 0;
-    const ссылка = buyLink(card.curve, сумма);
-    if (!ссылка || !сумма) {
+    if (!сумма) {
       await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Не получилось собрать покупку" });
       return;
     }
-    const текст = await сообщениеПокупки(card, сумма);
-    const куда = cb.message ? cb.message.chat.id : (cb.from && cb.from.id);
-    if (куда) {
-      await tg("sendMessage", {
-        chat_id: куда,
+
+    let ссылка = null;
+    let текст = null;
+    if (card.curve) {
+      ссылка = buyLink(card.curve, сумма);
+      текст = await сообщениеПокупки(card, сумма);
+    } else {
+      // Биржевой токен: маршрут свопа строится под кошелёк покупателя,
+      // поэтому без привязанного адреса собрать его нечем.
+      const профиль = await кошелёкПоTelegram(cb.from.id);
+      const кошелёк = профиль && профиль.wallet_address ? нормальныйАдрес(профиль.wallet_address) : null;
+      if (!кошелёк) {
+        await tg("answerCallbackQuery", {
+          callback_query_id: cb.id,
+          show_alert: true,
+          text: "Сначала привяжи кошелёк: открой бота и нажми «Мой кошелёк».",
+        });
+        return;
+      }
+      const своп = await свопТонВЖетон({ jetton: card.jetton, tonAmount: сумма, userWallet: кошелёк });
+      if (!своп) {
+        await tg("answerCallbackQuery", { callback_query_id: cb.id, show_alert: true, text: "Биржа не ответила — попробуй ещё раз" });
+        return;
+      }
+      ссылка = ссылкаСвопа(своп);
+      текст = сообщениеСвопа(card, сумма, своп);
+    }
+    if (!ссылка) {
+      await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Не получилось собрать покупку" });
+      return;
+    }
+    const подпись = { text: `💳 Подписать в кошельке · ${сумма} TON`, url: ссылка };
+
+    // Своп собран под кошелёк того, кто нажал: оставлять такую ссылку в
+    // общем чате нельзя — следующий заплатит своими TON, а токены уйдут
+    // первому. Поэтому она уходит нажавшему в личку.
+    if (!card.curve) {
+      const отправлено = await tgCall("sendMessage", {
+        chat_id: cb.from.id,
         text: текст,
         parse_mode: "HTML",
         link_preview_options: { is_disabled: true },
-        reply_markup: { inline_keyboard: [
-          [{ text: `💳 Подписать в кошельке · ${сумма} TON`, url: ссылка }],
-          [{ text: "← К токену", callback_data: `x:${card.ref}` }],
-        ] },
+        reply_markup: { inline_keyboard: [[подпись]] },
+      });
+      await tg("answerCallbackQuery", {
+        callback_query_id: cb.id,
+        show_alert: !отправлено.ok,
+        text: отправлено.ok ? "Расчёт отправлен тебе в личку" : "Открой бота и нажми «Старт» — расчёт придёт туда",
+      });
+      return;
+    }
+
+    const кнопки = { inline_keyboard: [[подпись], [{ text: "← К токену", callback_data: `x:${card.ref}` }]] };
+    // Сообщение из подсказки живёт в чужом чате, куда бот писать не
+    // может: там расчёт заменяет саму карточку, а «Назад» её вернёт.
+    if (cb.inline_message_id) {
+      await tg("editMessageText", {
+        inline_message_id: cb.inline_message_id,
+        text: текст,
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+        reply_markup: кнопки,
+      });
+    } else if (cb.message) {
+      await tg("sendMessage", {
+        chat_id: cb.message.chat.id,
+        text: текст,
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+        reply_markup: кнопки,
       });
     }
     await tg("answerCallbackQuery", { callback_query_id: cb.id });
@@ -529,8 +633,8 @@ async function inlineBuy(query, части) {
   }
 
   const card = await cardFor(найдено[0]);
-  // Кривой нет — покупать нечего собирать, сделка идёт в приложении.
-  if (!card.curve) {
+  // Ни кривой, ни адреса жетона — торговать нечем, остаётся приложение.
+  if (!card.curve && !card.jetton) {
     await tg("answerInlineQuery", {
       inline_query_id: query.id,
       cache_time: 20,
@@ -555,7 +659,11 @@ async function inlineBuy(query, части) {
 
   // Сумма названа — сразу расчёт и подпись. Не названа — карточка с
   // рядом сумм, выбор доделает человек прямо в чате.
-  const результат = сумма > 0
+  // Готовый расчёт кладём в сообщение только для кривой: её ссылка ни к
+  // кому не привязана. Своп на бирже собирается под кошелёк покупателя,
+  // и в общем чате такой ссылке не место — заплатит один, а токены
+  // придут другому. Там сумму выбирают кнопкой, и расчёт уходит в личку.
+  const результат = сумма > 0 && card.curve
     ? {
       type: "article",
       id: `buy-${сумма}`,
@@ -1170,7 +1278,7 @@ export default async function handler(req, res) {
           link_preview_options: card.chart
             ? { url: card.chart, prefer_large_media: true, show_above_text: true }
             : { is_disabled: true },
-          reply_markup: card.curve ? buyButtons(card, true) : tokenButtons(card, true),
+          reply_markup: (card.curve || card.jetton) ? buyButtons(card, true) : tokenButtons(card, true),
         });
         return res.status(200).json({ ok: true });
       }
