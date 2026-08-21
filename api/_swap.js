@@ -137,10 +137,9 @@ export async function свопТонВЖетон({ jetton, tonAmount, userWallet
 
   const decimals = Number(sim.ask_jetton_decimals ?? 9);
   return {
-    // Доля комиссии в процентах — так её и читают. Числом в токенах она
-    // выглядела как половина покупки, хотя это одна сотая.
-    процентКомиссии: Number(sim.fee_percent) * 100 || 0,
-    запасПроцентов: Number(sim.slippage_tolerance) * 100 || 0,
+    // Комиссии пулов и запас на проскальзывание наружу больше не идут:
+    // в чате их читают как мелкий шрифт. Остаётся то, что видно в
+    // кошельке, — сколько списывается и сколько придёт.
     to: tx.to.toString(),
     value: tx.value.toString(),
     body: tx.body.toBoc().toString("base64"),
