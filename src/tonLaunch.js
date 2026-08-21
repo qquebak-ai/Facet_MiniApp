@@ -601,6 +601,7 @@ export async function launchRealToken({
   // ---- Stage 0: metadata upload ----
   onStage?.(0);
   let metadataUrl;
+  let logoUrl = null;
   try {
     const uploaded = await uploadJettonAssets({
       logoFile,
@@ -609,6 +610,7 @@ export async function launchRealToken({
       description: form.desc.trim(),
     });
     metadataUrl = uploaded.metadataUrl;
+    logoUrl = uploaded.imageUrl;
     log(`metadata uploaded: ${metadataUrl}`);
   } catch (e) {
     fail("Не удалось загрузить метаданные токена", e);
@@ -929,6 +931,12 @@ export async function launchRealToken({
   onStage?.(3);
   return {
     jettonMasterAddress: jettonMasterAddress.toString(),
+    // Ссылка на логотип, который уже уехал в хранилище на нулевом шаге:
+    // без запуска токена не бывает, значит и картинка к этому моменту
+    // точно лежит. Приложение раньше грузило её второй раз в другой
+    // бакет, и когда та загрузка отваливалась, в базу шёл null —
+    // аватарка токена оставалась пустой у всех.
+    logoUrl,
     // Кошелёк запустившего. По нему приложение потом показывает, сколько
     // выпуска осталось у создателя и продавал ли он — без адреса такую
     // проверку не сделать, а искать его по истории ненадёжно.

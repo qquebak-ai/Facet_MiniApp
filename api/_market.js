@@ -73,6 +73,32 @@ export async function curveState(address) {
   }
 }
 
+/* Логотип из метаданных жетона.
+ *
+ * В базе ссылка есть не у всех: у токенов, запущенных до того, как
+ * приложение стало брать её прямо с запуска, поле пустое. В цепочке
+ * картинка при этом лежит всегда — метаданные уезжают в хранилище
+ * раньше выпуска. Ответы держим в памяти: одна и та же карточка в чате
+ * открывается по многу раз, а картинка у токена не меняется.
+ */
+const логотипы = new Map();
+export async function логотипЖетона(address) {
+  if (!address) return null;
+  if (логотипы.has(address)) return логотипы.get(address);
+  let url = null;
+  try {
+    const res = await fetch(`${TONAPI}/v2/jettons/${address}`);
+    if (res.ok) {
+      const json = await res.json();
+      url = (json && json.metadata && json.metadata.image) || (json && json.preview) || null;
+    }
+  } catch (err) {
+    url = null;
+  }
+  логотипы.set(address, url);
+  return url;
+}
+
 /* Цена одного токена в TON по состоянию кривой. Та же формула, что и в
    интерфейсе: цена — это отношение резервов, а не отдельное поле. */
 export function priceFromState(state) {
@@ -320,9 +346,10 @@ const escape = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;
 /* Полная сводка по одному токену: и текст сообщения, и короткая строка
    для списка в inline-подсказке. */
 export async function tokenCard(token) {
-  const [state, история] = await Promise.all([
+  const [state, история, логотип] = await Promise.all([
     curveState(token.curve_address),
     tradeHistory(token.id),
+    token.logo_url ? Promise.resolve(token.logo_url) : логотипЖетона(token.address),
   ]);
 
   const цена = priceFromState(state);
@@ -346,7 +373,7 @@ export async function tokenCard(token) {
 
   const имя = escape(token.name || token.ticker || "?");
   // Своего эмодзи у токенов нет — в приложении им рисуется ракета.
-  const значок = token.logo_url ? "🪙" : "🚀";
+  const значок = логотип ? "🪙" : "🚀";
   const тикер = escape(String(token.ticker || "").toUpperCase());
   const знак = движение >= 0 ? "+" : "";
   const стрелка = движение > 0 ? "▲" : движение < 0 ? "▼" : "•";
@@ -386,7 +413,7 @@ export async function tokenCard(token) {
     jetton: token.address || null,
     ticker: тикер,
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=tok_${token.id}`,
-    thumb: token.logo_url || null,
+    thumb: логотип || null,
   };
 }
 

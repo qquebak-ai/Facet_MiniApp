@@ -2535,6 +2535,10 @@ async function fetchJettonMeta(tokenAddress, testnet = false) {
       const rawSupply = json?.total_supply != null ? String(json.total_supply) : null;
       const meta = {
         holders: typeof json?.holders_count === "number" ? json.holders_count : null,
+        // Картинка из метаданных в цепочке. Нужна как запасной вариант
+        // для токенов, у которых в базе логотип не сохранился: в
+        // цепочке он всё равно есть, раз метаданные уехали до выпуска.
+        image: json?.metadata?.image || json?.preview || null,
         // Выпуск читаем с цепочки, а не берём из настроек: у токенов,
         // созданных до смены параметров, он другой.
         supply: rawSupply != null ? Number(rawSupply) / 10 ** decimals : null,
@@ -2554,6 +2558,33 @@ async function fetchJettonMeta(tokenAddress, testnet = false) {
 async function fetchJettonHolders(tokenAddress, testnet = false) {
   const meta = await fetchJettonMeta(tokenAddress, testnet);
   return meta ? meta.holders : null;
+}
+
+/* Логотип токена с запасным путём через цепочку.
+ *
+ * Обычно ссылка лежит в базе. Но у токенов, запущенных до того, как
+ * приложение стало брать её прямо с запуска, поле пустое — там вместо
+ * аватарки был серый кружок. Метаданные жетона в цепочке картинку
+ * знают всегда, поэтому спрашиваем их и, если человек — владелец
+ * токена, заодно дописываем ссылку в базу: тогда её увидят и лента, и
+ * бот, а не только эта вкладка. */
+function useTokenLogo(logoUrl, tokenAddress, testnet = false, tokenId = null, canFix = false) {
+  const [ссылка, setСсылка] = useState(logoUrl || null);
+  useEffect(() => {
+    setСсылка(logoUrl || null);
+    if (logoUrl || !tokenAddress) return;
+    let отменено = false;
+    fetchJettonMeta(tokenAddress, testnet).then((meta) => {
+      const img = meta && meta.image;
+      if (отменено || !img) return;
+      setСсылка(img);
+      if (canFix && tokenId) {
+        supabase.from("tokens").update({ logo_url: img }).eq("id", tokenId).then(() => {});
+      }
+    });
+    return () => { отменено = true; };
+  }, [logoUrl, tokenAddress, testnet, tokenId, canFix]);
+  return ссылка;
 }
 
 // Plain hook form of fetchJettonHolders, for spots (token detail header,
@@ -8701,6 +8732,14 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   const up = token.change >= 0;
   // У токена на кривой жетон живёт в той же сети, что и приложение.
   const holdersCount = useJettonHolders(token.tokenAddress, !!token.curveAddress && TON_TESTNET_NETWORK);
+  // Владелец заодно чинит запись в базе, поэтому передаём, он это или нет.
+  const логотип = useTokenLogo(
+    token.logoUrl,
+    token.tokenAddress,
+    !!token.curveAddress && TON_TESTNET_NETWORK,
+    token.id,
+    !!(currentUserId && token.ownerId && currentUserId === token.ownerId),
+  );
 
   // Состояние кривой нужно ради шкалы до листинга: сколько TON уже
   // собрано и сколько зашито целью в самом контракте.
@@ -8987,7 +9026,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     <div className="fx-view flex flex-col gap-4 pb-4" style={{ position: "relative" }}>
       <TrendFX up={up} seedKey={token.seed} />
       <TokenShareSheet
-        token={shareOpen ? token : null}
+        token={shareOpen ? { ...token, logoUrl: логотип } : null}
         curve={curve}
         holders={holdersCount}
         userId={currentUserId}
@@ -9012,7 +9051,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           in Mintly's own glass/gradient language. */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-3">
-          <TokenAvatar size={52} tone={up ? "up" : "down"} src={token.logoUrl}>{token.emoji}</TokenAvatar>
+          <TokenAvatar size={52} tone={up ? "up" : "down"} src={логотип}>{token.emoji}</TokenAvatar>
           <div>
             <div className="flex items-center gap-1.5">
               <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19.5, fontWeight: 700 }}>{token.name}</span>
@@ -14107,8 +14146,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // the real public URL everywhere from here on — success screen,
       // Supabase `tokens` row, and everyone else's feed all get the same
       // persistent image.
-      let persistentLogoUrl = null;
-      if (req.logoFile && userId) {
+      // Первым делом — ссылка от самого запуска: логотип уехал в
+      // хранилище ещё до выпуска токена, и на неё же ссылаются
+      // метаданные в цепочке. Всё остальное ниже — запасные пути на
+      // случай, если запуск её почему-то не отдал.
+      let persistentLogoUrl = chainResult.logoUrl || null;
+      if (!persistentLogoUrl && req.logoFile && userId) {
         try {
           // Путь обязан начинаться с id пользователя: политика хранилища
           // сверяет первую папку с auth.uid(). Раньше здесь был префикс
