@@ -14239,8 +14239,15 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       пул = new URLSearchParams(window.location.search).get("pool") || "";
     } catch (e) { /* адрес без параметров */ }
     const метка = telegramStartParam();
-    if (!id && метка.startsWith("tok_")) id = метка.slice(4);
+    if (!id && метка.startsWith("tok_")) id = метка.slice(4).split("~")[0];
     if (!пул && метка.startsWith("pool_")) пул = метка.slice(5);
+
+    // Сумма покупки из ссылки — необязательная.
+    let сумма = 0;
+    try {
+      сумма = Number(new URLSearchParams(window.location.search).get("buy")) || 0;
+    } catch (e) { /* адрес без параметров */ }
+    if (!сумма && метка.includes("~")) сумма = Number(метка.split("~")[1]) || 0;
 
     const свой = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     if (!свой && !пул) return;
@@ -14248,7 +14255,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     (async () => {
       if (свой) {
         const { data } = await supabase.from("tokens").select("*").eq("id", id).maybeSingle();
-        if (data) openToken(localTokenToFeedShape(mapTokenRow(data)));
+        if (!data) return;
+        openToken(localTokenToFeedShape(mapTokenRow(data)));
+        // Из бота можно прийти сразу за покупкой: «?token=…&buy=5»
+        // открывает окно сделки с уже вписанной суммой. Это запасной
+        // путь к тому же самому — через кошелёк по ссылке или здесь,
+        // через подключённый TonConnect.
+        if (сумма > 0) setTimeout(() => setTradeModal({ mode: "buy", prefill: сумма }), 400);
         return;
       }
       const карточка = await fetchPoolByAddress(пул);

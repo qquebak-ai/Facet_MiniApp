@@ -288,12 +288,16 @@ async function handleBuyCommand(message, хвост) {
     текст = сообщениеСвопа(card, сумма, своп);
   }
 
+  const ряды = [[{ text: `💳 Подписать в кошельке · ${сумма} TON`, url: ссылка }]];
+  if (card.curve && message.chat.type === "private") {
+    ряды.push([{ text: "Купить в приложении", web_app: { url: `${card.link}&buy=${сумма}` } }]);
+  }
   await tg("sendMessage", {
     chat_id: message.chat.id,
     text: текст,
     parse_mode: "HTML",
     link_preview_options: { is_disabled: true },
-    reply_markup: { inline_keyboard: [[{ text: `💳 Подписать в кошельке · ${сумма} TON`, url: ссылка }]] },
+    reply_markup: { inline_keyboard: ряды },
   });
 }
 
@@ -556,6 +560,12 @@ async function handleCallback(cb) {
       return;
     }
     const подпись = { text: `💳 Подписать в кошельке · ${сумма} TON`, url: ссылка };
+    // Запасной путь: та же покупка внутри приложения, через
+    // подключённый кошелёк. Нужен на случай, если кошелёк не разберёт
+    // ссылку — тогда сделка всё равно проходит, просто в два касания.
+    const вПриложении = card.curve && своё
+      ? { text: "Купить в приложении", web_app: { url: `${card.link}&buy=${сумма}` } }
+      : null;
 
     // Своп собран под кошелёк того, кто нажал: оставлять такую ссылку в
     // общем чате нельзя — следующий заплатит своими TON, а токены уйдут
@@ -576,7 +586,11 @@ async function handleCallback(cb) {
       return;
     }
 
-    const кнопки = { inline_keyboard: [[подпись], [{ text: "← К токену", callback_data: `x:${card.ref}` }]] };
+    const кнопки = { inline_keyboard: [
+      [подпись],
+      ...(вПриложении ? [[вПриложении]] : []),
+      [{ text: "← К токену", callback_data: `x:${card.ref}` }],
+    ] };
     // Сообщение из подсказки живёт в чужом чате, куда бот писать не
     // может: там расчёт заменяет саму карточку, а «Назад» её вернёт.
     if (cb.inline_message_id) {
