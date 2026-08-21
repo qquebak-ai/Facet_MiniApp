@@ -217,14 +217,12 @@ function buyButtons(card, своё) {
    Без суммы показываем меню, а не отказ: человек мог просто не знать
    формата. */
 async function handleBuyCommand(message, хвост) {
-  const части = String(хвост || "").trim().split(/\s+/).filter(Boolean);
-  const запрос = части[0] || "";
-  const сумма = Number(String(части[1] || "").replace(",", "."));
+  const { запрос, сумма } = разобратьПокупку(String(хвост || "").trim().split(/\s+/));
 
   if (!запрос) {
     await tg("sendMessage", {
       chat_id: message.chat.id,
-      text: "Что покупаем? <code>/buy PRSM 5</code> — тикер или адрес и сумма в TON.",
+      text: "Что покупаем? <code>/buy ТИКЕР или АДРЕС СУММА</code>\nНапример: <code>/buy PRSM 5</code>",
       parse_mode: "HTML",
     });
     return;
@@ -658,6 +656,26 @@ async function handleCallback(cb) {
   });
 }
 
+/* Разбор «что покупаем и на сколько».
+ *
+ * Порядок задуман один — сперва токен, потом сумма: «buy PRSM 5», «buy
+ * EQ… 5». Но пальцем в чате легко набрать наоборот, и отвечать на это
+ * непониманием глупо: число здесь может быть только суммой, а всё
+ * остальное — тикером или адресом.
+ */
+function разобратьПокупку(части) {
+  const слова = (части || []).map((s) => String(s).trim()).filter(Boolean);
+  let запрос = "";
+  let сумма = 0;
+  for (const w of слова) {
+    const n = Number(w.replace(",", "."));
+    const этоЧисло = Number.isFinite(n) && n > 0 && !looksLikeAddress(w);
+    if (этоЧисло && !сумма) { сумма = n; continue; }
+    if (!запрос) запрос = w;
+  }
+  return { запрос, сумма };
+}
+
 /* Покупка через упоминание: «@бот buy PRSM 5».
  *
  * Ссылка на подпись здесь публична намеренно — она ничем не привязана к
@@ -666,8 +684,7 @@ async function handleCallback(cb) {
  * отправляют в личку.
  */
 async function inlineBuy(query, части) {
-  const запрос = части[0] || "";
-  const сумма = Number(String(части[1] || "").replace(",", "."));
+  const { запрос, сумма } = разобратьПокупку(части);
 
   if (!запрос) {
     await tg("answerInlineQuery", {
@@ -676,10 +693,13 @@ async function inlineBuy(query, части) {
       results: [{
         type: "article",
         id: "buy-help",
-        title: "Покупка: укажи токен",
-        description: `@${TG_BOT} buy PRSM 5`,
+        title: "Покупка: укажи токен и сумму",
+        description: `@${TG_BOT} buy ТИКЕР или АДРЕС СУММА`,
         input_message_content: {
-          message_text: `Покупка через бота: <code>@${TG_BOT} buy ТИКЕР СУММА</code>`,
+          message_text: [
+            `<code>@${TG_BOT} buy PRSM 5</code> — по тикеру`,
+            `<code>@${TG_BOT} buy EQ… 5</code> — по адресу контракта`,
+          ].join("\n"),
           parse_mode: "HTML",
         },
       }],
@@ -786,7 +806,7 @@ async function handleInline(query) {
             `<code>@${TG_BOT} PRSM</code> — карточка токена: цена, движение за сутки, график, путь до биржи`,
             `<code>@${TG_BOT} EQ…</code> — то же по адресу контракта`,
             `<code>@${TG_BOT} top</code> — что торгуют прямо сейчас`,
-            `<code>@${TG_BOT} buy PRSM 5</code> — покупка: расчёт и подпись в кошельке`,
+            `<code>@${TG_BOT} buy PRSM 5</code> — покупка по тикеру или адресу: расчёт и подпись в кошельке`,
             `<code>@${TG_BOT} sell</code> и <code>@${TG_BOT} wallet</code> — продажа и кошелёк, в личке с ботом`,
             "",
             "Ищет и токены Mintly, и всё, что торгуется на биржах TON.",
