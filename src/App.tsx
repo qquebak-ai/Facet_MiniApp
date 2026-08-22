@@ -3215,7 +3215,38 @@ function flatCandles(price, timeframe, limit = CHART_TOTAL) {
   return { candles, volume };
 }
 
-async function fetchCurveOHLCV(curveAddress, timeframe, testnet, rate = tonUsd()) {
+/* История сделок кривой из базы.
+ *
+ * Её складывает серверный обход (api/refresh-curves.js) — те же самые
+ * транзакции, только прочитанные один раз на всех. Двести транзакций с
+ * цепочки при каждом открытии токена стоили секунды ожидания графика, а
+ * тут это один быстрый запрос к базе. Кеш устарел или пуст — возвращаем
+ * пусто, и вызывающий читает цепочку сам, как раньше. */
+const СДЕЛКИ_КЕШ_МС = 3 * 60 * 1000;
+const сделкиКеш = new Map(); // tokenId -> { ряд, ts }
+
+async function сделкиИзКеша(tokenId) {
+  if (!tokenId) return null;
+  const было = сделкиКеш.get(tokenId);
+  if (было && Date.now() - было.ts < 20000) return было.ряд;
+  const { data, error } = await supabase
+    .from("curve_cache")
+    .select("trades, updated_at")
+    .eq("token_id", tokenId)
+    .maybeSingle();
+  if (error || !data || !Array.isArray(data.trades)) return null;
+  const свежесть = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+  if (Date.now() - свежесть > СДЕЛКИ_КЕШ_МС) return null;
+  const ряд = data.trades.map((p) => ({
+    time: Number(p.t),
+    ton: BigInt(p.ton),
+    realTon: BigInt(p.r),
+  }));
+  сделкиКеш.set(tokenId, { ряд, ts: Date.now() });
+  return ряд;
+}
+
+async function fetchCurveOHLCV(curveAddress, timeframe, testnet, rate = tonUsd(), tokenId = null) {
   if (!(rate > 0)) return null;
   // Состояние нужно не только ради последней точки: в нём лежат
   // параметры, с которыми развёрнута именно эта кривая. Без него
@@ -3228,7 +3259,10 @@ async function fetchCurveOHLCV(curveAddress, timeframe, testnet, rate = tonUsd()
   // повторяется.
   const state = await fetchCurveState(curveAddress, testnet, TON_PRIORITY.chart);
   if (!state) return null;
-  const trades = await fetchCurveTrades(curveAddress, testnet, curveParamsOf(state).feeBps, TON_PRIORITY.chart);
+  // Сперва история из базы: она посчитана сервером и приезжает разом.
+  // Нет её — читаем цепочку, как раньше.
+  const trades = (await сделкиИзКеша(tokenId))
+    || (await fetchCurveTrades(curveAddress, testnet, curveParamsOf(state).feeBps, TON_PRIORITY.chart));
   if (trades == null) return null;
   return buildCurveCandles(trades, timeframe, state, CHART_TOTAL, rate);
 }
@@ -8911,7 +8945,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       // токена, вышедшего на биржу, есть оба адреса, и раньше свежий
       // биржевой график тут же затирался историей кривой.
       if (!result && token.curveAddress) {
-        result = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
+        result = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd(), token.id);
         if (result) src = "curve";
       }
       // Запасной истории курса от tonapi здесь больше нет. Это другой
@@ -8984,7 +9018,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     async function refresh() {
       let fresh = null;
       if (curveChart) {
-        fresh = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd());
+        fresh = await fetchCurveOHLCV(token.curveAddress, tf, TON_TESTNET_NETWORK, tonPriceUsd > 0 ? tonPriceUsd : tonUsd(), token.id);
       } else {
         // Только биржа. Если она не ответила — на экране остаётся то, что
         // уже нарисовано, и следующий круг спросит снова.
@@ -13454,7 +13488,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       .from("tokens")
       // Те же готовые числа, что и в ленте: свои токены показываются с
       // ценой и шкалой без единого обращения к цепочке.
-      .select("*, curve_cache(*)")
+      .select("*, curve_cache(price_ton,real_ton,graduation_ton,tokens_sold,supply,fee_bps,graduated,holders,vol24_ton,change24,tx24,logo_url,updated_at)")
       .eq("owner_id", uid)
       .eq("network", CURRENT_NETWORK)
       .order("created_at", { ascending: false });
@@ -13523,7 +13557,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // описана в supabase_curve_cache.sql, и PostgREST подставляет их
       // сам. Это и есть главная экономия — вместо трёх обращений к
       // цепочке на каждый токен один запрос к базе на всю ленту.
-      .select("*, curve_cache(*)")
+      .select("*, curve_cache(price_ton,real_ton,graduation_ton,tokens_sold,supply,fee_bps,graduated,holders,vol24_ton,change24,tx24,logo_url,updated_at)")
       // Токены чужой сети в ленте — мусор: их кривых в этой сети нет,
       // и каждое чтение рынка возвращало бы нули. Отсекаем в запросе, а
       // не после: иначе двести строк тестовых токенов вытеснили бы

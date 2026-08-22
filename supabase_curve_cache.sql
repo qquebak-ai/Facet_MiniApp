@@ -46,6 +46,12 @@ create policy "curve cache is public"
   on public.curve_cache for select
   using (true);
 
+-- История сделок кривой для графика: время, сумма и резерв после
+-- сделки. Свечи из неё приложение складывает само за миллисекунды, а
+-- вот прочитать двести транзакций с цепочки — это отдельный запрос на
+-- каждое открытие токена, и график появлялся с задержкой.
+alter table public.curve_cache add column if not exists trades jsonb;
+
 -- Индекс по времени обновления: приложение проверяет свежесть, а
 -- обработчик выбирает, что давно не обновлялось.
 create index if not exists curve_cache_updated_idx on public.curve_cache (updated_at desc);

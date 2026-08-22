@@ -217,6 +217,10 @@ export default async function handler(req, res) {
       change24: прежняя > 0 && сейчас > 0 ? ((сейчас - прежняя) / прежняя) * 100 : 0,
       tx24: заСутки.length,
       logo_url: tok.logo_url || (meta && meta.image) || null,
+      // История для графика. Нанотоны — строками: в JSON они не
+      // помещаются в число без потери точности, а приложение всё равно
+      // приводит их к BigInt.
+      trades: история.map((p) => ({ t: p.time, ton: p.ton.toString(), r: p.realTon.toString() })),
       updated_at: new Date().toISOString(),
     });
   }
