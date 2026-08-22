@@ -25,7 +25,17 @@ import {
   CURVE_SELL_FORWARD_TON,
   CURVE_SELL_VALUE,
 } from "./curveConfig";
-import { launchRealToken } from "./tonLaunch";
+/* Библиотеки запуска токена (@ton/ton, assets-sdk и их криптография) —
+   самая тяжёлая часть сборки, а нужны они ровно в одном месте: когда
+   человек нажал «Запустить». Раньше они ехали в общем куске, и их
+   ждали все — включая тех, кто просто открыл ленту. Теперь модуль
+   подгружается в момент запуска: пока идёт заполнение формы, он уже в
+   пути (см. предзагрузку в CreateView). */
+let tonLaunchModule = null;
+function загрузитьЗапуск() {
+  if (!tonLaunchModule) tonLaunchModule = import("./tonLaunch");
+  return tonLaunchModule;
+}
 /* ---------------------------------------------------------
    DESIGN TOKENS — shared by every screen (Home, Token, Create, Profile)
 --------------------------------------------------------- */
@@ -2519,7 +2529,7 @@ const holdersInflight = new Map(); // tokenAddress -> Promise, de-dupes concurre
 // запущенные в приложении — там, где работает приложение. Раньше адрес
 // всегда спрашивали у mainnet, и для своих токенов ответом был «нет
 // такого жетона», то есть прочерк вместо реального числа держателей.
-async function fetchJettonMeta(tokenAddress, testnet = false) {
+async function fetchJettonMeta(tokenAddress, testnet = false, priority = TON_PRIORITY.feed) {
   if (!tokenAddress) return null;
   const key = `${testnet ? "t" : "m"}:${tokenAddress}`;
   const cached = holdersCache.get(key);
@@ -2528,7 +2538,7 @@ async function fetchJettonMeta(tokenAddress, testnet = false) {
   const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
   const p = (async () => {
     try {
-      const res = await tonFetch(`${host}/v2/jettons/${tokenAddress}`);
+      const res = await tonFetch(`${host}/v2/jettons/${tokenAddress}`, undefined, priority);
       if (!res.ok) throw new Error(`tonapi ${res.status}`);
       const json = await res.json();
       const decimals = Number(json?.metadata?.decimals ?? 9) || 9;
@@ -3087,12 +3097,20 @@ function buildCurveCandles(trades, timeframe, state = null, limit = CHART_TOTAL,
 // мастеру жетона. Раньше здесь стояли ноль или заглушка, потому что
 // внешние агрегаторы про такой токен ничего не знают: пары на DEX у него
 // ещё нет.
-async function fetchCurveMarket(curveAddress, jettonMaster, testnet, rateArg = 0) {
+/* Рынок токена по его кривой.
+ *
+ * `быстро` — режим для первого показа ленты: берётся только состояние
+ * кривой, то есть один запрос вместо трёх. Цена, капитализация и шкала
+ * до биржи считаются уже из него, а история сделок (объём и движение за
+ * сутки) догружается второй волной. Раньше лента ждала все три запроса
+ * на каждый токен, и при очереди в 180 мс цифры появлялись через
+ * несколько секунд после открытия. */
+async function fetchCurveMarket(curveAddress, jettonMaster, testnet, rateArg = 0, { быстро = false } = {}) {
   if (!curveAddress) return null;
   const state = await fetchCurveState(curveAddress, testnet);
   if (!state) return null;
   const params = curveParamsOf(state);
-  const [trades, meta] = await Promise.all([
+  const [trades, meta] = быстро ? [null, null] : await Promise.all([
     fetchCurveTrades(curveAddress, testnet, params.feeBps),
     fetchJettonMeta(jettonMaster, testnet),
   ]);
@@ -10376,6 +10394,11 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
   const logoInputRef = useRef(null);
   const bannerInputRef = useRef(null);
 
+  // Форму заполняют не меньше полуминуты — за это время библиотеки
+  // запуска успевают доехать, и нажатие «Запустить» не упирается в
+  // ожидание загрузки.
+  useEffect(() => { загрузитьЗапуск(); }, []);
+
   function set(key) { return (e) => setForm(f => ({ ...f, [key]: e.target.value })); }
   // Разделитель допускается ровно один: без этого в поле набиралось
   // «0,1,2», а parseFloat от такого — не число, и запуск молча упирался
@@ -13411,7 +13434,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       .slice(0, 12);
     if (!без.length) return;
     без.forEach((tok) => логотипыДобраны.current.add(tok.id));
-    const мета = await Promise.all(без.map((tok) => fetchJettonMeta(tok.address, TON_TESTNET)));
+    // Последним в очереди: картинка подождёт, цена — нет.
+    const мета = await Promise.all(без.map((tok) => fetchJettonMeta(tok.address, TON_TESTNET, TON_PRIORITY.background)));
     const найдено = new Map();
     без.forEach((tok, i) => {
       const img = мета[i] && мета[i].image;
@@ -13452,13 +13476,20 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     const rows = (data || []).map(mapTokenRow);
     setCommunityTokens(rows);
     setCommunityLoaded(true);
-    дополнитьЛоготипы(rows);
 
     // Все рыночные числа берём у самих кривых: цену, капитализацию,
     // объём и изменение за сутки. Ограничиваем количество запросов —
     // лента может быть длинной, а при открытии токена всё равно идёт
     // отдельное, более свежее обновление.
-    await enrichCurveMarkets(rows);
+    //
+    // Двумя волнами: сперва цена и шкала до биржи одним запросом на
+    // токен, потом история сделок. Так лента перестаёт быть пустой в
+    // три раза раньше, а объём и движение дописываются, когда доедут.
+    await enrichCurveMarkets(rows, { быстро: true });
+    enrichCurveMarkets(rows);
+    // Логотипы — в самом конце: пустой кружок на карточке терпит, а
+    // отсутствующая цена нет.
+    дополнитьЛоготипы(rows);
   }
 
   // Дочитывает у кривых всё, чего нет в базе: цену, капитализацию, объём
@@ -13469,13 +13500,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // перезапуска приложения — и только что созданный токен не показывался
   // на главной, хотя в базе и в цепочке был.
   const enriching = useRef(false);
-  async function enrichCurveMarkets(rows) {
+  async function enrichCurveMarkets(rows, { быстро = false } = {}) {
     const withCurve = (rows || []).filter((tok) => tok.curveAddress).slice(0, 12);
     if (!withCurve.length || enriching.current) return;
     enriching.current = true;
     try {
     const markets = await Promise.all(
-      withCurve.map((tok) => fetchCurveMarket(tok.curveAddress, tok.address, TON_TESTNET, tonPriceUsd)),
+      withCurve.map((tok) => fetchCurveMarket(tok.curveAddress, tok.address, TON_TESTNET, tonPriceUsd, { быстро })),
     );
     const priced = new Map();
     withCurve.forEach((tok, i) => {
@@ -13486,10 +13517,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         // Капитализация — цена за весь выпуск, а не за проданное: так её
         // считают на всех подобных площадках. Выпуск читается с цепочки.
         mcapNum: m.mcapUsd,
-        vol: fmtCompact(m.vol24Usd),
         liq: fmtCompact(m.liqUsd),
-        change: m.change24,
-        tx24h: m.tx24,
+        // Объём и движение за сутки живут в истории сделок, а её быстрая
+        // волна не читает. Ставить нули не годится: на месте уже
+        // показанных чисел они выглядели бы обвалом, поэтому в этом
+        // режиме поля просто не трогаем.
+        ...(быстро ? null : { vol: fmtCompact(m.vol24Usd), change: m.change24, tx24h: m.tx24 }),
         // Для тонкой шкалы в ленте: сколько собрано и сколько нужно.
         raisedTon: Number(m.state.realTon) / 1e9,
         graduationTon: Number(m.state.graduationTon) / 1e9,
@@ -14266,6 +14299,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     }
 
     try {
+      const { launchRealToken } = await загрузитьЗапуск();
       const chainResult = await launchRealToken({
         tonConnectUI,
         walletAddress,

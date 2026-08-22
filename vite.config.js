@@ -3,7 +3,14 @@ import react from "@vitejs/plugin-react";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 export default defineConfig({
-  plugins: [react(), nodePolyfills()],
+  // Заплатка для узловой криптографии не ставится намеренно.
+  // crypto-browserify тянет за собой elliptic, asn1, diffie-hellman и
+  // прочую арифметику больших чисел — почти мегабайт кода, который
+  // грузился при каждом открытии приложения. Библиотеки TON в браузере
+  // считают хеши сами (jssha, tweetnacl), поэтому узловой crypto им не
+  // нужен; если он всё же где-то понадобится, обращение упрётся в
+  // отсутствующий модуль, а не тихо подтянет мегабайт.
+  plugins: [react(), nodePolyfills({ exclude: ["crypto"] })],
   build: {
     outDir: "dist",
     rollupOptions: {
@@ -32,7 +39,13 @@ export default defineConfig({
           // частям, они грузятся раньше самого React, и приложение
           // падает на первом же обращении к нему.
           if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return "react";
-          return "vendor";
+          // Всё остальное раскладывает сам сборщик. Общий кусок
+          // «vendor» здесь только вредил: в него сваливались и те
+          // библиотеки, которые вызываются через динамический import —
+          // анимации на экране запуска, узел цепочки и криптография
+          // выпуска, — и приложение тянуло их при первом открытии,
+          // хотя нужны они позже и не всем.
+          return undefined;
         },
       },
     },
