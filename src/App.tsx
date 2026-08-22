@@ -13396,6 +13396,32 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // supabase_tokens_schema.sql) instead of localStorage — this makes them
   // persist across devices/reinstalls and survive a logout/login, tied to
   // the real account (owner_id = auth.uid()) instead of just this browser.
+  /* Готовые числа из curve_cache — их складывает серверный обход
+     (api/refresh-curves.js). В долларах ничего не храним: курс меняется
+     чаще обхода, поэтому цену и объём переводим здесь, а при смене
+     курса пересчитываем заново (см. эффект ниже). */
+  function применитьКеш(tok, c, rate) {
+    if (!c) return tok;
+    const курс = rate > 0 ? rate : 0;
+    return {
+      ...tok,
+      priceTon: c.price_ton,
+      vol24Ton: c.vol24_ton,
+      // Капитализация — цена за весь выпуск, как и на прочих площадках.
+      mcapNum: c.price_ton * курс * (c.supply || 1000000000),
+      vol: fmtCompact(c.vol24_ton * курс),
+      liq: fmtCompact(c.real_ton * курс),
+      change: c.change24,
+      tx24h: c.tx24,
+      raisedTon: c.real_ton,
+      graduationTon: c.graduation_ton,
+      graduated: !!c.graduated,
+      holders: c.holders,
+      logoUrl: tok.logoUrl || c.logo_url || null,
+      кешОт: c.updated_at ? new Date(c.updated_at).getTime() : 0,
+    };
+  }
+
   function mapTokenRow(row) {
     return {
       id: row.id,
@@ -13426,12 +13452,17 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   async function loadMyTokens(uid) {
     const { data, error } = await supabase
       .from("tokens")
-      .select("*")
+      // Те же готовые числа, что и в ленте: свои токены показываются с
+      // ценой и шкалой без единого обращения к цепочке.
+      .select("*, curve_cache(*)")
       .eq("owner_id", uid)
       .eq("network", CURRENT_NETWORK)
       .order("created_at", { ascending: false });
     if (error) { console.error("[mintly] failed to load tokens from Supabase:", error); return; }
-    const rows = (data || []).map(mapTokenRow);
+    const rows = (data || []).map((row) => {
+      const кеш = Array.isArray(row.curve_cache) ? row.curve_cache[0] : row.curve_cache;
+      return применитьКеш(mapTokenRow(row), кеш, tonPriceUsd);
+    });
     setMyTokens(rows);
     дополнитьЛоготипы(rows);
   }
@@ -13480,10 +13511,19 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // even for signed-out visitors.
   const [communityTokens, setCommunityTokens] = useState([]);
   const [communityLoaded, setCommunityLoaded] = useState(false);
+  // Сколько кеш считается свежим. Обход ходит раз в минуту; три минуты
+  // запаса — на случай, если один заход подзадержался. Пока кеш свежий,
+  // приложение цепочку не трогает вовсе.
+  const КЕШ_СВЕЖ_МС = 3 * 60 * 1000;
+
   async function loadCommunityTokens() {
     const { data, error } = await supabase
       .from("tokens")
-      .select("*")
+      // Числа кривой приезжают тем же запросом: связь по token_id
+      // описана в supabase_curve_cache.sql, и PostgREST подставляет их
+      // сам. Это и есть главная экономия — вместо трёх обращений к
+      // цепочке на каждый токен один запрос к базе на всю ленту.
+      .select("*, curve_cache(*)")
       // Токены чужой сети в ленте — мусор: их кривых в этой сети нет,
       // и каждое чтение рынка возвращало бы нули. Отсекаем в запросе, а
       // не после: иначе двести строк тестовых токенов вытеснили бы
@@ -13492,24 +13532,51 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) { console.error("[mintly] failed to load community tokens from Supabase:", error); setCommunityLoaded(true); return; }
-    const rows = (data || []).map(mapTokenRow);
+    const rows = (data || []).map((row) => {
+      const кеш = Array.isArray(row.curve_cache) ? row.curve_cache[0] : row.curve_cache;
+      return применитьКеш(mapTokenRow(row), кеш, tonPriceUsd);
+    });
     setCommunityTokens(rows);
     setCommunityLoaded(true);
 
-    // Все рыночные числа берём у самих кривых: цену, капитализацию,
-    // объём и изменение за сутки. Ограничиваем количество запросов —
-    // лента может быть длинной, а при открытии токена всё равно идёт
-    // отдельное, более свежее обновление.
-    //
+    // Кеш свежий — цепочку не трогаем совсем: всё уже посчитано на
+    // сервере, и лента показана целиком с первого кадра. Дочитываем
+    // только то, что обход не успел покрыть, — свежезапущенный токен
+    // или заглохшее расписание.
+    const свежо = Date.now() - КЕШ_СВЕЖ_МС;
+    const устарели = rows.filter((tok) => tok.curveAddress && !(tok.кешОт > свежо));
+    if (!устарели.length) return;
+
     // Двумя волнами: сперва цена и шкала до биржи одним запросом на
     // токен, потом история сделок. Так лента перестаёт быть пустой в
     // три раза раньше, а объём и движение дописываются, когда доедут.
-    await enrichCurveMarkets(rows, { быстро: true });
-    enrichCurveMarkets(rows);
+    await enrichCurveMarkets(устарели, { быстро: true });
+    enrichCurveMarkets(устарели);
     // Логотипы — в самом конце: пустой кружок на карточке терпит, а
     // отсутствующая цена нет.
     дополнитьЛоготипы(rows);
   }
+
+  /* Курс приехал после ленты — переводим сохранённые числа кривой в
+     доллары заново. Сами они лежат в TON: курс меняется чаще, чем идёт
+     обход, и пересчитать дешевле, чем ходить в цепочку. */
+  useEffect(() => {
+    if (!(tonPriceUsd > 0)) return;
+    setCommunityTokens((prev) => {
+      let менялось = false;
+      const ряд = prev.map((tok) => {
+        if (tok.priceTon == null || tok.mcapNum > 0) return tok;
+        менялось = true;
+        return {
+          ...tok,
+          mcapNum: tok.priceTon * tonPriceUsd * 1000000000,
+          vol: fmtCompact((tok.vol24Ton || 0) * tonPriceUsd),
+          liq: fmtCompact((tok.raisedTon || 0) * tonPriceUsd),
+        };
+      });
+      return менялось ? ряд : prev;
+    });
+  }, [tonPriceUsd]);
 
   // Дочитывает у кривых всё, чего нет в базе: цену, капитализацию, объём
   // и — для блока «Почти на бирже» — собранное и цель. Вынесено
@@ -13574,19 +13641,18 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tonPriceUsd, communityTokens]);
 
-  // Кривые перечитываются и сами по себе: цифры на главной и в ленте
-  // иначе застывали бы на том, что было в момент открытия приложения.
-  // Раз в две минуты и только на видимой вкладке — чаще незачем, а в
-  // фоне это просто расход лимита tonapi.
+  // Цифры обновляются и сами по себе, иначе застыли бы на том, что было
+  // в момент открытия. Перечитываем ленту из базы: там уже лежит всё
+  // посчитанное сервером, и это один дешёвый запрос вместо обхода
+  // цепочки. Раз в минуту и только на видимой вкладке.
   useEffect(() => {
-    if (!(tonPriceUsd > 0)) return;
     const id = setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      enrichCurveMarkets(communityTokens.filter((tok) => tok.curveAddress));
-    }, 120000);
+      loadCommunityTokens();
+    }, 60000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tonPriceUsd, communityTokens]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -13943,25 +14009,19 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // что уже лежит на устройстве.
     if (!myCurveKey) { setBestMcapReady(true); return; }
     if (!tonPriceUsd) return;
-    let cancelled = false;
-    (async () => {
-      const list = myTokens.filter((tok) => tok.curveAddress).slice(0, 8);
-      const markets = await Promise.all(
-        list.map((tok) => fetchCurveMarket(tok.curveAddress, tok.address || tok.tokenAddress, TON_TESTNET, tonPriceUsd).catch(() => null)),
-      );
-      if (cancelled) return;
-      setBestMcapReady(true);
-      const top = markets.reduce((max, m) => (m && m.mcapUsd > max ? m.mcapUsd : max), 0);
-      if (top <= 0) return;
-      setBestMcapUsd((prev) => {
-        if (top <= prev) return prev;
-        try { if (mcapPeakKey) localStorage.setItem(mcapPeakKey, String(top)); } catch { /* не критично */ }
-        return top;
-      });
-    })();
-    return () => { cancelled = true; };
+    // Капитализация уже посчитана сервером и приехала вместе со
+    // списком: ходить за ней в цепочку заново — три запроса на токен
+    // ради одного числа, которое лежит рядом.
+    setBestMcapReady(true);
+    const top = myTokens.reduce((max, tok) => (tok.mcapNum > max ? tok.mcapNum : max), 0);
+    if (top <= 0) return;
+    setBestMcapUsd((prev) => {
+      if (top <= prev) return prev;
+      try { if (mcapPeakKey) localStorage.setItem(mcapPeakKey, String(top)); } catch { /* не критично */ }
+      return top;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myCurveKey, tonPriceUsd, mcapPeakKey]);
+  }, [myCurveKey, tonPriceUsd, mcapPeakKey, myTokens]);
 
   // Подтверждение аккаунта. Тоже в профиле: значок у ника должен
   // переживать перезапуск приложения и быть виден другим.
