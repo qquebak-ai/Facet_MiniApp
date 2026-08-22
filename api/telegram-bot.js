@@ -60,6 +60,11 @@ const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 // поэтому короткое имя мини-приложения в BotFather для приглашений уже
 // не требуется.
 const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
+
+// Значок для подсказок, у которых нет своей картинки: без него Telegram
+// рисует серый квадрат с первой буквой заголовка, и подсказка выглядит
+// поломанной.
+const ЗНАЧОК = `${APP_URL}/icon.PNG`;
 // Имя бота нужно самим сообщениям: в группах кнопка «открыть» ведёт не в
 // приложение, а в личку с ботом — web_app-кнопки Telegram пускает только
 // туда.
@@ -258,7 +263,7 @@ async function выборПоТикеру(chatId, запрос) {
       "",
       ...строки,
       "",
-      "Выбери нужный кнопкой ниже или пришли адрес: <code>/buy АДРЕС СУММА</code>",
+      "Выбери нужный кнопкой ниже или пришли CA: <code>/buy CA СУММА</code>",
     ].join("\n"),
     parse_mode: "HTML",
     link_preview_options: { is_disabled: true },
@@ -281,7 +286,7 @@ async function handleBuyCommand(message, хвост) {
   if (!запрос) {
     await tg("sendMessage", {
       chat_id: message.chat.id,
-      text: "Что покупаем? <code>/buy АДРЕС СУММА</code>\nНапример: <code>/buy EQAw…cuNT 5</code>\n\nПо тикеру — только поиск: <code>/token PRSM</code>",
+      text: "Что покупаем? <code>/buy CA СУММА</code>\nНапример: <code>/buy EQAw…cuNT 5</code>\n\nПо тикеру — только поиск: <code>/token PRSM</code>",
       parse_mode: "HTML",
     });
     return;
@@ -776,10 +781,11 @@ async function inlineBuy(query, части) {
         type: "article",
         id: "buy-help",
         title: "Покупка: укажи токен и сумму",
-        description: `@${TG_BOT} buy АДРЕС СУММА`,
+        description: `@${TG_BOT} buy CA СУММА`,
+        thumbnail_url: ЗНАЧОК,
         input_message_content: {
           message_text: [
-            `<code>@${TG_BOT} buy EQ… 5</code> — адрес контракта и сумма`,
+            `<code>@${TG_BOT} buy EQ… 5</code> — CA токена и сумма`,
             "",
             "По тикеру покупка не идёт: одно и то же название носит сколько угодно токенов.",
             `Найти нужный: <code>@${TG_BOT} PRSM</code>`,
@@ -801,14 +807,15 @@ async function inlineBuy(query, части) {
       results: [{
         type: "article",
         id: "buy-need-address",
-        title: "Для покупки нужен адрес контракта",
+        title: "Для покупки нужен CA токена",
         description: `Тикер могут носить разные токены. Найди нужный: @${TG_BOT} ${запрос}`,
+        thumbnail_url: ЗНАЧОК,
         input_message_content: {
           message_text: [
             `Покупка по тикеру не идёт: <b>${String(запрос).toUpperCase()}</b> может носить любой токен.`,
             "",
             `Найти нужный: <code>@${TG_BOT} ${запрос}</code> — и купить кнопкой в его карточке.`,
-            `Или сразу по адресу: <code>@${TG_BOT} buy EQ… 5</code>`,
+            `Или сразу по CA: <code>@${TG_BOT} buy EQ… 5</code>`,
           ].join("\n"),
           parse_mode: "HTML",
           link_preview_options: { is_disabled: true },
@@ -836,7 +843,7 @@ async function inlineBuy(query, части) {
         id: "buy-app",
         title: `$${card.ticker || ""} — торгуется в приложении`,
         description: "Отправить карточку токена",
-        thumbnail_url: card.thumb || undefined,
+        thumbnail_url: card.thumb || ЗНАЧОК,
         input_message_content: {
           message_text: card.text,
           parse_mode: "HTML",
@@ -862,7 +869,7 @@ async function inlineBuy(query, части) {
       id: `buy-${сумма}`,
       title: `Купить $${card.ticker || ""} на ${сумма} TON`,
       description: "Расчёт и подпись в кошельке",
-      thumbnail_url: card.thumb || undefined,
+      thumbnail_url: card.thumb || ЗНАЧОК,
       input_message_content: {
         message_text: await сообщениеПокупки(card, сумма),
         parse_mode: "HTML",
@@ -880,7 +887,7 @@ async function inlineBuy(query, части) {
       id: "buy-pick",
       title: `Купить $${card.ticker || ""}`,
       description: "Выбрать сумму в чате",
-      thumbnail_url: card.thumb || undefined,
+      thumbnail_url: card.thumb || ЗНАЧОК,
       input_message_content: {
         message_text: card.text,
         parse_mode: "HTML",
@@ -1007,7 +1014,7 @@ async function handleInline(query) {
     id: String(i),
     title: c.title,
     description: c.description,
-    thumbnail_url: c.thumb || undefined,
+    thumbnail_url: c.thumb || ЗНАЧОК,
     input_message_content: {
       message_text: c.text,
       parse_mode: "HTML",
@@ -1062,8 +1069,8 @@ async function handleTokenCommand(message, запрос) {
       chat_id: chat.id,
       reply_to_message_id: message.message_id,
       text: (ТЕСТОВАЯ
-        ? "Ничего не нашлось. Проверь тикер или пришли адрес контракта."
-        : "Ничего не нашлось — ни в Mintly, ни на биржах TON. Проверь тикер или пришли адрес контракта.") + ПОДСКАЗКА_СЕТИ,
+        ? "Ничего не нашлось. Проверь тикер или пришли CA токена."
+        : "Ничего не нашлось — ни в Mintly, ни на биржах TON. Проверь тикер или пришли CA токена.") + ПОДСКАЗКА_СЕТИ,
     });
     return;
   }
