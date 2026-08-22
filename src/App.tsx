@@ -13410,7 +13410,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
      курса пересчитываем заново (см. эффект ниже). */
   function применитьКеш(tok, c, rate) {
     if (!c) return tok;
-    const курс = rate > 0 ? rate : 0;
+    // Курс берём и из живого значения тоже: список перечитывается по
+    // таймеру, а тот держит в замыкании состояние первого кадра, где
+    // курса ещё нет. Из-за этого каждое обновление затирало посчитанные
+    // цифры нулями — на экране всё стоило «$0».
+    const курс = rate > 0 ? rate : tonUsd();
     return {
       ...tok,
       priceTon: c.price_ton,
@@ -13569,7 +13573,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
      доллары заново. Сами они лежат в TON: курс меняется чаще, чем идёт
      обход, и пересчитать дешевле, чем ходить в цепочку. */
   useEffect(() => {
-    if (!(tonPriceUsd > 0)) return;
+    const курс = tonPriceUsd > 0 ? tonPriceUsd : tonUsd();
+    if (!(курс > 0)) return;
     const пересчитать = (prev) => {
       let менялось = false;
       const ряд = prev.map((tok) => {
@@ -13577,9 +13582,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         менялось = true;
         return {
           ...tok,
-          mcapNum: tok.priceTon * tonPriceUsd * 1000000000,
-          vol: fmtCompact((tok.vol24Ton || 0) * tonPriceUsd),
-          liq: fmtCompact((tok.raisedTon || 0) * tonPriceUsd),
+          mcapNum: tok.priceTon * курс * 1000000000,
+          vol: fmtCompact((tok.vol24Ton || 0) * курс),
+          liq: fmtCompact((tok.raisedTon || 0) * курс),
         };
       });
       return менялось ? ряд : prev;
