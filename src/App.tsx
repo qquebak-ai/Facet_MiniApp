@@ -8576,7 +8576,7 @@ function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenPr
 /* WalletView — кошелёк отдельным разделом. Раньше он лежал карточкой
    посреди профиля, между аватаркой и своими токенами: чтобы посмотреть
    баланс, приходилось идти в личные настройки. */
-function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0, onConnect, onDisconnect, onCopy, holdings = [], holdingsReady = false, onSell, costBasis = {} }) {
+function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0, onConnect, onDisconnect, onCopy, holdings = [], holdingsReady = false }) {
   const [copied, setCopied] = useState(false);
   const balance = useCountUp(connected ? tonBalance : 0, 900, connected);
   const usd = useCountUp(connected ? tonBalance * tonPriceUsd : 0, 900, connected);
@@ -8617,15 +8617,13 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
         {copied ? <CheckCircle2 size={13} color={T.up} /> : <Copy size={13} color={T.muted} />}
       </button>
 
-      {/* Что куплено на этом кошельке. Продать можно прямо отсюда: раньше
-          для этого приходилось искать свой токен в ленте и открывать его
-          экран. */}
+      {/* Что куплено на этом кошельке. Только состав: сколько чего лежит.
+          Прибыль, счётчик строк и кнопка продажи отсюда убраны — за
+          сделкой человек идёт на экран токена, где видно и цену, и
+          график, а не решает вслепую по одной цифре. */}
       <div className="w-full" style={{ marginTop: 26 }}>
         <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("walletHoldings")}</span>
-          {holdings.length > 0 && (
-            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{holdings.length}</span>
-          )}
         </div>
 
         {!holdingsReady ? (
@@ -8636,17 +8634,7 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {holdings.map(({ tok, amount }) => {
-              // Вложено — по своим сделкам, стоит сейчас — по цене
-              // кривой. Если сделок в базе нет (покупал не отсюда),
-              // показываем только количество: выдумывать основание
-              // нельзя, по нему человек считает прибыль.
-              const о = costBasis[tok.address] || costBasis[tok.id] || null;
-              const вложено = о ? о.вложено : 0;
-              const сейчас = (Number(tok.priceTon) || 0) * amount;
-              const есть = о && вложено > 0 && сейчас > 0;
-              const рост = есть ? ((сейчас - вложено) / вложено) * 100 : 0;
-              return (
+            {holdings.map(({ tok, amount }) => (
               <div
                 key={tok.id}
                 className="fx-card w-full flex items-center gap-3 rounded-[22px] p-3"
@@ -8654,31 +8642,11 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
               >
                 <TokenAvatar size={40} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
                 <div className="flex-1 min-w-0 text-left">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${tok.ticker}</span>
-                    {есть && (
-                      <span style={{ fontFamily: monoFont, fontSize: 12.5, fontWeight: 700, color: рост >= 0 ? T.up : T.down }}>
-                        {рост >= 0 ? "+" : ""}{рост.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
+                  <span className="truncate block" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${tok.ticker}</span>
                   <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12, marginTop: 3 }}>{fmtCompact(amount)} {tok.ticker}</div>
-                  {есть && (
-                    <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5, marginTop: 2 }}>
-                      {fmtTon(вложено)} → {fmtTon(сейчас)} TON
-                    </div>
-                  )}
                 </div>
-                <button
-                  onClick={() => onSell && onSell(tok)}
-                  className="fx-tap rounded-full px-4 py-2"
-                  style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: displayFont, fontWeight: 700, fontSize: 13, color: T.ice, flexShrink: 0 }}
-                >
-                  {t("sell")}
-                </button>
               </div>
-              );
-            })}
+            ))}
           </div>
         )}
       </div>
@@ -13834,52 +13802,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     return () => { cancelled = true; };
   }, [connected, walletAddress, communityTokens, balanceRefreshTick]);
 
-  /* Сколько вложено в каждый токен и сколько это стоит сейчас.
-
-     Считаем по своим сделкам: в них записана и сумма в TON, и курс на
-     тот момент — пересчитывать прошлые покупки по сегодняшнему курсу
-     нельзя, прибыль скакала бы вместе с курсом TON.
-
-     Основание уменьшается пропорционально проданному: продал половину —
-     половина вложенного ушла вместе с ней. Иначе после частичной
-     продажи портфель показывал бы убыток на ровном месте. */
-  const [costBasis, setCostBasis] = useState({});
-  useEffect(() => {
-    if (!userId) { setCostBasis({}); return; }
-    let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase
-        .from("trades")
-        .select("token_id, token_address, side, ton_amount, token_amount")
-        .order("created_at", { ascending: true })
-        .limit(500);
-      if (error || cancelled) return;
-      const по = {};
-      for (const с of data || []) {
-        const ключ = с.token_address || с.token_id;
-        if (!ключ) continue;
-        const о = по[ключ] || (по[ключ] = { вложено: 0, штук: 0 });
-        const ton = Number(с.ton_amount) || 0;
-        const шт = Number(с.token_amount) || 0;
-        if (с.side === "buy") { о.вложено += ton; о.штук += шт; }
-        else if (о.штук > 0) {
-          const доля = Math.min(1, шт / о.штук);
-          о.вложено = Math.max(0, о.вложено * (1 - доля));
-          о.штук = Math.max(0, о.штук - шт);
-        }
-      }
-      setCostBasis(по);
-    })();
-    return () => { cancelled = true; };
-  }, [userId, balanceRefreshTick]);
-
-  // Продажа прямо из кошелька: открываем то же окно сделки, что и на
-  // экране токена, но экран не меняем — человек остаётся в кошельке.
-  function sellFromWallet(tok) {
-    setToken(tok.price == null ? localTokenToFeedShape(tok) : tok);
-    setTradeModal({ mode: "sell" });
-  }
-
   const [appSettings, setAppSettings] = useState(() => {
     const base = { language: "RU", theme: "Dark", pinEnabled: false };
     try {
@@ -15192,9 +15114,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
                 showToast(t("addressCopied"));
               }}
               holdings={walletHoldings}
-              costBasis={costBasis}
               holdingsReady={holdingsReady}
-              onSell={sellFromWallet}
             />
           </KeepAlive>
           <KeepAlive show={view === "shop"}>
