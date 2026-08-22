@@ -27,9 +27,12 @@ const CRON_SECRET = process.env.CRON_SECRET;
 
 const TESTNET = process.env.TON_TESTNET !== "0";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
-// Ключ серверный: у него нет ограничения по источнику, в отличие от
-// того, что уходит в браузер.
-const TONAPI_KEY = (process.env.TONAPI_KEY || process.env.VITE_TONAPI_KEY || "").trim();
+// Только серверный ключ. Тот, что уходит в браузер (VITE_TONAPI_KEY),
+// ограничен по источнику: у запроса с сервера заголовка Origin нет, и
+// tonapi такой ключ отбивает — обход молча возвращал пустоту. Без ключа
+// запросы идут по общему лимиту, этого хватает на пару десятков токенов
+// раз в минуту.
+const TONAPI_KEY = (process.env.TONAPI_KEY || "").trim();
 
 // Сколько токенов обходим за раз. Ограничение не про базу, а про
 // tonapi: на каждый токен уходит до трёх запросов.
@@ -52,7 +55,11 @@ async function tonapi(path, init) {
   const заголовки = TONAPI_KEY ? { Authorization: `Bearer ${TONAPI_KEY}` } : undefined;
   try {
     const res = await fetch(`${TONAPI}${path}`, { ...(init || {}), headers: { ...(init && init.headers), ...заголовки } });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // В логах Vercel видно, что именно отбило: лимит, ключ или адрес.
+      console.warn("[refresh-curves] tonapi", res.status, path);
+      return null;
+    }
     return await res.json();
   } catch (err) {
     return null;
@@ -62,7 +69,9 @@ async function tonapi(path, init) {
 /* Состояние кривой. Порядок полей задан структурой CurveData в
    контракте: менять нельзя, не поправив в приложении и в api/notify.js. */
 async function состояние(address) {
-  const json = await tonapi(`/v2/blockchain/accounts/${address}/methods/data`, { method: "POST" });
+  // Обычным GET, как в api/notify.js: этот путь уже проверен на боевых
+  // вызовах, и незачем иметь два разных способа спросить одно и то же.
+  const json = await tonapi(`/v2/blockchain/accounts/${address}/methods/data`);
   const stack = json && json.stack;
   if (!Array.isArray(stack) || stack.length < 7) return null;
   const num = (i) => BigInt(stack[i].num);
