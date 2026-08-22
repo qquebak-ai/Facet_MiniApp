@@ -378,21 +378,24 @@ export async function tokenCard(token) {
   const знак = движение >= 0 ? "+" : "";
   const стрелка = движение > 0 ? "▲" : движение < 0 ? "▼" : "•";
 
+  const стрелкаЭмодзи = движение > 0 ? "🔺" : движение < 0 ? "🔻" : "▪️";
+
   const строки = [
-    `${значок} <b>${имя}</b>  $${тикер}`,
+    `${значок} <b>${имя}</b> · $${тикер}`,
     "",
-    `Цена   <code>${fmtPrice(цена)}</code>`,
-    `Капа   <code>${fmtTon(капа)} TON</code>   ${стрелка} ${знак}${движение.toFixed(2)}% за 24ч`,
+    `💰 Цена: ${fmtPrice(цена)}`,
+    `📊 Капа: ${fmtTon(капа)} TON · ${стрелкаЭмодзи} ${знак}${движение.toFixed(2)}% за 24ч`,
   ];
   if (цель > 0) {
     строки.push("");
     строки.push(state && state.graduated
       ? `🎉 Кривая закрыта, собрано ${fmtTon(собрано)} TON — токен на бирже`
-      : `До биржи <code>${полоса}</code> ${(доля * 100).toFixed(0)}%\n${fmtTon(собрано)} из ${fmtTon(цель)} TON`);
+      : `🚀 Собрано для выхода на биржу: ${(доля * 100).toFixed(0)}%\n${fmtTon(собрано)} / ${fmtTon(цель)} TON`);
   }
   строки.push("");
-  строки.push(`Оборот 24ч ${fmtTon(оборот)} TON · Сделок ${история.length} · Возраст ${fmtAge(token.created_at)}`);
-  if (выпуск > 0) строки.push(`Продано ${fmtCount(выпуск)} из ${fmtCount(state ? nano(state.tokensForSale) : 0)} токенов`);
+  строки.push(`📈 Оборот 24ч: ${fmtTon(оборот)} TON`);
+  строки.push(`🔄 Сделок: ${история.length} · ⏱ Возраст: ${fmtAge(token.created_at)}`);
+  if (выпуск > 0) строки.push(`💠 Продано: ${fmtCount(выпуск)} из ${fmtCount(state ? nano(state.tokensForSale) : 0)}`);
   if (token.address) строки.push(`\n<code>${escape(token.address)}</code>`);
 
   const описание = state
