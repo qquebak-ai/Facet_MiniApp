@@ -6501,111 +6501,121 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
    контейнеру. */
 /* Сцена карточки «Магма».
 
-   Собрана как коллекционная карта, а не как фон с узором: сзади
-   вулканический пейзаж, спереди — сущность из обсидиана, внутри которой
-   светится магма. Аватарка человека приходится ей ровно на голову,
-   поэтому плечи разведены, а шея оставлена пустой.
+   Ровно то, что обещает название: озеро расплавленного камня. Сверху
+   плывёт застывшая корка, между плитами светятся швы, из разломов бьёт
+   жар, над поверхностью поднимаются искры.
 
-   Всё нарисовано в сетке 100×100 и растягивается по карточке, кроме
-   самой сущности: у неё своя система координат с привязкой к низу —
-   растянутая фигура выглядела бы кривым зеркалом. */
+   Раньше здесь стоял обсидиановый истукан, а лава была фоном за его
+   спиной: карточка читалась как «каменный воин», а не как магма.
+
+   Всё в сетке 100×100 и растягивается по карточке. Верхняя треть
+   намеренно тёмная и пустая — там аватарка и ник, и любой рисунок под
+   ними мешает читать. */
 const MagmaScene = React.memo(function MagmaScene({ c, height, showcase }) {
   const м = c.magma;
   const мелко = height < 130;
-  // Хребты: три плана, чем дальше — тем светлее от дымки и ниже
-  // контраст. Ломаные заданы руками: случайные давали то пилу, то
-  // ровную линию.
-  const хребты = [
-    { d: "M0,58 L12,49 L22,54 L34,42 L46,52 L58,44 L70,53 L82,46 L92,53 L100,48 L100,100 L0,100 Z", тон: 0.32, свет: 0.4 },
-    { d: "M0,68 L14,60 L26,66 L40,55 L52,64 L64,57 L78,66 L90,60 L100,66 L100,100 L0,100 Z", тон: 0.65, свет: 0.6 },
-    { d: "M0,80 L16,73 L30,79 L44,71 L58,78 L72,72 L86,79 L100,74 L100,100 L0,100 Z", тон: 0.95, свет: 0.85 },
+
+  // Корка лежит сплошной плитой — расплав виден только там, где она
+  // разошлась. Так и выглядит остывающая лава: чёрное поле, разрезанное
+  // светящимися швами. Раньше плиты были выложены с широкими зазорами,
+  // и низ карточки читался как оранжевые горы в закате, а не как магма.
+  //
+  // Швы заданы руками: случайные ломаные давали то паутину, то ровную
+  // плитку. Каждый со своим ритмом — камень остывает неравномерно.
+  const швы = [
+    { d: "M0,64 L22,61 L38,67 L58,62 L76,68 L92,63 L100,66", ш: 1.1 },
+    { d: "M0,82 L18,78 L34,84 L52,79 L70,85 L88,80 L100,83", ш: 1.3 },
+    { d: "M22,61 L26,72 L20,82 L24,92 L20,100", ш: 0.7 },
+    { d: "M58,62 L54,71 L60,80 L56,90 L60,100", ш: 0.7 },
+    { d: "M92,63 L88,73 L94,82 L90,92", ш: 0.6 },
+    { d: "M38,67 L44,76 L38,84", ш: 0.5 },
+    { d: "M76,68 L72,77 L78,86", ш: 0.5 },
   ];
-  // Потоки лавы по склону ближнего хребта.
-  const потоки = ["M22,79 L20,88 L23,96 L21,100", "M58,78 L61,86 L58,93 L60,100", "M86,79 L84,87 L87,94 L85,100"];
+
+  // Окна расплава: там, где корка провалилась и видно открытую лаву.
+  const окна = [
+    "M20,82 L30,79 L36,85 L28,90 L18,88 Z",
+    "M60,80 L72,77 L78,84 L66,88 Z",
+    "M40,92 L54,89 L62,95 L44,98 Z",
+  ];
 
   return (
     <>
-      {/* Зарево из-за хребтов — источник всего света на карточке. */}
+      {/* Жар снизу — единственный источник света на карточке. */}
       <div style={{
-        position: "absolute", left: "-10%", right: "-10%", top: "34%", height: "42%",
-        background: `radial-gradient(60% 100% at 50% 100%, ${hexA(м.hot, 0.4)} 0%, ${hexA(м.seam, 0.28)} 32%, transparent 72%)`,
-        filter: "blur(10px)",
+        position: "absolute", left: "-15%", right: "-15%", bottom: "-14%", height: "56%",
+        background: `radial-gradient(70% 100% at 50% 100%, ${hexA(м.seam, 0.32)} 0%, ${hexA(м.seam, 0.16)} 40%, transparent 76%)`,
+        filter: "blur(14px)",
         animation: "moltenBreath 7s ease-in-out infinite",
       }} />
 
       <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"
         style={{ position: "absolute", inset: 0 }} aria-hidden>
-        {хребты.map((х, i) => (
-          <g key={`rg${i}`}>
-            <path d={х.d} fill={i === 2 ? м.stone : м.bordo} fillOpacity={х.тон} />
-            {/* Раскалённая кромка гребня: свет из-за хребта ложится
-                только на верхнюю линию. */}
-            <path d={х.d.split(" L100,100")[0]} fill="none"
-              stroke={м.seam} strokeOpacity={х.свет} strokeWidth={i === 2 ? 0.8 : 0.5}
-              vectorEffect="non-scaling-stroke" />
-          </g>
-        ))}
-        {!мелко && потоки.map((д, i) => (
-          <path key={`fl${i}`} d={д} fill="none" stroke={м.seam} strokeOpacity="0.7"
-            strokeWidth="1.2" strokeLinecap="round" vectorEffect="non-scaling-stroke"
-            style={{ animation: `moltenBreath ${5 + i * 1.3}s ease-in-out ${-i * 1.7}s infinite` }} />
-        ))}
-      </svg>
-
-      {/* Сущность. Плечи, наплечники и грудь — гранёный камень; по
-          сколам идут трещины, в которых видно магму. Голову не рисуем:
-          её место занимает аватарка. */}
-      <svg
-        viewBox="0 0 100 60" preserveAspectRatio="xMidYMax meet"
-        style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: `${Math.min(72, 46 + height / 12)}%` }}
-        aria-hidden
-      >
         <defs>
-          <linearGradient id={`mg-body-${Math.round(height)}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#241016" />
-            <stop offset="55%" stopColor={м.stone} />
-            <stop offset="100%" stopColor="#050203" />
+          {/* Расплав в глубине: к низу светлее — там горячее. */}
+          <linearGradient id={`mg-lava-${Math.round(height)}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={м.seam} stopOpacity="0.85" />
+            <stop offset="60%" stopColor="#FF8A2D" stopOpacity="0.95" />
+            <stop offset="100%" stopColor={м.hot} stopOpacity="1" />
+          </linearGradient>
+          {/* Сама порода: почти чёрная, чуть теплее у нижнего края. */}
+          <linearGradient id={`mg-crust-${Math.round(height)}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#0A0407" />
+            <stop offset="70%" stopColor={м.stone} />
+            <stop offset="100%" stopColor="#1B080B" />
           </linearGradient>
         </defs>
-        {/* Силуэт: широкие плечи, вырез под голову, сколотые края. */}
-        <path
-          d="M50,60 L14,60 L10,46 L18,34 L30,27 L38,22 L40,14 L60,14 L62,22 L70,27 L82,34 L90,46 L86,60 Z"
-          fill={`url(#mg-body-${Math.round(height)})`}
-          stroke={hexA(м.seam, 0.55)} strokeWidth="0.7" strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-        {/* Наплечники — отдельные плиты поверх корпуса. */}
-        <path d="M10,46 L18,34 L30,27 L34,38 L24,44 L20,55 Z" fill="#150910" fillOpacity="0.95"
-          stroke={hexA(м.seam, 0.5)} strokeWidth="0.6" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        <path d="M90,46 L82,34 L70,27 L66,38 L76,44 L80,55 Z" fill="#150910" fillOpacity="0.95"
-          stroke={hexA(м.seam, 0.5)} strokeWidth="0.6" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        {/* Контровой свет: зарево бьёт из-за спины, поэтому горит
-            только верхняя кромка силуэта. Без него фигура сливается с
-            пейзажем в одно тёмное пятно. */}
-        <path
-          d="M14,60 L10,46 L18,34 L30,27 L38,22 L40,14 M60,14 L62,22 L70,27 L82,34 L90,46 L86,60"
-          fill="none" stroke={м.hot} strokeOpacity="0.8" strokeWidth="0.9"
-          strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
-          style={{ filter: `drop-shadow(0 0 4px ${hexA(м.seam, 0.8)})` }}
-        />
 
-        {/* Трещины: под камнем течёт магма, поэтому линии не ровные и
-            разгораются вразнобой. */}
-        <g fill="none" strokeLinecap="round" vectorEffect="non-scaling-stroke">
-          {[
-            "M40,20 L44,28 L41,34 L45,42 L43,52",
-            "M60,20 L56,29 L59,35 L55,44 L57,54",
-            "M34,38 L28,44 L30,52",
-            "M66,38 L72,44 L70,52",
-            "M50,26 L50,36 L47,44 L50,56",
-          ].map((д, i) => (
-            <g key={`cr${i}`} style={{ animation: `moltenBreath ${4.5 + i * 0.9}s ease-in-out ${-i * 1.1}s infinite` }}>
-              <path d={д} stroke={м.seam} strokeOpacity="0.75" strokeWidth="3.2" style={{ filter: "blur(1.8px)" }} />
-              <path d={д} stroke={м.hot} strokeOpacity="1" strokeWidth="0.9" />
-            </g>
-          ))}
-        </g>
+        {/* Расплав заливает низ, корка ляжет поверх и почти всё закроет. */}
+        <rect x="0" y="56" width="100" height="44" fill={`url(#mg-lava-${Math.round(height)})`} />
+
+        {/* Корка: рваный верхний край, дальше сплошная порода до низа. */}
+        <path d="M0,60 L14,57 L28,61 L44,56 L60,60 L74,55 L88,60 L100,57 L100,100 L0,100 Z"
+          fill={`url(#mg-crust-${Math.round(height)})`} />
+
+        {/* Верхняя кромка корки раскалена: на неё падает свет снизу. */}
+        <path d="M0,60 L14,57 L28,61 L44,56 L60,60 L74,55 L88,60 L100,57" fill="none"
+          stroke={м.seam} strokeOpacity="0.85" strokeWidth="0.9" strokeLinecap="round"
+          vectorEffect="non-scaling-stroke" style={{ filter: `drop-shadow(0 0 4px ${hexA(м.seam, 0.8)})` }} />
+
+        {/* Окна расплава — прорехи в корке. */}
+        {окна.map((д, i) => (
+          <g key={`ok${i}`} style={{ animation: `moltenBreath ${4.6 + i * 1.1}s ease-in-out ${-i * 1.3}s infinite` }}>
+            {/* Свет из прорехи, а не наклейка: широкое размытое пятно
+                снизу, поверх — приглушённый расплав. Резкий контур
+                читался как приклеенный жёлтый ромб. */}
+            <path d={д} fill={м.seam} fillOpacity="0.5" style={{ filter: "blur(3px)" }} />
+            <path d={д} fill={м.hot} fillOpacity="0.45" style={{ filter: "blur(1.2px)" }} />
+          </g>
+        ))}
+
+        {/* Швы: широкая мягкая полоса — зарево из глубины, поверх тонкая
+            яркая нить — сам расплав в разломе. */}
+        {швы.map((ш, i) => (
+          <g key={`sh${i}`} style={{ animation: `moltenBreath ${5 + i * 0.8}s ease-in-out ${-i * 0.9}s infinite` }}>
+            <path d={ш.d} fill="none" stroke={м.seam} strokeOpacity="0.6" strokeWidth={ш.ш * 3.4}
+              strokeLinecap="round" style={{ filter: "blur(2.2px)" }} vectorEffect="non-scaling-stroke" />
+            <path d={ш.d} fill="none" stroke={м.hot} strokeOpacity="0.95" strokeWidth={ш.ш}
+              strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          </g>
+        ))}
+
+        {/* Пузыри в открытом расплаве. На мелкой карточке их нет: точки
+            в пару пикселей превращаются в шум. */}
+        {!мелко && [[26, 85, 0.9, 0], [68, 83, 1.1, 1.2], [50, 94, 0.8, 0.6]].map(([x, y, r, d], i) => (
+          <circle key={`bb${i}`} cx={x} cy={y} r={r} fill="#FFF3D0" fillOpacity="0.9"
+            style={{ animation: `moltenBreath ${3.4 + i * 0.7}s ease-in-out ${-d}s infinite` }} />
+        ))}
       </svg>
+
+      {/* Дымка над лавой: тёплый воздух дрожит и слегка размывает
+          границу между корой и тёмным верхом. */}
+      <div style={{
+        position: "absolute", left: 0, right: 0, top: "44%", height: "22%",
+        background: `linear-gradient(180deg, transparent 0%, ${hexA(м.seam, 0.16)} 60%, transparent 100%)`,
+        filter: "blur(6px)",
+        animation: "moltenBreath 9s ease-in-out -3s infinite",
+      }} />
 
       {/* Надпись — только на витрине. В профиле карточка работает фоном
           под ником и аватаркой, и вторая крупная надпись там лишняя. */}
