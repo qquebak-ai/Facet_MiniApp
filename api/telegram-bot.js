@@ -227,18 +227,68 @@ function buyButtons(card, своё) {
   return { inline_keyboard: [суммы, ...продать, низ] };
 }
 
-/* Покупка командой: /buy PRSM 5 — тикер или адрес, потом сумма в TON.
-   Без суммы показываем меню, а не отказ: человек мог просто не знать
-   формата. */
+/* Что показать вместо покупки, когда назвали тикер.
+ *
+ * Список совпавших токенов с адресами: под одним тикером их бывает
+ * несколько, и выбрать должен человек, а не первая строка выдачи.
+ * Каждый — своей кнопкой, за ней стоит конкретный токен, а не текст.
+ */
+async function выборПоТикеру(chatId, запрос) {
+  let найдено = [];
+  try { найдено = await searchAll(запрос, 5); } catch (err) { найдено = []; }
+  if (!найдено.length) {
+    await tg("sendMessage", { chat_id: chatId, text: "Такого токена нет ни в Mintly, ни на биржах TON." });
+    return;
+  }
+
+  const карточки = [];
+  for (const t of найдено) {
+    try { карточки.push(await cardFor(t)); } catch (err) { /* один не собрался — остальные нужны */ }
+  }
+  if (!карточки.length) {
+    await tg("sendMessage", { chat_id: chatId, text: "Такого токена нет ни в Mintly, ни на биржах TON." });
+    return;
+  }
+
+  const строки = карточки.map((c, i) => `${i + 1}. <b>$${c.ticker || "?"}</b> — <code>${c.jetton || c.curve || "—"}</code>`);
+  await tg("sendMessage", {
+    chat_id: chatId,
+    text: [
+      `Тикер <b>${String(запрос).toUpperCase()}</b> может носить любой токен — покупка идёт только по адресу контракта.`,
+      "",
+      ...строки,
+      "",
+      "Выбери нужный кнопкой ниже или пришли адрес: <code>/buy АДРЕС СУММА</code>",
+    ].join("\n"),
+    parse_mode: "HTML",
+    link_preview_options: { is_disabled: true },
+    reply_markup: { inline_keyboard: карточки
+      .filter((c) => c.ref)
+      .map((c) => [{ text: `$${c.ticker || "?"} · ${(c.jetton || c.curve || "").slice(0, 6)}…`, callback_data: `x:${c.ref}` }]) },
+  });
+}
+
+/* Покупка командой: /buy EQ… 5 — адрес контракта, потом сумма в TON.
+
+   По тикеру покупку не начинаем: тикер никто не занимает, и под одним
+   и тем же названием живёт сколько угодно токенов — деньги ушли бы в
+   чужой. По тикеру показываем совпадения с адресами, а дальше человек
+   выбирает кнопкой. Без суммы показываем меню, а не отказ: человек мог
+   просто не знать формата. */
 async function handleBuyCommand(message, хвост) {
   const { запрос, сумма } = разобратьПокупку(String(хвост || "").trim().split(/\s+/));
 
   if (!запрос) {
     await tg("sendMessage", {
       chat_id: message.chat.id,
-      text: "Что покупаем? <code>/buy ТИКЕР или АДРЕС СУММА</code>\nНапример: <code>/buy PRSM 5</code>",
+      text: "Что покупаем? <code>/buy АДРЕС СУММА</code>\nНапример: <code>/buy EQAw…cuNT 5</code>\n\nПо тикеру — только поиск: <code>/token PRSM</code>",
       parse_mode: "HTML",
     });
+    return;
+  }
+
+  if (!looksLikeAddress(запрос)) {
+    await выборПоТикеру(message.chat.id, запрос);
     return;
   }
 
@@ -726,13 +776,42 @@ async function inlineBuy(query, части) {
         type: "article",
         id: "buy-help",
         title: "Покупка: укажи токен и сумму",
-        description: `@${TG_BOT} buy ТИКЕР или АДРЕС СУММА`,
+        description: `@${TG_BOT} buy АДРЕС СУММА`,
         input_message_content: {
           message_text: [
-            `<code>@${TG_BOT} buy PRSM 5</code> — по тикеру`,
-            `<code>@${TG_BOT} buy EQ… 5</code> — по адресу контракта`,
+            `<code>@${TG_BOT} buy EQ… 5</code> — адрес контракта и сумма`,
+            "",
+            "По тикеру покупка не идёт: одно и то же название носит сколько угодно токенов.",
+            `Найти нужный: <code>@${TG_BOT} PRSM</code>`,
           ].join("\n"),
           parse_mode: "HTML",
+        },
+      }],
+    });
+    return;
+  }
+
+  // Тикер к покупке не принимаем: занять его может кто угодно, и деньги
+  // ушли бы в чужой токен. Отправляем искать — там карточки с адресами
+  // и кнопка «Торговать» у каждой.
+  if (!looksLikeAddress(запрос)) {
+    await tg("answerInlineQuery", {
+      inline_query_id: query.id,
+      cache_time: 20,
+      results: [{
+        type: "article",
+        id: "buy-need-address",
+        title: "Для покупки нужен адрес контракта",
+        description: `Тикер могут носить разные токены. Найди нужный: @${TG_BOT} ${запрос}`,
+        input_message_content: {
+          message_text: [
+            `Покупка по тикеру не идёт: <b>${String(запрос).toUpperCase()}</b> может носить любой токен.`,
+            "",
+            `Найти нужный: <code>@${TG_BOT} ${запрос}</code> — и купить кнопкой в его карточке.`,
+            `Или сразу по адресу: <code>@${TG_BOT} buy EQ… 5</code>`,
+          ].join("\n"),
+          parse_mode: "HTML",
+          link_preview_options: { is_disabled: true },
         },
       }],
     });
