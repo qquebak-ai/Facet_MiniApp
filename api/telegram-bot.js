@@ -1102,7 +1102,16 @@ async function handleTop(message) {
   await tg("sendMessage", {
     chat_id: chat.id,
     reply_to_message_id: message.message_id,
-    text: `${строки.join("\n")}\n\nПодробнее: <code>/token ТИКЕР</code>`,
+    text: [
+      "🔥 <b>Топ мемкоинов за последнее время</b>",
+      "",
+      "Какие мемкоины сейчас забирают внимание рынка? 👀",
+      "",
+      ...строки,
+      "",
+      "🔎 Хочешь подробнее узнать о токене?",
+      "Пиши: <code>/token ТИКЕР</code>",
+    ].join("\n"),
     parse_mode: "HTML",
     reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", url: `https://t.me/${TG_BOT}?start=open` }]] },
   });
