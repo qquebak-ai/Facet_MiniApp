@@ -2601,15 +2601,27 @@ function useTokenLogo(logoUrl, tokenAddress, testnet = false, tokenId = null, ca
 // info tab) that lay the number out themselves rather than using the
 // icon+value HoldersBadge component. undefined = still loading, null =
 // TonAPI has nothing for this address.
-function useJettonHolders(tokenAddress, testnet = false) {
+/* Держатели без служебных кошельков.
+ *
+ * tonapi считает жетонные кошельки, а один из них принадлежит самой
+ * кривой: непроданный запас лежит на ней. Из-за этого у токена с
+ * единственным покупателем показывалось два держателя. После закрытия
+ * кривой остаток уходит на кошелёк площадки — он такой же служебный,
+ * поэтому вычитаем в обоих случаях. */
+function безСлужебных(holders, служебных = 0) {
+  if (holders == null) return null;
+  return Math.max(0, holders - служебных);
+}
+
+function useJettonHolders(tokenAddress, testnet = false, служебных = 0) {
   const [count, setCount] = useState(undefined);
   useEffect(() => {
     setCount(undefined);
     if (!tokenAddress) return;
     let cancelled = false;
-    fetchJettonHolders(tokenAddress, testnet).then((c) => { if (!cancelled) setCount(c); });
+    fetchJettonHolders(tokenAddress, testnet).then((c) => { if (!cancelled) setCount(безСлужебных(c, служебных)); });
     return () => { cancelled = true; };
-  }, [tokenAddress, testnet]);
+  }, [tokenAddress, testnet, служебных]);
   return count;
 }
 
@@ -3146,7 +3158,9 @@ async function fetchCurveMarket(curveAddress, jettonMaster, testnet, rateArg = 0
     liqUsd: (Number(state.realTon) / 1e9) * rate,
     vol24Usd: volTon * rate,
     tx24: recent.length,
-    holders: meta ? meta.holders : null,
+    // Кошелёк кривой в держатели не записываем: запас на ней — это не
+    // человек, купивший токен.
+    holders: meta ? безСлужебных(meta.holders, 1) : null,
     change24: prevPrice > 0 ? ((priceTon - prevPrice) / prevPrice) * 100 : 0,
   };
 }
@@ -8834,7 +8848,9 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   const [hovered, setHovered] = useState(null);
   const up = token.change >= 0;
   // У токена на кривой жетон живёт в той же сети, что и приложение.
-  const holdersCount = useJettonHolders(token.tokenAddress, !!token.curveAddress && TON_TESTNET_NETWORK);
+  // У токена на своей кривой один из жетонных кошельков — её
+  // собственный, человеком он не является.
+  const holdersCount = useJettonHolders(token.tokenAddress, !!token.curveAddress && TON_TESTNET_NETWORK, token.curveAddress ? 1 : 0);
   // Владелец заодно чинит запись в базе, поэтому передаём, он это или нет.
   const логотип = useTokenLogo(
     token.logoUrl,
@@ -10613,7 +10629,10 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
 --------------------------------------------------------- */
 
 function MyTokenCard({ t, onManage }) {
-  const holdersCount = useJettonHolders(t.address);
+  // Свои токены живут в той же сети, что и приложение, а один из
+  // жетонных кошельков — кошелёк кривой. Раньше здесь спрашивали
+  // mainnet и получали прочерк вместо числа.
+  const holdersCount = useJettonHolders(t.address, TON_TESTNET_NETWORK, t.curveAddress ? 1 : 0);
   return (
     <GlassCard style={{ padding: "12px 14px" }} className="flex items-center gap-3">
       <TokenAvatar tone={t.verified ? "neutral" : "neutral"} src={t.logoUrl}>{t.emoji}</TokenAvatar>
