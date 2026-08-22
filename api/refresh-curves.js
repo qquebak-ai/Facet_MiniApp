@@ -156,7 +156,9 @@ export default async function handler(req, res) {
     .order("created_at", { ascending: false })
     .limit(BATCH);
   if (error) return res.status(500).json({ error: "tokens_failed", detail: error.message });
-  if (!tokens || !tokens.length) return res.status(200).json({ updated: 0 });
+  if (!tokens || !tokens.length) {
+    return res.status(200).json({ updated: 0, tokens: 0, network: TESTNET ? "testnet" : "mainnet" });
+  }
 
   const сутки = Math.floor(Date.now() / 1000) - 86400;
   const строки = [];
@@ -164,9 +166,12 @@ export default async function handler(req, res) {
   // Токены обходим по очереди, а не пачкой: три параллельных запроса на
   // токен упрутся в лимит tonapi быстрее, чем принесут пользу. Обход
   // идёт в фоне, ждать его никто не будет.
+  // Сколько кривых не ответило — иначе пустой ответ не отличить от
+  // «токенов нет», и чинить приходится вслепую.
+  let молчат = 0;
   for (const tok of tokens) {
     const st = await состояние(tok.curve_address);
-    if (!st) continue;
+    if (!st) { молчат += 1; continue; }
 
     const params = {
       virtualTon: st.virtualTon || DEFAULT_VIRTUAL_TON,
@@ -207,7 +212,9 @@ export default async function handler(req, res) {
     });
   }
 
-  if (!строки.length) return res.status(200).json({ updated: 0 });
+  if (!строки.length) {
+    return res.status(200).json({ updated: 0, tokens: tokens.length, silent: молчат, network: TESTNET ? "testnet" : "mainnet" });
+  }
 
   const { error: writeError } = await admin.from("curve_cache").upsert(строки, { onConflict: "token_id" });
   if (writeError) return res.status(500).json({ error: "cache_failed", detail: writeError.message });
@@ -220,5 +227,5 @@ export default async function handler(req, res) {
     await admin.from("tokens").update({ logo_url: s.logo_url }).eq("id", s.token_id);
   }
 
-  return res.status(200).json({ updated: строки.length, logos: безЛоготипа.length });
+  return res.status(200).json({ updated: строки.length, tokens: tokens.length, silent: молчат, logos: безЛоготипа.length });
 }
