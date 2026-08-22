@@ -213,8 +213,8 @@ const STR = {
     sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionWallet: "Кошелёк",
     feedTitle: "Прямо сейчас",
     feedSub: "Что происходит на площадке",
-    feedTrade: "{who} купил {ticker} на {ton} TON",
-    feedLaunch: "{who} запустил {ticker}",
+    feedTrade: "{who} купил ${ticker} на {ton} TON",
+    feedLaunch: "{who} запустил ${ticker}",
     topTitle: "Топ",
     topTokens: "Токены",
     topCreators: "Создатели",
@@ -462,7 +462,7 @@ const STR = {
     rateLoadingRetry: "Курс TON ещё загружается, попробуй через секунду",
     insufficientTon: "Не хватает TON: на кошельке {have}, нужно {need} с газом",
     tokenSaveFailed: "Токен создан в сети, но не сохранился: {reason}. Попробуем ещё раз при следующем запуске.",
-    tokenSaveRecovered: "Токен {ticker} дописан в приложение",
+    tokenSaveRecovered: "Токен ${ticker} дописан в приложение",
     openingWallet: "Открываем кошелёк…",
     openingWalletHint: "Кошелёк покажет готовую сделку — останется подтвердить.",
     openWalletCta: "Открыть кошелёк",
@@ -566,8 +566,8 @@ const STR = {
     sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionWallet: "Wallet",
     feedTitle: "Right now",
     feedSub: "What's happening here",
-    feedTrade: "{who} bought {ticker} for {ton} TON",
-    feedLaunch: "{who} launched {ticker}",
+    feedTrade: "{who} bought ${ticker} for {ton} TON",
+    feedLaunch: "{who} launched ${ticker}",
     topTitle: "Top",
     topTokens: "Tokens",
     topCreators: "Creators",
@@ -815,7 +815,7 @@ const STR = {
     rateLoadingRetry: "TON rate is still loading, try again in a second",
     insufficientTon: "Not enough TON: wallet has {have}, need {need} incl. gas",
     tokenSaveFailed: "Token is live on-chain but wasn't saved: {reason}. We'll retry on next launch.",
-    tokenSaveRecovered: "Token {ticker} added to the app",
+    tokenSaveRecovered: "Token ${ticker} added to the app",
     openingWallet: "Opening your wallet…",
     openingWalletHint: "Your wallet will show the prepared transaction — just confirm it.",
     openWalletCta: "Open wallet",
@@ -4794,7 +4794,7 @@ function MempadRow({ t: tok, onOpen, index }) {
     <button onClick={() => onOpen(tok)} className="fx-tap w-full flex items-center gap-3 py-3 text-left" style={{ animationDelay: `${index * 55}ms` }}>
       <TokenAvatar size={44} tone={tok.change >= 0 ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
       <div className="flex-1 min-w-0">
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tok.ticker}</div>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>${tok.ticker}</div>
         <div className="flex items-center gap-2.5">
           <HoldersBadge tokenAddress={tok.tokenAddress} testnet={!!tok.curveAddress && TON_TESTNET_NETWORK} />
           <CardStat icon={Flame}>${tok.vol}</CardStat>
@@ -5055,7 +5055,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
               >
                 <TokenAvatar size={40} src={row.logo_url}>🚀</TokenAvatar>
                 <div className="flex-1 min-w-0 flex flex-col items-start">
-                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{row.ticker}</span>
+                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${row.ticker}</span>
                   <span className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{row.name}</span>
                 </div>
                 <ChevronRight size={16} color={T.muted} />
@@ -8164,7 +8164,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
             <SpotlightGrid up={spotlight.change >= 0} seedKey={spotlight.seed} />
             <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <TokenAvatar size={92} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl}>{spotlight.emoji}</TokenAvatar>
-              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 21.5, fontWeight: 800 }}>{spotlight.ticker}</span>
+              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 21.5, fontWeight: 800 }}>${spotlight.ticker}</span>
               <div className="flex items-center gap-3">
                 <HoldersBadge tokenAddress={spotlight.tokenAddress} testnet={!!spotlight.curveAddress && TON_TESTNET_NETWORK} />
                 <CardStat icon={Flame}>${spotlight.vol}</CardStat>
@@ -8276,7 +8276,7 @@ function AlmostListed({ tokens = [], onOpen }) {
               <TokenAvatar size={40} tone="up" src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{tok.ticker}</span>
+                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${tok.ticker}</span>
                   <span style={{ fontFamily: monoFont, color: T.electric, fontSize: 13, fontWeight: 700 }}>{pct.toFixed(0)}%</span>
                 </div>
                 <div style={{ height: 4, borderRadius: 2, background: T.surfaceHi, overflow: "hidden", marginTop: 6 }}>
@@ -8643,7 +8643,7 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
                 <TokenAvatar size={40} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
                 <div className="flex-1 min-w-0 text-left">
                   <span className="truncate block" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${tok.ticker}</span>
-                  <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12, marginTop: 3 }}>{fmtCompact(amount)} {tok.ticker}</div>
+                  <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12, marginTop: 3 }}>{fmtCompact(amount)} ${tok.ticker}</div>
                 </div>
               </div>
             ))}
@@ -9991,7 +9991,7 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
         </div>
 
         <div className="flex flex-col gap-1.5" style={{ marginTop: 14, fontFamily: monoFont, fontSize: 12, color: T.muted }}>
-          <div className="flex justify-between"><span>{t("rate")}</span><span style={{ color: T.ice }}>{fmtPrice(token.price)} / {token.ticker}</span></div>
+          <div className="flex justify-between"><span>{t("rate")}</span><span style={{ color: T.ice }}>{fmtPrice(token.price)} / ${token.ticker}</span></div>
           <div className="flex justify-between"><span>{t("networkFee")}</span><span style={{ color: T.ice }}>{NETWORK_FEE_TON} TON (${feeUsd.toFixed(2)})</span></div>
           <div className="flex justify-between"><span>{t("minReceive")}</span><span style={{ color: T.ice }}>{amount > 0 ? (isBuy ? `${(estimate * (1 - slippage / 100)).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ${token.ticker}` : `$${(estimate * (1 - slippage / 100)).toFixed(2)}`) : "—"}</span></div>
         </div>
@@ -10361,7 +10361,7 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
               <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice, textAlign: "right" }}>
                 {result.buyAmount} TON<br />
                 <span style={{ fontSize: 11.5, color: T.muted }}>
-                  {result.buyTokens.toLocaleString("ru-RU")} {result.ticker} · {result.buyPct.toFixed(result.buyPct < 1 ? 3 : 1)}%
+                  {result.buyTokens.toLocaleString("ru-RU")} ${result.ticker} · {result.buyPct.toFixed(result.buyPct < 1 ? 3 : 1)}%
                 </span>
               </span>
             </div>

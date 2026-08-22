@@ -1193,7 +1193,9 @@ async function handleWallet(chatId, telegramId) {
     строки.push("<b>Токены</b>");
     for (const ж of список.slice(0, 12)) {
       const шт = ж.amount >= 1000 ? Math.round(ж.amount).toLocaleString("ru-RU") : ж.amount.toFixed(2);
-      строки.push(`${ж.symbol} — ${шт}`);
+      // Тикер всегда с долларом: так он читается как тикер, а не как
+      // случайное слово рядом с числом.
+      строки.push(`$${String(ж.symbol || "?").toUpperCase()} — ${шт}`);
     }
     if (список.length > 12) строки.push(`…и ещё ${список.length - 12}`);
   } else {
