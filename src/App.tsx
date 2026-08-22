@@ -8226,6 +8226,35 @@ function AlmostListed({ tokens = [], onOpen }) {
   );
 }
 
+/* Плавный набор числа для витрины.
+ *
+ * Соседний useCountUp начинает с нуля при каждой смене цели, а числа на
+ * главной обновляются на ходу — прыжок к нулю читался бы как сбой.
+ * Здесь анимация идёт от того, что уже показано: первый раз это ноль,
+ * дальше — предыдущее значение.
+ */
+function useTicker(target, duration = 800) {
+  const [val, setVal] = useState(0);
+  const откуда = useRef(0);
+  useEffect(() => {
+    const начало = откуда.current;
+    if (начало === target) return;
+    let raf, start;
+    const tick = (ts) => {
+      if (!start) start = ts;
+      const p = Math.min(1, (ts - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const v = начало + (target - начало) * eased;
+      откуда.current = p < 1 ? v : target;
+      setVal(откуда.current);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return val;
+}
+
 /* Три числа под приветствием: сколько запущено за сутки, сколько TON
    лежит в живых кривых и сколько токенов дошло до биржи.
 
@@ -8267,15 +8296,25 @@ function HomeStats({ live = [] }) {
     };
   }, [live]);
 
-  if (!stats || !(Number(stats.launched) > 0)) return null;
+  const собрано = живые ? Math.max(живые.raisedTon, Number((stats || {}).raisedTon) || 0) : Number((stats || {}).raisedTon) || 0;
+  const наБирже = живые ? Math.max(живые.graduated, Number((stats || {}).graduated) || 0) : Number((stats || {}).graduated) || 0;
 
-  const собрано = живые ? Math.max(живые.raisedTon, Number(stats.raisedTon) || 0) : Number(stats.raisedTon) || 0;
-  const наБирже = живые ? Math.max(живые.graduated, Number(stats.graduated) || 0) : Number(stats.graduated) || 0;
+  const запусков = useTicker(Number((stats || {}).launched24) || 0);
+  const собраноПлавно = useTicker(собрано);
+  const наБиржеПлавно = useTicker(наБирже);
 
+  // Площадка пустая — полосы нет вовсе: ряд нулей говорит о ней хуже,
+  // чем её отсутствие. Проверяем только после ответа базы, иначе полоса
+  // мигнула бы на первой отрисовке.
+  if (stats && !(Number(stats.launched) > 0)) return null;
+
+  // Пока ничего не приехало, полоса стоит на нулях и числа набираются
+  // на глазах — это честнее, чем показать выдуманное значение или
+  // подсунуть пустое место, которое потом дёрнет вёрстку.
   const ячейки = [
-    { v: String(stats.launched24 || 0), k: "statLaunched24" },
-    { v: fmtTon(собрано), k: "statRaised" },
-    { v: String(наБирже), k: "statGraduated" },
+    { v: Math.round(запусков), k: "statLaunched24" },
+    { v: fmtTon(собраноПлавно), k: "statRaised" },
+    { v: Math.round(наБиржеПлавно), k: "statGraduated" },
   ];
 
   return (
