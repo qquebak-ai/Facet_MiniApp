@@ -398,8 +398,7 @@ export async function tokenCard(token) {
   }
   строки.push("");
   строки.push(`📈 Оборот 24ч: ${fmtTon(оборот)} TON`);
-  строки.push(`🔄 Сделок: ${история.length} · ⏱ Возраст: ${fmtAge(token.created_at)}`);
-  if (выпуск > 0) строки.push(`💠 Продано: ${fmtCount(выпуск)} из ${fmtCount(state ? nano(state.tokensForSale) : 0)}`);
+  строки.push(`🔄 Сделок: ${история.length} · ⏱ С момента листинга: ${fmtAge(token.created_at)}`);
   if (token.address) строки.push(`\n<code>${escape(token.address)}</code>`);
 
   const описание = state
