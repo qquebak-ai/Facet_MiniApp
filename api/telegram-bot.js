@@ -1182,25 +1182,32 @@ async function handleWallet(chatId, telegramId) {
 
   const [ton, список] = await Promise.all([балансTon(адрес), жетоны(адрес)]);
   const строки = [
-    "<b>Кошелёк</b>",
+    "<b>💼 Кошелёк Mintly</b>",
+    "",
+    "🔗 <b>Адрес</b>",
     `<code>${адрес}</code>`,
     "",
-    `TON: <b>${ton == null ? "—" : ton.toFixed(3)}</b>`,
+    "💎 <b>Баланс</b>",
+    `${ton == null ? "—" : ton.toFixed(3)} TON`,
   ];
   if (список && список.length) {
     строки.push("");
-    строки.push("<b>Токены</b>");
+    строки.push("🪙 <b>Токены</b>");
     for (const ж of список.slice(0, 12)) {
       const шт = ж.amount >= 1000 ? Math.round(ж.amount).toLocaleString("ru-RU") : ж.amount.toFixed(2);
       // Тикер всегда с долларом: так он читается как тикер, а не как
       // случайное слово рядом с числом.
-      строки.push(`$${String(ж.symbol || "?").toUpperCase()} — ${шт}`);
+      строки.push(`• $${String(ж.symbol || "?").toUpperCase()} — ${шт}`);
     }
     if (список.length > 12) строки.push(`…и ещё ${список.length - 12}`);
   } else {
     строки.push("");
-    строки.push("Токенов пока нет.");
+    строки.push("🪙 <b>Токены</b>");
+    строки.push("Пока пусто.");
   }
+  строки.push("");
+  строки.push("━━━━━━━━━━━━━━");
+  строки.push("💡 Управляй своими активами прямо в Mintly.");
 
   await tg("sendMessage", {
     chat_id: chatId,
