@@ -103,6 +103,41 @@ export async function логотипЖетона(address) {
   return url;
 }
 
+/* Курс TON в долларах.
+ *
+ * Держим в памяти пять минут: карточка открывается по многу раз, а курс
+ * за это время заметно не двигается. Спрашиваем боевой узел даже в
+ * тестовой сети — своей цены у тестового TON нет, и показывать по нему
+ * доллары всё равно неоткуда.
+ */
+let курсКеш = { значение: 0, ts: 0 };
+export async function курсTon() {
+  if (курсКеш.значение > 0 && Date.now() - курсКеш.ts < 300000) return курсКеш.значение;
+  try {
+    const res = await fetch("https://tonapi.io/v2/rates?tokens=ton&currencies=usd");
+    if (res.ok) {
+      const json = await res.json();
+      const v = Number(json && json.rates && json.rates.TON && json.rates.TON.prices && json.rates.TON.prices.USD) || 0;
+      if (v > 0) {
+        курсКеш = { значение: v, ts: Date.now() };
+        return v;
+      }
+    }
+  } catch (err) { /* ниже запасной источник */ }
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd");
+    if (res.ok) {
+      const json = await res.json();
+      const v = Number(json && json["the-open-network"] && json["the-open-network"].usd) || 0;
+      if (v > 0) {
+        курсКеш = { значение: v, ts: Date.now() };
+        return v;
+      }
+    }
+  } catch (err) { /* курса нет — покажем в TON */ }
+  return курсКеш.значение;
+}
+
 /* Цена одного токена в TON по состоянию кривой. Та же формула, что и в
    интерфейсе: цена — это отношение резервов, а не отдельное поле. */
 export function priceFromState(state) {
@@ -350,17 +385,21 @@ const escape = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;
 /* Полная сводка по одному токену: и текст сообщения, и короткая строка
    для списка в inline-подсказке. */
 export async function tokenCard(token) {
-  const [state, история, логотип] = await Promise.all([
+  const [state, история, логотип, курс] = await Promise.all([
     curveState(token.curve_address),
     tradeHistory(token.id),
     token.logo_url ? Promise.resolve(token.logo_url) : логотипЖетона(token.address),
+    курсTon(),
   ]);
 
   const цена = priceFromState(state);
   const собрано = state ? nano(state.realTon) : 0;
   const цель = state ? nano(state.graduationTon) : 0;
   const выпуск = state ? nano(state.tokensSold) : 0;
-  const капа = цена > 0 ? цена * 1000000000 : 0; // весь выпуск — миллиард
+  // Капитализация — цена за весь выпуск (миллиард) и сразу в долларах:
+  // в TON её приходилось пересчитывать в уме, а привыкли к доллару.
+  const капаTon = цена > 0 ? цена * 1000000000 : 0;
+  const капа = курс > 0 ? капаTon * курс : 0;
 
   // Движение за сутки считаем по своим сделкам: первая за 24 часа против
   // текущей цены кривой. Сделок нет — движения тоже нет, и рисовать
@@ -388,7 +427,7 @@ export async function tokenCard(token) {
     `${значок} <b>${имя}</b> · $${тикер}`,
     "",
     `💰 Цена: ${fmtPrice(цена)}`,
-    `📊 Капа: ${fmtTon(капа)} TON · ${стрелкаЭмодзи} ${знак}${движение.toFixed(2)}% за 24ч`,
+    `📊 Капа: ${капа > 0 ? fmtUsd(капа) : `${fmtTon(капаTon)} TON`} · ${стрелкаЭмодзи} ${знак}${движение.toFixed(2)}% за 24ч`,
   ];
   if (цель > 0) {
     строки.push("");

@@ -15,7 +15,7 @@
 
 import { createCanvas, encodePNG, fillRect, line, px, text, textWidth } from "./_png.js";
 import { adminClient } from "./_support.js";
-import { curveState, priceFromState, looksLikeAddress, poolByAddress } from "./_market.js";
+import { curveState, priceFromState, looksLikeAddress, poolByAddress, курсTon } from "./_market.js";
 
 const W = 800;
 const H = 420;
@@ -295,7 +295,7 @@ export default async function handler(req, res) {
         .eq("id", токен)
         .maybeSingle();
       if (!строка) return res.status(404).json({ error: "not_found" });
-      const state = await curveState(строка.curve_address);
+      const [state, курс] = await Promise.all([curveState(строка.curve_address), курсTon()]);
       const точки = await ценыКривой(строка.id, state, строка.curve_address, свежо);
       const цена = priceFromState(state);
       // Последняя точка — из контракта: он свежее любой записанной
@@ -309,7 +309,9 @@ export default async function handler(req, res) {
         ticker: String(строка.ticker || "").toUpperCase(),
         name: строка.name,
         priceText: fmtЦена(цена, true),
-        capText: цена > 0 ? fmtБольшое(цена * 1e9, true) : "",
+        // Капитализация в долларах: в TON её приходилось пересчитывать
+        // в уме. Курса нет — показываем в TON, это лучше прочерка.
+        capText: цена > 0 ? (курс > 0 ? fmtБольшое(цена * 1e9 * курс, false) : fmtБольшое(цена * 1e9, true)) : "",
         change: старт > 0 && цена > 0 ? ((цена - старт) / старт) * 100 : 0,
         точки: ряд,
         вTon: true,
