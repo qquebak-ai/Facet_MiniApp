@@ -44,20 +44,47 @@ async function свечиБиржи(pool) {
   }
 }
 
-async function ценыСделок(tokenId) {
+/* Цены по истории кривой.
+ *
+ * Раньше точки считались как «TON поделить на токены» по записям своих
+ * сделок. Это не цена: в уплаченную сумму входят газ и комиссия, и на
+ * мелкой покупке она оказывается в разы выше настоящей. Первые точки
+ * задирало вверх, последняя бралась из контракта — и график только что
+ * запущенного токена, у которого были одни покупки, шёл вниз.
+ *
+ * Теперь берём то же, что и приложение: резерв кривой после каждой
+ * сделки (его складывает api/refresh-curves.js) и ту же формулу цены,
+ * что зашита в контракт.
+ */
+async function ценыКривой(tokenId, state) {
   const admin = adminClient();
-  if (!admin) return [];
+  if (!admin || !state) return [];
   const { data } = await admin
-    .from("trades")
-    .select("ton_amount, token_amount, created_at")
+    .from("curve_cache")
+    .select("trades")
     .eq("token_id", tokenId)
-    .order("created_at", { ascending: true })
-    .limit(300);
-  return (data || [])
-    .map((с) => {
-      const ton = Number(с.ton_amount) || 0;
-      const шт = Number(с.token_amount) || 0;
-      return ton > 0 && шт > 0 ? ton / шт : 0;
+    .maybeSingle();
+  const ряд = (data && Array.isArray(data.trades)) ? data.trades : [];
+  if (!ряд.length) return [];
+
+  const virtualTon = state.virtualTon;
+  const virtualTokens = state.virtualTokens;
+  const цена = (realTon) => {
+    const резервTon = virtualTon + realTon;
+    const резервТокенов = (virtualTon * virtualTokens) / резервTon;
+    return резервТокенов <= 0n ? 0 : Number(резервTon) / Number(резервТокенов);
+  };
+
+  // Резерв в истории набирается с нуля от самой старой прочитанной
+  // транзакции, а у токена с длинной историей начало обрезано. Истина
+  // на сейчас — резерв из контракта, поэтому весь ряд сдвигаем на
+  // разницу: тогда последняя точка совпадает с состоянием.
+  const последний = BigInt(ряд[ряд.length - 1].r || 0);
+  const сдвиг = state.realTon - последний;
+  return ряд
+    .map((p) => {
+      const r = BigInt(p.r || 0) + сдвиг;
+      return цена(r > 0n ? r : 0n);
     })
     .filter((v) => v > 0);
 }
@@ -197,11 +224,15 @@ export default async function handler(req, res) {
         .eq("id", токен)
         .maybeSingle();
       if (!строка) return res.status(404).json({ error: "not_found" });
-      const [state, точки] = await Promise.all([curveState(строка.curve_address), ценыСделок(строка.id)]);
+      const state = await curveState(строка.curve_address);
+      const точки = await ценыКривой(строка.id, state);
       const цена = priceFromState(state);
-      // Последнюю точку берём из кривой: она свежее любой сделки,
-      // записанной приложением.
-      const ряд = цена > 0 ? [...точки, цена] : точки;
+      // Последняя точка — из контракта: он свежее любой записанной
+      // истории. Сделок ещё не было — рисуем прямую по текущей цене,
+      // это правда: между сделками цена на кривой стоит.
+      const ряд = цена > 0
+        ? (точки.length ? [...точки, цена] : [цена, цена])
+        : точки;
       const старт = ряд.length ? ряд[0] : 0;
       const png = нарисовать({
         ticker: String(строка.ticker || "").toUpperCase(),
