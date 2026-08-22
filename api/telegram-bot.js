@@ -717,13 +717,8 @@ async function handleCallback(cb) {
     return;
   }
 
-  // Время последнего обновления в самом сообщении. Без него, когда цена
-  // за минуту не дрогнула, Telegram отвечает «not modified» и оставляет
-  // карточку как была — со стороны это читается как «кнопка не
-  // работает». Со строкой времени видно, что данные перечитаны.
-  const час = new Date().toLocaleTimeString("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const тело = {
-    text: `${card.text}\n\n🕒 Обновлено в ${час} МСК`,
+    text: card.text,
     parse_mode: "HTML",
     link_preview_options: card.chart
       ? { url: свежийГрафик(card.chart), prefer_large_media: true, show_above_text: true }
