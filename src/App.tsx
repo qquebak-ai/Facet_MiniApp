@@ -1667,11 +1667,13 @@ const BgLeaf = React.memo(function BgLeaf({ kind, size, flip, seed = 0 }) {
       </defs>
       <path d={leaf.outline} fill={`url(#g-${uid})`} stroke="#DFFFF0" strokeOpacity="0.55" strokeWidth="0.9" />
       <path d={leaf.outline} fill={`url(#s-${uid})`} />
-      {/* Черенок и жилы — светящаяся схема: линия, а по ней узлы. Это и
-          отличает лист от растения: внутри у него проводка. */}
-      <path d={leaf.stem} stroke={T.electric} strokeWidth={1.3} strokeLinecap="round" fill="none" opacity="0.9" />
+      {/* Черенок и жилы того же стекла, что и сам лист: раньше они
+          горели оранжевым и читались отдельным рисунком поверх
+          прозрачной пластины — фон переставал быть фоном. Белым по
+          белому это уже не схема, а прожилки. */}
+      <path d={leaf.stem} stroke="#EAFFF4" strokeWidth={1.3} strokeLinecap="round" fill="none" opacity="0.5" />
       {detailed && (
-        <g stroke={T.electric} strokeWidth={0.8} strokeLinecap="round" fill="none" opacity="0.75">
+        <g stroke="#EAFFF4" strokeWidth={0.8} strokeLinecap="round" fill="none" opacity="0.34">
           {leaf.veins.map((v, i) => <path key={i} d={v} />)}
         </g>
       )}
