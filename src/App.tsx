@@ -8084,16 +8084,22 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   // крупнее по капитализации. Если за час везде тихо (ночь, выходные),
   // окно расширяется до 6 часов, потом до суток — так карточка никогда не
   // остаётся пустой.
+  const localTokens = useMemo(() => (myTokens || []).map(localTokenToFeedShape), [myTokens]);
+
   const spotlightTop = useMemo(() => {
-    if (!tokens.length) return [];
+    // Биржевой ленты может не быть вовсе — в тестовой сети её нет по
+    // определению. Тогда в центр внимания идут свои токены: пустая
+    // рамка вместо карточки выглядела поломкой.
+    const источник = tokens.length ? tokens : localTokens;
+    if (!источник.length) return [];
     const ranked = (win) =>
-      [...tokens]
+      [...источник]
         .filter((tok) => (tok[win] || 0) > 0)
         .sort((a, b) => (b[win] || 0) - (a[win] || 0));
     const byActivity = ["tx1h", "tx6h", "tx24h"].map(ranked).find((list) => list.length);
-    const list = byActivity || [...tokens].sort((a, b) => b.mcapNum - a.mcapNum);
+    const list = byActivity || [...источник].sort((a, b) => b.mcapNum - a.mcapNum);
     return list.slice(0, SPOTLIGHT_COUNT);
-  }, [tokens]);
+  }, [tokens, localTokens]);
 
   const [spotIdx, setSpotIdx] = useState(0);
   useEffect(() => {
@@ -8105,8 +8111,6 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   // Индекс намеренно растёт без ограничения, а по кругу гоняем здесь:
   // так смена ленты не сбрасывает позицию на первый токен.
   const spotlight = spotlightTop.length ? spotlightTop[spotIdx % spotlightTop.length] : null;
-
-  const localTokens = useMemo(() => (myTokens || []).map(localTokenToFeedShape), [myTokens]);
 
   const list = useMemo(() => {
     // "New" now means what it literally says: tokens launched through
@@ -13566,7 +13570,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
      обход, и пересчитать дешевле, чем ходить в цепочку. */
   useEffect(() => {
     if (!(tonPriceUsd > 0)) return;
-    setCommunityTokens((prev) => {
+    const пересчитать = (prev) => {
       let менялось = false;
       const ряд = prev.map((tok) => {
         if (tok.priceTon == null || tok.mcapNum > 0) return tok;
@@ -13579,7 +13583,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         };
       });
       return менялось ? ряд : prev;
-    });
+    };
+    // Оба списка: «Новые» в мемпаде показывают свои токены, и без этого
+    // у них оставались нули, пока не перезапустишь приложение.
+    setCommunityTokens(пересчитать);
+    setMyTokens(пересчитать);
   }, [tonPriceUsd]);
 
   // Дочитывает у кривых всё, чего нет в базе: цену, капитализацию, объём
