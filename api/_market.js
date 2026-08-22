@@ -66,6 +66,10 @@ export async function curveState(address) {
       tokensSold: num(3),
       tokensForSale: num(4),
       graduationTon: num(5),
+      // Комиссия зашита в контракт при запуске: у токенов, созданных до
+      // смены настроек, она своя. Нужна, чтобы посчитать, сколько из
+      // покупки ушло в резерв, — по этому и строится график.
+      feeBps: num(6),
       graduated: stack[7] ? Number(stack[7].num) !== 0 : false,
     };
   } catch (err) {
@@ -503,5 +507,10 @@ export async function cardByRef(вид, ключ) {
    человек сам попросил обновить: обычная пятиминутная метка вернула бы
    ту же картинку из кэша Telegram, и кнопка выглядела бы сломанной. */
 export function свежийГрафик(chart) {
-  return String(chart || "").replace(/&t=\d+/, `&t=${Date.now()}`);
+  const адрес = String(chart || "").replace(/&t=\d+/, `&t=${Date.now()}`);
+  if (!адрес) return адрес;
+  // fresh=1 — просьба к рисовалке прочитать цепочку прямо сейчас, а не
+  // брать историю из кеша: по нажатию «Обновить» человек ждёт именно
+  // свежую картинку, а не ту, что успел записать обход.
+  return адрес.includes("fresh=1") ? адрес : `${адрес}&fresh=1`;
 }

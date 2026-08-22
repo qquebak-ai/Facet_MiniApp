@@ -44,6 +44,67 @@ async function свечиБиржи(pool) {
   }
 }
 
+// Сеть та же, что у всего бота (см. api/_market.js).
+const TESTNET = process.env.TON_TESTNET !== "0";
+const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
+const TONAPI_KEY = (process.env.TONAPI_KEY || "").trim();
+
+// Оп-коды кривой: покупка приходит с «BUY», продажа — уведомлением от
+// жетонного кошелька. Те же числа, что в контракте и в приложении.
+const OP_BUY = 0x42555921;
+const OP_JETTON_NOTIFY = 0x7362d09c;
+// Столько кривая удерживает из покупки на газ (CURVE_GAS_BUY_OVERHEAD).
+const GAS_BUY_OVERHEAD = 120000000n;
+
+function опкод(msg) {
+  const raw = msg && msg.op_code;
+  if (raw == null || raw === "") return null;
+  const n = Number.parseInt(String(raw), 16);
+  return Number.isFinite(n) ? n : null;
+}
+
+/* История прямо из цепочки — для кнопки «Обновить».
+ *
+ * Резерв набирается по сделкам: покупка добавляет то, что осталось от
+ * приложенной суммы после газа и комиссии, продажа вычитает выплаченное
+ * продавцу. Отсюда и форма графика: покупки ведут его вверх, продажи —
+ * вниз, ровно как двигают цену на кривой.
+ */
+async function сделкиСЦепочки(curveAddress, feeBps) {
+  if (!curveAddress) return null;
+  try {
+    const заголовки = TONAPI_KEY ? { Authorization: `Bearer ${TONAPI_KEY}` } : undefined;
+    const res = await fetch(`${TONAPI}/v2/blockchain/accounts/${curveAddress}/transactions?limit=200`, { headers: заголовки });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const txs = ((json && json.transactions) || []).slice().sort((a, b) => (a.utime || 0) - (b.utime || 0));
+    const ряд = [];
+    let резерв = 0n;
+    const доля = BigInt(feeBps || 100n);
+    for (const tx of txs) {
+      const in_ = tx.in_msg;
+      if (!in_ || tx.success === false || tx.aborted) continue;
+      const op = опкод(in_);
+      if (op === OP_BUY) {
+        const пришло = BigInt(in_.value || 0) - GAS_BUY_OVERHEAD;
+        if (пришло <= 0n) continue;
+        const чисто = пришло - (пришло * доля) / 10000n;
+        if (чисто <= 0n) continue;
+        резерв += чисто;
+        ряд.push({ t: tx.utime, r: резерв.toString() });
+      } else if (op === OP_JETTON_NOTIFY) {
+        const выплата = (tx.out_msgs || []).reduce((s, m) => (опкод(m) ? s : s + BigInt(m.value || 0)), 0n);
+        if (выплата <= 0n) continue;
+        резерв = резерв > выплата ? резерв - выплата : 0n;
+        ряд.push({ t: tx.utime, r: резерв.toString() });
+      }
+    }
+    return ряд;
+  } catch (err) {
+    return null;
+  }
+}
+
 /* Цены по истории кривой.
  *
  * Раньше точки считались как «TON поделить на токены» по записям своих
@@ -56,15 +117,22 @@ async function свечиБиржи(pool) {
  * сделки (его складывает api/refresh-curves.js) и ту же формулу цены,
  * что зашита в контракт.
  */
-async function ценыКривой(tokenId, state) {
+async function ценыКривой(tokenId, state, curveAddress, свежо) {
   const admin = adminClient();
-  if (!admin || !state) return [];
-  const { data } = await admin
-    .from("curve_cache")
-    .select("trades")
-    .eq("token_id", tokenId)
-    .maybeSingle();
-  const ряд = (data && Array.isArray(data.trades)) ? data.trades : [];
+  if (!state) return [];
+  // По кнопке «Обновить» читаем цепочку сами: кеш пишет расписание раз
+  // в минуту, и сразу после покупки картинка отставала от текста, где
+  // цена берётся из контракта.
+  let ряд = свежо ? await сделкиСЦепочки(curveAddress, state.feeBps) : null;
+  if (!ряд || !ряд.length) {
+    if (!admin) return [];
+    const { data } = await admin
+      .from("curve_cache")
+      .select("trades")
+      .eq("token_id", tokenId)
+      .maybeSingle();
+    ряд = (data && Array.isArray(data.trades)) ? data.trades : [];
+  }
   if (!ряд.length) return [];
 
   const virtualTon = state.virtualTon;
@@ -197,6 +265,9 @@ export default async function handler(req, res) {
   const параметры = new URL(req.url, "https://x").searchParams;
   const пул = параметры.get("pool");
   const токен = параметры.get("token");
+  // «Обновить» в чате просит свежую картинку — тогда историю читаем
+  // прямо из цепочки, не дожидаясь очередного обхода.
+  const свежо = параметры.get("fresh") === "1";
 
   try {
     if (пул && looksLikeAddress(пул)) {
@@ -225,7 +296,7 @@ export default async function handler(req, res) {
         .maybeSingle();
       if (!строка) return res.status(404).json({ error: "not_found" });
       const state = await curveState(строка.curve_address);
-      const точки = await ценыКривой(строка.id, state);
+      const точки = await ценыКривой(строка.id, state, строка.curve_address, свежо);
       const цена = priceFromState(state);
       // Последняя точка — из контракта: он свежее любой записанной
       // истории. Сделок ещё не было — рисуем прямую по текущей цене,
@@ -244,7 +315,7 @@ export default async function handler(req, res) {
         вTon: true,
       });
       res.setHeader("Content-Type", "image/png");
-      res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
+      res.setHeader("Cache-Control", свежо ? "no-store" : "public, max-age=60, s-maxage=60");
       return res.status(200).send(png);
     }
 
