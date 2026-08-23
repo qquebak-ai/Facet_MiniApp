@@ -4751,38 +4751,44 @@ function HomeHero({ onGoTab, onGoCreate }) {
         <div className="relative" style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 700, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
           {t("heroTitle")}
         </div>
-        <div className="relative" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 15.5, marginTop: 12, lineHeight: 1.55, maxWidth: 330 }}>
+        <div className="relative" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14.5, marginTop: 10, lineHeight: 1.5, maxWidth: 320 }}>
           {t("heroBodyLead")}<span className="fx-shine-text" style={{ fontWeight: 600 }}>{t("heroFee")}</span>{t("heroBodyTail")}
         </div>
       </div>
 
-      <div className="flex items-start justify-around gap-2">
-        {actions.map(a => {
+      {/* Действия плитками, а не кружками в пустоте: три тёмных круга на
+          чёрном фоне читались как дырки, подписи под ними висели сами по
+          себе, и верх страницы выглядел незаконченным. Плитка держит
+          иконку и подпись вместе, а первая — акцентная: запуск токена
+          и есть то, ради чего сюда приходят. */}
+      <div className="flex gap-2">
+        {actions.map((a) => {
           const isLaunch = a.key === "homeActionLaunch";
           return (
             <button
               key={a.key}
               onClick={a.onClick}
-              className="fx-tap flex flex-col items-center gap-2"
-              style={{ background: "transparent", border: "none" }}
+              className="fx-card fx-tap flex-1 flex flex-col items-center justify-center gap-2"
+              style={{
+                padding: "14px 8px", borderRadius: 20,
+                background: isLaunch
+                  ? `linear-gradient(160deg, ${hexA(T.electric, 0.18)} 0%, ${hexA(T.electric, 0.05)} 70%, transparent 100%)`
+                  : T.surface,
+                border: `1px solid ${isLaunch ? hexA(T.electric, 0.45) : T.line}`,
+                position: "relative", overflow: "hidden",
+              }}
             >
-              <div
-                className="fx-card fx-inert"
-                style={{
-                  width: 60, height: 60, borderRadius: "50%",
-                  background: "#000000", border: `1px solid ${T.line}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  position: "relative", overflow: "hidden",
-                }}
-              >
-                <WidgetSparks />
-                {isLaunch ? (
-                  <RocketIconFX />
-                ) : (
-                  <a.icon size={24} strokeWidth={1.6} color={T.turquoise} style={{ position: "relative", zIndex: 1 }} />
-                )}
+              {isLaunch && <WidgetSparks />}
+              <div style={{ position: "relative", zIndex: 1, height: 26, display: "flex", alignItems: "center" }}>
+                {isLaunch ? <RocketIconFX /> : <a.icon size={22} strokeWidth={1.7} color={T.turquoise} />}
               </div>
-              <span style={{ fontFamily: bodyFont, fontSize: 12.5, fontWeight: 500, color: T.ice, textAlign: "center", lineHeight: 1.25, maxWidth: 82 }}>{t(a.key)}</span>
+              <span style={{
+                position: "relative", zIndex: 1,
+                fontFamily: bodyFont, fontSize: 12.5, fontWeight: 600,
+                color: isLaunch ? T.ice : T.muted, textAlign: "center", lineHeight: 1.2,
+              }}>
+                {t(a.key)}
+              </span>
             </button>
           );
         })}
