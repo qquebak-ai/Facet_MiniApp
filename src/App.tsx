@@ -8522,6 +8522,9 @@ function Leaderboard({ onOpenToken, onOpenProfile, live = [] }) {
       return {
         ...э,
         raised: св.raisedTon != null ? св.raisedTon : э.raised,
+        // Капитализация приезжает оттуда же, из ленты: в самом топе её
+        // нет, а на строке она говорит о токене больше, чем собранное.
+        mcapNum: св.mcapNum,
         // Логотип у ленты бывает свежее: она добирает его из цепочки,
         // когда в базе пусто.
         logo_url: э.logo_url || св.logoUrl || null,
@@ -8586,6 +8589,14 @@ function Leaderboard({ onOpenToken, onOpenProfile, live = [] }) {
                   : tf("topLaunched", { n: э.launched, ton: fmtTon(Number(э.raised) || 0) })}
               </div>
             </div>
+            {/* Капитализация справа — то, по чему токены сравнивают в
+                первую очередь. Нет числа (лента ещё не дочитала кривую)
+                — места не занимаем. */}
+            {tab === "tokens" && э.mcapNum > 0 && (
+              <span style={{ fontFamily: displayFont, color: T.up, fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
+                {fmtUSD(э.mcapNum)}
+              </span>
+            )}
           </button>
         ))}
       </div>
