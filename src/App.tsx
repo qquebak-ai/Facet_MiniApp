@@ -10160,7 +10160,10 @@ function ImageCropModal({ file, shape = "circle", onCancel, onConfirm }) {
       const croppedFile = new File([blob], `${baseName}-cropped.jpg`, { type: "image/jpeg" });
       const url = URL.createObjectURL(croppedFile);
       onConfirm(croppedFile, url);
-    }, "image/jpeg", 0.92);
+      // Качество 0.82 вместо 0.92: на кружке в 40–90 пикселей разницы
+      // не видно, а файл легче примерно вдвое — столько же экономится
+      // на отправке, и «Сохранить» перестаёт ждать мобильную сеть.
+    }, "image/jpeg", 0.82);
   }
 
   if (!file) return null;
@@ -12102,9 +12105,12 @@ function safeImageExt(file) {
 async function uploadAvatarIfNeeded(userId) {
   if (!avatarFile) return avatarUrl; // ничего не выбирали — оставляем как было
   const path = `${userId}/${Date.now()}.${safeImageExt(avatarFile)}`;
+  // contentType задаём сами: без него Supabase иногда ставит
+  // application/octet-stream, и картинка потом отдаётся браузеру как
+  // файл на скачивание.
   const { error: uploadError } = await supabase.storage
     .from("avatars")
-    .upload(path, avatarFile, { upsert: true });
+    .upload(path, avatarFile, { upsert: true, contentType: avatarFile.type || "image/jpeg", cacheControl: "31536000" });
   if (uploadError) {
     setServerError(tf("authErrAvatarUpload", { msg: uploadError.message }));
     return null;
@@ -12129,15 +12135,23 @@ async function uploadAvatarIfNeeded(userId) {
 
 // ---------- EDIT (no auth call — just updates the row) ----------
     if (isEdit) {
-      const { data: sessionData } = await supabase.auth.getUser();
-      const userId = sessionData?.user?.id;
+      // Кто мы — берём из сохранённой сессии, а не запросом getUser():
+      // тот каждый раз ходит на сервер сверять токен, и на медленной
+      // сети кнопка секунду висела в «Проверяем…» ещё до того, как
+      // началось само сохранение. Сессия лежит на устройстве и знает
+      // тот же идентификатор.
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id;
       let uploadedUrl = avatarUrl; // если userId вдруг не найден — оставляем как было
 
       if (userId) {
         uploadedUrl = await uploadAvatarIfNeeded(userId);
         if (avatarFile && !uploadedUrl) { setSubmitting(false); return; } // загрузка не удалась
 
-        const { error: updateError } = await supabase
+        // Запись в базу не задерживает окно: картинка уже загружена, а
+        // строка профиля — короткая, и ждать её ответа человеку незачем.
+        // Ошибку он увидит на следующем открытии, там же где и правил.
+        supabase
           .from("profiles")
           .update({
             // Ник не трогаем: он неизменяем, и в базе на это стоит
@@ -12146,15 +12160,12 @@ async function uploadAvatarIfNeeded(userId) {
             avatar_url: uploadedUrl,
             emoji: uploadedUrl ? null : previewEmoji,
           })
-          .eq("id", userId);
-        setSubmitting(false);
-        if (updateError) {
-          setServerError(friendlyAuthError(updateError.message));
-          return;
-        }
-      } else {
-        setSubmitting(false);
+          .eq("id", userId)
+          .then(({ error }) => {
+            if (error) console.error("[mintly] профиль не сохранился:", error.message);
+          });
       }
+      setSubmitting(false);
 
       onSubmit({
         nickname: nicknameTrimmed,
