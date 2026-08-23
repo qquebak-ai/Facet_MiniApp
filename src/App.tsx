@@ -1199,6 +1199,21 @@ function GlobalStyle() {
         color: transparent;
         animation: textSweep 5s linear infinite;
       }
+      /* Блик по шкале до биржи: та же бегущая белая полоса, что и в
+         надписи «комиссией 1%», только красит не буквы, а заливку. Шкала
+         почти всегда стоит на месте, и без движения её принимали за
+         поломанную картинку. */
+      @keyframes barSweep { 0%{background-position:100% 0;} 100%{background-position:0% 0;} }
+      .fx-shine-bar {
+        background-image: linear-gradient(100deg, ${T.electric} 0%, ${T.electric} 40%, #ffffff 50%, ${T.electric} 60%, ${T.electric} 100%);
+        background-size: 220% 100%;
+        animation: barSweep 5s linear infinite;
+      }
+      .fx-shine-bar-up {
+        background-image: linear-gradient(100deg, ${T.up} 0%, ${T.up} 40%, #ffffff 50%, ${T.up} 60%, ${T.up} 100%);
+        background-size: 220% 100%;
+        animation: barSweep 5s linear infinite;
+      }
       @keyframes mcapGlow { 0%,100%{text-shadow:0 0 10px currentColor,0 0 2px currentColor;} 50%{text-shadow:0 0 18px currentColor,0 0 4px currentColor;} }
       @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
       /* Появляется на месте — только проявлением и лёгким укрупнением,
@@ -5899,7 +5914,7 @@ function GraduationBar({ raisedTon = 0, targetTon = 0, compact = false }) {
   if (compact) {
     return (
       <div style={{ height: 3, borderRadius: 2, background: T.surfaceHi, overflow: "hidden", marginTop: 6 }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: done ? T.up : T.electric }} />
+        <div className={done ? "fx-shine-bar-up" : "fx-shine-bar"} style={{ width: `${pct}%`, height: "100%" }} />
       </div>
     );
   }
@@ -5912,7 +5927,7 @@ function GraduationBar({ raisedTon = 0, targetTon = 0, compact = false }) {
         </span>
       </div>
       <div style={{ height: 6, borderRadius: 3, background: T.surfaceHi, overflow: "hidden" }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: done ? T.up : T.electric, transition: `width ${EASE}` }} />
+        <div className={done ? "fx-shine-bar-up" : "fx-shine-bar"} style={{ width: `${pct}%`, height: "100%", transition: `width ${EASE}` }} />
       </div>
       <div className="flex items-center justify-between" style={{ marginTop: 7 }}>
         <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>
@@ -8294,7 +8309,7 @@ function AlmostListed({ tokens = [], onOpen }) {
                   <span style={{ fontFamily: monoFont, color: T.electric, fontSize: 13, fontWeight: 700 }}>{pct.toFixed(0)}%</span>
                 </div>
                 <div style={{ height: 4, borderRadius: 2, background: T.surfaceHi, overflow: "hidden", marginTop: 6 }}>
-                  <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: T.electric }} />
+                  <div className="fx-shine-bar" style={{ width: `${Math.min(100, pct)}%`, height: "100%" }} />
                 </div>
                 <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 5 }}>
                   {tf("homeAlmostLeft", { left: fmtTon(Math.max(0, tok.graduationTon - tok.raisedTon)) })}
