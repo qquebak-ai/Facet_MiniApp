@@ -15224,7 +15224,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         <div
           className="flex items-center justify-around"
           style={{
-            position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: insetBottom + 16, zIndex: 5,
+            // Ниже прежнего: отступ в шестнадцать пикселей поднимал
+            // панель над самым краем, и она отъедала середину экрана.
+            position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: insetBottom + 6, zIndex: 5,
             width: "92%", maxWidth: 420,
             padding: "10px 10px",
             borderRadius: 999,
