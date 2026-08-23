@@ -8299,8 +8299,11 @@ function AlmostListed({ tokens = [], onOpen }) {
             <button
               key={tok.id}
               onClick={() => onOpen && onOpen(tok)}
-              className="fx-card fx-tap w-full flex items-center gap-3 rounded-[22px] p-3 text-left"
-              style={{ background: T.surface, border: `1px solid ${T.line}`, animationDelay: `${i * 60}ms` }}
+              // Подложки нет намеренно: три тёмных прямоугольника подряд
+              // на тёмном фоне читались как пустые заглушки, а не как
+              // список. Строку держат аватарка, тикер и шкала.
+              className="fx-card fx-tap w-full flex items-center gap-3 rounded-[22px] py-2.5 text-left"
+              style={{ background: "transparent", border: "none", animationDelay: `${i * 60}ms` }}
             >
               <TokenAvatar size={40} tone="up" src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
               <div className="flex-1 min-w-0">
@@ -8556,8 +8559,8 @@ function Leaderboard({ onOpenToken, onOpenProfile, live = [] }) {
           <button
             key={э.id || i}
             onClick={() => (tab === "tokens" ? onOpenToken && onOpenToken(э) : onOpenProfile && onOpenProfile(э.id))}
-            className="fx-card fx-tap w-full flex items-center gap-3 rounded-[20px] p-2.5 text-left"
-            style={{ background: T.surface, border: `1px solid ${T.line}`, animationDelay: `${i * 40}ms` }}
+            className="fx-card fx-tap w-full flex items-center gap-3 rounded-[20px] py-2 text-left"
+            style={{ background: "transparent", border: "none", animationDelay: `${i * 40}ms` }}
           >
             {/* Место числом, а не медалью: медали читаются наградой, а
                 это просто порядок. */}
