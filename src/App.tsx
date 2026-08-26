@@ -1255,16 +1255,20 @@ function GlobalStyle() {
       @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
       /* Появляется на месте — только проявлением и лёгким укрупнением,
          без наезда сверху. Уходит вверх и растворяется. */
-      /* Лист падает сверху вниз, покачиваясь и поворачиваясь, и
-         растворяется на обоих концах пути — так не видно, как он
-         возвращается наверх.
-         Углы поворота приходят переменными, чтобы каждый лист летел
-         по-своему, а само правило было одно на всех. */
-      @keyframes leafFall {
-        0%   { transform: translate3d(0, -14vh, 0) rotate(var(--r0)); opacity: 0; }
-        8%   { opacity: var(--o); }
-        88%  { opacity: var(--o); }
-        100% { transform: translate3d(var(--dx), 104vh, 0) rotate(var(--r1)); opacity: 0; }
+      /* Пятна фона. Ходят по своим траекториям и с разной длительностью:
+         при одинаковом движении они дышали бы в такт и читались бы как
+         мигание, а не как медленный свет. */
+      @keyframes auraDrift1 {
+        0%,100% { transform: translate3d(0,0,0) scale(1); }
+        50%     { transform: translate3d(7%,5%,0) scale(1.16); }
+      }
+      @keyframes auraDrift2 {
+        0%,100% { transform: translate3d(0,0,0) scale(1.12); }
+        50%     { transform: translate3d(-9%,-6%,0) scale(0.94); }
+      }
+      @keyframes auraDrift3 {
+        0%,100% { transform: translate3d(0,0,0) scale(1.05); }
+        50%     { transform: translate3d(5%,-8%,0) scale(1.22); }
       }
       /* Заливка листа в индикаторе загрузки: бежит снизу вверх и уходит
          за верхний край, потом начинается заново. */
@@ -1689,139 +1693,62 @@ const LEAF_KINDS = [
   },
 ];
 
-/* Один лист. Компонент отдельный и мемоизированный: разметка у каждого
-   в десяток путей, а перерисовывать её незачем — движение целиком на
-   CSS. Мелкие листья идут без прожилок: на 20 px они превращаются в
-   грязь, а не в деталь. */
-const BgLeaf = React.memo(function BgLeaf({ kind, size, flip, seed = 0 }) {
-  const leaf = LEAF_KINDS[kind % LEAF_KINDS.length];
-  const detailed = size >= 30;
-  // Идентификаторы разводятся по листу: одинаковые в пределах страницы
-  // браузер сводит к первому, и все листья получили бы одну заливку.
-  const uid = `bl${kind}-${seed}`;
-  return (
-    <g transform={flip ? "scale(-1,1)" : undefined}>
-      <defs>
-        {/* Матовое стекло: почти прозрачная пластина, светлее у кромки,
-            куда падает свет, и глуше в глубине. Сплошная заливка цветом
-            давала наклейку, а не стекло. */}
-        <linearGradient id={`g-${uid}`} x1="0.15" y1="0" x2="0.85" y2="1">
-          <stop offset="0%" stopColor="#EAFFF4" stopOpacity="0.42" />
-          <stop offset="45%" stopColor={T.mintGlass} stopOpacity="0.24" />
-          <stop offset="100%" stopColor={T.mintGlass} stopOpacity="0.09" />
-        </linearGradient>
-        {/* Блик по одной стороне — короткий, иначе читается как вторая
-            заливка поверх первой. */}
-        <linearGradient id={`s-${uid}`} x1="0" y1="0" x2="1" y2="0.7">
-          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.34" />
-          <stop offset="38%" stopColor="#FFFFFF" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={leaf.outline} fill={`url(#g-${uid})`} stroke="#DFFFF0" strokeOpacity="0.55" strokeWidth="0.9" />
-      <path d={leaf.outline} fill={`url(#s-${uid})`} />
-      {/* Черенок и жилы того же стекла, что и сам лист: раньше они
-          горели оранжевым и читались отдельным рисунком поверх
-          прозрачной пластины — фон переставал быть фоном. Белым по
-          белому это уже не схема, а прожилки. */}
-      <path d={leaf.stem} stroke="#EAFFF4" strokeWidth={1.3} strokeLinecap="round" fill="none" opacity="0.5" />
-      {detailed && (
-        <g stroke="#EAFFF4" strokeWidth={0.8} strokeLinecap="round" fill="none" opacity="0.34">
-          {leaf.veins.map((v, i) => <path key={i} d={v} />)}
-        </g>
-      )}
-    </g>
-  );
-});
 
-/* CyberGrid — живой фон вместо плоской чёрной заливки: падающие мятные
-   листья на CSS/SVG, без rAF и канваса, чтобы не жечь батарею в Telegram
-   WebView. Всё под pointer-events:none и на zIndex 0 — контент
-   приложения лежит выше на zIndex 1.
-   Сетка отсюда убрана: её тонкие линии просвечивали рядом с элементами
-   и спорили с содержимым. */
-const LEAF_COUNT = 33;
+/* CyberGrid — живой фон вместо плоской чёрной заливки: несколько
+   крупных размытых пятен мяты и оранжевого медленно ходят по экрану,
+   поверх — едва заметное зерно и виньетка по краям. Всё на CSS, без rAF
+   и канваса, чтобы не жечь батарею в Telegram WebView. Слой под
+   pointer-events:none и на zIndex 0 — контент приложения лежит выше.
+
+   Листья убраны: осенний силуэт спорил с названием и с торговыми
+   экранами, где на фоне и так много мелких деталей. */
+
+// Зерно поверх градиентов. Без него большие мягкие пятна на телефоне
+// расслаиваются полосами — экран не вытягивает столько близких оттенков.
+const ЗЕРНО = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E\")";
 
 function CyberGrid({ showStars = true }) {
-  // Листья трёх пород падают сверху вниз, покачиваясь и поворачиваясь.
-  // Порода, зеркало и размер у каждого свои — одинаковых силуэтов рядом
-  // не встречается.
-  //
-  // Каждому листу отведена своя вертикальная полоса экрана, и внутри неё
-  // он лишь немного смещается. При полностью случайных координатах
-  // несколько листьев неизбежно оказывались бы рядом и читались бы как
-  // ком; полосы этого не допускают. Задержки тоже разнесены по своему
-  // циклу — иначе они падали бы строем.
-  const leaves = useMemo(() => {
-    const rnd = seededRand(88117);
-    const order = Array.from({ length: LEAF_COUNT }, (_, i) => i);
-    // Полосы раздаются вперемешку, чтобы соседние по времени листья не
-    // шли слева направо по порядку.
-    for (let i = order.length - 1; i > 0; i--) {
-      const j = Math.floor(rnd() * (i + 1));
-      [order[i], order[j]] = [order[j], order[i]];
-    }
-    const band = 100 / LEAF_COUNT;
-    return order.map((slot, i) => {
-      const dur = 15 + rnd() * 20;
-      return {
-        left: slot * band + rnd() * band * 0.7,
-        size: 16 + rnd() * 46,
-        kind: Math.floor(rnd() * LEAF_KINDS.length),
-        flip: rnd() < 0.5,
-        // Стекло само по себе бледное: прежние доли задавались под
-        // сплошную заливку, и с ними лист пропадал совсем.
-        opacity: 0.2 + rnd() * 0.26,
-        dur,
-        delay: -(i / LEAF_COUNT) * dur - rnd() * 4,
-        r0: -60 + rnd() * 120,
-        r1: -180 + rnd() * 360,
-        dx: -34 + rnd() * 68,
-      };
-    });
-  }, []);
+  // В профиле и на чужой странице фон приглушаем: там своя
+  // карточка-подложка, и два слоя друг на друге читаются как шум.
+  const сила = showStars ? 1 : 0.45;
+
+  const пятна = [
+    { цвет: T.mintGlass, доля: 0.27, left: "-32%", top: "-20%", w: "115%", h: "72%", анимация: "auraDrift1 26s" },
+    { цвет: T.electric, доля: 0.19, left: "34%", top: "18%", w: "100%", h: "64%", анимация: "auraDrift2 34s" },
+    { цвет: T.mintGlass, доля: 0.18, left: "-20%", top: "58%", w: "104%", h: "66%", анимация: "auraDrift3 42s" },
+    { цвет: T.electric, доля: 0.12, left: "10%", top: "80%", w: "90%", h: "58%", анимация: "auraDrift2 30s" },
+  ];
 
   return (
     <div aria-hidden data-bg-fx style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
-      {/* листья. В профиле их гасим: там своя карточка-подложка, и два
-          слоя фона друг на друге читаются как шум.
+      {/* Пятна лежат в одном изолированном слое: так браузер собирает
+          фон целиком, а не кусками — иначе на границах проступают
+          светлые швы. */}
+      <div style={{ position: "absolute", inset: 0, transform: "translateZ(0)", isolation: "isolate", contain: "paint" }}>
+        {пятна.map((п, i) => (
+          <div
+            key={`aura${i}`}
+            style={{
+              position: "absolute",
+              left: п.left, top: п.top, width: п.w, height: п.h,
+              background: `radial-gradient(50% 50% at 50% 50%, ${hexA(п.цвет, п.доля * сила)} 0%, ${hexA(п.цвет, п.доля * сила * 0.35)} 45%, transparent 72%)`,
+              animation: `${п.анимация} ease-in-out ${-i * 7}s infinite`,
+              backfaceVisibility: "hidden",
+            }}
+          />
+        ))}
+      </div>
 
-          Все листья лежат в одном слое: обёртка вынесена на композицию
-          (translateZ) и изолирована, а у самих листьев больше нет
-          will-change. С отдельным постоянным слоем на каждый лист
-          браузер пересобирал картинку кусками, и на границах элементов
-          поверх фона проступали тонкие светлые линии. */}
-      {showStars && (
-        <div style={{ position: "absolute", inset: 0, transform: "translateZ(0)", isolation: "isolate", contain: "paint" }}>
-      {leaves.map((l, i) => (
-        <svg
-          key={`leaf${i}`}
-          // Ширина считается от высоты по пропорциям области рисования:
-          // при равных сторонах лист растягивался бы поперёк.
-          width={Math.round(l.size * (30 / 38))}
-          height={l.size}
-          viewBox="-15 -32 30 38"
-          style={{
-            position: "absolute",
-            left: `${l.left}%`,
-            top: 0,
-            ["--o"]: l.opacity,
-            ["--r0"]: `${l.r0}deg`,
-            ["--r1"]: `${l.r1}deg`,
-            ["--dx"]: `${l.dx}px`,
-            opacity: 0,
-            animation: `leafFall ${l.dur}s linear ${l.delay}s infinite`,
-            backfaceVisibility: "hidden",
-          }}
-        >
-          <BgLeaf kind={l.kind} size={l.size} flip={l.flip} seed={i} />
-        </svg>
-      ))}
-        </div>
-      )}
+      {/* Виньетка: к краям темнее, чтобы текст не спорил с пятнами. */}
+      <div style={{
+        position: "absolute", inset: 0,
+        background: `radial-gradient(120% 80% at 50% 40%, transparent 0%, ${hexA(T.bg, 0.42)} 70%, ${hexA(T.bg, 0.82)} 100%)`,
+      }} />
+
+      <div style={{ position: "absolute", inset: 0, backgroundImage: ЗЕРНО, opacity: 0.05, mixBlendMode: "overlay" }} />
     </div>
   );
 }
-
 
 /* animated 0 -> value counter, no external deps */
 function useCountUp(target, duration = 900, active = true) {
