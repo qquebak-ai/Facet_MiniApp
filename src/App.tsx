@@ -209,8 +209,7 @@ const STR = {
     homeLive: "Онлайн",
     homeEcoTitle: "Площадка растёт",
     homeEcoUnit: "токенов запущено",
-    homeEcoDay: "за сутки",
-    homeEcoRaised: "TON в кривых",
+    homeEcoRaised: "TON в токенах",
     homeEcoDex: "на бирже",
     homeDoNow: "Что сделать сейчас",
     homeDoLaunchNote: "Свой токен за пару минут",
@@ -576,8 +575,7 @@ const STR = {
     homeLive: "Online",
     homeEcoTitle: "The platform is growing",
     homeEcoUnit: "tokens launched",
-    homeEcoDay: "today",
-    homeEcoRaised: "TON on curves",
+    homeEcoRaised: "TON in tokens",
     homeEcoDex: "on DEX",
     homeDoNow: "What to do now",
     homeDoLaunchNote: "Your token in a couple of minutes",
@@ -4794,7 +4792,6 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
   }, [live]);
 
   const всего = Number((stats || {}).launched) || 0;
-  const заСутки = Number((stats || {}).launched24) || 0;
   const собрано = живые ? Math.max(живые.raisedTon, Number((stats || {}).raisedTon) || 0) : Number((stats || {}).raisedTon) || 0;
   const наБирже = живые ? Math.max(живые.graduated, Number((stats || {}).graduated) || 0) : Number((stats || {}).graduated) || 0;
 
@@ -4847,7 +4844,6 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
 
         <div className="relative flex flex-wrap gap-2" style={{ marginTop: 12 }}>
           {[
-            { рост: true, число: `+${заСутки}`, подпись: t("homeEcoDay") },
             { рост: false, число: fmtTon(собраноПлавно), подпись: t("homeEcoRaised") },
             { рост: false, число: String(наБирже), подпись: t("homeEcoDex") },
           ].map((б, i) => (
