@@ -1707,10 +1707,24 @@ const LEAF_KINDS = [
 // расслаиваются полосами — экран не вытягивает столько близких оттенков.
 const ЗЕРНО = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E\")";
 
-function CyberGrid({ showStars = true }) {
+function CyberGrid({ showStars = true, hidden = false }) {
   // В профиле и на чужой странице фон приглушаем: там своя
   // карточка-подложка, и два слоя друг на друге читаются как шум.
   const сила = showStars ? 1 : 0.45;
+
+  // На мемпаде фон убирается совсем: пятна уезжают вверх и гаснут, под
+  // ними остаётся чистый чёрный. Пока уезжают — слой ещё в разметке,
+  // после перехода снимаем его, чтобы анимации пятен не крутились
+  // впустую.
+  const [снят, setСнят] = useState(hidden);
+  useEffect(() => {
+    if (!hidden) { setСнят(false); return; }
+    const id = setTimeout(() => setСнят(true), 560);
+    return () => clearTimeout(id);
+  }, [hidden]);
+  // Слой не выкидываем из разметки, а прячем: иначе при возвращении он
+  // появлялся бы уже на месте, без обратного полёта.
+  const убран = hidden && снят;
 
   const пятна = [
     { цвет: T.mintGlass, доля: 0.27, left: "-32%", top: "-20%", w: "115%", h: "72%", анимация: "auraDrift1 26s" },
@@ -1724,7 +1738,14 @@ function CyberGrid({ showStars = true }) {
       {/* Пятна лежат в одном изолированном слое: так браузер собирает
           фон целиком, а не кусками — иначе на границах проступают
           светлые швы. */}
-      <div style={{ position: "absolute", inset: 0, transform: "translateZ(0)", isolation: "isolate", contain: "paint" }}>
+      <div style={{
+        position: "absolute", inset: 0, isolation: "isolate", contain: "paint",
+        transform: hidden ? "translate3d(0,-42%,0) scale(0.92)" : "translateZ(0)",
+        opacity: hidden ? 0 : 1,
+        visibility: убран ? "hidden" : "visible",
+        // Уход быстрый, но с торможением — иначе читается как рывок.
+        transition: "transform 520ms cubic-bezier(0.22,0.61,0.36,1), opacity 420ms ease-out",
+      }}>
         {пятна.map((п, i) => (
           <div
             key={`aura${i}`}
@@ -1733,6 +1754,7 @@ function CyberGrid({ showStars = true }) {
               left: п.left, top: п.top, width: п.w, height: п.h,
               background: `radial-gradient(50% 50% at 50% 50%, ${hexA(п.цвет, п.доля * сила)} 0%, ${hexA(п.цвет, п.доля * сила * 0.35)} 45%, transparent 72%)`,
               animation: `${п.анимация} ease-in-out ${-i * 7}s infinite`,
+              animationPlayState: убран ? "paused" : "running",
               backfaceVisibility: "hidden",
             }}
           />
@@ -1743,9 +1765,15 @@ function CyberGrid({ showStars = true }) {
       <div style={{
         position: "absolute", inset: 0,
         background: `radial-gradient(120% 80% at 50% 40%, transparent 0%, ${hexA(T.bg, 0.42)} 70%, ${hexA(T.bg, 0.82)} 100%)`,
+        opacity: hidden ? 0 : 1,
+        transition: "opacity 420ms ease-out",
       }} />
 
-      <div style={{ position: "absolute", inset: 0, backgroundImage: ЗЕРНО, opacity: 0.05, mixBlendMode: "overlay" }} />
+      <div style={{
+        position: "absolute", inset: 0, backgroundImage: ЗЕРНО,
+        opacity: hidden ? 0 : 0.05, mixBlendMode: "overlay",
+        transition: "opacity 420ms ease-out",
+      }} />
     </div>
   );
 }
@@ -15179,7 +15207,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           поджигала, убраны: на разных телефонах они ложились по-разному,
           а на тех, где острова нет, рамка выглядела случайной деталью. */}
       {rocketFlying && <LaunchRocket variant={rocketVariant} />}
-      <CyberGrid showStars={view !== "profile" && view !== "user"} />
+      <CyberGrid showStars={view !== "profile" && view !== "user"} hidden={view === "mempad"} />
       {/* Пришли за подписью — заставка только задерживает: человек ждёт
           кошелёк, а не знакомство с приложением. */}
       {!bootHidden && !сразуВКошелёк && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
