@@ -1240,6 +1240,19 @@ function GlobalStyle() {
         background-size: 220% 100%;
         animation: barSweep 5s linear infinite;
       }
+      /* Свечение в углу сводки: неподвижное пятно читалось как пятно
+         на картинке, поэтому оно дышит и чуть смещается — два слоя с
+         разным ритмом, чтобы движение не выглядело зациклённым. */
+      @keyframes heroGlowA {
+        0%,100% { transform: translate3d(0,0,0) scale(1);      opacity: .85; }
+        50%     { transform: translate3d(-6%,4%,0) scale(1.18); opacity: 1;   }
+      }
+      @keyframes heroGlowB {
+        0%,100% { transform: translate3d(0,0,0) scale(1.1);    opacity: .45; }
+        50%     { transform: translate3d(8%,-6%,0) scale(.92);  opacity: .9;  }
+      }
+      .fx-hero-glow-a { animation: heroGlowA 6s ease-in-out infinite; }
+      .fx-hero-glow-b { animation: heroGlowB 9s ease-in-out -2s infinite; }
       @keyframes mcapGlow { 0%,100%{text-shadow:0 0 10px currentColor,0 0 2px currentColor;} 50%{text-shadow:0 0 18px currentColor,0 0 4px currentColor;} }
       @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
       /* Появляется на месте — только проявлением и лёгким укрупнением,
@@ -4822,10 +4835,15 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
       {/* Сводка. Крупным — то, что растёт: запущенные токены. Рядом
           бейджи с приростом за сутки и с тем, сколько сейчас в кривых. */}
       <div className="fx-view relative rounded-[24px] overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.line}`, padding: 16 }}>
-        <div style={{
+        <div className="fx-hero-glow-a" style={{
           position: "absolute", right: "-20%", top: "-40%", width: "70%", height: "160%",
-          background: `radial-gradient(50% 50% at 50% 50%, ${hexA(T.electric, 0.16)} 0%, transparent 70%)`,
-          pointerEvents: "none",
+          background: `radial-gradient(50% 50% at 50% 50%, ${hexA(T.electric, 0.42)} 0%, ${hexA(T.electric, 0.14)} 45%, transparent 72%)`,
+          filter: "blur(2px)", pointerEvents: "none",
+        }} />
+        <div className="fx-hero-glow-b" style={{
+          position: "absolute", right: "6%", bottom: "-70%", width: "55%", height: "150%",
+          background: `radial-gradient(50% 50% at 50% 50%, ${hexA(T.electric, 0.3)} 0%, transparent 70%)`,
+          filter: "blur(6px)", pointerEvents: "none",
         }} />
         <div className="relative flex items-center gap-2">
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15.5, fontWeight: 700 }}>{t("homeEcoTitle")}</span>
