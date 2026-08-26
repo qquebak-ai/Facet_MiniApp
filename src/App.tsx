@@ -213,7 +213,7 @@ const STR = {
     homeDoNow: "Что сделать сейчас",
     homeDoLaunchNote: "Свой токен за пару минут",
     homeDoMempadNote: "Смотри, что запускают сейчас",
-    homeDoWalletNote: "Баланс и твои токены",
+    homeDoProfileNote: "Твои токены, награды и настройки",
     homePopular: "Популярные",
     homePopularAll: "Все",
     heroBodyLead: "Создавай, торгуй и расти с ",
@@ -222,7 +222,7 @@ const STR = {
     mempadSpotlight: "В центре внимания",
     mempadLaunchToken: "Запустить токен",
     tickerBought: "купил", tickerSold: "продал",
-    sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionWallet: "Кошелёк",
+    sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionProfile: "Профиль",
     feedTitle: "Прямо сейчас",
     feedSub: "Что происходит на площадке",
     feedTrade: "{who} купил ${ticker} на {ton} TON",
@@ -578,7 +578,7 @@ const STR = {
     homeDoNow: "What to do now",
     homeDoLaunchNote: "Your token in a couple of minutes",
     homeDoMempadNote: "See what is launching now",
-    homeDoWalletNote: "Balance and your tokens",
+    homeDoProfileNote: "Your tokens, rewards and settings",
     homePopular: "Popular",
     homePopularAll: "All",
     heroBodyLead: "Create, trade and grow with ",
@@ -587,7 +587,7 @@ const STR = {
     mempadSpotlight: "Spotlight",
     mempadLaunchToken: "Launch token",
     tickerBought: "bought", tickerSold: "sold",
-    sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionWallet: "Wallet",
+    sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionProfile: "Profile",
     feedTitle: "Right now",
     feedSub: "What's happening here",
     feedTrade: "{who} bought ${ticker} for {ton} TON",
@@ -4835,7 +4835,7 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
     // возвращаться он умеет только на вкладку, с которой пришли.
     { icon: Rocket, key: "homeActionLaunch", note: "homeDoLaunchNote", onClick: onGoCreate },
     { icon: Flame, key: "homeActionMempad", note: "homeDoMempadNote", onClick: () => onGoTab("mempad") },
-    { icon: Wallet, key: "homeActionWallet", note: "homeDoWalletNote", onClick: () => onGoTab("wallet") },
+    { icon: User, key: "homeActionProfile", note: "homeDoProfileNote", onClick: () => onGoTab("profile") },
   ];
 
   return (
