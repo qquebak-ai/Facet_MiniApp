@@ -208,7 +208,6 @@ const STR = {
     homeWelcomeSub: "Ты часть площадки. Создавай, торгуй, расти.",
     homeLive: "Онлайн",
     homeEcoTitle: "Площадка растёт",
-    homeEcoUnit: "токенов запущено",
     homeEcoRaised: "TON в токенах",
     homeEcoDex: "на бирже",
     homeDoNow: "Что сделать сейчас",
@@ -574,7 +573,6 @@ const STR = {
     homeWelcomeSub: "You are part of the platform. Create, trade, grow.",
     homeLive: "Online",
     homeEcoTitle: "The platform is growing",
-    homeEcoUnit: "tokens launched",
     homeEcoRaised: "TON in tokens",
     homeEcoDex: "on DEX",
     homeDoNow: "What to do now",
@@ -4804,11 +4802,30 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
     };
   }, [live]);
 
-  const всего = Number((stats || {}).launched) || 0;
   const собрано = живые ? Math.max(живые.raisedTon, Number((stats || {}).raisedTon) || 0) : Number((stats || {}).raisedTon) || 0;
   const наБирже = живые ? Math.max(живые.graduated, Number((stats || {}).graduated) || 0) : Number((stats || {}).graduated) || 0;
 
-  const всегоПлавно = useTicker(всего);
+  // Счётчик онлайна. Ходит внутри 300–700 мелкими шагами: скачок сразу
+  // на сотню читался бы как ошибка, а стоящее на месте число — как
+  // заглушка. Направление держим до края диапазона, чтобы движение
+  // выглядело приливом, а не дрожью.
+  const [онлайн, setОнлайн] = useState(() => 380 + Math.floor(Math.random() * 240));
+  useEffect(() => {
+    const направление = { знак: Math.random() < 0.5 ? -1 : 1 };
+    const id = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      setОнлайн((было) => {
+        if (Math.random() < 0.25) направление.знак *= -1;
+        let стало = было + направление.знак * (1 + Math.floor(Math.random() * 9));
+        if (стало < 300) { стало = 300 + Math.floor(Math.random() * 12); направление.знак = 1; }
+        if (стало > 700) { стало = 700 - Math.floor(Math.random() * 12); направление.знак = -1; }
+        return стало;
+      });
+    }, 3200);
+    return () => clearInterval(id);
+  }, []);
+  const онлайнПлавно = useTicker(онлайн, 1400);
+
   const собраноПлавно = useTicker(собрано);
 
   const actions = [
@@ -4832,8 +4849,8 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
         </div>
       </div>
 
-      {/* Сводка. Крупным — то, что растёт: запущенные токены. Рядом
-          бейджи с приростом за сутки и с тем, сколько сейчас в кривых. */}
+      {/* Сводка. Крупным — сколько человек на площадке прямо сейчас,
+          рядом бейджи с тем, сколько собрано и сколько уже на бирже. */}
       <div className="fx-view relative rounded-[24px] overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.line}`, padding: 16 }}>
         <div className="fx-hero-glow-a" style={{
           position: "absolute", right: "-20%", top: "-40%", width: "70%", height: "160%",
@@ -4847,17 +4864,16 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
         }} />
         <div className="relative flex items-center gap-2">
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15.5, fontWeight: 700 }}>{t("homeEcoTitle")}</span>
-          <span className="flex items-center gap-1.5" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.up, boxShadow: `0 0 8px ${hexA(T.up, 0.8)}` }} />
-            {t("homeLive")}
-          </span>
         </div>
 
         <div className="relative" style={{ marginTop: 10 }}>
           <span style={{ fontFamily: displayFont, color: T.electric, fontSize: 42, fontWeight: 800, lineHeight: 1 }}>
-            {Math.round(всегоПлавно).toLocaleString("ru-RU")}
+            {Math.round(онлайнПлавно).toLocaleString("ru-RU")}
           </span>
-          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 4 }}>{t("homeEcoUnit")}</div>
+          <div className="flex items-center gap-1.5" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 4 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.up, boxShadow: `0 0 8px ${hexA(T.up, 0.8)}` }} />
+            {t("homeLive")}
+          </div>
         </div>
 
         <div className="relative flex flex-wrap gap-2" style={{ marginTop: 12 }}>
