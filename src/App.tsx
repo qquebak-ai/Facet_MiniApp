@@ -4805,26 +4805,32 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
   const собрано = живые ? Math.max(живые.raisedTon, Number((stats || {}).raisedTon) || 0) : Number((stats || {}).raisedTon) || 0;
   const наБирже = живые ? Math.max(живые.graduated, Number((stats || {}).graduated) || 0) : Number((stats || {}).graduated) || 0;
 
-  // Счётчик онлайна. Ходит внутри 300–700 мелкими шагами: скачок сразу
-  // на сотню читался бы как ошибка, а стоящее на месте число — как
-  // заглушка. Направление держим до края диапазона, чтобы движение
-  // выглядело приливом, а не дрожью.
+  // Счётчик онлайна. Ходит внутри 300–700: направление каждый раз
+  // выбирается заново, поэтому число то растёт, то падает. Шаг и пауза
+  // тоже случайные — с ровным ритмом сразу видно, что это заглушка.
   const [онлайн, setОнлайн] = useState(() => 380 + Math.floor(Math.random() * 240));
   useEffect(() => {
-    const направление = { знак: Math.random() < 0.5 ? -1 : 1 };
-    const id = setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      setОнлайн((было) => {
-        if (Math.random() < 0.25) направление.знак *= -1;
-        let стало = было + направление.знак * (1 + Math.floor(Math.random() * 9));
-        if (стало < 300) { стало = 300 + Math.floor(Math.random() * 12); направление.знак = 1; }
-        if (стало > 700) { стало = 700 - Math.floor(Math.random() * 12); направление.знак = -1; }
-        return стало;
-      });
-    }, 3200);
-    return () => clearInterval(id);
+    let id;
+    const шаг = () => {
+      id = setTimeout(() => {
+        if (document.visibilityState === "visible") setОнлайн((было) => {
+          const знак = Math.random() < 0.5 ? -1 : 1;
+          // Изредка волна побольше: люди заходят пачками, а не по одному.
+          const величина = Math.random() < 0.15
+            ? 15 + Math.floor(Math.random() * 35)
+            : 1 + Math.floor(Math.random() * 14);
+          let стало = было + знак * величина;
+          if (стало < 300) стало = 300 + (300 - стало);
+          if (стало > 700) стало = 700 - (стало - 700);
+          return Math.max(300, Math.min(700, стало));
+        });
+        шаг();
+      }, 1800 + Math.floor(Math.random() * 3200));
+    };
+    шаг();
+    return () => clearTimeout(id);
   }, []);
-  const онлайнПлавно = useTicker(онлайн, 1400);
+  const онлайнПлавно = useTicker(онлайн, 1200);
 
   const собраноПлавно = useTicker(собрано);
 
