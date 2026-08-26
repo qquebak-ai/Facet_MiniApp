@@ -204,6 +204,20 @@ const STR = {
     doneClose: "Готово",
     launchingWait: "Не закрывай экран, это займёт пару секунд…",
     heroTitle: "Начни уже сейчас",
+    homeWelcome: "Добро пожаловать!",
+    homeWelcomeSub: "Ты часть площадки. Создавай, торгуй, расти.",
+    homeLive: "Онлайн",
+    homeEcoTitle: "Площадка растёт",
+    homeEcoUnit: "токенов запущено",
+    homeEcoDay: "за сутки",
+    homeEcoRaised: "TON в кривых",
+    homeEcoDex: "на бирже",
+    homeDoNow: "Что сделать сейчас",
+    homeDoLaunchNote: "Свой токен за пару минут",
+    homeDoMempadNote: "Смотри, что запускают сейчас",
+    homeDoWalletNote: "Баланс и твои токены",
+    homePopular: "Популярные",
+    homePopularAll: "Все",
     heroBodyLead: "Создавай, торгуй и расти с ",
     heroBodyTail: " на сделку. Присоединяйся к экосистеме с первого дня.",
     heroFee: "комиссией 1%",
@@ -557,6 +571,20 @@ const STR = {
     doneClose: "Done",
     launchingWait: "Don't close this screen, this'll just take a second…",
     heroTitle: "Start right now",
+    homeWelcome: "Welcome!",
+    homeWelcomeSub: "You are part of the platform. Create, trade, grow.",
+    homeLive: "Online",
+    homeEcoTitle: "The platform is growing",
+    homeEcoUnit: "tokens launched",
+    homeEcoDay: "today",
+    homeEcoRaised: "TON on curves",
+    homeEcoDex: "on DEX",
+    homeDoNow: "What to do now",
+    homeDoLaunchNote: "Your token in a couple of minutes",
+    homeDoMempadNote: "See what is launching now",
+    homeDoWalletNote: "Balance and your tokens",
+    homePopular: "Popular",
+    homePopularAll: "All",
     heroBodyLead: "Create, trade and grow with ",
     heroBodyTail: " per trade. Join the ecosystem from day one.",
     heroFee: "a 1% fee",
@@ -4730,62 +4758,150 @@ function WidgetSparks() {
   );
 }
 
-function HomeHero({ onGoTab, onGoCreate }) {
+/* Шапка главной: приветствие и живая сводка по площадке.
+ *
+ * Раньше здесь стояли заголовок с обещанием и три круглые иконки: ни
+ * одной настоящей цифры, и человек, зашедший второй раз, не узнавал
+ * ничего нового. Теперь сверху то, что происходит прямо сейчас —
+ * сколько токенов запущено, сколько прибавилось за сутки, сколько TON
+ * лежит в кривых, — а действия идут строками с пояснением.
+ */
+function HomeHero({ onGoTab, onGoCreate, live = [] }) {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const прочитать = () => supabase.rpc("platform_stats", { p_network: CURRENT_NETWORK }).then(({ data, error }) => {
+      if (cancelled || error || !data) return;
+      setStats(data);
+    }, () => {});
+    прочитать();
+    // Числа меняются от чужих действий — перечитываем сами, иначе они
+    // застынут на моменте открытия.
+    const id = setInterval(() => { if (document.visibilityState === "visible") прочитать(); }, 60000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  // Собранное и вышедших на биржу берём из ленты: она читает кривые
+  // напрямую, а в базе эти числа от обхода по расписанию и отстают.
+  const живые = useMemo(() => {
+    const ряд = (live || []).filter((tok) => tok && tok.raisedTon != null);
+    if (!ряд.length) return null;
+    return {
+      raisedTon: ряд.filter((tok) => !tok.graduated).reduce((s, tok) => s + (Number(tok.raisedTon) || 0), 0),
+      graduated: ряд.filter((tok) => tok.graduated).length,
+    };
+  }, [live]);
+
+  const всего = Number((stats || {}).launched) || 0;
+  const заСутки = Number((stats || {}).launched24) || 0;
+  const собрано = живые ? Math.max(живые.raisedTon, Number((stats || {}).raisedTon) || 0) : Number((stats || {}).raisedTon) || 0;
+  const наБирже = живые ? Math.max(живые.graduated, Number((stats || {}).graduated) || 0) : Number((stats || {}).graduated) || 0;
+
+  const всегоПлавно = useTicker(всего);
+  const собраноПлавно = useTicker(собрано);
+
   const actions = [
     // Запуск — не вкладка, а отдельная страница, поэтому и открывается
     // своим способом. Через onGoTab подсветка нижнего меню уезжала на
     // несуществующий раздел, и «назад» с этой страницы возвращал на неё же:
     // возвращаться он умеет только на вкладку, с которой пришли.
-    { icon: Rocket, key: "homeActionLaunch", onClick: onGoCreate },
-    { icon: Flame, key: "homeActionMempad", onClick: () => onGoTab("mempad") },
-    { icon: Wallet, key: "homeActionWallet", onClick: () => onGoTab("wallet") },
+    { icon: Rocket, key: "homeActionLaunch", note: "homeDoLaunchNote", onClick: onGoCreate },
+    { icon: Flame, key: "homeActionMempad", note: "homeDoMempadNote", onClick: () => onGoTab("mempad") },
+    { icon: Wallet, key: "homeActionWallet", note: "homeDoWalletNote", onClick: () => onGoTab("wallet") },
   ];
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="relative pt-2 pb-1">
-        {/* Кегли крупнее прежних цифр не случайно: у нынешнего шрифта
-            строчные буквы ниже примерно на седьмую часть при той же
-            высоте прописных, и текст выглядел мельче, чем раньше.
-            Заголовку добавлено меньше — в нём почти одни прописные. */}
-        <div className="relative" style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 700, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
-          {t("heroTitle")}
+      <div className="pt-1">
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 27, fontWeight: 700, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
+          {t("homeWelcome")}
         </div>
-        <div className="relative" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 15.5, marginTop: 12, lineHeight: 1.55, maxWidth: 330 }}>
-          {t("heroBodyLead")}<span className="fx-shine-text" style={{ fontWeight: 600 }}>{t("heroFee")}</span>{t("heroBodyTail")}
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, marginTop: 6, lineHeight: 1.45 }}>
+          {t("homeWelcomeSub")}
         </div>
       </div>
 
-      <div className="flex items-start justify-around gap-2">
-        {actions.map(a => {
-          const isLaunch = a.key === "homeActionLaunch";
-          return (
-            <button
-              key={a.key}
-              onClick={a.onClick}
-              className="fx-tap flex flex-col items-center gap-2"
-              style={{ background: "transparent", border: "none" }}
-            >
-              <div
-                className="fx-card fx-inert"
+      {/* Сводка. Крупным — то, что растёт: запущенные токены. Рядом
+          бейджи с приростом за сутки и с тем, сколько сейчас в кривых. */}
+      <div className="fx-view relative rounded-[24px] overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.line}`, padding: 16 }}>
+        <div style={{
+          position: "absolute", right: "-20%", top: "-40%", width: "70%", height: "160%",
+          background: `radial-gradient(50% 50% at 50% 50%, ${hexA(T.electric, 0.16)} 0%, transparent 70%)`,
+          pointerEvents: "none",
+        }} />
+        <div className="relative flex items-center gap-2">
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15.5, fontWeight: 700 }}>{t("homeEcoTitle")}</span>
+          <span className="flex items-center gap-1.5" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.up, boxShadow: `0 0 8px ${hexA(T.up, 0.8)}` }} />
+            {t("homeLive")}
+          </span>
+        </div>
+
+        <div className="relative" style={{ marginTop: 10 }}>
+          <span style={{ fontFamily: displayFont, color: T.electric, fontSize: 42, fontWeight: 800, lineHeight: 1 }}>
+            {Math.round(всегоПлавно).toLocaleString("ru-RU")}
+          </span>
+          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 4 }}>{t("homeEcoUnit")}</div>
+        </div>
+
+        <div className="relative flex flex-wrap gap-2" style={{ marginTop: 12 }}>
+          {[
+            { рост: true, число: `+${заСутки}`, подпись: t("homeEcoDay") },
+            { рост: false, число: fmtTon(собраноПлавно), подпись: t("homeEcoRaised") },
+            { рост: false, число: String(наБирже), подпись: t("homeEcoDex") },
+          ].map((б, i) => (
+            <div key={i} className="flex items-center gap-1.5 rounded-full"
+              style={{ padding: "6px 12px", background: T.bg, border: `1px solid ${T.line}` }}>
+              {б.рост && <TrendingUp size={13} color={T.up} />}
+              <span style={{ fontFamily: monoFont, color: б.рост ? T.up : T.ice, fontSize: 13, fontWeight: 700 }}>{б.число}</span>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{б.подпись}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Действия строками: видно не только иконку, но и зачем нажимать. */}
+      <div>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700, marginBottom: 10 }}>
+          {t("homeDoNow")}
+        </div>
+        <div className="flex flex-col gap-2">
+          {actions.map((a) => {
+            const isLaunch = a.key === "homeActionLaunch";
+            return (
+              <button
+                key={a.key}
+                onClick={a.onClick}
+                className="fx-card fx-tap w-full flex items-center gap-3 rounded-[20px] text-left"
                 style={{
-                  width: 60, height: 60, borderRadius: "50%",
-                  background: "#000000", border: `1px solid ${T.line}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: "12px 14px",
+                  background: isLaunch
+                    ? `linear-gradient(120deg, ${hexA(T.electric, 0.14)} 0%, ${hexA(T.electric, 0.03)} 60%, transparent 100%)`
+                    : T.surface,
+                  border: `1px solid ${isLaunch ? hexA(T.electric, 0.4) : T.line}`,
                   position: "relative", overflow: "hidden",
                 }}
               >
-                <WidgetSparks />
-                {isLaunch ? (
-                  <RocketIconFX />
-                ) : (
-                  <a.icon size={24} strokeWidth={1.6} color={T.turquoise} style={{ position: "relative", zIndex: 1 }} />
-                )}
-              </div>
-              <span style={{ fontFamily: bodyFont, fontSize: 12.5, fontWeight: 500, color: T.ice, textAlign: "center", lineHeight: 1.25, maxWidth: 82 }}>{t(a.key)}</span>
-            </button>
-          );
-        })}
+                {isLaunch && <WidgetSparks />}
+                <div style={{
+                  position: "relative", zIndex: 1,
+                  width: 40, height: 40, borderRadius: 14, flexShrink: 0,
+                  background: isLaunch ? hexA(T.electric, 0.12) : T.bg,
+                  border: `1px solid ${isLaunch ? hexA(T.electric, 0.3) : T.line}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <a.icon size={20} strokeWidth={1.7} color={isLaunch ? T.electric : T.turquoise} />
+                </div>
+                <div className="flex-1 min-w-0" style={{ position: "relative", zIndex: 1 }}>
+                  <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{t(a.key)}</div>
+                  <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, marginTop: 2 }}>{t(a.note)}</div>
+                </div>
+                <ChevronRight size={16} color={isLaunch ? T.electric : T.muted} style={{ position: "relative", zIndex: 1, flexShrink: 0 }} />
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -8435,6 +8551,47 @@ function HomeStats({ live = [] }) {
   );
 }
 
+/* Популярные токены строкой: аватарка, тикер, движение за сутки.
+   Лента горизонтальная — на неё смотрят мельком, по дороге к чему-то
+   ещё, а вертикальный список занял бы пол-экрана. */
+function HomePopular({ tokens = [], onOpen, onAll }) {
+  const ряд = useMemo(() => (tokens || [])
+    .filter((tok) => tok.mcapNum > 0)
+    .slice()
+    .sort((a, b) => (b.mcapNum || 0) - (a.mcapNum || 0))
+    .slice(0, 8), [tokens]);
+  if (!ряд.length) return null;
+
+  return (
+    <div className="fx-view">
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("homePopular")}</span>
+        <button onClick={onAll} className="fx-tap" style={{ background: "transparent", border: "none", fontFamily: bodyFont, color: T.electric, fontSize: 12.5 }}>
+          {t("homePopularAll")}
+        </button>
+      </div>
+      <div className="no-scrollbar flex gap-2 overflow-x-auto" style={{ paddingBottom: 2 }}>
+        {ряд.map((tok) => (
+          <button
+            key={tok.id}
+            onClick={() => onOpen && onOpen(tok)}
+            className="fx-tap flex items-center gap-2 rounded-[16px]"
+            style={{ padding: "8px 12px 8px 8px", background: T.surface, border: `1px solid ${T.line}`, flexShrink: 0 }}
+          >
+            <TokenAvatar size={28} tone={tok.change >= 0 ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+            <div className="text-left">
+              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>${tok.ticker}</div>
+              <div style={{ fontFamily: monoFont, color: tok.change >= 0 ? T.up : T.down, fontSize: 11.5, marginTop: 1 }}>
+                {tok.change >= 0 ? "+" : ""}{(tok.change || 0).toFixed(1)}%
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* Лента событий площадки.
 
    Кто что купил и какие токены только что запустили — в одном списке,
@@ -8606,9 +8763,11 @@ function Leaderboard({ onOpenToken, onOpenProfile, live = [] }) {
 
 function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile }) {
   return (
-    <div className="flex flex-col gap-4" style={{ paddingBottom: 12 }}>
-      <HomeHero onGoTab={onGoTab} onGoCreate={onGoCreate} />
-      <HomeStats live={curveTokens} />
+    <div className="flex flex-col gap-5" style={{ paddingBottom: 12 }}>
+      {/* Полосы с тремя числами больше нет: те же цифры теперь стоят в
+          самой шапке, и повторять их ниже незачем. */}
+      <HomeHero onGoTab={onGoTab} onGoCreate={onGoCreate} live={curveTokens} />
+      <HomePopular tokens={curveTokens} onOpen={onOpenToken} onAll={() => onGoTab("mempad")} />
       <ActivityFeed />
       <AlmostListed tokens={curveTokens} onOpen={onOpenToken} />
       <Leaderboard onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} live={curveTokens} />
