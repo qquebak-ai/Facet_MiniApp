@@ -24,7 +24,8 @@ const STON_API = "https://api.ston.fi/v1";
 // Биржа живёт только в боевой сети. В тестовой своп собирать не из
 // чего, и честнее сказать это прямо, чем отдать ссылку, которая ничего
 // не купит.
-const TESTNET = process.env.TON_TESTNET !== "0";
+// Боевая сеть по умолчанию. Тестовая включается явно: TON_TESTNET=1.
+const TESTNET = process.env.TON_TESTNET === "1";
 
 // Кошелёк площадки. Тот же, что получает комиссию с кривой.
 const FEE_ADDRESS = process.env.FEE_ADDRESS || "UQClGN5huzz-Z3bwgxr7GOPe5Jyi8PNKbsNnDFKFNGbjusvT";

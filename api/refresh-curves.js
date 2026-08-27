@@ -25,7 +25,8 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CRON_SECRET = process.env.CRON_SECRET;
 
-const TESTNET = process.env.TON_TESTNET !== "0";
+// Боевая сеть по умолчанию. Тестовая включается явно: TON_TESTNET=1.
+const TESTNET = process.env.TON_TESTNET === "1";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
 // Только серверный ключ. Тот, что уходит в браузер (VITE_TONAPI_KEY),
 // ограничен по источнику: у запроса с сервера заголовка Origin нет, и

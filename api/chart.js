@@ -45,7 +45,8 @@ async function свечиБиржи(pool) {
 }
 
 // Сеть та же, что у всего бота (см. api/_market.js).
-const TESTNET = process.env.TON_TESTNET !== "0";
+// Боевая сеть по умолчанию. Тестовая включается явно: TON_TESTNET=1.
+const TESTNET = process.env.TON_TESTNET === "1";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
 const TONAPI_KEY = (process.env.TONAPI_KEY || "").trim();
 

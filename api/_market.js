@@ -16,7 +16,8 @@ import { adminClient } from "./_support.js";
 // Сеть задаётся одним переключателем на всё приложение (см.
 // TON_TESTNET_NETWORK в src/App.tsx). Здесь по умолчанию тестовая —
 // вернуть боевую можно переменной окружения TON_TESTNET=0.
-const TESTNET = process.env.TON_TESTNET !== "0";
+// Боевая сеть по умолчанию. Тестовая включается явно: TON_TESTNET=1.
+const TESTNET = process.env.TON_TESTNET === "1";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
 export const NETWORK = TESTNET ? "testnet" : "mainnet";
 

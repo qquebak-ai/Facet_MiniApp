@@ -2251,9 +2251,11 @@ const TONAPI_MAINNET_BASE = "https://tonapi.io";
 // Vercel (TON_TESTNET), и когда половины задавались по-разному,
 // приложение и обходчик расходились в том, где искать кривые. Теперь
 // обе меняются в одном месте — Vercel → Environment Variables:
-//   VITE_TON_TESTNET=0  и  TON_TESTNET=0   — боевая сеть,
-//   VITE_TON_TESTNET=1  и  TON_TESTNET=1   — тестовая.
-const TON_TESTNET_NETWORK = String(import.meta.env.VITE_TON_TESTNET ?? "1") !== "0";
+//   VITE_TON_TESTNET=1  и  TON_TESTNET=1   — тестовая сеть,
+//   без них (или с нулём)                  — боевая.
+// По умолчанию боевая: приложение вышло из обкатки, и тестовая сеть
+// нужна теперь только тем, кто её специально попросит.
+const TON_TESTNET_NETWORK = String(import.meta.env.VITE_TON_TESTNET ?? "0") === "1";
 
 /* Адреса площадки в записи текущей сети.
  *
