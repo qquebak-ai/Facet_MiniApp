@@ -232,6 +232,7 @@ const STR = {
     topCreators: "Создатели",
     topRaised: "собрано {ton} TON",
     topOnDex: "уже на бирже",
+    topClosing: "кривая закрыта, пул готовится",
     topLaunched: "{n} токенов · {ton} TON",
     statLaunched24: "запусков за сутки",
     statRaised: "TON в токенах",
@@ -260,7 +261,10 @@ const STR = {
     gradDone: "Кривая закрыта — токен уходит на биржу",
     gradNote: "Когда в кривой наберётся {target} TON, торговля здесь закроется. Собранные TON и оставшийся выпуск уйдут на кошелёк площадки — из них заводится пара на бирже.",
     gradClosedTitle: "Кривая закрыта",
-    gradClosedBody: "Токен набрал {target} TON. Здесь он больше не торгуется: ликвидность уходит на биржу, дальше торговля идёт там.",
+    gradClosedBody: "Токен набрал {target} TON. Здесь он больше не торгуется: собранная ликвидность ушла на кошелёк площадки, из неё заводится пара на бирже. Как только пара появится, здесь встанет ссылка на неё.",
+    gradListedTitle: "Торгуется на бирже",
+    gradListedBody: "Пара на Ston.fi заведена — покупать и продавать теперь можно там.",
+    gradListedOpen: "Открыть на бирже",
     tabChart: "График", tabInfo: "Инфо", tabTx: "Транзакции", chartModePrice: "Цена",
     tokenNoAddress: "Адрес недоступен",
     txUnavailable: "Список транзакций пока недоступен для этого пула",
@@ -597,6 +601,7 @@ const STR = {
     topCreators: "Creators",
     topRaised: "{ton} TON raised",
     topOnDex: "already on a DEX",
+    topClosing: "curve closed, pair on the way",
     topLaunched: "{n} tokens · {ton} TON",
     statLaunched24: "launches today",
     statRaised: "TON in tokens",
@@ -625,7 +630,10 @@ const STR = {
     gradDone: "Curve closed — the token is heading to an exchange",
     gradNote: "Once the curve holds {target} TON, trading here closes. The collected TON and the remaining supply go to the platform wallet — the exchange pair is created from them.",
     gradClosedTitle: "Curve closed",
-    gradClosedBody: "The token reached {target} TON. It no longer trades here: the liquidity is moving to an exchange, and trading continues there.",
+    gradClosedBody: "The token reached {target} TON. It no longer trades here: the liquidity went to the platform wallet and a pair is being set up on an exchange. Once it exists, the link shows up here.",
+    gradListedTitle: "Trading on a DEX",
+    gradListedBody: "The Ston.fi pair is live — buy and sell it there.",
+    gradListedOpen: "Open on the DEX",
     tabChart: "Chart", tabInfo: "Info", tabTx: "Transactions", chartModePrice: "Price",
     tokenNoAddress: "Address unavailable",
     txUnavailable: "Transaction list isn't available for this pool yet",
@@ -8442,6 +8450,9 @@ function Leaderboard({ onOpenToken, onOpenProfile, live = [] }) {
         // Логотип у ленты бывает свежее: она добирает его из цепочки,
         // когда в базе пусто.
         logo_url: э.logo_url || св.logoUrl || null,
+        // Пара на бирже. В самом топе этого поля нет, а без него строка
+        // писала «уже на бирже» токену, торговать которым ещё негде.
+        dexPoolAddress: св.dexPoolAddress || null,
       };
     });
     return покривой.size ? ряд.slice().sort((a, b) => (Number(b.raised) || 0) - (Number(a.raised) || 0)) : ряд;
@@ -8499,7 +8510,9 @@ function Leaderboard({ onOpenToken, onOpenProfile, live = [] }) {
               </div>
               <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 2 }}>
                 {tab === "tokens"
-                  ? (э.graduated ? t("topOnDex") : tf("topRaised", { ton: fmtTon(Number(э.raised) || 0) }))
+                  ? (э.graduated
+                    ? t(э.dexPoolAddress ? "topOnDex" : "topClosing")
+                    : tf("topRaised", { ton: fmtTon(Number(э.raised) || 0) }))
                   : tf("topLaunched", { n: э.launched, ton: fmtTon(Number(э.raised) || 0) })}
               </div>
             </div>
@@ -9268,13 +9281,30 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           {curve && curve.graduated ? (
             // Контракт с этого момента отбивает и покупку, и продажу.
             // Показывать кнопки, которые заведомо не сработают, — врать.
-            <div className="rounded-[22px] p-4 flex items-start gap-3" style={{ background: T.surface, border: `1px solid ${hexA(T.up, 0.4)}` }}>
-              <ShieldCheck size={18} color={T.up} style={{ flexShrink: 0, marginTop: 1 }} />
+            // Но и «торгуется на бирже» до появления пары — то же враньё:
+            // пару заводят отдельным действием, и до неё торговать негде.
+            <div className="rounded-[22px] p-4 flex items-start gap-3" style={{ background: T.surface, border: `1px solid ${hexA(token.dexPoolAddress ? T.up : T.warning, 0.4)}` }}>
+              <ShieldCheck size={18} color={token.dexPoolAddress ? T.up : T.warning} style={{ flexShrink: 0, marginTop: 1 }} />
               <div>
-                <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{tr("gradClosedTitle")}</div>
+                <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>
+                  {tr(token.dexPoolAddress ? "gradListedTitle" : "gradClosedTitle")}
+                </div>
                 <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
-                  {trf("gradClosedBody", { target: fmtTon(Number(curve.graduationTon) / 1e9) })}
+                  {token.dexPoolAddress
+                    ? tr("gradListedBody")
+                    : trf("gradClosedBody", { target: fmtTon(Number(curve.graduationTon) / 1e9) })}
                 </p>
+                {token.dexPoolAddress && (
+                  <a
+                    href={`https://app.ston.fi/swap?ft=TON&tt=${token.address || ""}`}
+                    target="_blank" rel="noreferrer"
+                    className="fx-tap inline-flex items-center gap-1.5 rounded-full"
+                    style={{ marginTop: 10, padding: "7px 13px", background: hexA(T.up, 0.14), border: `1px solid ${hexA(T.up, 0.4)}`, fontFamily: bodyFont, color: T.up, fontSize: 13, fontWeight: 700 }}
+                  >
+                    {tr("gradListedOpen")}
+                    <ExternalLink size={13} />
+                  </a>
+                )}
               </div>
             </div>
           ) : curve ? (
@@ -13364,6 +13394,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       tx24h: 0,
       address: row.address,
       poolAddress: row.pool_address,
+      // Пара на бирже, заведённая после закрытия кривой. Отдельно от
+      // poolAddress: тот отвечает за токены, пришедшие из ленты биржи, а
+      // этот — за свои, у которых кривая уже отторговала.
+      dexPoolAddress: row.dex_pool_address || null,
       curveAddress: row.curve_address || null,
       curveJettonWallet: row.curve_jetton_wallet || null,
       creatorWallet: row.creator_wallet || null,
@@ -14188,6 +14222,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       tx24h: 0,
       address: row.address,
       poolAddress: row.pool_address,
+      // Пара на бирже, заведённая после закрытия кривой. Отдельно от
+      // poolAddress: тот отвечает за токены, пришедшие из ленты биржи, а
+      // этот — за свои, у которых кривая уже отторговала.
+      dexPoolAddress: row.dex_pool_address || null,
       curveAddress: row.curve_address || null,
       curveJettonWallet: row.curve_jetton_wallet || null,
       creatorWallet: row.creator_wallet || null,

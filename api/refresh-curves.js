@@ -51,6 +51,35 @@ const GAS_BUY_OVERHEAD = 120000000n;
 const OP_BUY = 0x42555921;
 const OP_JETTON_NOTIFY = 0x7362d09c;
 
+// Пул токена на бирже. Контракт кривой, набрав цель, отправляет всю
+// ликвидность на кошелёк площадки — пару на Ston.fi заводят уже оттуда,
+// отдельным действием. Пока пары нет, торговать негде, и писать «на
+// бирже» рано. Проверяем самым дешёвым способом: спрашиваем биржу, во
+// что обменяется один TON. Есть маршрут — есть пул, и его адрес приходит
+// в том же ответе.
+const STON_API = "https://api.ston.fi/v1";
+const PTON = "EQCM3B12QK1e4yZSf8GtBRT0aLMNyEsBc_DhVfRRtOEffLez";
+
+async function пулНаБирже(jetton) {
+  // Биржа живёт только в боевой сети — в тестовой спрашивать нечего.
+  if (TESTNET || !jetton) return null;
+  const параметры = new URLSearchParams({
+    offer_address: PTON,
+    ask_address: jetton,
+    units: "1000000000",
+    slippage_tolerance: "0.02",
+    dex_v2: "true",
+  });
+  try {
+    const res = await fetch(`${STON_API}/swap/simulate?${параметры}`, { method: "POST" });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json && json.pool_address ? json.pool_address : null;
+  } catch {
+    return null;
+  }
+}
+
 async function tonapi(path, init) {
   const заголовки = TONAPI_KEY ? { Authorization: `Bearer ${TONAPI_KEY}` } : undefined;
   try {
@@ -157,9 +186,15 @@ export default async function handler(req, res) {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
+  // Колонка с парой на бирже появилась позже (supabase_listing.sql).
+  // Пока миграции нет, читаем без неё — иначе запрос отбивается целиком
+  // и обход перестаёт обновлять витрину.
+  const { error: нетКолонки } = await admin.from("tokens").select("dex_pool_address").limit(1);
+  const естьЛистинг = !нетКолонки;
+
   const { data: tokens, error } = await admin
     .from("tokens")
-    .select("id, address, curve_address, logo_url")
+    .select(`id, address, curve_address, logo_url${естьЛистинг ? ", dex_pool_address" : ""}`)
     .not("curve_address", "is", null)
     .eq("network", TESTNET ? "testnet" : "mainnet")
     .order("created_at", { ascending: false })
@@ -178,6 +213,7 @@ export default async function handler(req, res) {
   // Сколько кривых не ответило — иначе пустой ответ не отличить от
   // «токенов нет», и чинить приходится вслепую.
   let молчат = 0;
+  let залистили = 0;
   for (const tok of tokens) {
     const st = await состояние(tok.curve_address);
     if (!st) { молчат += 1; continue; }
@@ -199,6 +235,19 @@ export default async function handler(req, res) {
     const доОкна = история.filter((p) => p.time < сутки);
     const прежняя = цена(доОкна.length ? доОкна[доОкна.length - 1].realTon : 0n, params);
     const сейчас = цена(st.realTon, params);
+
+    // Кривая закрылась, а пула ещё нет — проверяем, не завели ли его.
+    // Записываем один раз: дальше адрес уже известен и спрашивать
+    // биржу незачем.
+    if (естьЛистинг && st.graduated && !tok.dex_pool_address && tok.address) {
+      const пул = await пулНаБирже(tok.address);
+      if (пул) {
+        await admin.from("tokens")
+          .update({ dex_pool_address: пул, listed_at: new Date().toISOString() })
+          .eq("id", tok.id);
+        залистили += 1;
+      }
+    }
 
     строки.push({
       token_id: tok.id,
@@ -240,5 +289,5 @@ export default async function handler(req, res) {
     await admin.from("tokens").update({ logo_url: s.logo_url }).eq("id", s.token_id);
   }
 
-  return res.status(200).json({ updated: строки.length, tokens: tokens.length, silent: молчат, logos: безЛоготипа.length });
+  return res.status(200).json({ updated: строки.length, tokens: tokens.length, silent: молчат, logos: безЛоготипа.length, listed: залистили });
 }

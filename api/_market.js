@@ -203,6 +203,16 @@ function поCatalog(json) {
   return { tokensById, dexById };
 }
 
+/* Есть ли в базе колонка с парой на бирже. Ответ не меняется в течение
+   жизни процесса, поэтому спрашиваем один раз. */
+let колонкаПула = null;
+async function естьКолонкаПула(admin) {
+  if (колонкаПула !== null) return колонкаПула;
+  const { error } = await admin.from("tokens").select("dex_pool_address").limit(1);
+  колонкаПула = !error;
+  return колонкаПула;
+}
+
 /* Поиск по бирже: тикер, название или адрес. GeckoTerminal ищет по
    пулам, поэтому один и тот же токен приходит несколько раз — оставляем
    пул с самой большой ликвидностью, он и есть настоящий рынок. */
@@ -269,7 +279,10 @@ export async function findTokens(query, limit = 8) {
   // Колонки ровно те, что есть в таблице: адрес жетона называется
   // «address», отдельного поля под эмодзи нет вовсе. Лишнее имя здесь
   // роняет весь запрос, и поиск молча возвращает пустоту.
-  const колонки = "id, name, ticker, logo_url, address, curve_address, created_at, owner_id";
+  // dex_pool_address появился позже остальных (см. supabase_listing.sql).
+  // Пока миграция не выполнена, колонки в базе нет, и запрос с ней
+  // отбивается целиком — поэтому один раз проверяем и дальше помним.
+  const колонки = `id, name, ticker, logo_url, address, curve_address, created_at, owner_id${await естьКолонкаПула(admin) ? ", dex_pool_address" : ""}`;
 
   let ряд;
   if (looksLikeAddress(q)) {
@@ -431,8 +444,13 @@ export async function tokenCard(token) {
   ];
   if (цель > 0) {
     строки.push("");
+    // «На бирже» — только когда пара действительно заведена: контракт
+    // закрывает кривую сам, а пару из собранной ликвидности заводят
+    // отдельным действием, и до неё торговать негде.
     строки.push(state && state.graduated
-      ? `🎉 Кривая закрыта, собрано ${fmtTon(собрано)} TON — токен на бирже`
+      ? (token.dex_pool_address
+        ? `🎉 Кривая закрыта, собрано ${fmtTon(собрано)} TON — торгуется на бирже`
+        : `🎉 Кривая закрыта, собрано ${fmtTon(собрано)} TON — пара на бирже готовится`)
       : `🚀 Собрано для выхода на биржу: ${(доля * 100).toFixed(0)}%\n${fmtTon(собрано)} / ${fmtTon(цель)} TON`);
   }
   строки.push("");
@@ -535,7 +553,7 @@ export async function cardByRef(вид, ключ) {
   if (!admin) return null;
   const { data } = await admin
     .from("tokens")
-    .select("id, name, ticker, logo_url, address, curve_address, created_at, owner_id")
+    .select(`id, name, ticker, logo_url, address, curve_address, created_at, owner_id${await естьКолонкаПула(admin) ? ", dex_pool_address" : ""}`)
     .eq("id", ключ)
     .maybeSingle();
   return data ? tokenCard(data) : null;

@@ -238,7 +238,7 @@ export default async function handler(req, res) {
         next.sent_almost = pct >= 90 || prev.sent_almost;
         next.sent_half = pct >= 50 || prev.sent_half;
       } else if (curve.graduated && !prev.sent_closed) {
-        if (await tell(chat, `<b>${label}</b> закрыл кривую 🎉\nСобрано ${fmt(curve.realTon)} TON. Торговля в приложении закончилась, ликвидность уходит на биржу.`)) sent += 1;
+        if (await tell(chat, `<b>${label}</b> закрыл кривую 🎉\nСобрано ${fmt(curve.realTon)} TON. Торговля в приложении закончилась, из собранного заводится пара на бирже — напишем, когда она появится.`)) sent += 1;
         next.sent_closed = true;
       } else if (!curve.graduated && pct >= 90 && !prev.sent_almost) {
         if (await tell(chat, `<b>${label}</b> почти на бирже: ${pct.toFixed(0)}% пути\nОсталось ${fmt(Math.max(0, target - curve.realTon))} TON`)) sent += 1;
@@ -272,7 +272,7 @@ export default async function handler(req, res) {
           .maybeSingle();
         if (было) continue;
         const текст = событие === "closed"
-          ? `<b>${label}</b> вышел на биржу 🎉\nТвои токены никуда не делись — торговля продолжается там.`
+          ? `<b>${label}</b> закрыл кривую 🎉\nТвои токены никуда не делись: из собранного заводится пара на бирже, торговля продолжится там.`
           : событие === "almost"
             ? `<b>${label}</b> почти на бирже: ${pct.toFixed(0)}% пути\nОсталось ${fmt(Math.max(0, target - curve.realTon))} TON`
             : `<b>${label}</b> прошёл половину пути до биржи\nВ кривой ${fmt(curve.realTon)} из ${fmt(target)} TON`;
