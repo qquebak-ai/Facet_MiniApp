@@ -1713,13 +1713,14 @@ function CyberGrid({ showStars = true, hidden = false }) {
   const сила = showStars ? 1 : 0.45;
 
   // На мемпаде фон убирается совсем: пятна уезжают вверх и гаснут, под
-  // ними остаётся чистый чёрный. Пока уезжают — слой ещё в разметке,
-  // после перехода снимаем его, чтобы анимации пятен не крутились
-  // впустую.
+  // ними остаётся чистый чёрный. Полёт начинается не сразу, а через
+  // мгновение после перехода — иначе раздел открывается уже пустым и
+  // движения никто не видит. Пока уезжают — слой ещё в разметке, после
+  // снимаем его, чтобы анимации пятен не крутились впустую.
   const [снят, setСнят] = useState(hidden);
   useEffect(() => {
     if (!hidden) { setСнят(false); return; }
-    const id = setTimeout(() => setСнят(true), 900);
+    const id = setTimeout(() => setСнят(true), 1300);
     return () => clearTimeout(id);
   }, [hidden]);
   // Слой не выкидываем из разметки, а прячем: иначе при возвращении он
@@ -1755,7 +1756,11 @@ function CyberGrid({ showStars = true, hidden = false }) {
               left: п.left, top: п.top, width: п.w, height: п.h,
               transform: hidden ? "translate3d(0,-115%,0) scale(0.86)" : "translateZ(0)",
               opacity: hidden ? 0 : 1,
-              transition: `transform 620ms cubic-bezier(0.32,0,0.24,1) ${i * 75}ms, opacity 620ms cubic-bezier(0.7,0,0.9,1) ${i * 75}ms`,
+              // Пауза перед стартом только на уходе: возвращается фон
+              // сразу, ждать его на других экранах незачем.
+              transition: hidden
+                ? `transform 640ms cubic-bezier(0.32,0,0.24,1) ${260 + i * 80}ms, opacity 640ms cubic-bezier(0.7,0,0.9,1) ${260 + i * 80}ms`
+                : "transform 520ms cubic-bezier(0.22,0.61,0.36,1), opacity 420ms ease-out",
               willChange: "transform",
             }}
           >
@@ -1777,13 +1782,13 @@ function CyberGrid({ showStars = true, hidden = false }) {
         position: "absolute", inset: 0,
         background: `radial-gradient(120% 80% at 50% 40%, transparent 0%, ${hexA(T.bg, 0.42)} 70%, ${hexA(T.bg, 0.82)} 100%)`,
         opacity: hidden ? 0 : 1,
-        transition: "opacity 520ms ease-in 150ms",
+        transition: hidden ? "opacity 640ms ease-in 420ms" : "opacity 420ms ease-out",
       }} />
 
       <div style={{
         position: "absolute", inset: 0, backgroundImage: ЗЕРНО,
         opacity: hidden ? 0 : 0.05, mixBlendMode: "overlay",
-        transition: "opacity 520ms ease-in 150ms",
+        transition: hidden ? "opacity 640ms ease-in 420ms" : "opacity 420ms ease-out",
       }} />
     </div>
   );
@@ -14861,27 +14866,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Фон уходит вверх раньше самого перехода на мемпад: если менять экран
-  // сразу, полёт свечений происходит уже за новым разделом и его просто
-  // не видно — кажется, что фон выключили рубильником.
-  const [фонВверх, setФонВверх] = useState(false);
-  const таймерФона = useRef(null);
-  useEffect(() => () => clearTimeout(таймерФона.current), []);
-
-  function goTab(name) {
-    clearTimeout(таймерФона.current);
-    if (name === "mempad" && view !== "mempad") {
-      setФонВверх(true);
-      // Столько же, сколько длится первый рывок пятен вверх: человек
-      // успевает увидеть начало полёта, но задержки не чувствует.
-      // Флаг снимаем сразу же: дальше фон держит скрытым сам раздел,
-      // а зависший флаг не давал бы фону вернуться на другие экраны.
-      таймерФона.current = setTimeout(() => { setTab(name); setView(name); setФонВверх(false); }, 240);
-      return;
-    }
-    setФонВверх(false);
-    setTab(name); setView(name);
-  }
+  function goTab(name) { setTab(name); setView(name); }
   // Создание — отдельная страница, а не вкладка: пункт из нижнего меню
   // убран, поэтому tab не трогаем — подсветка остаётся на том разделе,
   // откуда пришли, и «назад» возвращает туда же.
@@ -15238,7 +15223,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           поджигала, убраны: на разных телефонах они ложились по-разному,
           а на тех, где острова нет, рамка выглядела случайной деталью. */}
       {rocketFlying && <LaunchRocket variant={rocketVariant} />}
-      <CyberGrid showStars={view !== "profile" && view !== "user"} hidden={view === "mempad" || фонВверх} />
+      <CyberGrid showStars={view !== "profile" && view !== "user"} hidden={view === "mempad"} />
       {/* Пришли за подписью — заставка только задерживает: человек ждёт
           кошелёк, а не знакомство с приложением. */}
       {!bootHidden && !сразуВКошелёк && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
