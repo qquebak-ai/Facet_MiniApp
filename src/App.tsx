@@ -4143,7 +4143,7 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
       if (first) {
         // Ответы прошлого захода уже лежат в кэше — рисуем их сразу, не
         // дожидаясь сети.
-        pools.forEach((p) => mergeIn(cachedPoolTrades(p.poolAddress), p));
+        pools.forEach((p) => mergeIn(cachedPoolTrades(p.poolAddress, сетьТокена(p)), p));
       }
 
       const slice = [];
@@ -4154,7 +4154,7 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
 
       await Promise.all(
         slice.map(async (p) => {
-          const rows = await fetchPoolTrades(p.poolAddress, 300, GT_PRIORITY.feed);
+          const rows = await fetchPoolTrades(p.poolAddress, 300, GT_PRIORITY.feed, сетьТокена(p));
           if (cancelled || !rows) return;
           mergeIn(rows, p);
         })
@@ -8341,14 +8341,37 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   const [solTokens, setSolTokens] = useState(null);
   const [solLoading, setSolLoading] = useState(false);
   useEffect(() => {
-    if (сеть !== "sol" || solTokens) return;
+    if (сеть !== "sol") return;
     let cancelled = false;
-    setSolLoading(true);
-    fetchPoolsPage(1, GT_NETWORK_SOL)
-      .then((rows) => { if (!cancelled) setSolTokens(rows || []); })
-      .finally(() => { if (!cancelled) setSolLoading(false); });
-    return () => { cancelled = true; };
-  }, [сеть, solTokens]);
+    if (!solTokens) setSolLoading(true);
+
+    // Столько же страниц и с тем же обновлением, что у ленты TON: одна
+    // страница давала два десятка токенов, список кончался на середине
+    // экрана, и цифры в нём застывали на момент открытия.
+    async function загрузить() {
+      const страницы = await Promise.all(
+        Array.from({ length: FEED_PAGES }, (_, i) => fetchPoolsPage(i + 1, GT_NETWORK_SOL)),
+      );
+      if (cancelled) return;
+      const все = страницы.filter(Boolean).flat();
+      if (все.length) {
+        // Один и тот же пул приходит на соседних страницах, когда рынок
+        // перетасовался между запросами.
+        const по = new Map(все.map((tok) => [tok.id, tok]));
+        setSolTokens([...по.values()].slice(0, FEED_LIMIT));
+      } else if (!solTokens) {
+        setSolTokens([]);
+      }
+      setSolLoading(false);
+    }
+
+    загрузить();
+    const iv = setInterval(() => {
+      if (document.visibilityState === "visible") загрузить();
+    }, TOKEN_REFRESH_MS);
+    return () => { cancelled = true; clearInterval(iv); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [сеть]);
 
   // «В центре внимания» — пятёрка токенов, по которым прошло больше всего
   // сделок за последний час, и она прокручивается по кругу. Час берём как
@@ -8362,7 +8385,12 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
     // Биржевой ленты может не быть вовсе — в тестовой сети её нет по
     // определению. Тогда в центр внимания идут свои токены: пустая
     // рамка вместо карточки выглядела поломкой.
-    const источник = tokens.length ? tokens : localTokens;
+    //
+    // В Solana источник один — её собственная лента: своих запусков там
+    // нет, и подмешивать TON-токены было бы враньём.
+    const источник = сеть === "sol"
+      ? (solTokens || [])
+      : (tokens.length ? tokens : localTokens);
     if (!источник.length) return [];
     const ranked = (win) =>
       [...источник]
@@ -8371,7 +8399,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
     const byActivity = ["tx1h", "tx6h", "tx24h"].map(ranked).find((list) => list.length);
     const list = byActivity || [...источник].sort((a, b) => b.mcapNum - a.mcapNum);
     return list.slice(0, SPOTLIGHT_COUNT);
-  }, [tokens, localTokens]);
+  }, [tokens, localTokens, solTokens, сеть]);
 
   const [spotIdx, setSpotIdx] = useState(0);
   useEffect(() => {
@@ -8387,9 +8415,19 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   const list = useMemo(() => {
     // "New" now means what it literally says: tokens launched through
     // this app, not the newest items in the external real-market feed.
-    // В Solana своих запусков нет: там мы не лаунчпад, а витрина чужого
-    // рынка, поэтому фильтры к ней не применяются.
-    if (сеть === "sol") return solTokens || [];
+    // В Solana своих запусков нет, поэтому «Новые» там означает не
+    // «запущенные здесь», а самые свежие пары рынка — по возрасту.
+    if (сеть === "sol") {
+      const featured = new Set(spotlightTop.map((tok) => tok.id));
+      let arr = (solTokens || []).filter((tok) => !featured.has(tok.id));
+      switch (filter) {
+        case "hot": arr = [...arr].sort((a, b) => b.change - a.change); break;
+        case "dex": arr = arr.filter((tok) => tok.verified); break;
+        case "new": arr = [...arr].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)); break;
+        default: break;
+      }
+      return arr;
+    }
     if (filter === "new") return localTokens;
     const featured = new Set(spotlightTop.map((tok) => tok.id));
     let arr = tokens.filter((tok) => !featured.has(tok.id));
@@ -8459,9 +8497,13 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         })}
       </div>
 
-      {сеть === "ton" && <RecentBuysTicker tokens={tokens} curveTokens={myTokens} onOpen={onOpen} />}
+      <RecentBuysTicker
+        tokens={сеть === "sol" ? (solTokens || []) : tokens}
+        curveTokens={сеть === "sol" ? [] : myTokens}
+        onOpen={onOpen}
+      />
 
-      {сеть === "sol" ? null : loading && !spotlight ? (
+      {(сеть === "sol" ? solLoading : loading) && !spotlight ? (
         <div className="fx-card rounded-[22px] p-6 flex flex-col items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
           <div className="fx-skeleton" style={{ width: 92, height: 92, borderRadius: "50%" }} />
           <div className="fx-skeleton" style={{ width: 90, height: 16, borderRadius: 4 }} />
@@ -8514,7 +8556,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         </div>
       )}
 
-      <div className="no-scrollbar flex items-center gap-2 overflow-x-auto" style={{ touchAction: "pan-x", overscrollBehaviorX: "contain", overflowY: "hidden", display: сеть === "sol" ? "none" : undefined }}>
+      <div className="no-scrollbar flex items-center gap-2 overflow-x-auto" style={{ touchAction: "pan-x", overscrollBehaviorX: "contain", overflowY: "hidden" }}>
         {MEMPAD_FILTERS.map(f => {
           const active = filter === f.id;
           return (
