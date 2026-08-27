@@ -2062,14 +2062,14 @@ function fillCandleGaps(candles, stepSec, limit = CHART_TOTAL, nowSec = Math.flo
 // the app's existing token model so every screen (cards, detail, stats)
 // keeps working unchanged. Falls back to null on any failure so callers
 // can keep showing the bundled fallback list instead of an empty feed.
-async function fetchTonMemePools(limit = 18, pages = 1) {
+async function fetchTonMemePools(limit = 18, pages = 1, network = GT_NETWORK) {
   // Одна страница GeckoTerminal — это 20 пулов, и на «Горячие» с «DEX»
   // такого списка мало. Ходим по нескольким страницам подряд и склеиваем
   // результат, отсеивая повторы по id пула.
   const collected = [];
   const seen = new Set();
   for (let page = 1; page <= pages; page++) {
-    const rows = await fetchPoolsPage(page);
+    const rows = await fetchPoolsPage(page, network);
     if (!rows) break; // страница не отдалась — довольствуемся тем, что есть
     rows.forEach((tok) => {
       if (seen.has(tok.id)) return;
@@ -8338,26 +8338,33 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
     // Столько же страниц и с тем же обновлением, что у ленты TON: одна
     // страница давала два десятка токенов, список кончался на середине
     // экрана, и цифры в нём застывали на момент открытия.
-    async function загрузить() {
-      const страницы = await Promise.all(
-        Array.from({ length: FEED_PAGES }, (_, i) => fetchPoolsPage(i + 1, GT_NETWORK_SOL)),
-      );
+    // Страницы читаются по очереди, а не разом: у источника общий лимит
+    // на приложение, и пять одновременных запросов он отбивал целиком —
+    // раздел оставался пустым. Сначала первая страница, чтобы список
+    // появился сразу, потом добор остального в фоне.
+    async function загрузить(глубоко) {
+      const rows = глубоко
+        ? await fetchTonMemePools(FEED_LIMIT, FEED_PAGES, GT_NETWORK_SOL)
+        : await fetchTonMemePools(20, 1, GT_NETWORK_SOL);
       if (cancelled) return;
-      const все = страницы.filter(Boolean).flat();
-      if (все.length) {
-        // Один и тот же пул приходит на соседних страницах, когда рынок
-        // перетасовался между запросами.
-        const по = new Map(все.map((tok) => [tok.id, tok]));
-        setSolTokens([...по.values()].slice(0, FEED_LIMIT));
-      } else if (!solTokens) {
-        setSolTokens([]);
+      // null означает, что источник не ответил. Затирать им уже
+      // показанный список нельзя — лучше оставить прежние цифры.
+      if (rows && rows.length) {
+        setSolTokens((prev) => {
+          if (глубоко || !prev || !prev.length) return rows;
+          const свежие = new Map(rows.map((tok) => [tok.id, tok]));
+          const слито = prev.map((tok) => свежие.get(tok.id) || tok);
+          const известные = new Set(prev.map((tok) => tok.id));
+          rows.forEach((tok) => { if (!известные.has(tok.id)) слито.push(tok); });
+          return слито;
+        });
       }
       setSolLoading(false);
     }
 
-    загрузить();
+    загрузить(false).then(() => { if (!cancelled) загрузить(true); });
     const iv = setInterval(() => {
-      if (document.visibilityState === "visible") загрузить();
+      if (document.visibilityState === "visible") загрузить(false);
     }, TOKEN_REFRESH_MS);
     return () => { cancelled = true; clearInterval(iv); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
