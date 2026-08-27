@@ -4763,6 +4763,87 @@ const MEMPAD_FILTERS = [
   { id: "hot", labelKey: "mempadFilterHot" },
 ];
 
+/* Аура токена — фон карточки «В центре внимания».
+
+   Цвет берётся из самого логотипа: картинка рисуется в холст размером
+   восемь на восемь точек, из них считается средний тон, и он же
+   разливается за карточкой мягким пятном. У каждого токена выходит своя
+   подложка, и подборка каждый раз выглядит по-новому, ничего для этого
+   не рисуя вручную.
+
+   Если логотипа нет или чужой сервер не отдал картинку для чтения
+   (браузер не пускает к пикселям без разрешения), цвет выводится из
+   тикера — тот же токен всегда получает тот же оттенок. */
+const аураКеш = new Map(); // ссылка на логотип -> [r,g,b]
+
+function цветИзТикера(тикер) {
+  const h = hashSeed(String(тикер || "?")) % 360;
+  // Насыщенность и светлота фиксированы: случайные давали то грязь, то
+  // кислоту, а так любой тикер получает ровный глубокий тон.
+  const s = 0.62;
+  const l = 0.52;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+}
+
+function SpotlightAura({ src, ticker }) {
+  const [цвет, setЦвет] = useState(() => (src && аураКеш.get(src)) || null);
+
+  useEffect(() => {
+    if (!src) { setЦвет(null); return; }
+    const готовый = аураКеш.get(src);
+    if (готовый) { setЦвет(готовый); return; }
+
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = 8; c.height = 8;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, 8, 8);
+        const { data } = ctx.getImageData(0, 0, 8, 8);
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          // Прозрачные и почти чёрные точки пропускаем: у логотипов на
+          // прозрачном фоне они дают серую кашу вместо цвета.
+          if (data[i + 3] < 40) continue;
+          if (data[i] + data[i + 1] + data[i + 2] < 60) continue;
+          r += data[i]; g += data[i + 1]; b += data[i + 2]; n += 1;
+        }
+        if (!n || cancelled) return;
+        const итог = [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+        аураКеш.set(src, итог);
+        setЦвет(итог);
+      } catch {
+        // Чужой сервер не разрешил читать пиксели — останется цвет из тикера.
+      }
+    };
+    img.src = src;
+    return () => { cancelled = true; };
+  }, [src]);
+
+  const [r, g, b] = цвет || цветИзТикера(ticker);
+  const тон = (a) => `rgba(${r}, ${g}, ${b}, ${a})`;
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute", inset: 0, pointerEvents: "none",
+        background: `radial-gradient(80% 60% at 50% 22%, ${тон(0.5)} 0%, ${тон(0.18)} 42%, transparent 72%), linear-gradient(180deg, ${тон(0.12)} 0%, transparent 60%)`,
+        // Смена токена в подборке не должна выглядеть как вспышка.
+        transition: "background 520ms ease-out",
+      }}
+    />
+  );
+}
+
 function MempadRow({ t: tok, onOpen, index }) {
   return (
     <button onClick={() => onOpen(tok)} className="fx-tap w-full flex items-center gap-3 py-3 text-left" style={{ animationDelay: `${index * 55}ms` }}>
@@ -8392,6 +8473,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
           {/* key по токену — карточка переигрывает своё появление на каждой
               смене, поэтому подмена не выглядит как рывок. */}
           <button key={spotlight.id} onClick={() => onOpen(spotlight)} className="fx-card w-full flex flex-col items-center text-center gap-2.5 rounded-[22px] p-6" style={{ background: T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden" }}>
+            <SpotlightAura src={spotlight.logoUrl} ticker={spotlight.ticker} />
             <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <TokenAvatar size={92} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl}>{spotlight.emoji}</TokenAvatar>
               <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 21.5, fontWeight: 800 }}>${spotlight.ticker}</span>
