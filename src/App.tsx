@@ -1268,6 +1268,37 @@ function GlobalStyle() {
         background-size: 220% 100%;
         animation: barSweep 5s linear infinite;
       }
+      /* Медленное дыхание фирменной графики сети. Только transform и
+         opacity — их браузер считает на видеокарте, прокрутке не мешает.
+         Пятнадцать секунд на круг: движение должно ощущаться как свет в
+         комнате, а не как анимация. */
+      @keyframes netDrift {
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: .92; }
+        50%      { transform: translate3d(-10px, 6px, 0) scale(1.035); opacity: 1; }
+      }
+      .fx-net-drift {
+        animation: netDrift 15s ease-in-out infinite;
+        transform-origin: center;
+        will-change: transform;
+      }
+      /* Появление раздела: графика проступает и чуть подаётся вперёд —
+         так переключение сети читается как смена места, а не как
+         перекраска фона. */
+      @keyframes netIn {
+        from { opacity: 0; transform: translate3d(0, -10px, 0) scale(1.04); }
+        to   { opacity: 1; transform: none; }
+      }
+      .fx-net-in { animation: netIn 460ms cubic-bezier(0.22,0.61,0.36,1) both; }
+      /* Блик проходит по фигуре раз в семь секунд и половину времени
+         стоит за краем: постоянно бегущая полоса читалась бы как
+         неисправность, а редкая — как отражение света. */
+      @keyframes netShine {
+        0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+        12%  { opacity: 1; }
+        58%  { opacity: 1; }
+        70%, 100% { transform: translate3d(620px, 0, 0); opacity: 0; }
+      }
+      .fx-net-shine { animation: netShine 7s ease-in-out infinite; will-change: transform; }
       @keyframes mcapGlow { 0%,100%{text-shadow:0 0 10px currentColor,0 0 2px currentColor;} 50%{text-shadow:0 0 18px currentColor,0 0 4px currentColor;} }
       @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
       /* Появляется на месте — только проявлением и лёгким укрупнением,
@@ -8152,6 +8183,172 @@ function ShopView({ cosmetics, owned, coins, onBuy, onOpenLook, onOpenChest, ach
   );
 }
 
+/* Фон раздела под выбранную сеть.
+
+   Ровное цветное пятно за заголовком выглядело как недоделка: цвет есть,
+   а сказать ему нечего. Здесь у каждой сети её собственная геометрия —
+   та, по которой её узнают без единой подписи.
+
+   TON — кристалл: ромб её знака, разложенный на грани, стоящий в
+   решётке диагоналей и подсвеченный снизу.
+
+   Solana — три наклонные полосы из их логотипа, от фиолетового к
+   мятному, с бегущим по ним бликом.
+
+   Всё нарисовано одним SVG и гасится маской к низу, чтобы список
+   начинался с чистого чёрного. Из движущегося — блик и очень медленное
+   дыхание фигуры: только transform и opacity, то есть работа
+   видеокарты, а не пересчёт разметки. */
+const СЕТЬ_ЦВЕТА = {
+  ton: { основной: "#0098EA", второй: "#7FDBFF" },
+  sol: { основной: "#9945FF", второй: "#14F195" },
+};
+
+function СетевойФон({ сеть = "ton" }) {
+  const цвета = СЕТЬ_ЦВЕТА[сеть] || СЕТЬ_ЦВЕТА.ton;
+  const sol = сеть === "sol";
+
+  return (
+    <div
+      aria-hidden
+      className="fx-net-in"
+      style={{
+        position: "absolute", left: "-16%", right: "-16%", top: -110, height: 470,
+        pointerEvents: "none", zIndex: 0, overflow: "hidden",
+      }}
+    >
+      <svg width="100%" height="100%" viewBox="0 0 420 470" preserveAspectRatio="xMidYMid slice" style={{ display: "block" }}>
+        <defs>
+          {/* Маска: к низу графика сходит на нет, иначе она спорила бы с
+              карточками списка. */}
+          <linearGradient id={`fade-${сеть}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#fff" stopOpacity="0.85" />
+            <stop offset="38%" stopColor="#fff" stopOpacity="1" />
+            <stop offset="72%" stopColor="#fff" stopOpacity="0.5" />
+            <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+          </linearGradient>
+          <mask id={`mask-${сеть}`}>
+            <rect width="420" height="470" fill={`url(#fade-${сеть})`} />
+          </mask>
+
+          <linearGradient id={`face-${сеть}`} x1="0.1" y1="0" x2="0.9" y2="1">
+            <stop offset="0%" stopColor={цвета.второй} stopOpacity="0.55" />
+            <stop offset="60%" stopColor={цвета.основной} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={цвета.основной} stopOpacity="0.05" />
+          </linearGradient>
+
+          <linearGradient id={`edge-${сеть}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={цвета.второй} stopOpacity="1" />
+            <stop offset="100%" stopColor={цвета.основной} stopOpacity="0.4" />
+          </linearGradient>
+
+          <linearGradient id={`bar-${сеть}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#9945FF" stopOpacity="0.9" />
+            <stop offset="55%" stopColor="#7B5CFF" stopOpacity="0.7" />
+            <stop offset="100%" stopColor="#14F195" stopOpacity="0.85" />
+          </linearGradient>
+
+          <radialGradient id={`halo-${сеть}`} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={цвета.основной} stopOpacity="0.6" />
+            <stop offset="55%" stopColor={цвета.основной} stopOpacity="0.16" />
+            <stop offset="100%" stopColor={цвета.основной} stopOpacity="0" />
+          </radialGradient>
+
+          <radialGradient id={`halo2-${сеть}`} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={цвета.второй} stopOpacity="0.4" />
+            <stop offset="100%" stopColor={цвета.второй} stopOpacity="0" />
+          </radialGradient>
+
+          {/* Блик, бегущий по фигуре. Узкая светлая полоса, которая
+              проходит раз в несколько секунд и оживляет статичную форму. */}
+          <linearGradient id={`shine-${сеть}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#fff" stopOpacity="0" />
+            <stop offset="45%" stopColor="#fff" stopOpacity="0.5" />
+            <stop offset="55%" stopColor="#fff" stopOpacity="0.5" />
+            <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+          </linearGradient>
+
+          {!sol && (
+            <pattern id="grid-ton" width="30" height="30" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="30" stroke="#7FDBFF" strokeOpacity="0.3" strokeWidth="0.9" />
+              <line x1="0" y1="0" x2="30" y2="0" stroke="#7FDBFF" strokeOpacity="0.3" strokeWidth="0.9" />
+            </pattern>
+          )}
+        </defs>
+
+        <g mask={`url(#mask-${сеть})`}>
+          {sol ? (
+            <>
+              <ellipse cx="120" cy="150" rx="240" ry="150" fill={`url(#halo-${сеть})`} />
+              <ellipse cx="370" cy="215" rx="180" ry="120" fill={`url(#halo2-${сеть})`} />
+
+              {/* Три полосы знака Solana: одинаковый наклон, ровные
+                  зазоры, уходят за оба края — как часть чего-то большего.
+                  Дышит вся связка целиком, поэтому строй не ломается. */}
+              <g className="fx-net-drift">
+                {[0, 1, 2].map((i) => {
+                  const y = 78 + i * 56;
+                  return (
+                    <g key={i}>
+                      <path
+                        d={`M-60,${y + 34} L500,${y - 30} L500,${y - 2} L-60,${y + 62} Z`}
+                        fill={`url(#bar-${сеть})`}
+                        opacity={0.5 - i * 0.06}
+                      />
+                      <path
+                        d={`M-60,${y + 34} L500,${y - 30}`}
+                        stroke={i === 2 ? "#14F195" : "#B37BFF"}
+                        strokeOpacity="0.6"
+                        strokeWidth="1.3"
+                        fill="none"
+                      />
+                    </g>
+                  );
+                })}
+                {/* Блик поперёк полос. */}
+                <g className="fx-net-shine">
+                  <rect x="-160" y="40" width="120" height="290" fill={`url(#shine-${сеть})`} opacity="0.5" />
+                </g>
+              </g>
+            </>
+          ) : (
+            <>
+              <rect width="420" height="470" fill="url(#grid-ton)" opacity="0.75" mask={`url(#mask-${сеть})`} />
+              <ellipse cx="250" cy="150" rx="230" ry="160" fill={`url(#halo-${сеть})`} />
+
+              {/* Кристалл TON. Крупный, чуть выходит за правый край —
+                  так он читается как форма, а не как значок.
+
+                  Позиция и дыхание — на разных слоях намеренно: CSS-
+                  анимация задаёт свой transform и затирает атрибут, и
+                  фигура, стоявшая справа, уезжала в левый верхний угол,
+                  то есть за пределы экрана. */}
+              <g transform="translate(322 224)">
+              <g className="fx-net-drift">
+                <path d="M0,-84 L72,-18 L0,100 L-72,-18 Z" fill={`url(#face-${сеть})`} opacity="0.85" />
+                <path d="M0,-84 L-72,-18 L0,100 Z" fill="#0098EA" opacity="0.14" />
+                <path d="M0,-84 L72,-18 L0,100 L-72,-18 Z" fill="none" stroke={`url(#edge-${сеть})`} strokeWidth="1.8" />
+                <path d="M0,-84 L0,100" stroke="#7FDBFF" strokeOpacity="0.5" strokeWidth="1.1" />
+                <path d="M-72,-18 L72,-18" stroke="#7FDBFF" strokeOpacity="0.32" strokeWidth="1.1" />
+                {/* Внутренняя огранка: грань поменьше внутри большой. */}
+                <path d="M0,-84 L36,-18 L0,38 L-36,-18 Z" fill="none" stroke="#7FDBFF" strokeOpacity="0.2" strokeWidth="0.9" />
+
+                <g className="fx-net-shine">
+                  <rect x="-170" y="-110" width="56" height="240" fill={`url(#shine-${сеть})`} opacity="0.45" />
+                </g>
+              </g>
+              </g>
+
+              {/* Горизонт, вдоль которого стоит кристалл. */}
+              <path d="M-40,282 L460,236" stroke="#0098EA" strokeOpacity="0.4" strokeWidth="1.2" fill="none" />
+            </>
+          )}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
 function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   const [filter, setFilter] = useState("new");
   // Сеть выбирается сверху, отдельно от фильтров: это не «ещё один
@@ -8225,26 +8422,11 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
     return arr;
   }, [tokens, filter, spotlightTop, localTokens, solTokens, сеть]);
 
-  // Фон под цвет выбранной сети: у TON это её синий, у Solana —
-  // фирменная пара фиолетового с мятным. Не украшение: экраны двух
-  // рынков выглядят одинаково, и без цветовой подсказки легко забыть,
-  // где находишься, а сделки там идут разными кошельками.
-  const фонСети = сеть === "sol"
-    ? `radial-gradient(90% 55% at 12% 18%, ${hexA("#9945FF", 0.5)} 0%, transparent 66%), radial-gradient(85% 50% at 92% 30%, ${hexA("#14F195", 0.3)} 0%, transparent 64%)`
-    : `radial-gradient(95% 55% at 18% 20%, ${hexA("#0098EA", 0.42)} 0%, transparent 68%), radial-gradient(80% 45% at 95% 34%, ${hexA("#0098EA", 0.16)} 0%, transparent 62%)`;
-
   return (
     <div className="flex flex-col gap-5" style={{ paddingBottom: 12, position: "relative" }}>
-      {/* Слой лежит под содержимым и шире его: свечение должно уходить
-          за края экрана, а не обрываться по колонке текста. */}
-      <div aria-hidden style={{
-        // Начинается выше заголовка и тянется на треть экрана: свет
-        // должен «падать» на первые карточки, а не висеть полосой.
-        position: "absolute", left: "-14%", right: "-14%", top: -60, height: 460,
-        background: фонСети,
-        transition: "background 420ms ease-out",
-        pointerEvents: "none", zIndex: 0,
-      }} />
+      {/* Ключ по сети: смена перерисовывает графику заново, вместе с её
+          появлением. Без него SVG остался бы прежним с новым цветом. */}
+      <СетевойФон key={сеть} сеть={сеть} />
 
       <div className="flex items-center justify-between" style={{ position: "relative", zIndex: 1 }}>
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("navMempad")}</span>
