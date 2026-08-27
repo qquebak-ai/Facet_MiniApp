@@ -10116,7 +10116,14 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
 
         <div className="flex flex-col gap-1.5" style={{ marginTop: 14, fontFamily: monoFont, fontSize: 12, color: T.muted }}>
           <div className="flex justify-between"><span>{t("rate")}</span><span style={{ color: T.ice }}>{fmtPrice(token.price)} / ${token.ticker}</span></div>
-          <div className="flex justify-between"><span>{t("networkFee")}</span><span style={{ color: T.ice }}>{NETWORK_FEE_TON} TON (${feeUsd.toFixed(2)})</span></div>
+          {/* Комиссию платят монетой той сети, где идёт сделка. В Solana
+              к ней добавляется разовая аренда счёта под новый токен —
+              её берут один раз и возвращают, когда счёт закрывают. */}
+          <div className="flex justify-between"><span>{t("networkFee")}</span><span style={{ color: T.ice }}>
+            {соло
+              ? `≈0.003 SOL${solPriceUsd > 0 ? ` ($${(0.003 * solPriceUsd).toFixed(2)})` : ""}`
+              : `${NETWORK_FEE_TON} TON ($${feeUsd.toFixed(2)})`}
+          </span></div>
           <div className="flex justify-between"><span>{t("minReceive")}</span><span style={{ color: T.ice }}>{amount > 0 ? (isBuy ? `${(estimate * (1 - slippage / 100)).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ${token.ticker}` : `$${(estimate * (1 - slippage / 100)).toFixed(2)}`) : "—"}</span></div>
         </div>
 
