@@ -4267,7 +4267,14 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
         <TokenAvatar size={20} tone={b.kind === "sell" ? "down" : "up"} src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
         <span className="truncate" style={{ fontFamily: monoFont, color: T.muted, fontSize: 12.5 }}>{shortAddr(b.from) || "—"}</span>
         <span style={{ fontFamily: bodyFont, color: b.kind === "sell" ? T.down : T.up, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}>
-          {b.kind === "sell" ? t("tickerSold") : t("tickerBought")} {fmtTon(b.volTon != null ? b.volTon : (tonUsd() > 0 ? b.volUsd / tonUsd() : 0))} TON
+          {/* Сумма в монете той сети, где прошла сделка: в разделе
+              Solana цифры в TON были просто неправдой. */}
+          {b.kind === "sell" ? t("tickerSold") : t("tickerBought")} {(() => {
+            const соло = b.token && b.token.chain === "solana";
+            const курс = соло ? solUsd() : tonUsd();
+            const сумма = !соло && b.volTon != null ? b.volTon : (курс > 0 ? b.volUsd / курс : 0);
+            return `${fmtTon(сумма)} ${соло ? "SOL" : "TON"}`;
+          })()}
         </span>
         <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>${b.token.ticker}</span>
       </div>
@@ -9987,6 +9994,26 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
 let tonUsdLive = 0;
 function tonUsd() {
   return tonUsdLive > 0 ? tonUsdLive : 0;
+}
+
+/* Курс SOL. Нужен там же, где и курс TON: суммы сделок источник отдаёт в
+   долларах, а показывать их надо в монете той сети, где сделка прошла.
+   Спрашиваем не чаще раза в пять минут — на цифрах ленты точность до
+   секунды ничего не меняет. */
+let solUsdLive = 0;
+let solUsdAt = 0;
+function solUsd() {
+  if (typeof window !== "undefined" && Date.now() - solUsdAt > 5 * 60 * 1000) {
+    solUsdAt = Date.now();
+    fetch(`${GT_BASE}/networks/${GT_NETWORK_SOL}/tokens/So11111111111111111111111111111111111111112`)
+      .then((r) => r.json())
+      .then((j) => {
+        const цена = parseFloat(j?.data?.attributes?.price_usd) || 0;
+        if (цена > 0) solUsdLive = цена;
+      })
+      .catch(() => {});
+  }
+  return solUsdLive > 0 ? solUsdLive : 0;
 }
 // Минимальная стартовая покупка. В тестнете её нет: там TON ничего не
 // стоят, порог в долларах не имеет смысла и только мешает проверять.
