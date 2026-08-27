@@ -51,30 +51,25 @@ const GAS_BUY_OVERHEAD = 120000000n;
 const OP_BUY = 0x42555921;
 const OP_JETTON_NOTIFY = 0x7362d09c;
 
-// Пул токена на бирже. Контракт кривой, набрав цель, отправляет всю
-// ликвидность на кошелёк площадки — пару на Ston.fi заводят уже оттуда,
-// отдельным действием. Пока пары нет, торговать негде, и писать «на
-// бирже» рано. Проверяем самым дешёвым способом: спрашиваем биржу, во
-// что обменяется один TON. Есть маршрут — есть пул, и его адрес приходит
-// в том же ответе.
-const STON_API = "https://api.ston.fi/v1";
-const PTON = "EQCM3B12QK1e4yZSf8GtBRT0aLMNyEsBc_DhVfRRtOEffLez";
-
-async function пулНаБирже(jetton) {
-  // Биржа живёт только в боевой сети — в тестовой спрашивать нечего.
-  if (TESTNET || !jetton) return null;
-  const параметры = new URLSearchParams({
-    offer_address: PTON,
-    ask_address: jetton,
-    units: "1000000000",
-    slippage_tolerance: "0.02",
-    dex_v2: "true",
-  });
+// Состояние собственного пула токена. Кривая, набрав цель, отдаёт ему
+// TON и остаток выпуска, и торговля продолжается там. Раньше на этом
+// месте спрашивали Ston.fi, не завели ли пару вручную; теперь пара не
+// нужна вовсе — рынок свой, и пул разворачивается ещё при запуске.
+//
+// Поля идут в порядке структуры PoolData: tonReserve, tokenReserve,
+// feeBps, ready.
+async function состояниеПула(address) {
+  if (!address) return null;
   try {
-    const res = await fetch(`${STON_API}/swap/simulate?${параметры}`, { method: "POST" });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json && json.pool_address ? json.pool_address : null;
+    const json = await tonapi(`/v2/blockchain/accounts/${address}/methods/data`, { method: "POST" });
+    const stack = (json && json.stack) || [];
+    if (stack.length < 4) return null;
+    return {
+      tonReserve: BigInt(stack[0].num),
+      tokenReserve: BigInt(stack[1].num),
+      feeBps: BigInt(stack[2].num),
+      ready: Number(stack[3].num) !== 0,
+    };
   } catch {
     return null;
   }
@@ -194,7 +189,7 @@ export default async function handler(req, res) {
 
   const { data: tokens, error } = await admin
     .from("tokens")
-    .select(`id, address, curve_address, logo_url${естьЛистинг ? ", dex_pool_address" : ""}`)
+    .select(`id, address, curve_address, logo_url${естьЛистинг ? ", dex_pool_address, listed_at" : ""}`)
     .not("curve_address", "is", null)
     .eq("network", TESTNET ? "testnet" : "mainnet")
     .order("created_at", { ascending: false })
@@ -236,24 +231,31 @@ export default async function handler(req, res) {
     const прежняя = цена(доОкна.length ? доОкна[доОкна.length - 1].realTon : 0n, params);
     const сейчас = цена(st.realTon, params);
 
-    // Кривая закрылась, а пула ещё нет — проверяем, не завели ли его.
-    // Записываем один раз: дальше адрес уже известен и спрашивать
-    // биржу незачем.
-    if (естьЛистинг && st.graduated && !tok.dex_pool_address && tok.address) {
-      const пул = await пулНаБирже(tok.address);
-      if (пул) {
+    // Кривая закрылась — с этого момента цена живёт в пуле. Отмечаем
+    // время, когда он принял ликвидность: по нему приложение отличает
+    // «переезжает» от «торгуется».
+    let пул = null;
+    if (естьЛистинг && st.graduated && tok.dex_pool_address) {
+      пул = await состояниеПула(tok.dex_pool_address);
+      if (пул && пул.ready && !tok.listed_at) {
         await admin.from("tokens")
-          .update({ dex_pool_address: пул, listed_at: new Date().toISOString() })
+          .update({ listed_at: new Date().toISOString() })
           .eq("id", tok.id);
         залистили += 1;
       }
     }
 
+    // После закрытия кривой её резервы равны нулю: всё уехало в пул.
+    // Брать цену оттуда — значит показывать ноль на витрине, поэтому у
+    // закрытых токенов и цена, и «сколько в рынке» считаются по пулу.
+    const вПуле = пул && пул.ready;
+    const ценаПула = вПуле ? Number(пул.tonReserve) / Number(пул.tokenReserve) : 0;
+
     строки.push({
       token_id: tok.id,
       curve_address: tok.curve_address,
-      price_ton: сейчас,
-      real_ton: Number(st.realTon) / 1e9,
+      price_ton: вПуле ? ценаПула : сейчас,
+      real_ton: вПуле ? Number(пул.tonReserve) / 1e9 : Number(st.realTon) / 1e9,
       graduation_ton: Number(st.graduationTon) / 1e9,
       tokens_sold: Number(st.tokensSold) / 1e9,
       supply: meta && meta.supply ? meta.supply : DEFAULT_SUPPLY,
@@ -263,7 +265,9 @@ export default async function handler(req, res) {
       // непроданный запас.
       holders: meta && meta.holders != null ? Math.max(0, meta.holders - 1) : null,
       vol24_ton: объём,
-      change24: прежняя > 0 && сейчас > 0 ? ((сейчас - прежняя) / прежняя) * 100 : 0,
+      change24: прежняя > 0 && (вПуле ? ценаПула : сейчас) > 0
+        ? (((вПуле ? ценаПула : сейчас) - прежняя) / прежняя) * 100
+        : 0,
       tx24: заСутки.length,
       logo_url: tok.logo_url || (meta && meta.image) || null,
       // История для графика. Нанотоны — строками: в JSON они не

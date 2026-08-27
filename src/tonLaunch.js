@@ -125,6 +125,8 @@ import { JettonMinter } from "@ton-community/assets-sdk/dist/jetton/JettonMinter
 import { JettonWallet } from "@ton-community/assets-sdk/dist/jetton/JettonWallet";
 import {
   curveContract,
+  poolContract,
+  buildSetCurveBody,
   buildBuyBody,
   buildSetJettonWalletBody,
   CURVE_PARAMS,
@@ -741,16 +743,30 @@ export async function launchRealToken({
   // как она развёрнута — в этой же транзакции.
   let curveAddress = null;
   let curveJettonWallet = null;
+  let poolAddress = null;
   try {
+    // Пул готовим первым: его адрес зависит только от жетона и
+    // параметров площадки, и именно он зашивается в кривую получателем
+    // ликвидности. Наоборот не выйдет — оба адреса зависели бы друг от
+    // друга, и вычислить нельзя было бы ни один.
+    const pool = await poolContract({
+      admin: Address.parse(walletAddress),
+      jettonMaster: jettonMasterAddress,
+      feeWallet: Address.parse(feeAddress),
+    });
+    poolAddress = pool.address;
+    log(`адрес пула (детерминированный, без запроса в сеть): ${poolAddress.toString()}`);
+
     const curve = await curveContract({
       admin: Address.parse(walletAddress),
       jettonMaster: jettonMasterAddress,
       feeWallet: Address.parse(feeAddress),
-      // Куда уйдут деньги после набора порога. Пока это казначейство —
-      // оттуда заводится пара на настоящем DEX. Адрес зашивается в
-      // контракт навсегда: сменить его потом нельзя, и это единственный
-      // способ вынуть средства.
-      graduationDestination: Address.parse(treasuryAddress),
+      // Куда уйдут деньги после набора порога — в собственный пул этого
+      // же токена. Раньше здесь стояло казначейство площадки, и пару на
+      // чужой бирже заводили руками: пока её не завели, торговать было
+      // негде. Адрес зашивается в контракт навсегда, сменить его нельзя,
+      // и это единственный способ вынуть средства из кривой.
+      graduationDestination: poolAddress,
     });
     curveAddress = curve.address;
     log(`адрес кривой (детерминированный, без запроса в сеть): ${curveAddress.toString()}`);
@@ -789,6 +805,30 @@ export async function launchRealToken({
       bounce: false,
     });
     log("развёртывание кривой с привязкой кошелька поставлено в очередь");
+
+    // Пул разворачивается сразу, той же транзакцией: потом на это никто
+    // не придёт, а без развёрнутого контракта кривая отдала бы
+    // ликвидность в пустоту. Ему нужны два адреса — собственный кошелёк
+    // жетона и кривая, у которой он примет ликвидность. Оба считаются
+    // офлайн, поэтому едут вместе с развёртыванием.
+    const poolJettonWallet = JettonWallet.createFromConfig({
+      owner: poolAddress,
+      jettonMaster: jettonMasterAddress,
+    }).address;
+    await batchSender.send({
+      to: poolAddress,
+      value: toNano("0.06"),
+      init: pool.init,
+      body: buildSetJettonWalletBody(poolJettonWallet),
+      bounce: false,
+    });
+    await batchSender.send({
+      to: poolAddress,
+      value: toNano("0.03"),
+      body: buildSetCurveBody(curveAddress),
+      bounce: false,
+    });
+    log(`развёртывание пула поставлено в очередь, его кошелёк жетона: ${poolJettonWallet.toString()}`);
 
     // Стартовая покупка создателя — четвёртым сообщением той же
     // транзакции. Раньше это было опасно: покупка доходит до кривой за
@@ -943,9 +983,11 @@ export async function launchRealToken({
     creatorWallet: walletAddress,
     curveAddress: curveAddress ? curveAddress.toString() : null,
     curveJettonWallet: curveJettonWallet ? curveJettonWallet.toString() : null,
-    // Пула на внешнем DEX у токена нет и не должно быть: пока он на
-    // кривой, торговля идёт через неё. Пул появится после набора порога.
+    // Пула на внешней бирже у токена нет и не будет: рынок свой. Пока
+    // идёт кривая, торговля через неё, а после порога — через этот пул.
+    // Он уже развёрнут и ждёт ликвидность.
     poolAddress: null,
+    curvePoolAddress: poolAddress ? poolAddress.toString() : null,
     explorerUrl: `https://tonscan.org/address/${jettonMasterAddress.toString()}`,
     // Real, on-chain-confirmed balance (see waitForJettonBalance above) —
     // use this instead of the pre-launch estimate wherever the app

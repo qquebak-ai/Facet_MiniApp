@@ -904,55 +904,102 @@ export function dictValueParserJettonTransferNotification(): DictionaryValue<Jet
     }
 }
 
-export type Buy = {
-    $$type: 'Buy';
+export type JettonExcesses = {
+    $$type: 'JettonExcesses';
+    queryId: bigint;
+}
+
+export function storeJettonExcesses(src: JettonExcesses) {
+    return (builder: Builder) => {
+        const b_0 = builder;
+        b_0.storeUint(3576854235, 32);
+        b_0.storeUint(src.queryId, 64);
+    };
+}
+
+export function loadJettonExcesses(slice: Slice) {
+    const sc_0 = slice;
+    if (sc_0.loadUint(32) !== 3576854235) { throw Error('Invalid prefix'); }
+    const _queryId = sc_0.loadUintBig(64);
+    return { $$type: 'JettonExcesses' as const, queryId: _queryId };
+}
+
+export function loadTupleJettonExcesses(source: TupleReader) {
+    const _queryId = source.readBigNumber();
+    return { $$type: 'JettonExcesses' as const, queryId: _queryId };
+}
+
+export function loadGetterTupleJettonExcesses(source: TupleReader) {
+    const _queryId = source.readBigNumber();
+    return { $$type: 'JettonExcesses' as const, queryId: _queryId };
+}
+
+export function storeTupleJettonExcesses(source: JettonExcesses) {
+    const builder = new TupleBuilder();
+    builder.writeNumber(source.queryId);
+    return builder.build();
+}
+
+export function dictValueParserJettonExcesses(): DictionaryValue<JettonExcesses> {
+    return {
+        serialize: (src, builder) => {
+            builder.storeRef(beginCell().store(storeJettonExcesses(src)).endCell());
+        },
+        parse: (src) => {
+            return loadJettonExcesses(src.loadRef().beginParse());
+        }
+    }
+}
+
+export type PoolBuy = {
+    $$type: 'PoolBuy';
     queryId: bigint;
     minTokensOut: bigint;
 }
 
-export function storeBuy(src: Buy) {
+export function storePoolBuy(src: PoolBuy) {
     return (builder: Builder) => {
         const b_0 = builder;
-        b_0.storeUint(1112889633, 32);
+        b_0.storeUint(1346524505, 32);
         b_0.storeUint(src.queryId, 64);
         b_0.storeCoins(src.minTokensOut);
     };
 }
 
-export function loadBuy(slice: Slice) {
+export function loadPoolBuy(slice: Slice) {
     const sc_0 = slice;
-    if (sc_0.loadUint(32) !== 1112889633) { throw Error('Invalid prefix'); }
+    if (sc_0.loadUint(32) !== 1346524505) { throw Error('Invalid prefix'); }
     const _queryId = sc_0.loadUintBig(64);
     const _minTokensOut = sc_0.loadCoins();
-    return { $$type: 'Buy' as const, queryId: _queryId, minTokensOut: _minTokensOut };
+    return { $$type: 'PoolBuy' as const, queryId: _queryId, minTokensOut: _minTokensOut };
 }
 
-export function loadTupleBuy(source: TupleReader) {
+export function loadTuplePoolBuy(source: TupleReader) {
     const _queryId = source.readBigNumber();
     const _minTokensOut = source.readBigNumber();
-    return { $$type: 'Buy' as const, queryId: _queryId, minTokensOut: _minTokensOut };
+    return { $$type: 'PoolBuy' as const, queryId: _queryId, minTokensOut: _minTokensOut };
 }
 
-export function loadGetterTupleBuy(source: TupleReader) {
+export function loadGetterTuplePoolBuy(source: TupleReader) {
     const _queryId = source.readBigNumber();
     const _minTokensOut = source.readBigNumber();
-    return { $$type: 'Buy' as const, queryId: _queryId, minTokensOut: _minTokensOut };
+    return { $$type: 'PoolBuy' as const, queryId: _queryId, minTokensOut: _minTokensOut };
 }
 
-export function storeTupleBuy(source: Buy) {
+export function storeTuplePoolBuy(source: PoolBuy) {
     const builder = new TupleBuilder();
     builder.writeNumber(source.queryId);
     builder.writeNumber(source.minTokensOut);
     return builder.build();
 }
 
-export function dictValueParserBuy(): DictionaryValue<Buy> {
+export function dictValueParserPoolBuy(): DictionaryValue<PoolBuy> {
     return {
         serialize: (src, builder) => {
-            builder.storeRef(beginCell().store(storeBuy(src)).endCell());
+            builder.storeRef(beginCell().store(storePoolBuy(src)).endCell());
         },
         parse: (src) => {
-            return loadBuy(src.loadRef().beginParse());
+            return loadPoolBuy(src.loadRef().beginParse());
         }
     }
 }
@@ -1004,109 +1051,62 @@ export function dictValueParserSetJettonWallet(): DictionaryValue<SetJettonWalle
     }
 }
 
-export type Graduate = {
-    $$type: 'Graduate';
-    queryId: bigint;
+export type SetCurve = {
+    $$type: 'SetCurve';
+    curve: Address;
 }
 
-export function storeGraduate(src: Graduate) {
+export function storeSetCurve(src: SetCurve) {
     return (builder: Builder) => {
         const b_0 = builder;
-        b_0.storeUint(1196572996, 32);
-        b_0.storeUint(src.queryId, 64);
+        b_0.storeUint(1396920918, 32);
+        b_0.storeAddress(src.curve);
     };
 }
 
-export function loadGraduate(slice: Slice) {
+export function loadSetCurve(slice: Slice) {
     const sc_0 = slice;
-    if (sc_0.loadUint(32) !== 1196572996) { throw Error('Invalid prefix'); }
-    const _queryId = sc_0.loadUintBig(64);
-    return { $$type: 'Graduate' as const, queryId: _queryId };
+    if (sc_0.loadUint(32) !== 1396920918) { throw Error('Invalid prefix'); }
+    const _curve = sc_0.loadAddress();
+    return { $$type: 'SetCurve' as const, curve: _curve };
 }
 
-export function loadTupleGraduate(source: TupleReader) {
-    const _queryId = source.readBigNumber();
-    return { $$type: 'Graduate' as const, queryId: _queryId };
+export function loadTupleSetCurve(source: TupleReader) {
+    const _curve = source.readAddress();
+    return { $$type: 'SetCurve' as const, curve: _curve };
 }
 
-export function loadGetterTupleGraduate(source: TupleReader) {
-    const _queryId = source.readBigNumber();
-    return { $$type: 'Graduate' as const, queryId: _queryId };
+export function loadGetterTupleSetCurve(source: TupleReader) {
+    const _curve = source.readAddress();
+    return { $$type: 'SetCurve' as const, curve: _curve };
 }
 
-export function storeTupleGraduate(source: Graduate) {
+export function storeTupleSetCurve(source: SetCurve) {
     const builder = new TupleBuilder();
-    builder.writeNumber(source.queryId);
+    builder.writeAddress(source.curve);
     return builder.build();
 }
 
-export function dictValueParserGraduate(): DictionaryValue<Graduate> {
+export function dictValueParserSetCurve(): DictionaryValue<SetCurve> {
     return {
         serialize: (src, builder) => {
-            builder.storeRef(beginCell().store(storeGraduate(src)).endCell());
+            builder.storeRef(beginCell().store(storeSetCurve(src)).endCell());
         },
         parse: (src) => {
-            return loadGraduate(src.loadRef().beginParse());
+            return loadSetCurve(src.loadRef().beginParse());
         }
     }
 }
 
-export type JettonExcesses = {
-    $$type: 'JettonExcesses';
-    queryId: bigint;
-}
-
-export function storeJettonExcesses(src: JettonExcesses) {
-    return (builder: Builder) => {
-        const b_0 = builder;
-        b_0.storeUint(3576854235, 32);
-        b_0.storeUint(src.queryId, 64);
-    };
-}
-
-export function loadJettonExcesses(slice: Slice) {
-    const sc_0 = slice;
-    if (sc_0.loadUint(32) !== 3576854235) { throw Error('Invalid prefix'); }
-    const _queryId = sc_0.loadUintBig(64);
-    return { $$type: 'JettonExcesses' as const, queryId: _queryId };
-}
-
-export function loadTupleJettonExcesses(source: TupleReader) {
-    const _queryId = source.readBigNumber();
-    return { $$type: 'JettonExcesses' as const, queryId: _queryId };
-}
-
-export function loadGetterTupleJettonExcesses(source: TupleReader) {
-    const _queryId = source.readBigNumber();
-    return { $$type: 'JettonExcesses' as const, queryId: _queryId };
-}
-
-export function storeTupleJettonExcesses(source: JettonExcesses) {
-    const builder = new TupleBuilder();
-    builder.writeNumber(source.queryId);
-    return builder.build();
-}
-
-export function dictValueParserJettonExcesses(): DictionaryValue<JettonExcesses> {
-    return {
-        serialize: (src, builder) => {
-            builder.storeRef(beginCell().store(storeJettonExcesses(src)).endCell());
-        },
-        parse: (src) => {
-            return loadJettonExcesses(src.loadRef().beginParse());
-        }
-    }
-}
-
-export type PendingBuy = {
-    $$type: 'PendingBuy';
+export type PoolPendingBuy = {
+    $$type: 'PoolPendingBuy';
     buyer: Address;
     ton: bigint;
     tokens: bigint;
     failed: boolean;
 }
 
-export function storePendingBuy(src: PendingBuy) {
+export function storePoolPendingBuy(src: PoolPendingBuy) {
     return (builder: Builder) => {
         const b_0 = builder;
         b_0.storeAddress(src.buyer);
@@ -1116,32 +1116,32 @@ export function storePendingBuy(src: PendingBuy) {
     };
 }
 
-export function loadPendingBuy(slice: Slice) {
+export function loadPoolPendingBuy(slice: Slice) {
     const sc_0 = slice;
     const _buyer = sc_0.loadAddress();
     const _ton = sc_0.loadCoins();
     const _tokens = sc_0.loadCoins();
     const _failed = sc_0.loadBit();
-    return { $$type: 'PendingBuy' as const, buyer: _buyer, ton: _ton, tokens: _tokens, failed: _failed };
+    return { $$type: 'PoolPendingBuy' as const, buyer: _buyer, ton: _ton, tokens: _tokens, failed: _failed };
 }
 
-export function loadTuplePendingBuy(source: TupleReader) {
+export function loadTuplePoolPendingBuy(source: TupleReader) {
     const _buyer = source.readAddress();
     const _ton = source.readBigNumber();
     const _tokens = source.readBigNumber();
     const _failed = source.readBoolean();
-    return { $$type: 'PendingBuy' as const, buyer: _buyer, ton: _ton, tokens: _tokens, failed: _failed };
+    return { $$type: 'PoolPendingBuy' as const, buyer: _buyer, ton: _ton, tokens: _tokens, failed: _failed };
 }
 
-export function loadGetterTuplePendingBuy(source: TupleReader) {
+export function loadGetterTuplePoolPendingBuy(source: TupleReader) {
     const _buyer = source.readAddress();
     const _ton = source.readBigNumber();
     const _tokens = source.readBigNumber();
     const _failed = source.readBoolean();
-    return { $$type: 'PendingBuy' as const, buyer: _buyer, ton: _ton, tokens: _tokens, failed: _failed };
+    return { $$type: 'PoolPendingBuy' as const, buyer: _buyer, ton: _ton, tokens: _tokens, failed: _failed };
 }
 
-export function storeTuplePendingBuy(source: PendingBuy) {
+export function storeTuplePoolPendingBuy(source: PoolPendingBuy) {
     const builder = new TupleBuilder();
     builder.writeAddress(source.buyer);
     builder.writeNumber(source.ton);
@@ -1150,312 +1150,245 @@ export function storeTuplePendingBuy(source: PendingBuy) {
     return builder.build();
 }
 
-export function dictValueParserPendingBuy(): DictionaryValue<PendingBuy> {
+export function dictValueParserPoolPendingBuy(): DictionaryValue<PoolPendingBuy> {
     return {
         serialize: (src, builder) => {
-            builder.storeRef(beginCell().store(storePendingBuy(src)).endCell());
+            builder.storeRef(beginCell().store(storePoolPendingBuy(src)).endCell());
         },
         parse: (src) => {
-            return loadPendingBuy(src.loadRef().beginParse());
+            return loadPoolPendingBuy(src.loadRef().beginParse());
         }
     }
 }
 
-export type CurveData = {
-    $$type: 'CurveData';
-    virtualTon: bigint;
-    virtualTokens: bigint;
-    realTon: bigint;
-    tokensSold: bigint;
-    tokensForSale: bigint;
-    graduationTon: bigint;
+export type PoolData = {
+    $$type: 'PoolData';
+    tonReserve: bigint;
+    tokenReserve: bigint;
     feeBps: bigint;
-    graduated: boolean;
+    ready: boolean;
+    curve: Address | null;
+    jettonMaster: Address;
     jettonWallet: Address | null;
 }
 
-export function storeCurveData(src: CurveData) {
+export function storePoolData(src: PoolData) {
     return (builder: Builder) => {
         const b_0 = builder;
-        b_0.storeInt(src.virtualTon, 257);
-        b_0.storeInt(src.virtualTokens, 257);
-        b_0.storeInt(src.realTon, 257);
+        b_0.storeInt(src.tonReserve, 257);
+        b_0.storeInt(src.tokenReserve, 257);
+        b_0.storeInt(src.feeBps, 257);
+        b_0.storeBit(src.ready);
         const b_1 = new Builder();
-        b_1.storeInt(src.tokensSold, 257);
-        b_1.storeInt(src.tokensForSale, 257);
-        b_1.storeInt(src.graduationTon, 257);
-        const b_2 = new Builder();
-        b_2.storeInt(src.feeBps, 257);
-        b_2.storeBit(src.graduated);
-        b_2.storeAddress(src.jettonWallet);
-        b_1.storeRef(b_2.endCell());
+        b_1.storeAddress(src.curve);
+        b_1.storeAddress(src.jettonMaster);
+        b_1.storeAddress(src.jettonWallet);
         b_0.storeRef(b_1.endCell());
     };
 }
 
-export function loadCurveData(slice: Slice) {
+export function loadPoolData(slice: Slice) {
     const sc_0 = slice;
-    const _virtualTon = sc_0.loadIntBig(257);
-    const _virtualTokens = sc_0.loadIntBig(257);
-    const _realTon = sc_0.loadIntBig(257);
+    const _tonReserve = sc_0.loadIntBig(257);
+    const _tokenReserve = sc_0.loadIntBig(257);
+    const _feeBps = sc_0.loadIntBig(257);
+    const _ready = sc_0.loadBit();
     const sc_1 = sc_0.loadRef().beginParse();
-    const _tokensSold = sc_1.loadIntBig(257);
-    const _tokensForSale = sc_1.loadIntBig(257);
-    const _graduationTon = sc_1.loadIntBig(257);
-    const sc_2 = sc_1.loadRef().beginParse();
-    const _feeBps = sc_2.loadIntBig(257);
-    const _graduated = sc_2.loadBit();
-    const _jettonWallet = sc_2.loadMaybeAddress();
-    return { $$type: 'CurveData' as const, virtualTon: _virtualTon, virtualTokens: _virtualTokens, realTon: _realTon, tokensSold: _tokensSold, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, graduated: _graduated, jettonWallet: _jettonWallet };
+    const _curve = sc_1.loadMaybeAddress();
+    const _jettonMaster = sc_1.loadAddress();
+    const _jettonWallet = sc_1.loadMaybeAddress();
+    return { $$type: 'PoolData' as const, tonReserve: _tonReserve, tokenReserve: _tokenReserve, feeBps: _feeBps, ready: _ready, curve: _curve, jettonMaster: _jettonMaster, jettonWallet: _jettonWallet };
 }
 
-export function loadTupleCurveData(source: TupleReader) {
-    const _virtualTon = source.readBigNumber();
-    const _virtualTokens = source.readBigNumber();
-    const _realTon = source.readBigNumber();
-    const _tokensSold = source.readBigNumber();
-    const _tokensForSale = source.readBigNumber();
-    const _graduationTon = source.readBigNumber();
+export function loadTuplePoolData(source: TupleReader) {
+    const _tonReserve = source.readBigNumber();
+    const _tokenReserve = source.readBigNumber();
     const _feeBps = source.readBigNumber();
-    const _graduated = source.readBoolean();
+    const _ready = source.readBoolean();
+    const _curve = source.readAddressOpt();
+    const _jettonMaster = source.readAddress();
     const _jettonWallet = source.readAddressOpt();
-    return { $$type: 'CurveData' as const, virtualTon: _virtualTon, virtualTokens: _virtualTokens, realTon: _realTon, tokensSold: _tokensSold, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, graduated: _graduated, jettonWallet: _jettonWallet };
+    return { $$type: 'PoolData' as const, tonReserve: _tonReserve, tokenReserve: _tokenReserve, feeBps: _feeBps, ready: _ready, curve: _curve, jettonMaster: _jettonMaster, jettonWallet: _jettonWallet };
 }
 
-export function loadGetterTupleCurveData(source: TupleReader) {
-    const _virtualTon = source.readBigNumber();
-    const _virtualTokens = source.readBigNumber();
-    const _realTon = source.readBigNumber();
-    const _tokensSold = source.readBigNumber();
-    const _tokensForSale = source.readBigNumber();
-    const _graduationTon = source.readBigNumber();
+export function loadGetterTuplePoolData(source: TupleReader) {
+    const _tonReserve = source.readBigNumber();
+    const _tokenReserve = source.readBigNumber();
     const _feeBps = source.readBigNumber();
-    const _graduated = source.readBoolean();
+    const _ready = source.readBoolean();
+    const _curve = source.readAddressOpt();
+    const _jettonMaster = source.readAddress();
     const _jettonWallet = source.readAddressOpt();
-    return { $$type: 'CurveData' as const, virtualTon: _virtualTon, virtualTokens: _virtualTokens, realTon: _realTon, tokensSold: _tokensSold, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, graduated: _graduated, jettonWallet: _jettonWallet };
+    return { $$type: 'PoolData' as const, tonReserve: _tonReserve, tokenReserve: _tokenReserve, feeBps: _feeBps, ready: _ready, curve: _curve, jettonMaster: _jettonMaster, jettonWallet: _jettonWallet };
 }
 
-export function storeTupleCurveData(source: CurveData) {
+export function storeTuplePoolData(source: PoolData) {
     const builder = new TupleBuilder();
-    builder.writeNumber(source.virtualTon);
-    builder.writeNumber(source.virtualTokens);
-    builder.writeNumber(source.realTon);
-    builder.writeNumber(source.tokensSold);
-    builder.writeNumber(source.tokensForSale);
-    builder.writeNumber(source.graduationTon);
+    builder.writeNumber(source.tonReserve);
+    builder.writeNumber(source.tokenReserve);
     builder.writeNumber(source.feeBps);
-    builder.writeBoolean(source.graduated);
+    builder.writeBoolean(source.ready);
+    builder.writeAddress(source.curve);
+    builder.writeAddress(source.jettonMaster);
     builder.writeAddress(source.jettonWallet);
     return builder.build();
 }
 
-export function dictValueParserCurveData(): DictionaryValue<CurveData> {
+export function dictValueParserPoolData(): DictionaryValue<PoolData> {
     return {
         serialize: (src, builder) => {
-            builder.storeRef(beginCell().store(storeCurveData(src)).endCell());
+            builder.storeRef(beginCell().store(storePoolData(src)).endCell());
         },
         parse: (src) => {
-            return loadCurveData(src.loadRef().beginParse());
+            return loadPoolData(src.loadRef().beginParse());
         }
     }
 }
 
-export type BondingCurve$Data = {
-    $$type: 'BondingCurve$Data';
+export type LiquidityPool$Data = {
+    $$type: 'LiquidityPool$Data';
     admin: Address;
     jettonMaster: Address;
     feeWallet: Address;
-    graduationDestination: Address;
-    virtualTon: bigint;
-    virtualTokens: bigint;
-    tokensForSale: bigint;
-    graduationTon: bigint;
     feeBps: bigint;
     jettonWallet: Address | null;
-    realTon: bigint;
-    tokensSold: bigint;
-    graduated: boolean;
-    liquidityMoved: boolean;
-    pending: Dictionary<bigint, PendingBuy>;
+    curve: Address | null;
+    tonReserve: bigint;
+    tokenReserve: bigint;
+    tonFunded: boolean;
+    tokensFunded: boolean;
+    pending: Dictionary<bigint, PoolPendingBuy>;
     nextQueryId: bigint;
-    supplyReady: boolean;
-    supplyReceived: bigint;
 }
 
-export function storeBondingCurve$Data(src: BondingCurve$Data) {
+export function storeLiquidityPool$Data(src: LiquidityPool$Data) {
     return (builder: Builder) => {
         const b_0 = builder;
         b_0.storeAddress(src.admin);
         b_0.storeAddress(src.jettonMaster);
         b_0.storeAddress(src.feeWallet);
+        b_0.storeUint(src.feeBps, 16);
         const b_1 = new Builder();
-        b_1.storeAddress(src.graduationDestination);
-        b_1.storeCoins(src.virtualTon);
-        b_1.storeCoins(src.virtualTokens);
-        b_1.storeCoins(src.tokensForSale);
-        b_1.storeCoins(src.graduationTon);
-        b_1.storeUint(src.feeBps, 16);
-        const b_2 = new Builder();
-        b_2.storeAddress(src.jettonWallet);
-        b_2.storeCoins(src.realTon);
-        b_2.storeCoins(src.tokensSold);
-        b_2.storeBit(src.graduated);
-        b_2.storeBit(src.liquidityMoved);
-        b_2.storeDict(src.pending, Dictionary.Keys.BigUint(64), dictValueParserPendingBuy());
-        b_2.storeUint(src.nextQueryId, 64);
-        b_2.storeBit(src.supplyReady);
-        b_2.storeCoins(src.supplyReceived);
-        b_1.storeRef(b_2.endCell());
+        b_1.storeAddress(src.jettonWallet);
+        b_1.storeAddress(src.curve);
+        b_1.storeCoins(src.tonReserve);
+        b_1.storeCoins(src.tokenReserve);
+        b_1.storeBit(src.tonFunded);
+        b_1.storeBit(src.tokensFunded);
+        b_1.storeDict(src.pending, Dictionary.Keys.BigUint(64), dictValueParserPoolPendingBuy());
+        b_1.storeUint(src.nextQueryId, 64);
         b_0.storeRef(b_1.endCell());
     };
 }
 
-export function loadBondingCurve$Data(slice: Slice) {
+export function loadLiquidityPool$Data(slice: Slice) {
     const sc_0 = slice;
     const _admin = sc_0.loadAddress();
     const _jettonMaster = sc_0.loadAddress();
     const _feeWallet = sc_0.loadAddress();
+    const _feeBps = sc_0.loadUintBig(16);
     const sc_1 = sc_0.loadRef().beginParse();
-    const _graduationDestination = sc_1.loadAddress();
-    const _virtualTon = sc_1.loadCoins();
-    const _virtualTokens = sc_1.loadCoins();
-    const _tokensForSale = sc_1.loadCoins();
-    const _graduationTon = sc_1.loadCoins();
-    const _feeBps = sc_1.loadUintBig(16);
-    const sc_2 = sc_1.loadRef().beginParse();
-    const _jettonWallet = sc_2.loadMaybeAddress();
-    const _realTon = sc_2.loadCoins();
-    const _tokensSold = sc_2.loadCoins();
-    const _graduated = sc_2.loadBit();
-    const _liquidityMoved = sc_2.loadBit();
-    const _pending = Dictionary.load(Dictionary.Keys.BigUint(64), dictValueParserPendingBuy(), sc_2);
-    const _nextQueryId = sc_2.loadUintBig(64);
-    const _supplyReady = sc_2.loadBit();
-    const _supplyReceived = sc_2.loadCoins();
-    return { $$type: 'BondingCurve$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, graduationDestination: _graduationDestination, virtualTon: _virtualTon, virtualTokens: _virtualTokens, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, jettonWallet: _jettonWallet, realTon: _realTon, tokensSold: _tokensSold, graduated: _graduated, liquidityMoved: _liquidityMoved, pending: _pending, nextQueryId: _nextQueryId, supplyReady: _supplyReady, supplyReceived: _supplyReceived };
+    const _jettonWallet = sc_1.loadMaybeAddress();
+    const _curve = sc_1.loadMaybeAddress();
+    const _tonReserve = sc_1.loadCoins();
+    const _tokenReserve = sc_1.loadCoins();
+    const _tonFunded = sc_1.loadBit();
+    const _tokensFunded = sc_1.loadBit();
+    const _pending = Dictionary.load(Dictionary.Keys.BigUint(64), dictValueParserPoolPendingBuy(), sc_1);
+    const _nextQueryId = sc_1.loadUintBig(64);
+    return { $$type: 'LiquidityPool$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, feeBps: _feeBps, jettonWallet: _jettonWallet, curve: _curve, tonReserve: _tonReserve, tokenReserve: _tokenReserve, tonFunded: _tonFunded, tokensFunded: _tokensFunded, pending: _pending, nextQueryId: _nextQueryId };
 }
 
-export function loadTupleBondingCurve$Data(source: TupleReader) {
+export function loadTupleLiquidityPool$Data(source: TupleReader) {
     const _admin = source.readAddress();
     const _jettonMaster = source.readAddress();
     const _feeWallet = source.readAddress();
-    const _graduationDestination = source.readAddress();
-    const _virtualTon = source.readBigNumber();
-    const _virtualTokens = source.readBigNumber();
-    const _tokensForSale = source.readBigNumber();
-    const _graduationTon = source.readBigNumber();
     const _feeBps = source.readBigNumber();
     const _jettonWallet = source.readAddressOpt();
-    const _realTon = source.readBigNumber();
-    const _tokensSold = source.readBigNumber();
-    const _graduated = source.readBoolean();
-    const _liquidityMoved = source.readBoolean();
-    source = source.readTuple();
-    const _pending = Dictionary.loadDirect(Dictionary.Keys.BigUint(64), dictValueParserPendingBuy(), source.readCellOpt());
+    const _curve = source.readAddressOpt();
+    const _tonReserve = source.readBigNumber();
+    const _tokenReserve = source.readBigNumber();
+    const _tonFunded = source.readBoolean();
+    const _tokensFunded = source.readBoolean();
+    const _pending = Dictionary.loadDirect(Dictionary.Keys.BigUint(64), dictValueParserPoolPendingBuy(), source.readCellOpt());
     const _nextQueryId = source.readBigNumber();
-    const _supplyReady = source.readBoolean();
-    const _supplyReceived = source.readBigNumber();
-    return { $$type: 'BondingCurve$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, graduationDestination: _graduationDestination, virtualTon: _virtualTon, virtualTokens: _virtualTokens, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, jettonWallet: _jettonWallet, realTon: _realTon, tokensSold: _tokensSold, graduated: _graduated, liquidityMoved: _liquidityMoved, pending: _pending, nextQueryId: _nextQueryId, supplyReady: _supplyReady, supplyReceived: _supplyReceived };
+    return { $$type: 'LiquidityPool$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, feeBps: _feeBps, jettonWallet: _jettonWallet, curve: _curve, tonReserve: _tonReserve, tokenReserve: _tokenReserve, tonFunded: _tonFunded, tokensFunded: _tokensFunded, pending: _pending, nextQueryId: _nextQueryId };
 }
 
-export function loadGetterTupleBondingCurve$Data(source: TupleReader) {
+export function loadGetterTupleLiquidityPool$Data(source: TupleReader) {
     const _admin = source.readAddress();
     const _jettonMaster = source.readAddress();
     const _feeWallet = source.readAddress();
-    const _graduationDestination = source.readAddress();
-    const _virtualTon = source.readBigNumber();
-    const _virtualTokens = source.readBigNumber();
-    const _tokensForSale = source.readBigNumber();
-    const _graduationTon = source.readBigNumber();
     const _feeBps = source.readBigNumber();
     const _jettonWallet = source.readAddressOpt();
-    const _realTon = source.readBigNumber();
-    const _tokensSold = source.readBigNumber();
-    const _graduated = source.readBoolean();
-    const _liquidityMoved = source.readBoolean();
-    const _pending = Dictionary.loadDirect(Dictionary.Keys.BigUint(64), dictValueParserPendingBuy(), source.readCellOpt());
+    const _curve = source.readAddressOpt();
+    const _tonReserve = source.readBigNumber();
+    const _tokenReserve = source.readBigNumber();
+    const _tonFunded = source.readBoolean();
+    const _tokensFunded = source.readBoolean();
+    const _pending = Dictionary.loadDirect(Dictionary.Keys.BigUint(64), dictValueParserPoolPendingBuy(), source.readCellOpt());
     const _nextQueryId = source.readBigNumber();
-    const _supplyReady = source.readBoolean();
-    const _supplyReceived = source.readBigNumber();
-    return { $$type: 'BondingCurve$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, graduationDestination: _graduationDestination, virtualTon: _virtualTon, virtualTokens: _virtualTokens, tokensForSale: _tokensForSale, graduationTon: _graduationTon, feeBps: _feeBps, jettonWallet: _jettonWallet, realTon: _realTon, tokensSold: _tokensSold, graduated: _graduated, liquidityMoved: _liquidityMoved, pending: _pending, nextQueryId: _nextQueryId, supplyReady: _supplyReady, supplyReceived: _supplyReceived };
+    return { $$type: 'LiquidityPool$Data' as const, admin: _admin, jettonMaster: _jettonMaster, feeWallet: _feeWallet, feeBps: _feeBps, jettonWallet: _jettonWallet, curve: _curve, tonReserve: _tonReserve, tokenReserve: _tokenReserve, tonFunded: _tonFunded, tokensFunded: _tokensFunded, pending: _pending, nextQueryId: _nextQueryId };
 }
 
-export function storeTupleBondingCurve$Data(source: BondingCurve$Data) {
+export function storeTupleLiquidityPool$Data(source: LiquidityPool$Data) {
     const builder = new TupleBuilder();
     builder.writeAddress(source.admin);
     builder.writeAddress(source.jettonMaster);
     builder.writeAddress(source.feeWallet);
-    builder.writeAddress(source.graduationDestination);
-    builder.writeNumber(source.virtualTon);
-    builder.writeNumber(source.virtualTokens);
-    builder.writeNumber(source.tokensForSale);
-    builder.writeNumber(source.graduationTon);
     builder.writeNumber(source.feeBps);
     builder.writeAddress(source.jettonWallet);
-    builder.writeNumber(source.realTon);
-    builder.writeNumber(source.tokensSold);
-    builder.writeBoolean(source.graduated);
-    builder.writeBoolean(source.liquidityMoved);
-    builder.writeCell(source.pending.size > 0 ? beginCell().storeDictDirect(source.pending, Dictionary.Keys.BigUint(64), dictValueParserPendingBuy()).endCell() : null);
+    builder.writeAddress(source.curve);
+    builder.writeNumber(source.tonReserve);
+    builder.writeNumber(source.tokenReserve);
+    builder.writeBoolean(source.tonFunded);
+    builder.writeBoolean(source.tokensFunded);
+    builder.writeCell(source.pending.size > 0 ? beginCell().storeDictDirect(source.pending, Dictionary.Keys.BigUint(64), dictValueParserPoolPendingBuy()).endCell() : null);
     builder.writeNumber(source.nextQueryId);
-    builder.writeBoolean(source.supplyReady);
-    builder.writeNumber(source.supplyReceived);
     return builder.build();
 }
 
-export function dictValueParserBondingCurve$Data(): DictionaryValue<BondingCurve$Data> {
+export function dictValueParserLiquidityPool$Data(): DictionaryValue<LiquidityPool$Data> {
     return {
         serialize: (src, builder) => {
-            builder.storeRef(beginCell().store(storeBondingCurve$Data(src)).endCell());
+            builder.storeRef(beginCell().store(storeLiquidityPool$Data(src)).endCell());
         },
         parse: (src) => {
-            return loadBondingCurve$Data(src.loadRef().beginParse());
+            return loadLiquidityPool$Data(src.loadRef().beginParse());
         }
     }
 }
 
- type BondingCurve_init_args = {
-    $$type: 'BondingCurve_init_args';
+ type LiquidityPool_init_args = {
+    $$type: 'LiquidityPool_init_args';
     admin: Address;
     jettonMaster: Address;
     feeWallet: Address;
-    graduationDestination: Address;
-    virtualTon: bigint;
-    virtualTokens: bigint;
-    tokensForSale: bigint;
-    graduationTon: bigint;
     feeBps: bigint;
 }
 
-function initBondingCurve_init_args(src: BondingCurve_init_args) {
+function initLiquidityPool_init_args(src: LiquidityPool_init_args) {
     return (builder: Builder) => {
         const b_0 = builder;
         b_0.storeAddress(src.admin);
         b_0.storeAddress(src.jettonMaster);
         b_0.storeAddress(src.feeWallet);
         const b_1 = new Builder();
-        b_1.storeAddress(src.graduationDestination);
-        b_1.storeInt(src.virtualTon, 257);
-        b_1.storeInt(src.virtualTokens, 257);
-        const b_2 = new Builder();
-        b_2.storeInt(src.tokensForSale, 257);
-        b_2.storeInt(src.graduationTon, 257);
-        b_2.storeInt(src.feeBps, 257);
-        b_1.storeRef(b_2.endCell());
+        b_1.storeInt(src.feeBps, 257);
         b_0.storeRef(b_1.endCell());
     };
 }
 
-async function BondingCurve_init(admin: Address, jettonMaster: Address, feeWallet: Address, graduationDestination: Address, virtualTon: bigint, virtualTokens: bigint, tokensForSale: bigint, graduationTon: bigint, feeBps: bigint) {
-    const __code = Cell.fromHex('b5ee9c724102390100109b00022cff008e88f4a413f4bcf2c80bed53208e8130e1ed43d9010d0202710207020120030403b1b9156ed44d0d200018eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e30d1111111211111110111111100f11100f550edb3c57105f0f6c2180e0f200202750506038ca811ed44d0d200018eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e30ddb3c57105f0f6c210e0f3203b0ab42ed44d0d200018eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e30d1111111211111110111111100f11100f550edb3c57105f0f6c210e0f2f020120080c020120090b0389b4ec5da89a1a400031d65f481f481f481a803a1f481020203ae01020203ae01a861a1020203ae01020203ae01020203ae006020d220d020ce13a2aa0fc61bb678d932d93300e0f0a0012547dc75479ed547fbe038db52adda89a1a400031d65f481f481f481a803a1f481020203ae01020203ae01a861a1020203ae01020203ae01020203ae006020d220d020ce13a2aa0fc61bb678ae20be1ed84300e0f31038db9dcded44d0d200018eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e30ddb3c57105f0f6c2180e0f3004e001d072d721d200d200fa4021103450666f04f86102f862ed44d0d200018eb2fa40fa40fa40d401d0fa40810101d700810101d700d430d0810101d700810101d700810101d7003010691068106709d15507e30d1113e302705612d74920c21f97311112d31f1113de2182105745544aba0e0f101500ae6d702070706d7170258164c52ec200f2f48158922dc200f2f48200d6852cc200f2f48135c153cdb9f2f4812b632bc200f2f48171532ac2ff952a8103e8bb9170e2f2f453dca853dca1a9048200d8ee511fa152c0bbf2f4009cfa40fa40fa40d401d0fa40fa00fa00fa00fa00d30fd430d0d72c01916d93fa4001e201fa00fa00d200d200f404d33fd200fa00300f11120f0f11110f0f11100f57121110111111100f11100f550e01fc11118020d72120d749c1608e66300f11110f0e11100e10df551cc87f01ca0011121111111055e0011111011112ce1fce1dce0bc8ce500afa025008fa025006fa025004fa0212cb0fc858206e9430cf84809201cee258fa0258fa0212ca0012ca0013f40013cb3f13ca005003fa02cdcdc9ed54e0d31f0182100f8a7ea5bd1101f28e66300f11110f0e11100e10df551cc87f01ca0011121111111055e0011111011112ce1fce1dce0bc8ce500afa025008fa025006fa025004fa0212cb0fc858206e9430cf84809201cee258fa0258fa0212ca0012ca0013f40013cb3f13ca005003fa02cdcdc9ed54e0d33f302280402259f40f6fa192306ddf1203f8206e92306d9fd0fa40fa00fa00d20055306c146f04e2206ee302206ef2d0806f243056148ec602804050237fc855305034ce01fa0201fa02ca00c9103412206e953059f45b30944133f417e20f11110f0e11100e10df10ce10bd10ac109b108a107910681057104610354143e150358040f45b305182a15074a124b313381400cc5b0f11110f0e11100e10df551cc87f01ca0011121111111055e0011111011112ce1fce1dce0bc8ce500afa025008fa025006fa025004fa0212cb0fc858206e9430cf84809201cee258fa0258fa0212ca0012ca0013f40013cb3f13ca005003fa02cdcdc9ed5401ca93533ab99170e2927036de50667270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb000f11110f0e11100e10df10ce10bd10ac109b108a107910681710461035404438049ae30221821042555921ba8f385b1111d33ffa00301111111311111110111211100f11110f0e11100e10df10ce10bd10ac109b108a1079106810571046103510241023db3ce02182107362d09cba162c381700fc5b1111fa403081557df8425612c705f2f481122f086e18f2f40f11110f0e11100e10df551cc87f01ca0011121111111055e0011111011112ce1fce1dce0bc8ce500afa025008fa025006fa025004fa0212cb0fc858206e9430cf84809201cee258fa0258fa0212ca0012ca0013f40013cb3f13ca005003fa02cdcdc9ed5404fe8ffd5b1111d33f31fa00fa401111111211111110111211100f11120f0e11120e0d11120d0c11120c0b11120b0a11120a0911120908111208071112070611120605111205041112040311120302111202011113011114db3c8152b8f84258c705f2f481606326b3f2f48200d7aa5613c200f2f421b39456122cbe9170e2e3022d181e2401d85b571157110d11100d10cf10be552a7f01db3cc87f01ca0011121111111055e0011111011112ce1fce1dce0bc8ce500afa025008fa025006fa025004fa0212cb0fc858206e9430cf84809201cee258fa0258fa0212ca0012ca0013f40013cb3f13ca005003fa02cdcdc9ed541903f6db3c6d258040f4876fa520911295316d326d01e2908ee3206e92306d9fd0fa40fa00fa00d20055306c146f04e2206ef2d0806f24208e29431380405024c855305034ce01fa0201fa02ca00c922103401206e953059f45b30944133f417e25055e30d8040270259f47c6fa5209402d4305895316d326d01e21037e82d1a1d02fc3028a48040705445505246c855305034ce01fa0201fa02ca00c9463052a0206e953059f45b30944133f417e2821004c4b4007ff8286d7070c8ca00c9d0106e105a1048c8556082100f8a7ea55008cb1f16cb3f5004fa0212ce01206e9430cf84809201cee2f40001fa02cec92545337050346d036d5520c8cf8580ca00891b1c0001100052cf16ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb00000a10235f033403fe8125a1561328bbf2f41111111211111110111111100f11100f550e1114db3c1111111211111110111211100f11120f0e11120e0d11120d0c11120c0b11120b0a11120a09111209111208070655405614db3c530aa8812710a9045ca1814c9021c200f2f420815be01117be01111601f2f481400d532abbf2f45099a11115171f2022006620d749c101923070e0d20001923070e020d749c120923070e0d31f01821053454c4cbd923070e020d749c104923070e0fa003004f420c101923070e01111111211111110111211100f11120f0e11120e0d11120d0c11120c0b11120b0a11120a0911120911120807065540db3c011113a01112db3c5613a0a5011113a9041112db3c011113a120c1009e301110111111100f11100f550e70e01111111211111110111111100f11100f10ef10de10cd32303121002810bc10ab109a108910781067105610451034413001fca127c2008e3b52f87270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb009137e20111120111117070036d6d50436d5033c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e22300faf400c901fb000e11110e0d11100d10cf10be10ad109c108b107a10691058105710465522c87f01ca0011121111111055e0011111011112ce1fce1dce0bc8ce500afa025008fa025006fa025004fa0212cb0fc858206e9430cf84809201cee258fa0258fa0212ca0012ca0013f40013cb3f13ca005003fa02cdcdc9ed5404b2e0218210d53276dbba8eac5b1111d33f30588040f45b300f11110f0e11100e10df10ce10bd10ac109b108a107910681057104610354143e021821047524144bae302218210946a98b6bae3025713c0001112c12101111201b038252a2b04bc5b1111d33f3081207625f2f48140ea24b3f2f41110111111100f11100f10ef10de10cd10bc10ab109a10891078106710561045103411124130db3c357f5317a120c2009430355712e30d7027c2009137e30d1110111111100f11100f550e2d26293802fc3821821008f0d18072706d820afaf08070c8ca00c9d004111a04103e56160356174133c8556082100f8a7ea55008cb1f16cb3f5004fa0212ce01206e9430cf84809201cee2f40001fa02cec9104813021116021a10246d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf818ae2f400c901fb002728001a58cf8680cf8480f400f400cf81000c031111031035007652e87270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb0001bc5b1111d33f30c8018210aff90f5758cb1fcb3fc91110111211100f11110f0e11100e10df10ce10bd10ac109b108a10791068105710461035443012f84270705003804201503304c8cf8580ca00cf8440ce01fa02806acf40f400c901fb003802788f3270201111111311111110111211100f11110f0e11100e10df10ce10bd10ac109b108a1079106810571046103510241023db3ce05f0f5f03f2c0822c3802f63181606327b3f2f41111111211111110111211100f11120f0e11120e0d11120d0c11120c0b11120b0a11120a0911120911120807065540db3cf8416f24135f038200c07d21821007270e00bcf2f4821007270e00a1530ba8812710a90466a1814c9021c200f2f41111111411111110111311100f11120f0e11140e2d2e001853886eb3f2e444206ef2d08003f00d11130d0c11120c0b11140b0a11130a09111209081114080711130706111206051114050411130403111203021114020111130111125612db3c814c9021c200f2f48200ea395381a02ebbf2f420815be01118be01111701f2f4075612a0065615a05613c200925713e30d21a48040f842011114561770c82f343504f420c101923070e01111111211111110111211100f11120f0e11120e0d11120d0c11120c0b11120b0a11120a0911120911120807065540db3c011113a01112db3c011113a9041112db3c011113a120c1009e301110111111100f11100f550e70e01111111211111110111111100f11100f10ef10de10cd10bc10ab3130323302c4db3c1111111211111110111211100f11120f0e11120e0d11120d0c11120c0b11120b0a11120a0911120911120807065540db3c01111301a81111111211111110111111100f11100f10ef10de10cd10bc10ab109a10891078106710561045103441303132000653d7a0000653c6a10020109a1089107810671056104510344130007a52f011147270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb0001fe55305034ce01fa0201fa02ca00c91024011113015230206e953059f45b30944133f417e2821004c4b4007ff842f8286d7070c8ca00c9d0106805111b05c8556082100f8a7ea55008cb1f16cb3f5004fa0212ce01206e9430cf84809201cee2f40001fa02cec903111403011115017050346d036d5520c8cf8580ca00cf844036018ece01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb000d11110d0c11100c10bf10ae109d108c107b106a10591048102746440503db3c37001a25b393537abe9170e2927f36de00b2c87f01ca0011121111111055e0011111011112ce1fce1dce0bc8ce500afa025008fa025006fa025004fa0212cb0fc858206e9430cf84809201cee258fa0258fa0212ca0012ca0013f40013cb3f13ca005003fa02cdcdc9ed5461ec4f56');
+async function LiquidityPool_init(admin: Address, jettonMaster: Address, feeWallet: Address, feeBps: bigint) {
+    const __code = Cell.fromHex('b5ee9c7241022601000c2d00025aff008e88f4a413f4bcf2c80bed53208e983001d072d721d200d200fa4021103450666f04f86102f862e1ed43d9010b02027102070201200306020120040501f5b62adda89a1a400031c71f481f481f481a61fa803a1ae580322db27f48003c403ae580322db27f48003c403f401f401a401a401e809a67e602118211621142112d8391c5ff481f481f481a803a1020203ae006028866009a2aa04dadae040e0e0dae302e2a65385ff2a530207d17722e1c5e5e9c4aa17b678d98301901f1b7133da89a1a400031c71f481f481f481a61fa803a1ae580322db27f48003c403ae580322db27f48003c403f401f401a401a401e809a67e602118211621142112d8391c5ff481f481f481a803a1020203ae006028866009a2aa04dadae040e0e0dae302e2a65385ff2a530207d17722e1c5e5e9c5b678d98302201f5baf42ed44d0d200018e38fa40fa40fa40d30fd401d0d72c01916d93fa4001e201d72c01916d93fa4001e201fa00fa00d200d200f404d33f30108c108b108a10896c1c8e2ffa40fa40fa40d401d0810101d7003014433004d155026d6d702070706d7181715329c2ff95298103e8bb9170e2f2f4e2550bdb3c6cc1821020120080a01f1b8762ed44d0d200018e38fa40fa40fa40d30fd401d0d72c01916d93fa4001e201d72c01916d93fa4001e201fa00fa00d200d200f404d33f30108c108b108a10896c1c8e2ffa40fa40fa40d401d0810101d7003014433004d155026d6d702070706d7181715329c2ff95298103e8bb9170e2f2f4e2db3c6cc7809014c54754855b2db3c103f4ed05477b80f11120f0e11110e0d11100d10cf10be10ad109c108b107a2201f1b9dcded44d0d200018e38fa40fa40fa40d30fd401d0d72c01916d93fa4001e201d72c01916d93fa4001e201fa00fa00d200d200f404d33f30108c108b108a10896c1c8e2ffa40fa40fa40d401d0810101d7003014433004d155026d6d702070706d7181715329c2ff95298103e8bb9170e2f2f4e2db3c6cc182303feed44d0d200018e38fa40fa40fa40d30fd401d0d72c01916d93fa4001e201d72c01916d93fa4001e201fa00fa00d200d200f404d33f30108c108b108a10896c1c8e2ffa40fa40fa40d401d0810101d7003014433004d155026d6d702070706d7181715329c2ff95298103e8bb9170e2f2f4e20de302702cd74920c21fe300210c101102de0b8020d72120d749c1608e4630109b5518c87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed54e0d31f0182100f8a7ea5bde302d33f302b80402259f40f6fa192306ddf0d0e008c30109b5518c87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed5401f4206e92306d9fd0fa40fa00fa00d20055306c146f04e2206e8e465b109b5518c87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed54e0206ef2d0806f2430503e8040f45b305162a1505da0504472700f018e136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb00109b108a1079106810571046104540341c000a310cd31f0d03f682105745544aba8e5c5b0bfa403081557df8422cc705f2f481122f076e17f2f4109b5518c87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed54e021821053435256bae30221821050425559bae3022112131400ba5b0bfa403081557df8422cc705f2f482009d43066e16f2f4109b5518c87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed5401bc5b0bd33f31fa003010ac109b108a10791068105710461035443012db3cc87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed541f03fe82107362d09cbae302218210d53276dbba8e5d5b0bd33f30500b8040f45b30109b108a107910681057104610354403c87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed54e0218210946a98b6bae3023dc0000c151b1d04d65b0bd33f31fa00fa4010bc10ac109c108c107c106c105c104c103c4cdedb3c8152b8f84258c705f2f48200d7aa2dc200f2f422b393266eb39170e29a26206ef2d08052e0c7059170e2e30255a08200b8880cdb3c1df2f410ac109b108a107910681057104610354014503e20162217009c323c3c09a0107a106955257f02c87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed5403f6db3c55b02edb3c5309a8812710a9045ca1814c9021c200f2f420815be01111be01111001f2f48200b1875328b9f2f45077a1505fa025c2008e3b52967270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb009135e250cb7018191a006620d749c101923070e0d20001923070e020d749c120923070e0d31f01821053454c4cbd923070e020d749c104923070e0fa003002aa20c101917f8e9b55b0db3cb310cd10bc10ab109a1089107810671056104510344130e2923070e05250a055b0db3c2da0a5500da9045250a120c1009430550a70e010bc10ab109a10891078106710561045103441302223018e70036d6d50436d5033c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb00108b107a106910581047103644331c01925b0bd33f30c8018210aff90f5758cb1fcb3fc910ac109b108a10791068105710461035443012f84270705003804201503304c8cf8580ca00cf8440ce01fa02806acf40f400c901fb001c0082c87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed5402dac1211cb08f61246eb39af84225206ef2d080c7059170e29221b39170e2e302109b551870db3cc87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed54e05f0cf2c0821e1f00d431f8416f24135f03820afaf080a1816f7121c200f2f413a0108a1079106810571046103550347f5520c87f01ca0055b050bcce19ce17ce15cb0fc85004206e9430cf84809201cee258206e9430cf84809201cee201fa0258fa0212ca0012ca0012f40012cb3fcdc9ed5404f010ac5e38107b106c105b104c103b4cbc8200b8880cdb3c1df2f4550adb3cf8416f24135f038200c07d21821007270e00bcf2f4821007270e00a1530aa8812710a90466a1814c9021c200f2f455b22cdb3c814c9021c200f2f48200b1875316b9f2f420815be01112be01111101f2f4515ca0514fa12dc20022202124001853776eb3f2e444206ef2d08002a420c101917f8e9b55b0db3cb310cd10bc10ab109a1089107810671056104510344130e2923070e05260a055b0db3c500da9045240a120c1009430550a70e010bc10ab109a1089107810671056104510344130222300282391229170e29325c2009170e29324c2009170e200065354a801fc8e3b529e7270136d6d50436d03c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb00913de224a48040f842500e561170c855305034ce01fa0201fa02ca00c9542d60206e953059f45b30944133f417e2821004c4b4007ff842f8286d7070c8ca00c9d02500f2106b05111505c8556082100f8a7ea55008cb1f16cb3f5004fa0212ce01206e9430cf84809201cee2f40001fa02cec9103e45f07050346d036d5520c8cf8580ca00cf8440ce01fa028069cf40025c6e016eb0935bcf819d58cf8680cf8480f400f400cf81e2f400c901fb00107b106a10591048103746154134d87828ac');
     const builder = beginCell();
     builder.storeUint(0, 1);
-    initBondingCurve_init_args({ $$type: 'BondingCurve_init_args', admin, jettonMaster, feeWallet, graduationDestination, virtualTon, virtualTokens, tokensForSale, graduationTon, feeBps })(builder);
+    initLiquidityPool_init_args({ $$type: 'LiquidityPool_init_args', admin, jettonMaster, feeWallet, feeBps })(builder);
     const __data = builder.endCell();
     return { code: __code, data: __data };
 }
 
-export const BondingCurve_errors = {
+export const LiquidityPool_errors = {
     2: { message: "Stack underflow" },
     3: { message: "Stack overflow" },
     4: { message: "Integer overflow" },
@@ -1494,28 +1427,20 @@ export const BondingCurve_errors = {
     138: { message: "Not a basechain address" },
     1092: { message: "jetton wallet not set" },
     4655: { message: "jetton wallet already set" },
-    8310: { message: "threshold not reached" },
-    9633: { message: "more tokens than sold" },
-    11107: { message: "graduationTon must be positive" },
-    13761: { message: "tokensForSale must be below virtualTokens" },
-    16397: { message: "reserve underflow" },
-    16618: { message: "already moved" },
     19600: { message: "amount too small" },
     21176: { message: "unknown jetton wallet" },
     21885: { message: "only admin" },
-    22674: { message: "virtualTokens must be positive" },
     23520: { message: "slippage" },
-    24675: { message: "curve graduated" },
-    25797: { message: "virtualTon must be positive" },
+    28529: { message: "liquidity too small" },
     29011: { message: "feeBps out of range" },
+    40259: { message: "curve already set" },
+    45447: { message: "not enough liquidity" },
+    47240: { message: "pool not ready" },
     49277: { message: "not enough value for gas" },
-    54917: { message: "tokensForSale must be positive" },
     55210: { message: "empty transfer" },
-    55534: { message: "graduationTon unreachable" },
-    59961: { message: "not enough tokens left" },
 } as const
 
-export const BondingCurve_errors_backward = {
+export const LiquidityPool_errors_backward = {
     "Stack underflow": 2,
     "Stack overflow": 3,
     "Integer overflow": 4,
@@ -1554,28 +1479,20 @@ export const BondingCurve_errors_backward = {
     "Not a basechain address": 138,
     "jetton wallet not set": 1092,
     "jetton wallet already set": 4655,
-    "threshold not reached": 8310,
-    "more tokens than sold": 9633,
-    "graduationTon must be positive": 11107,
-    "tokensForSale must be below virtualTokens": 13761,
-    "reserve underflow": 16397,
-    "already moved": 16618,
     "amount too small": 19600,
     "unknown jetton wallet": 21176,
     "only admin": 21885,
-    "virtualTokens must be positive": 22674,
     "slippage": 23520,
-    "curve graduated": 24675,
-    "virtualTon must be positive": 25797,
+    "liquidity too small": 28529,
     "feeBps out of range": 29011,
+    "curve already set": 40259,
+    "not enough liquidity": 45447,
+    "pool not ready": 47240,
     "not enough value for gas": 49277,
-    "tokensForSale must be positive": 54917,
     "empty transfer": 55210,
-    "graduationTon unreachable": 55534,
-    "not enough tokens left": 59961,
 } as const
 
-const BondingCurve_types: ABIType[] = [
+const LiquidityPool_types: ABIType[] = [
     {"name":"DataSize","header":null,"fields":[{"name":"cells","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"bits","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"refs","type":{"kind":"simple","type":"int","optional":false,"format":257}}]},
     {"name":"SignedBundle","header":null,"fields":[{"name":"signature","type":{"kind":"simple","type":"fixed-bytes","optional":false,"format":64}},{"name":"signedData","type":{"kind":"simple","type":"slice","optional":false,"format":"remainder"}}]},
     {"name":"StateInit","header":null,"fields":[{"name":"code","type":{"kind":"simple","type":"cell","optional":false}},{"name":"data","type":{"kind":"simple","type":"cell","optional":false}}]},
@@ -1591,88 +1508,84 @@ const BondingCurve_types: ABIType[] = [
     {"name":"FactoryDeploy","header":1829761339,"fields":[{"name":"queryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}},{"name":"cashback","type":{"kind":"simple","type":"address","optional":false}}]},
     {"name":"JettonTransfer","header":260734629,"fields":[{"name":"queryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}},{"name":"amount","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"destination","type":{"kind":"simple","type":"address","optional":false}},{"name":"responseDestination","type":{"kind":"simple","type":"address","optional":true}},{"name":"customPayload","type":{"kind":"simple","type":"cell","optional":true}},{"name":"forwardTonAmount","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"forwardPayload","type":{"kind":"simple","type":"slice","optional":false,"format":"remainder"}}]},
     {"name":"JettonTransferNotification","header":1935855772,"fields":[{"name":"queryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}},{"name":"amount","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"sender","type":{"kind":"simple","type":"address","optional":false}},{"name":"forwardPayload","type":{"kind":"simple","type":"slice","optional":false,"format":"remainder"}}]},
-    {"name":"Buy","header":1112889633,"fields":[{"name":"queryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}},{"name":"minTokensOut","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}}]},
-    {"name":"SetJettonWallet","header":1464161354,"fields":[{"name":"wallet","type":{"kind":"simple","type":"address","optional":false}}]},
-    {"name":"Graduate","header":1196572996,"fields":[{"name":"queryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}}]},
     {"name":"JettonExcesses","header":3576854235,"fields":[{"name":"queryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}}]},
-    {"name":"PendingBuy","header":null,"fields":[{"name":"buyer","type":{"kind":"simple","type":"address","optional":false}},{"name":"ton","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tokens","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"failed","type":{"kind":"simple","type":"bool","optional":false}}]},
-    {"name":"CurveData","header":null,"fields":[{"name":"virtualTon","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"virtualTokens","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"realTon","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"tokensSold","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"tokensForSale","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"graduationTon","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"feeBps","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"graduated","type":{"kind":"simple","type":"bool","optional":false}},{"name":"jettonWallet","type":{"kind":"simple","type":"address","optional":true}}]},
-    {"name":"BondingCurve$Data","header":null,"fields":[{"name":"admin","type":{"kind":"simple","type":"address","optional":false}},{"name":"jettonMaster","type":{"kind":"simple","type":"address","optional":false}},{"name":"feeWallet","type":{"kind":"simple","type":"address","optional":false}},{"name":"graduationDestination","type":{"kind":"simple","type":"address","optional":false}},{"name":"virtualTon","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"virtualTokens","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tokensForSale","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"graduationTon","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"feeBps","type":{"kind":"simple","type":"uint","optional":false,"format":16}},{"name":"jettonWallet","type":{"kind":"simple","type":"address","optional":true}},{"name":"realTon","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tokensSold","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"graduated","type":{"kind":"simple","type":"bool","optional":false}},{"name":"liquidityMoved","type":{"kind":"simple","type":"bool","optional":false}},{"name":"pending","type":{"kind":"dict","key":"uint","keyFormat":64,"value":"PendingBuy","valueFormat":"ref"}},{"name":"nextQueryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}},{"name":"supplyReady","type":{"kind":"simple","type":"bool","optional":false}},{"name":"supplyReceived","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}}]},
+    {"name":"PoolBuy","header":1346524505,"fields":[{"name":"queryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}},{"name":"minTokensOut","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}}]},
+    {"name":"SetJettonWallet","header":1464161354,"fields":[{"name":"wallet","type":{"kind":"simple","type":"address","optional":false}}]},
+    {"name":"SetCurve","header":1396920918,"fields":[{"name":"curve","type":{"kind":"simple","type":"address","optional":false}}]},
+    {"name":"PoolPendingBuy","header":null,"fields":[{"name":"buyer","type":{"kind":"simple","type":"address","optional":false}},{"name":"ton","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tokens","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"failed","type":{"kind":"simple","type":"bool","optional":false}}]},
+    {"name":"PoolData","header":null,"fields":[{"name":"tonReserve","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"tokenReserve","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"feeBps","type":{"kind":"simple","type":"int","optional":false,"format":257}},{"name":"ready","type":{"kind":"simple","type":"bool","optional":false}},{"name":"curve","type":{"kind":"simple","type":"address","optional":true}},{"name":"jettonMaster","type":{"kind":"simple","type":"address","optional":false}},{"name":"jettonWallet","type":{"kind":"simple","type":"address","optional":true}}]},
+    {"name":"LiquidityPool$Data","header":null,"fields":[{"name":"admin","type":{"kind":"simple","type":"address","optional":false}},{"name":"jettonMaster","type":{"kind":"simple","type":"address","optional":false}},{"name":"feeWallet","type":{"kind":"simple","type":"address","optional":false}},{"name":"feeBps","type":{"kind":"simple","type":"uint","optional":false,"format":16}},{"name":"jettonWallet","type":{"kind":"simple","type":"address","optional":true}},{"name":"curve","type":{"kind":"simple","type":"address","optional":true}},{"name":"tonReserve","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tokenReserve","type":{"kind":"simple","type":"uint","optional":false,"format":"coins"}},{"name":"tonFunded","type":{"kind":"simple","type":"bool","optional":false}},{"name":"tokensFunded","type":{"kind":"simple","type":"bool","optional":false}},{"name":"pending","type":{"kind":"dict","key":"uint","keyFormat":64,"value":"PoolPendingBuy","valueFormat":"ref"}},{"name":"nextQueryId","type":{"kind":"simple","type":"uint","optional":false,"format":64}}]},
 ]
 
-const BondingCurve_opcodes = {
+const LiquidityPool_opcodes = {
     "Deploy": 2490013878,
     "DeployOk": 2952335191,
     "FactoryDeploy": 1829761339,
     "JettonTransfer": 260734629,
     "JettonTransferNotification": 1935855772,
-    "Buy": 1112889633,
-    "SetJettonWallet": 1464161354,
-    "Graduate": 1196572996,
     "JettonExcesses": 3576854235,
+    "PoolBuy": 1346524505,
+    "SetJettonWallet": 1464161354,
+    "SetCurve": 1396920918,
 }
 
-const BondingCurve_getters: ABIGetter[] = [
-    {"name":"tonReserve","methodId":108886,"arguments":[],"returnType":{"kind":"simple","type":"int","optional":false,"format":257}},
-    {"name":"tokenReserve","methodId":92177,"arguments":[],"returnType":{"kind":"simple","type":"int","optional":false,"format":257}},
+const LiquidityPool_getters: ABIGetter[] = [
     {"name":"k","methodId":122317,"arguments":[],"returnType":{"kind":"simple","type":"int","optional":false,"format":257}},
+    {"name":"ready","methodId":80025,"arguments":[],"returnType":{"kind":"simple","type":"bool","optional":false}},
     {"name":"tokensOutFor","methodId":94018,"arguments":[{"name":"tonIn","type":{"kind":"simple","type":"int","optional":false,"format":257}}],"returnType":{"kind":"simple","type":"int","optional":false,"format":257}},
     {"name":"tonOutFor","methodId":69974,"arguments":[{"name":"tokensIn","type":{"kind":"simple","type":"int","optional":false,"format":257}}],"returnType":{"kind":"simple","type":"int","optional":false,"format":257}},
-    {"name":"data","methodId":100194,"arguments":[],"returnType":{"kind":"simple","type":"CurveData","optional":false}},
+    {"name":"data","methodId":100194,"arguments":[],"returnType":{"kind":"simple","type":"PoolData","optional":false}},
 ]
 
-export const BondingCurve_getterMapping: { [key: string]: string } = {
-    'tonReserve': 'getTonReserve',
-    'tokenReserve': 'getTokenReserve',
+export const LiquidityPool_getterMapping: { [key: string]: string } = {
     'k': 'getK',
+    'ready': 'getReady',
     'tokensOutFor': 'getTokensOutFor',
     'tonOutFor': 'getTonOutFor',
     'data': 'getData',
 }
 
-const BondingCurve_receivers: ABIReceiver[] = [
+const LiquidityPool_receivers: ABIReceiver[] = [
     {"receiver":"internal","message":{"kind":"typed","type":"SetJettonWallet"}},
-    {"receiver":"internal","message":{"kind":"typed","type":"Buy"}},
+    {"receiver":"internal","message":{"kind":"typed","type":"SetCurve"}},
+    {"receiver":"internal","message":{"kind":"typed","type":"PoolBuy"}},
     {"receiver":"internal","message":{"kind":"empty"}},
     {"receiver":"internal","message":{"kind":"typed","type":"JettonTransferNotification"}},
     {"receiver":"internal","message":{"kind":"typed","type":"JettonExcesses"}},
-    {"receiver":"internal","message":{"kind":"typed","type":"Graduate"}},
     {"receiver":"internal","message":{"kind":"typed","type":"Deploy"}},
 ]
 
 
-export class BondingCurve implements Contract {
+export class LiquidityPool implements Contract {
     
     public static readonly GasBuyOverhead = 120000000n;
     public static readonly GasJettonTransfer = 80000000n;
     public static readonly MinContractBalance = 50000000n;
-    public static readonly GasGraduationTransfer = 150000000n;
-    public static readonly GasGraduationNotify = 50000000n;
     public static readonly storageReserve = 0n;
-    public static readonly errors = BondingCurve_errors_backward;
-    public static readonly opcodes = BondingCurve_opcodes;
+    public static readonly errors = LiquidityPool_errors_backward;
+    public static readonly opcodes = LiquidityPool_opcodes;
     
-    static async init(admin: Address, jettonMaster: Address, feeWallet: Address, graduationDestination: Address, virtualTon: bigint, virtualTokens: bigint, tokensForSale: bigint, graduationTon: bigint, feeBps: bigint) {
-        return await BondingCurve_init(admin, jettonMaster, feeWallet, graduationDestination, virtualTon, virtualTokens, tokensForSale, graduationTon, feeBps);
+    static async init(admin: Address, jettonMaster: Address, feeWallet: Address, feeBps: bigint) {
+        return await LiquidityPool_init(admin, jettonMaster, feeWallet, feeBps);
     }
     
-    static async fromInit(admin: Address, jettonMaster: Address, feeWallet: Address, graduationDestination: Address, virtualTon: bigint, virtualTokens: bigint, tokensForSale: bigint, graduationTon: bigint, feeBps: bigint) {
-        const __gen_init = await BondingCurve_init(admin, jettonMaster, feeWallet, graduationDestination, virtualTon, virtualTokens, tokensForSale, graduationTon, feeBps);
+    static async fromInit(admin: Address, jettonMaster: Address, feeWallet: Address, feeBps: bigint) {
+        const __gen_init = await LiquidityPool_init(admin, jettonMaster, feeWallet, feeBps);
         const address = contractAddress(0, __gen_init);
-        return new BondingCurve(address, __gen_init);
+        return new LiquidityPool(address, __gen_init);
     }
     
     static fromAddress(address: Address) {
-        return new BondingCurve(address);
+        return new LiquidityPool(address);
     }
     
     readonly address: Address; 
     readonly init?: { code: Cell, data: Cell };
     readonly abi: ContractABI = {
-        types:  BondingCurve_types,
-        getters: BondingCurve_getters,
-        receivers: BondingCurve_receivers,
-        errors: BondingCurve_errors,
+        types:  LiquidityPool_types,
+        getters: LiquidityPool_getters,
+        receivers: LiquidityPool_receivers,
+        errors: LiquidityPool_errors,
     };
     
     constructor(address: Address, init?: { code: Cell, data: Cell }) {
@@ -1680,14 +1593,17 @@ export class BondingCurve implements Contract {
         this.init = init;
     }
     
-    async send(provider: ContractProvider, via: Sender, args: { value: bigint, bounce?: boolean| null | undefined }, message: SetJettonWallet | Buy | null | JettonTransferNotification | JettonExcesses | Graduate | Deploy) {
+    async send(provider: ContractProvider, via: Sender, args: { value: bigint, bounce?: boolean| null | undefined }, message: SetJettonWallet | SetCurve | PoolBuy | null | JettonTransferNotification | JettonExcesses | Deploy) {
         
         let body: Cell | null = null;
         if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'SetJettonWallet') {
             body = beginCell().store(storeSetJettonWallet(message)).endCell();
         }
-        if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'Buy') {
-            body = beginCell().store(storeBuy(message)).endCell();
+        if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'SetCurve') {
+            body = beginCell().store(storeSetCurve(message)).endCell();
+        }
+        if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'PoolBuy') {
+            body = beginCell().store(storePoolBuy(message)).endCell();
         }
         if (message === null) {
             body = new Cell();
@@ -1698,9 +1614,6 @@ export class BondingCurve implements Contract {
         if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'JettonExcesses') {
             body = beginCell().store(storeJettonExcesses(message)).endCell();
         }
-        if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'Graduate') {
-            body = beginCell().store(storeGraduate(message)).endCell();
-        }
         if (message && typeof message === 'object' && !(message instanceof Slice) && message.$$type === 'Deploy') {
             body = beginCell().store(storeDeploy(message)).endCell();
         }
@@ -1710,24 +1623,17 @@ export class BondingCurve implements Contract {
         
     }
     
-    async getTonReserve(provider: ContractProvider) {
-        const builder = new TupleBuilder();
-        const source = (await provider.get('tonReserve', builder.build())).stack;
-        const result = source.readBigNumber();
-        return result;
-    }
-    
-    async getTokenReserve(provider: ContractProvider) {
-        const builder = new TupleBuilder();
-        const source = (await provider.get('tokenReserve', builder.build())).stack;
-        const result = source.readBigNumber();
-        return result;
-    }
-    
     async getK(provider: ContractProvider) {
         const builder = new TupleBuilder();
         const source = (await provider.get('k', builder.build())).stack;
         const result = source.readBigNumber();
+        return result;
+    }
+    
+    async getReady(provider: ContractProvider) {
+        const builder = new TupleBuilder();
+        const source = (await provider.get('ready', builder.build())).stack;
+        const result = source.readBoolean();
         return result;
     }
     
@@ -1750,7 +1656,7 @@ export class BondingCurve implements Contract {
     async getData(provider: ContractProvider) {
         const builder = new TupleBuilder();
         const source = (await provider.get('data', builder.build())).stack;
-        const result = loadGetterTupleCurveData(source);
+        const result = loadGetterTuplePoolData(source);
         return result;
     }
     

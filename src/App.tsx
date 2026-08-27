@@ -20,6 +20,7 @@ import {
   tonOutFor,
   curvePriceTon,
   buildBuyBody,
+  buildPoolBuyBody,
   buildSellPayload,
   CURVE_GAS_BUY_OVERHEAD,
   CURVE_SELL_FORWARD_TON,
@@ -231,8 +232,8 @@ const STR = {
     topTokens: "Токены",
     topCreators: "Создатели",
     topRaised: "собрано {ton} TON",
-    topOnDex: "уже на бирже",
-    topClosing: "кривая закрыта, пул готовится",
+    topOnDex: "свободный рынок",
+    topClosing: "кривая закрыта, переезд в пул",
     topLaunched: "{n} токенов · {ton} TON",
     statLaunched24: "запусков за сутки",
     statRaised: "TON в токенах",
@@ -261,10 +262,9 @@ const STR = {
     gradDone: "Кривая закрыта — токен уходит на биржу",
     gradNote: "Когда в кривой наберётся {target} TON, торговля здесь закроется. Собранные TON и оставшийся выпуск уйдут на кошелёк площадки — из них заводится пара на бирже.",
     gradClosedTitle: "Кривая закрыта",
-    gradClosedBody: "Токен набрал {target} TON. Здесь он больше не торгуется: собранная ликвидность ушла на кошелёк площадки, из неё заводится пара на бирже. Как только пара появится, здесь встанет ссылка на неё.",
-    gradListedTitle: "Торгуется на бирже",
-    gradListedBody: "Пара на Ston.fi заведена — покупать и продавать теперь можно там.",
-    gradListedOpen: "Открыть на бирже",
+    gradClosedBody: "Токен набрал {target} TON. Кривая отработала, и всё собранное вместе с остатком выпуска переезжает в пул токена. Как только переезд закончится, торговля откроется снова — здесь же.",
+    gradListedTitle: "Свободный рынок",
+    gradListedBody: "Кривая отработала: теперь цена ходит вверх и вниз по резервам пула. Ликвидность заперта в контракте — вынуть её не может никто, поэтому продать можно в любой момент.",
     tabChart: "График", tabInfo: "Инфо", tabTx: "Транзакции", chartModePrice: "Цена",
     tokenNoAddress: "Адрес недоступен",
     txUnavailable: "Список транзакций пока недоступен для этого пула",
@@ -600,8 +600,8 @@ const STR = {
     topTokens: "Tokens",
     topCreators: "Creators",
     topRaised: "{ton} TON raised",
-    topOnDex: "already on a DEX",
-    topClosing: "curve closed, pair on the way",
+    topOnDex: "free market",
+    topClosing: "curve closed, moving to the pool",
     topLaunched: "{n} tokens · {ton} TON",
     statLaunched24: "launches today",
     statRaised: "TON in tokens",
@@ -630,10 +630,9 @@ const STR = {
     gradDone: "Curve closed — the token is heading to an exchange",
     gradNote: "Once the curve holds {target} TON, trading here closes. The collected TON and the remaining supply go to the platform wallet — the exchange pair is created from them.",
     gradClosedTitle: "Curve closed",
-    gradClosedBody: "The token reached {target} TON. It no longer trades here: the liquidity went to the platform wallet and a pair is being set up on an exchange. Once it exists, the link shows up here.",
-    gradListedTitle: "Trading on a DEX",
-    gradListedBody: "The Ston.fi pair is live — buy and sell it there.",
-    gradListedOpen: "Open on the DEX",
+    gradClosedBody: "The token reached {target} TON. The curve is done, and everything it collected — plus the unsold supply — is moving into the token's own pool. Trading reopens right here once it lands.",
+    gradListedTitle: "Free market",
+    gradListedBody: "The curve is done: the price now moves both ways with the pool's reserves. The liquidity is locked in the contract and nobody can pull it out, so you can always sell.",
     tabChart: "Chart", tabInfo: "Info", tabTx: "Transactions", chartModePrice: "Price",
     tokenNoAddress: "Address unavailable",
     txUnavailable: "Transaction list isn't available for this pool yet",
@@ -2375,6 +2374,40 @@ async function loadCurveState(curveAddress, testnet, priority = TON_PRIORITY.fee
     };
   } catch (err) {
     console.error("[mintly] не удалось прочитать состояние кривой:", err);
+    return null;
+  }
+}
+
+/* Состояние своего пула. Читается тем же способом, что и кривая, но
+   поля другие: у пула резервы настоящие, виртуальных нет.
+
+   Порядок задан структурой PoolData в contracts/src/liquidity_pool.tact:
+   tonReserve, tokenReserve, feeBps, ready, curve, jettonMaster,
+   jettonWallet. Адреса в конце не читаем — приложению они не нужны. */
+async function fetchPoolState(poolAddress, testnet, priority = TON_PRIORITY.token) {
+  if (!poolAddress) return null;
+  return curveStateCached(`p:${testnet ? "t" : "m"}:${poolAddress}`, () => loadPoolState(poolAddress, testnet, priority));
+}
+
+async function loadPoolState(poolAddress, testnet, priority = TON_PRIORITY.token) {
+  const host = testnet ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
+  try {
+    const res = await tonFetch(`${host}/v2/blockchain/accounts/${poolAddress}/methods/data`, { method: "POST" }, priority);
+    if (!res.ok) throw new Error(`tonapi ${res.status}`);
+    const json = await res.json();
+    const stack = json?.stack || [];
+    if (stack.length < 4) return null;
+    const num = (i) => BigInt(stack[i].num);
+    return {
+      tonReserve: num(0),
+      tokenReserve: num(1),
+      feeBps: num(2),
+      // Обе половины ликвидности на месте — торговля открыта. Пока
+      // кривая не отдала свои, пул есть, но торговать в нём нечем.
+      ready: stack[3] ? Number(stack[3].num) !== 0 : false,
+    };
+  } catch (err) {
+    console.error("[mintly] не удалось прочитать состояние пула:", err);
     return null;
   }
 }
@@ -8856,6 +8889,26 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     return () => { cancelled = true; clearInterval(iv); };
   }, [token.curveAddress]);
 
+  // Состояние собственного пула. Спрашиваем только когда кривая уже
+  // закрыта: до этого пул развёрнут, но пуст, и торговля идёт не через
+  // него — лишний запрос в цепочку на каждый токен ленты ни к чему.
+  const [poolState, setPoolState] = useState(null);
+  useEffect(() => {
+    if (!token.dexPoolAddress || !(curve && curve.graduated)) { setPoolState(null); return; }
+    let cancelled = false;
+    const load = () => fetchPoolState(token.dexPoolAddress, TON_TESTNET_NETWORK, TON_PRIORITY.token).then((st) => {
+      if (!cancelled && st) setPoolState(st);
+    });
+    load();
+    const iv = setInterval(load, 20000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [token.dexPoolAddress, curve && curve.graduated]);
+
+  // Рынок открыт: пул принял обе половины ликвидности и торгует. Между
+  // закрытием кривой и этим моментом проходит несколько блоков —
+  // покупать в это время физически не у кого.
+  const рынокОткрыт = !!(token.dexPoolAddress && poolState && poolState.ready);
+
   // Real OHLCV (via GeckoTerminal's data API — no iframe, no branding) when
   // the token is backed by a live on-chain pool; a synthetic random-walk
   // chart otherwise (bundled demo tokens, or if the fetch fails) so the
@@ -9289,28 +9342,17 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             // Показывать кнопки, которые заведомо не сработают, — врать.
             // Но и «торгуется на бирже» до появления пары — то же враньё:
             // пару заводят отдельным действием, и до неё торговать негде.
-            <div className="rounded-[22px] p-4 flex items-start gap-3" style={{ background: T.surface, border: `1px solid ${hexA(token.dexPoolAddress ? T.up : T.warning, 0.4)}` }}>
-              <ShieldCheck size={18} color={token.dexPoolAddress ? T.up : T.warning} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div className="rounded-[22px] p-4 flex items-start gap-3" style={{ background: T.surface, border: `1px solid ${hexA(рынокОткрыт ? T.up : T.warning, 0.4)}` }}>
+              <ShieldCheck size={18} color={рынокОткрыт ? T.up : T.warning} style={{ flexShrink: 0, marginTop: 1 }} />
               <div>
                 <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>
-                  {tr(token.dexPoolAddress ? "gradListedTitle" : "gradClosedTitle")}
+                  {tr(рынокОткрыт ? "gradListedTitle" : "gradClosedTitle")}
                 </div>
                 <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
-                  {token.dexPoolAddress
+                  {рынокОткрыт
                     ? tr("gradListedBody")
                     : trf("gradClosedBody", { target: fmtTon(Number(curve.graduationTon) / 1e9) })}
                 </p>
-                {token.dexPoolAddress && (
-                  <a
-                    href={`https://app.ston.fi/swap?ft=TON&tt=${token.address || ""}`}
-                    target="_blank" rel="noreferrer"
-                    className="fx-tap inline-flex items-center gap-1.5 rounded-full"
-                    style={{ marginTop: 10, padding: "7px 13px", background: hexA(T.up, 0.14), border: `1px solid ${hexA(T.up, 0.4)}`, fontFamily: bodyFont, color: T.up, fontSize: 13, fontWeight: 700 }}
-                  >
-                    {tr("gradListedOpen")}
-                    <ExternalLink size={13} />
-                  </a>
-                )}
               </div>
             </div>
           ) : curve ? (
@@ -9337,7 +9379,11 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             />
           )}
 
-          {curve && curve.graduated ? null : connected ? (
+          {/* Кривая закрыта, но пул токена уже принял ликвидность —
+              торговля продолжается там же, теми же кнопками. Прячем их
+              только когда торговать действительно негде: пул ещё не
+              наполнен. */}
+          {curve && curve.graduated && !рынокОткрыт ? null : connected ? (
             <div className="flex gap-2">
               <button onClick={onBuy} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15, background: PRISM, color: PRISM_TEXT, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("buy")}</button>
               <button onClick={onSell} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15, background: "transparent", color: T.rose, border: `1px solid ${T.rose}`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("sell")}</button>
@@ -14188,6 +14234,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       pool_address: result.poolAddress || null,
       curve_address: result.curveAddress || null,
       curve_jetton_wallet: result.curveJettonWallet || null,
+      dex_pool_address: result.curvePoolAddress || null,
       creator_wallet: result.creatorWallet || null,
       explorer_url: result.explorerUrl || null,
       category: result.category || null,
@@ -14381,6 +14428,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           logoUrl: persistentLogoUrl,
           curveAddress: chainResult.curveAddress,
           curveJettonWallet: chainResult.curveJettonWallet,
+          // Свой пул этого токена: развёрнут вместе с кривой и ждёт
+          // ликвидность. После закрытия кривой торговля идёт через него.
+          curvePoolAddress: chainResult.curvePoolAddress || null,
           creatorWallet: chainResult.creatorWallet || null,
           network: TON_TESTNET ? "testnet" : "mainnet",
           address: chainResult.jettonMasterAddress,
@@ -14429,6 +14479,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       verified: false,
       curveAddress: result.curveAddress || null,
       curveJettonWallet: result.curveJettonWallet || null,
+      dexPoolAddress: result.curvePoolAddress || null,
       createdAt: result.createdAt || Date.now(),
     });
     openToken(feedToken);
@@ -14815,14 +14866,22 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         // кошелёк. У токенов из внешней ленты кривой нет: там остаётся
         // прежний перевод, потому что торговать на чужом пуле отсюда
         // пока нечем.
-        const messages = token.curveAddress
+        // Куда идёт сделка: пока кривая торгует — в неё, после закрытия
+        // — в собственный пул токена. Оба контракта наши, удерживают
+        // одинаковый газ и берут ту же комиссию, отличается только тело
+        // сообщения.
+        const рынокПул = !!(token.graduated && token.dexPoolAddress);
+        const рынок = рынокПул ? token.dexPoolAddress : token.curveAddress;
+        const messages = рынок
           ? [{
-              address: token.curveAddress,
+              address: рынок,
               // Контракт удерживает фиксированную сумму на газ, поэтому
-              // отправляем её сверх суммы покупки — иначе на кривую
+              // отправляем её сверх суммы покупки — иначе на рынок
               // попадёт меньше, чем человек ввёл.
               amount: (toNano(totalTon.toFixed(9)) + CURVE_GAS_BUY_OVERHEAD).toString(),
-              payload: buildBuyBody({ queryId: 0n, minTokensOut: 0n }).toBoc().toString("base64"),
+              payload: (рынокПул
+                ? buildPoolBuyBody({ queryId: 0n, minTokensOut: 0n })
+                : buildBuyBody({ queryId: 0n, minTokensOut: 0n })).toBoc().toString("base64"),
             }]
           : [
               { address: TREASURY_ADDRESS, amount: toNano(mainTon.toFixed(9)).toString() },
@@ -14858,7 +14917,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // жетона продавца, поэтому адрес спрашиваем у мастера жетона.
       try {
         let messages;
-        if (token.curveAddress && token.tokenAddress && chainJettonWallet) {
+        // Тот же выбор рынка, что и при покупке: закрытая кривая
+        // означает, что жетоны нужно переводить уже в пул.
+        const рынокПродажи = token.graduated && token.dexPoolAddress
+          ? token.dexPoolAddress
+          : token.curveAddress;
+        if (рынокПродажи && token.tokenAddress && chainJettonWallet) {
           // Адрес уже известен — между нажатием и открытием кошелька не
           // должно быть ни одного await, иначе окно кошелька закроется.
           // tonapi отдаёт адрес в сыром виде (0:abc…), а кошельки ждут
@@ -14874,7 +14938,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             // всего берём точное значение из сети, а не пересчитанное из
             // округлённого числа токенов.
             .storeCoins(sellRaw)
-            .storeAddress(Address.parse(token.curveAddress))
+            .storeAddress(Address.parse(рынокПродажи))
             .storeAddress(Address.parse(walletAddress))
             .storeBit(false)
             .storeCoins(CURVE_SELL_FORWARD_TON)

@@ -13,6 +13,7 @@
 
 import { Address, beginCell, toNano } from "@ton/core";
 import { BondingCurve, storeBuy, storeSetJettonWallet } from "./contracts/BondingCurve";
+import { LiquidityPool, storePoolBuy, storeSetCurve } from "./contracts/LiquidityPool";
 
 // Одни и те же числа должны стоять и в деплое, и в предпросчёте цены в
 // интерфейсе, иначе показанное «вы получите» разойдётся с тем, что
@@ -149,5 +150,79 @@ export function curvePriceTon(state) {
   const tonReserve = params.virtualTon + realTon;
   const tokenReserve = params.virtualTokens - tokensSold;
   if (tokenReserve <= 0n) return 0;
+  return Number(tonReserve) / Number(tokenReserve);
+}
+
+
+/* ---------------------------------------------------------------------
+   Пул: рынок токена после того, как кривая отторговала.
+
+   Кривая живёт до порога и отдаёт всё, что собрала, одному получателю.
+   Этот получатель — контракт пула, и торговля продолжается в нём: те же
+   правила, та же комиссия, только резервы настоящие, без виртуальных.
+   Ни бирж, ни ручного заведения пары — всё внутри площадки.
+
+   Адрес пула зависит только от жетона и параметров площадки, поэтому
+   известен до развёртывания. Это важно: кривая создаётся с адресом
+   пула внутри, и если бы пул, наоборот, знал адрес кривой заранее, ни
+   один из двух адресов нельзя было бы вычислить.
+--------------------------------------------------------------------- */
+
+// Столько пул удерживает из покупки на газ (GasBuyOverhead в
+// liquidity_pool.tact). Числа обязаны совпадать с контрактом.
+export const POOL_GAS_BUY_OVERHEAD = toNano("0.12");
+export const POOL_SELL_FORWARD_TON = toNano("0.08");
+export const POOL_SELL_VALUE = toNano("0.2");
+
+export async function poolContract({ admin, jettonMaster, feeWallet }) {
+  return await LiquidityPool.fromInit(
+    typeof admin === "string" ? Address.parse(admin) : admin,
+    typeof jettonMaster === "string" ? Address.parse(jettonMaster) : jettonMaster,
+    typeof feeWallet === "string" ? Address.parse(feeWallet) : feeWallet,
+    CURVE_PARAMS.feeBps,
+  );
+}
+
+export function buildPoolBuyBody({ queryId = 0n, minTokensOut = 0n } = {}) {
+  const builder = beginCell();
+  storePoolBuy({ $$type: "PoolBuy", queryId, minTokensOut })(builder);
+  return builder.endCell();
+}
+
+export function buildSetCurveBody(curve) {
+  const builder = beginCell();
+  storeSetCurve({
+    $$type: "SetCurve",
+    curve: typeof curve === "string" ? Address.parse(curve) : curve,
+  })(builder);
+  return builder.endCell();
+}
+
+// Предпросчёт по пулу. Формула та же, что у кривой, но резервы берутся
+// как есть: виртуальных здесь нет, поэтому цена может и падать.
+export function poolTokensOutFor(state, tonIn) {
+  if (!state || tonIn <= 0n) return 0n;
+  const { tonReserve, tokenReserve } = state;
+  if (tonReserve <= 0n || tokenReserve <= 0n) return 0n;
+  const k = tonReserve * tokenReserve;
+  const out = tokenReserve - k / (tonReserve + tonIn);
+  return out > 0n ? out : 0n;
+}
+
+export function poolTonOutFor(state, tokensIn) {
+  if (!state || tokensIn <= 0n) return 0n;
+  const { tonReserve, tokenReserve } = state;
+  if (tonReserve <= 0n || tokenReserve <= 0n) return 0n;
+  const k = tonReserve * tokenReserve;
+  const newTokenReserve = tokenReserve + tokensIn;
+  const newTonReserve = (k + newTokenReserve - 1n) / newTokenReserve;
+  const out = tonReserve - newTonReserve;
+  return out > 0n ? out : 0n;
+}
+
+export function poolPriceTon(state) {
+  if (!state) return 0;
+  const { tonReserve, tokenReserve } = state;
+  if (!tokenReserve || tokenReserve <= 0n) return 0;
   return Number(tonReserve) / Number(tokenReserve);
 }

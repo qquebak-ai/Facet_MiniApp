@@ -44,7 +44,7 @@
 
 import { SUPPORT_CHAT_ID, adminClient, deliverAnswer } from "./_support.js";
 import { searchAll, cardFor, cardByRef, свежийГрафик, findTokens, trendingExternal, looksLikeAddress, NETWORK } from "./_market.js";
-import { оценкаПокупки, БЫСТРЫЕ_СУММЫ } from "./_trade.js";
+import { оценкаПокупки, оценкаПокупкиВПуле, БЫСТРЫЕ_СУММЫ } from "./_trade.js";
 import { кошелёкПоTelegram, привязатьКошелёк, балансTon, жетоны, жетонныйКошелёк, нормальныйАдрес } from "./_wallet.js";
 import { свопТонВЖетон, ссылкаСвопа } from "./_swap.js";
 
@@ -338,7 +338,7 @@ async function handleBuyCommand(message, хвост) {
   // нужен адрес кошелька покупателя.
   let ссылка = null;
   let текст = null;
-  if (card.curve) {
+  if (card.curve || card.pool) {
     текст = await сообщениеПокупки(card, сумма);
   } else {
     const профиль = await кошелёкПоTelegram(message.from.id);
@@ -509,9 +509,15 @@ function сообщениеСвопа(card, сумма, своп) {
 
 /* Расчёт покупки: что человек увидит перед тем, как открыть кошелёк. */
 async function сообщениеПокупки(card, сумма) {
-  const { curveState } = await import("./_market.js");
-  const state = await curveState(card.curve);
-  const о = state ? оценкаПокупки(state, сумма) : null;
+  const { curveState, poolState } = await import("./_market.js");
+  // Пока кривая торгует — считаем по ней, после закрытия — по пулу
+  // токена. Оба контракта свои, и человек в обоих случаях подписывает
+  // сделку в приложении.
+  const state = card.curve ? await curveState(card.curve) : null;
+  const пул = !state && card.pool ? await poolState(card.pool) : null;
+  const о = state
+    ? оценкаПокупки(state, сумма)
+    : (пул && пул.ready ? оценкаПокупкиВПуле(пул, сумма) : null);
   const шт = о ? о.токенов : 0;
   const тикер = card.title.replace(/^\$/, "").split(" ")[0];
   const строки = [
@@ -522,7 +528,7 @@ async function сообщениеПокупки(card, сумма) {
       : `Платишь <b>${сумма} TON</b>`,
     о
       ? `Получишь ≈ <b>${шт >= 1000 ? Math.round(шт).toLocaleString("ru-RU") : шт.toFixed(2)} ${тикер}</b>`
-      : "Кривая не ответила — цифры уточнит кошелёк",
+      : "Рынок не ответил — цифры уточнит кошелёк",
     "",
     "Подпиши в кошельке — токены придут туда же.",
   ].filter(Boolean);

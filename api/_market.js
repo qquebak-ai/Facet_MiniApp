@@ -86,6 +86,28 @@ export async function curveState(address) {
  * открывается по многу раз, а картинка у токена не меняется.
  */
 const логотипы = new Map();
+/* Состояние собственного пула токена: он принимает торговлю после того,
+   как кривая набрала порог и отдала ему ликвидность. Поля — в порядке
+   структуры PoolData из contracts/src/liquidity_pool.tact. */
+export async function poolState(address) {
+  if (!address) return null;
+  try {
+    const res = await fetch(`${TONAPI}/v2/blockchain/accounts/${address}/methods/data`, { method: "POST" });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const stack = json && json.stack;
+    if (!Array.isArray(stack) || stack.length < 4) return null;
+    return {
+      tonReserve: BigInt(stack[0].num),
+      tokenReserve: BigInt(stack[1].num),
+      feeBps: BigInt(stack[2].num),
+      ready: Number(stack[3].num) !== 0,
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
 export async function логотипЖетона(address) {
   if (!address) return null;
   if (логотипы.has(address)) return логотипы.get(address);
@@ -473,6 +495,9 @@ export async function tokenCard(token) {
     // кнопку, которую контракт отобьёт, — врать. Такой токен торгуется
     // дальше в приложении, оттуда и идёт сделка.
     curve: state && !state.graduated ? token.curve_address || null : null,
+    // После закрытия кривой рынок переезжает в собственный пул токена.
+    // Сделка там собирается так же, только другим телом сообщения.
+    pool: state && state.graduated ? token.dex_pool_address || null : null,
     jetton: token.address || null,
     ticker: тикер,
     botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=tok_${token.id}`,
