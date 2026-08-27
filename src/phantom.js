@@ -128,10 +128,16 @@ export async function подключить() {
   return сессия;
 }
 
-/* Подпись и отправка готовой транзакции. Транзакцию собирает сервер
+/* Подпись готовой транзакции. Транзакцию собирает сервер
    (api/solana.js) и отдаёт в base64 — Phantom ждёт base58, поэтому
-   перекодируем по дороге. Возвращается подпись сделки в сети. */
-export async function подписатьИОтправить(transactionBase64, сессия = сохранённаяСессия()) {
+   перекодируем по дороге, а обратно получаем её же, но подписанную.
+
+   Раньше здесь был signAndSendTransaction — он делал и то и другое
+   разом, но Phantom его отключил и на каждый вызов отвечает «метод не
+   поддерживается». Теперь кошелёк только подписывает, а в сеть сделку
+   отправляем сами: так надёжнее и в любом случае это единственный
+   оставшийся путь. */
+export async function подписать(transactionBase64, сессия = сохранённаяСессия()) {
   if (!сессия) throw new Error("кошелёк не подключён");
   const секрет = bs58.decode(сессия.secret);
   const байты = Uint8Array.from(atob(transactionBase64), (c) => c.charCodeAt(0));
@@ -142,7 +148,7 @@ export async function подписатьИОтправить(transactionBase64, 
   });
 
   const id = случайныйКлюч();
-  const url = `${PHANTOM}/signAndSendTransaction?` + new URLSearchParams({
+  const url = `${PHANTOM}/signTransaction?` + new URLSearchParams({
     dapp_encryption_public_key: сессия.pub,
     nonce,
     payload,
@@ -156,5 +162,10 @@ export async function подписатьИОтправить(transactionBase64, 
   if (!ответ.data || !ответ.nonce) throw new Error("кошелёк ответил не тем");
 
   const данные = расшифровать(секрет, ответ.nonce, ответ.data);
-  return данные.signature;
+  if (!данные || !данные.transaction) throw new Error("кошелёк не вернул подпись");
+  // Обратно в base64: сервер отправляет сделку в сеть именно в нём.
+  const подписанная = bs58.decode(данные.transaction);
+  let двоичная = "";
+  for (const b of подписанная) двоичная += String.fromCharCode(b);
+  return btoa(двоичная);
 }

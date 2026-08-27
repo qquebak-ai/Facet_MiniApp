@@ -131,6 +131,24 @@ export async function балансы({ wallet, mint }) {
   return итог;
 }
 
+/* Отправка подписанной сделки в сеть.
+ *
+ * Раньше этим занимался сам кошелёк — deeplink signAndSendTransaction
+ * подписывал и отправлял разом. Phantom его отключил, и теперь кошелёк
+ * только подписывает; довести сделку до сети — наша работа.
+ *
+ * preflightCommitment намеренно мягкий: строгая проверка на узле, чуть
+ * отставшем от сети, отбивает совершенно нормальные сделки.
+ */
+export async function отправить(signedBase64) {
+  if (!signedBase64 || typeof signedBase64 !== "string") return null;
+  const подпись = await rpc("sendTransaction", [
+    signedBase64,
+    { encoding: "base64", skipPreflight: false, preflightCommitment: "processed", maxRetries: 3 },
+  ]);
+  return подпись || null;
+}
+
 export default async function handler(req, res) {
   const действие = String((req.query && req.query.action) || "");
   try {
@@ -164,6 +182,15 @@ export default async function handler(req, res) {
       if (!b) return res.status(400).json({ error: "bad_request" });
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json(b);
+    }
+
+    if (действие === "send") {
+      if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+      const тело = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+      const подпись = await отправить(тело.transaction);
+      if (!подпись) return res.status(400).json({ error: "bad_request" });
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ signature: подпись });
     }
 
     if (действие === "swap") {

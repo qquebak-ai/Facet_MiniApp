@@ -15065,7 +15065,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
      раздела, куда заходят не все, незачем. */
   async function свопSolana({ token, amountSol, продажа = false, количество = 0 }) {
     /* eslint-disable-next-line no-param-reassign */
-    const { подключить, сохранённаяСессия, подписатьИОтправить } = await import("./phantom");
+    const { подключить, сохранённаяСессия, подписать } = await import("./phantom");
     let сессия = сохранённаяСессия();
     if (!сессия) {
       showToast(t("solConnecting"));
@@ -15109,7 +15109,16 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     if (!собранная || собранная.error || !собранная.transaction) throw new Error("сделка не собралась");
 
     showToast(t("solSignInWallet"));
-    return await подписатьИОтправить(собранная.transaction, сессия);
+    // Кошелёк только подписывает: отправку в сеть Phantom больше не
+    // делает, поэтому подписанную сделку доводим до узла сами.
+    const подписанная = await подписать(собранная.transaction, сессия);
+    const итог = await fetch("/api/solana?action=send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transaction: подписанная }),
+    }).then((r) => r.json());
+    if (!итог || итог.error) throw new Error("сеть не приняла сделку");
+    return итог.signature;
   }
 
   async function confirmTrade(mode, payAmount, receiveAmount, unit, rawAmount, rawEstimate) {
