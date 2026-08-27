@@ -1833,6 +1833,10 @@ const TF_SECONDS = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, 
 
 const GT_BASE = "https://api.geckoterminal.com/api/v2";
 const GT_NETWORK = "ton";
+// Сеть Solana в тех же справочниках GeckoTerminal. Лента, графики и
+// карточки токенов читаются одним и тем же кодом — отличается только
+// это слово в адресе запроса.
+const GT_NETWORK_SOL = "solana";
 // Мем-ленту оставляем только для настоящих "мемов" по капитализации —
 // токены с капой от 1 млрд $ и выше выглядят как established/blue-chip
 // активы, а не как мемкоины, поэтому отсекаем их ещё на этапе фетча.
@@ -2078,12 +2082,12 @@ function normalizePools(json) {
   }).filter(t => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING);
 }
 
-async function fetchPoolsPage(page) {
+async function fetchPoolsPage(page, network = GT_NETWORK) {
   try {
     // include=base_token,dex pulls the actual token record (real name,
     // symbol, on-chain address, logo image_url) and the DEX the pool
     // trades on, for every pool in one request.
-    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/trending_pools?page=${page}&include=base_token,dex`);
+    const res = await gtFetch(`${GT_BASE}/networks/${network}/trending_pools?page=${page}&include=base_token,dex`);
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     return normalizePools(await res.json());
   } catch (err) {
@@ -2094,10 +2098,10 @@ async function fetchPoolsPage(page) {
 /* Один пул по адресу. Нужен для ссылок из бота: карточку токена с биржи
    присылают в чат, и при открытии его ещё нет в ленте — она грузится
    пачками и до нужного токена может не дойти вовсе. */
-async function fetchPoolByAddress(poolAddress) {
+async function fetchPoolByAddress(poolAddress, network = GT_NETWORK) {
   if (!poolAddress) return null;
   try {
-    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}?include=base_token,dex`);
+    const res = await gtFetch(`${GT_BASE}/networks/${network}/pools/${poolAddress}?include=base_token,dex`);
     if (!res.ok) return null;
     const json = await res.json();
     // Одиночный пул приходит объектом. Пустой ответ или список вместо
@@ -2120,11 +2124,12 @@ async function fetchPoolByAddress(poolAddress) {
 // calling this for every card in the feed would blow through the free API's
 // rate limit for no benefit, since the list view never shows the description.
 const tokenInfoCache = new Map(); // tokenAddress -> info | null
-async function fetchTokenInfo(tokenAddress) {
+async function fetchTokenInfo(tokenAddress, network = GT_NETWORK) {
   if (!tokenAddress) return null;
-  if (tokenInfoCache.has(tokenAddress)) return tokenInfoCache.get(tokenAddress);
+  const ключ = `${network}:${tokenAddress}`;
+  if (tokenInfoCache.has(ключ)) return tokenInfoCache.get(ключ);
   try {
-    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/tokens/${tokenAddress}/info`);
+    const res = await gtFetch(`${GT_BASE}/networks/${network}/tokens/${tokenAddress}/info`);
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const a = json?.data?.attributes || {};
@@ -2135,10 +2140,10 @@ async function fetchTokenInfo(tokenAddress) {
       twitter: a.twitter_handle ? `https://x.com/${a.twitter_handle}` : null,
       imageUrl: a.image_url && !a.image_url.includes("missing_small") ? a.image_url : null,
     };
-    tokenInfoCache.set(tokenAddress, info);
+    tokenInfoCache.set(ключ, info);
     return info;
   } catch (err) {
-    tokenInfoCache.set(tokenAddress, null);
+    tokenInfoCache.set(ключ, null);
     return null;
   }
 }
@@ -2645,10 +2650,10 @@ function cachedPoolTrades(poolAddress) {
 // страницей, и обрезать её незачем — из этих же строк собирается и
 // вкладка сделок, и общая лента, а пропущенная сделка обратно уже не
 // приедет.
-async function fetchPoolTrades(poolAddress, limit = 300, priority = GT_PRIORITY.trades) {
+async function fetchPoolTrades(poolAddress, limit = 300, priority = GT_PRIORITY.trades, network = GT_NETWORK) {
   if (!poolAddress) return null;
   try {
-    const res = await gtFetch(`${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/trades`, { priority });
+    const res = await gtFetch(`${GT_BASE}/networks/${network}/pools/${poolAddress}/trades`, { priority });
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
     const json = await res.json();
     const rows = json?.data || [];
@@ -2789,22 +2794,22 @@ async function fetchTonapiChart(jettonAddress, tf, testnet = false) {
 const OHLCV_TTL_MS = 30_000;
 const ohlcvInflight = new Map();
 
-async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart, signal = undefined) {
-  const cacheKey = `${poolAddress}:${tf}`;
+async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart, signal = undefined, network = GT_NETWORK) {
+  const cacheKey = `${network}:${poolAddress}:${tf}`;
   const hit = ohlcvCache.get(cacheKey);
   if (hit && Date.now() - hit.ts < OHLCV_TTL_MS) return hit.value;
   // Тот же запрос уже идёт — ждём его, а не шлём второй: обновление раз в
   // пятнадцать секунд и первая загрузка легко совпадают.
   if (ohlcvInflight.has(cacheKey)) return ohlcvInflight.get(cacheKey);
-  const run = loadPoolOHLCV(poolAddress, tf, priority, signal, cacheKey, hit);
+  const run = loadPoolOHLCV(poolAddress, tf, priority, signal, cacheKey, hit, network);
   ohlcvInflight.set(cacheKey, run);
   try { return await run; } finally { ohlcvInflight.delete(cacheKey); }
 }
 
-async function loadPoolOHLCV(poolAddress, tf, priority, signal, cacheKey, hit) {
+async function loadPoolOHLCV(poolAddress, tf, priority, signal, cacheKey, hit, network = GT_NETWORK) {
   const cfg = GT_TF[tf] || GT_TF.H1;
   const fetchLimit = Math.min(1000, 200 * (cfg.resample || 1));
-  const url = `${GT_BASE}/networks/${GT_NETWORK}/pools/${poolAddress}/ohlcv/${cfg.timeframe}?aggregate=${cfg.aggregate}&limit=${fetchLimit}&currency=usd&token=base`;
+  const url = `${GT_BASE}/networks/${network}/pools/${poolAddress}/ohlcv/${cfg.timeframe}?aggregate=${cfg.aggregate}&limit=${fetchLimit}&currency=usd&token=base`;
   try {
     const res = await gtFetch(url, { priority, retries: priority >= GT_PRIORITY.chart ? 3 : 1, signal });
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);

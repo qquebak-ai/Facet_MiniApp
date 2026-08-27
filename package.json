@@ -15,11 +15,13 @@
     "@ton/core": "^0.63.1",
     "@ton/ton": "*",
     "@tonconnect/ui-react": "^2.0.9",
+    "bs58": "^6.0.0",
     "lottie-web": "^5.13.0",
     "lucide-react": "^0.383.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
