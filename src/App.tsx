@@ -8225,9 +8225,28 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
     return arr;
   }, [tokens, filter, spotlightTop, localTokens, solTokens, сеть]);
 
+  // Фон под цвет выбранной сети: у TON это её синий, у Solana —
+  // фирменная пара фиолетового с мятным. Не украшение: экраны двух
+  // рынков выглядят одинаково, и без цветовой подсказки легко забыть,
+  // где находишься, а сделки там идут разными кошельками.
+  const фонСети = сеть === "sol"
+    ? `radial-gradient(90% 55% at 12% 18%, ${hexA("#9945FF", 0.5)} 0%, transparent 66%), radial-gradient(85% 50% at 92% 30%, ${hexA("#14F195", 0.3)} 0%, transparent 64%)`
+    : `radial-gradient(95% 55% at 18% 20%, ${hexA("#0098EA", 0.42)} 0%, transparent 68%), radial-gradient(80% 45% at 95% 34%, ${hexA("#0098EA", 0.16)} 0%, transparent 62%)`;
+
   return (
-    <div className="flex flex-col gap-5" style={{ paddingBottom: 12 }}>
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-5" style={{ paddingBottom: 12, position: "relative" }}>
+      {/* Слой лежит под содержимым и шире его: свечение должно уходить
+          за края экрана, а не обрываться по колонке текста. */}
+      <div aria-hidden style={{
+        // Начинается выше заголовка и тянется на треть экрана: свет
+        // должен «падать» на первые карточки, а не висеть полосой.
+        position: "absolute", left: "-14%", right: "-14%", top: -60, height: 460,
+        background: фонСети,
+        transition: "background 420ms ease-out",
+        pointerEvents: "none", zIndex: 0,
+      }} />
+
+      <div className="flex items-center justify-between" style={{ position: "relative", zIndex: 1 }}>
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("navMempad")}</span>
         {/* Кнопка в цвете приложения: зелёный здесь был из набора
             «рост цены», к запуску токена отношения не имеющего. Фирменный
@@ -8253,7 +8272,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
 
       {/* Выбор сети. Два рынка не смешиваются: слева свои токены на TON,
           справа чужие мемкоины Solana. */}
-      <div className="flex items-center gap-1 rounded-full" style={{ padding: 3, background: T.surface, border: `1px solid ${T.line}`, alignSelf: "flex-start" }}>
+      <div className="flex items-center gap-1 rounded-full" style={{ padding: 3, background: hexA(T.surface, 0.86), border: `1px solid ${T.line}`, alignSelf: "flex-start", position: "relative", zIndex: 1 }}>
         {[["ton", "TON"], ["sol", "SOL"]].map(([id, подпись]) => {
           const активна = сеть === id;
           return (
@@ -8263,8 +8282,11 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
               className="fx-tap rounded-full"
               style={{
                 padding: "7px 18px",
-                background: активна ? T.ice : "transparent",
-                color: активна ? T.bg : T.muted,
+                // Выбранная сеть подсвечивается своим цветом, а не
+                // общим белым: тогда переключатель и фон читаются как
+                // одно целое.
+                background: активна ? (id === "sol" ? "#9945FF" : "#0098EA") : "transparent",
+                color: активна ? "#FFFFFF" : T.muted,
                 border: "none",
                 fontFamily: displayFont, fontSize: 14, fontWeight: 700,
                 transition: `background ${EASE}, color ${EASE}`,
