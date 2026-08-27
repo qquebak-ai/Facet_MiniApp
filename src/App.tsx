@@ -8497,7 +8497,10 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         })}
       </div>
 
+      {/* Ключ по сети: без него собранные сделки оставались в памяти
+          компонента, и в ленте Solana продолжали идти покупки из TON. */}
       <RecentBuysTicker
+        key={сеть}
         tokens={сеть === "sol" ? (solTokens || []) : tokens}
         curveTokens={сеть === "sol" ? [] : myTokens}
         onOpen={onOpen}
@@ -13508,10 +13511,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // лимит API), поэтому обычный опрос обновляет только первую страницу,
     // а остальное освежается раз в пару минут.
     async function poll(deep) {
-      // В тестовой сети лента бирж не нужна: те токены живут в боевой,
-      // купить их отсюда нельзя, а вперемешку со своими они только
-      // путают, в какой сети человек находится.
-      if (TON_TESTNET_NETWORK) { setTokensLoading(false); return; }
+      // Лента бирж читается всегда, даже когда свои контракты в тестовой
+      // сети: с появлением выбора сети в мемпаде она перестала мешаться
+      // со своими токенами — те лежат под фильтром «Новые», — а без неё
+      // раздел TON был пустым рядом с полным разделом Solana.
       const live = deep
         ? await fetchTonMemePools(FEED_LIMIT, FEED_PAGES)
         : await fetchTonMemePools(20, 1);
