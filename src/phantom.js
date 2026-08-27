@@ -99,7 +99,10 @@ export async function подключить() {
   const url = `${PHANTOM}/connect?` + new URLSearchParams({
     app_url: APP_URL,
     dapp_encryption_public_key: bs58.encode(пара.publicKey),
-    redirect_link: `${APP_URL}/api/phantom?action=callback&id=${id}`,
+    // Адрес возврата — чистый путь, без своих параметров: Phantom
+    // дописывает ответ через «?», и на ссылке, где вопрос уже стоит,
+    // получается мусор, который кошелёк отвергает целиком.
+    redirect_link: `${APP_URL}/phantom/${id}`,
     cluster: "mainnet-beta",
   });
 
@@ -143,7 +146,7 @@ export async function подписатьИОтправить(transactionBase64, 
     dapp_encryption_public_key: сессия.pub,
     nonce,
     payload,
-    redirect_link: `${APP_URL}/api/phantom?action=callback&id=${id}`,
+    redirect_link: `${APP_URL}/phantom/${id}`,
   });
 
   открыть(url);

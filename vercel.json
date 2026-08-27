@@ -57,5 +57,11 @@
       "path": "/api/notify",
       "schedule": "0 9 * * *"
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/phantom/:id",
+      "destination": "/api/phantom?action=callback&id=:id"
+    }
   ]
 }
