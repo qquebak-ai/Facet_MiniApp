@@ -479,6 +479,7 @@ const STR = {
     solWalletTitle: "Кошелёк Solana",
     solWalletNote: "Нужен для мемкоинов Solana. TON-кошелёк остаётся на месте.",
     solWalletConnect: "Подключить",
+    solWalletConnectFirst: "кошелёк не подключён",
     solWalletOpening: "Открываю…",
     solWalletLoading: "Считаю баланс…",
     solWalletDisconnect: "Отключить кошелёк Solana",
@@ -859,6 +860,7 @@ const STR = {
     solWalletTitle: "Solana wallet",
     solWalletNote: "For Solana memecoins. Your TON wallet stays as it is.",
     solWalletConnect: "Connect",
+    solWalletConnectFirst: "wallet not connected",
     solWalletOpening: "Opening…",
     solWalletLoading: "Reading balance…",
     solWalletDisconnect: "Disconnect Solana wallet",
@@ -2620,7 +2622,9 @@ function sleep(ms) {
    открытый график идёт вперёд ленты и превью, а между запросами
    держится пауза. На 429 попытка повторяется с нарастающей задержкой —
    молча отдавать «данных нет» из-за лимита нельзя. */
-const GT_PRIORITY = { chart: 3, trades: 2, spark: 1, feed: 0 };
+// Сделки идут первыми: их ждут, глядя на пустой список, а график к
+// этому моменту уже нарисован прошлым ответом.
+const GT_PRIORITY = { trades: 4, chart: 3, spark: 1, feed: 0 };
 const gtQueue = [];
 let gtBusy = false;
 let gtLastRequestAt = 0;
@@ -2675,9 +2679,12 @@ function gtFetch(url, { retries = 2, priority = GT_PRIORITY.feed, signal } = {})
 // Последний удачный ответ по каждому пулу. Нужен, чтобы при повторном
 // открытии экрана или возврате на вкладку список рисовался сразу, а сеть
 // догоняла в фоне — вместо пустого «загружаем».
-const tradesCache = new Map(); // poolAddress -> trades[]
-function cachedPoolTrades(poolAddress) {
-  return (poolAddress && tradesCache.get(poolAddress)) || null;
+const tradesCache = new Map(); // "сеть:пул" -> trades[]
+function ключСделок(poolAddress, network = GT_NETWORK) {
+  return `${network}:${poolAddress}`;
+}
+function cachedPoolTrades(poolAddress, network = GT_NETWORK) {
+  return (poolAddress && tradesCache.get(ключСделок(poolAddress, network))) || null;
 }
 
 // limit по умолчанию щедрый: эндпоинт отдаёт последние сделки одной
@@ -2709,7 +2716,7 @@ async function fetchPoolTrades(poolAddress, limit = 300, priority = GT_PRIORITY.
         at: a.block_timestamp || null,
       };
     });
-    tradesCache.set(poolAddress, trades);
+    tradesCache.set(ключСделок(poolAddress, network), trades);
     return trades;
   } catch (err) {
     return null;
@@ -4836,10 +4843,6 @@ const MEMPAD_FILTERS = [
   { id: "new", labelKey: "mempadFilterNew" },
   { id: "dex", labelKey: "mempadFilterDex" },
   { id: "hot", labelKey: "mempadFilterHot" },
-  // Мемкоины Solana. Лента у них своя и читается отдельно: запросов к
-  // источнику она стоит столько же, сколько основная, а нужна не всем —
-  // поэтому грузится только когда фильтр выбран.
-  { id: "sol", labelKey: "mempadFilterSol" },
 ];
 
 function MempadRow({ t: tok, onOpen, index }) {
@@ -8145,6 +8148,10 @@ function ShopView({ cosmetics, owned, coins, onBuy, onOpenLook, onOpenChest, ach
 
 function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   const [filter, setFilter] = useState("new");
+  // Сеть выбирается сверху, отдельно от фильтров: это не «ещё один
+  // способ отсортировать», а другой рынок целиком — свои токены, свои
+  // кошельки, своя лента.
+  const [сеть, setСеть] = useState("ton");
 
   // Лента Solana. Тот же источник и тот же разбор, что у основной, но
   // читается только по требованию: две сети сразу — это вдвое больше
@@ -8152,14 +8159,14 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   const [solTokens, setSolTokens] = useState(null);
   const [solLoading, setSolLoading] = useState(false);
   useEffect(() => {
-    if (filter !== "sol" || solTokens) return;
+    if (сеть !== "sol" || solTokens) return;
     let cancelled = false;
     setSolLoading(true);
     fetchPoolsPage(1, GT_NETWORK_SOL)
       .then((rows) => { if (!cancelled) setSolTokens(rows || []); })
       .finally(() => { if (!cancelled) setSolLoading(false); });
     return () => { cancelled = true; };
-  }, [filter, solTokens]);
+  }, [сеть, solTokens]);
 
   // «В центре внимания» — пятёрка токенов, по которым прошло больше всего
   // сделок за последний час, и она прокручивается по кругу. Час берём как
@@ -8198,8 +8205,10 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   const list = useMemo(() => {
     // "New" now means what it literally says: tokens launched through
     // this app, not the newest items in the external real-market feed.
+    // В Solana своих запусков нет: там мы не лаунчпад, а витрина чужого
+    // рынка, поэтому фильтры к ней не применяются.
+    if (сеть === "sol") return solTokens || [];
     if (filter === "new") return localTokens;
-    if (filter === "sol") return solTokens || [];
     const featured = new Set(spotlightTop.map((tok) => tok.id));
     let arr = tokens.filter((tok) => !featured.has(tok.id));
     switch (filter) {
@@ -8208,7 +8217,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
       default: break;
     }
     return arr;
-  }, [tokens, filter, spotlightTop, localTokens, solTokens]);
+  }, [tokens, filter, spotlightTop, localTokens, solTokens, сеть]);
 
   return (
     <div className="flex flex-col gap-5" style={{ paddingBottom: 12 }}>
@@ -8227,6 +8236,8 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
             border: `1px solid ${hexA(T.electric, 0.4)}`,
             boxShadow: `0 0 14px ${hexA(T.electric, 0.18)}`,
             position: "relative", overflow: "hidden",
+            // В Solana мы не запускаем токены, только показываем чужие.
+            display: сеть === "sol" ? "none" : undefined,
           }}
         >
           <LeafIcon size={17} color={T.electric} kind={2} />
@@ -8234,9 +8245,34 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         </button>
       </div>
 
-      <RecentBuysTicker tokens={tokens} curveTokens={myTokens} onOpen={onOpen} />
+      {/* Выбор сети. Два рынка не смешиваются: слева свои токены на TON,
+          справа чужие мемкоины Solana. */}
+      <div className="flex items-center gap-1 rounded-full" style={{ padding: 3, background: T.surface, border: `1px solid ${T.line}`, alignSelf: "flex-start" }}>
+        {[["ton", "TON"], ["sol", "SOL"]].map(([id, подпись]) => {
+          const активна = сеть === id;
+          return (
+            <button
+              key={id}
+              onClick={() => { haptic("light"); setСеть(id); }}
+              className="fx-tap rounded-full"
+              style={{
+                padding: "7px 18px",
+                background: активна ? T.ice : "transparent",
+                color: активна ? T.bg : T.muted,
+                border: "none",
+                fontFamily: displayFont, fontSize: 14, fontWeight: 700,
+                transition: `background ${EASE}, color ${EASE}`,
+              }}
+            >
+              {подпись}
+            </button>
+          );
+        })}
+      </div>
 
-      {loading && !spotlight ? (
+      {сеть === "ton" && <RecentBuysTicker tokens={tokens} curveTokens={myTokens} onOpen={onOpen} />}
+
+      {сеть === "sol" ? null : loading && !spotlight ? (
         <div className="fx-card rounded-[22px] p-6 flex flex-col items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
           <div className="fx-skeleton" style={{ width: 92, height: 92, borderRadius: "50%" }} />
           <div className="fx-skeleton" style={{ width: 90, height: 16, borderRadius: 4 }} />
@@ -8289,7 +8325,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         </div>
       )}
 
-      <div className="no-scrollbar flex items-center gap-2 overflow-x-auto" style={{ touchAction: "pan-x", overscrollBehaviorX: "contain", overflowY: "hidden" }}>
+      <div className="no-scrollbar flex items-center gap-2 overflow-x-auto" style={{ touchAction: "pan-x", overscrollBehaviorX: "contain", overflowY: "hidden", display: сеть === "sol" ? "none" : undefined }}>
         {MEMPAD_FILTERS.map(f => {
           const active = filter === f.id;
           return (
@@ -8308,8 +8344,8 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         </button>
       </div>
 
-      <div className="flex flex-col gap-2" key={filter}>
-        {(filter === "sol" ? solLoading : loading) && !list.length
+      <div className="flex flex-col gap-2" key={`${сеть}:${filter}`}>
+        {(сеть === "sol" ? solLoading : loading) && !list.length
           ? <PageLoader minHeight={220} />
           : loading
             ? Array.from({ length: 4 }).map((_, i) => <MempadRowSkeleton key={i} index={i} />)
@@ -9289,7 +9325,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   // tab is actually opened (no point spending API calls on tabs nobody
   // looked at), refreshed while it stays open.
   const [infoLoading, setInfoLoading] = useState(false);
-  const [trades, setTrades] = useState(() => cachedPoolTrades(token.poolAddress));
+  const [trades, setTrades] = useState(() => cachedPoolTrades(token.poolAddress, сетьТокена(token)));
   const [tradesLoading, setTradesLoading] = useState(false);
   // У токена на кривой сделок в агрегаторах нет: список собирается из
   // транзакций самого контракта.
@@ -9309,12 +9345,15 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     return () => { cancelled = true; clearInterval(iv); };
   }, [tab, token.curveAddress, token.tokenAddress, token.poolAddress]);
 
+  // Ждать перехода на вкладку не нужно: запрос дешёвый, а список к
+  // моменту нажатия уже готов. Раньше он начинался только по клику, и
+  // человек смотрел на пустоту ровно столько, сколько идёт запрос.
   useEffect(() => {
-    if (tab !== "tx" || !token.poolAddress) return;
+    if (!token.poolAddress) return;
     let cancelled = false;
     // Есть что показать из прошлого захода — рисуем немедленно и не
     // включаем «загружаем»: обновление приедет через секунду поверх.
-    const cached = cachedPoolTrades(token.poolAddress);
+    const cached = cachedPoolTrades(token.poolAddress, сетьТокена(token));
     if (cached) setTrades(cached);
     setTradesLoading(!cached);
     async function load() {
@@ -9328,9 +9367,10 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       setTradesLoading(false);
     }
     load();
-    const iv = setInterval(load, 15000);
-    return () => { cancelled = true; clearInterval(iv); };
-  }, [tab, token.poolAddress]);
+    // Пока вкладка сделок не открыта, обновлять список ни к чему.
+    const iv = tab === "tx" ? setInterval(load, 15000) : null;
+    return () => { cancelled = true; if (iv) clearInterval(iv); };
+  }, [tab, token.poolAddress, token.chain]);
 
   // Ссылки на сайт и соцсети приходят из внешнего источника, то есть их
   // содержимое мы не контролируем. Открываем только http и https:
@@ -10051,6 +10091,10 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
   // Курс SOL нужен только окну сделки по токену Solana — там он один раз
   // пересчитывает введённую сумму в примерное количество токенов.
   const [solPriceUsd, setSolPriceUsd] = useState(0);
+  // Сколько на кошельке Solana: монет — чтобы знать предел покупки,
+  // токенов — чтобы было что продавать. Оба числа живут в сети, и без
+  // них поле «Доступно» показывало прочерк.
+  const [solБаланс, setSolБаланс] = useState(null);
   // Первым делом: остальные хуки читают tradeModal, и объявить его ниже
   // значит обратиться к нему до создания.
   const [tradeModal, closing] = useClosing(tradeModalProp);
@@ -10059,6 +10103,21 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
   // готовая покупка ровно на то, что человек ввёл в форме создания.
   const [amountStr, setAmountStr] = useState(tradeModal?.prefill ? String(tradeModal.prefill) : "");
   const [slippage, setSlippage] = useState(1);
+
+  useEffect(() => {
+    if (!tradeModal || !token || token.chain !== "solana") { setSolБаланс(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { сохранённаяСессия } = await import("./phantom");
+      const сессия = сохранённаяСессия();
+      if (!сессия || cancelled) return;
+      const параметры = new URLSearchParams({ wallet: сессия.wallet });
+      if (token.tokenAddress) параметры.set("mint", token.tokenAddress);
+      const b = await fetch(`/api/solana?action=balances&${параметры}`).then((r) => r.json()).catch(() => null);
+      if (!cancelled && b && !b.error) setSolБаланс({ sol: Number(b.sol) || 0, token: Number(b.token) || 0 });
+    })();
+    return () => { cancelled = true; };
+  }, [tradeModal, token && token.chain, token && token.tokenAddress]);
 
   useEffect(() => {
     if (!tradeModal || !token || token.chain !== "solana" || solPriceUsd > 0) return;
@@ -10104,7 +10163,13 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
 
   // Покупка теперь считается в TON, а не в долларах: пользователь вводит
   // сумму в TON, и она напрямую ограничена доступным балансом кошелька.
-  const maxAmount = isBuy ? (соло ? Infinity : spendableTon) : holdingTokens;
+  // У Solana предел свой: монеты на её кошельке, а при продаже — сколько
+  // токена там лежит. Немного оставляем на комиссию сети, иначе сделка
+  // не пройдёт из-за нехватки на газ.
+  const solДоступно = solБаланс ? Math.max(0, solБаланс.sol - 0.005) : null;
+  const maxAmount = соло
+    ? (isBuy ? (solДоступно == null ? Infinity : solДоступно) : (solБаланс ? solБаланс.token : holdingTokens))
+    : (isBuy ? spendableTon : holdingTokens);
   const overMax = amount > maxAmount;
   // Курс токена (token.price) хранится в USD, поэтому для оценки
   // количества токенов TON всё ещё конвертируется через tonPriceUsd —
@@ -10194,11 +10259,17 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
         <div className="flex items-center justify-between" style={{ marginTop: 16 }}>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{isBuy ? t("youPay") : t("youSell")}</span>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>
-            {t("available")}: {isBuy
-              // Баланс Solana-кошелька приложению неизвестен: он живёт в
-              // Phantom, и спрашивать его до подключения не у кого.
-              ? (соло ? "—" : `${spendableTon.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON`)
-              : balanceKnown ? `${holdingTokens.toLocaleString("ru-RU")} ${token.ticker}` : "…"}
+            {t("available")}: {соло
+              // Пока кошелёк Solana не подключён, спрашивать баланс не у
+              // кого — тогда и предела нет.
+              ? (solБаланс == null
+                ? t("solWalletConnectFirst")
+                : isBuy
+                  ? `${(solДоступно || 0).toLocaleString("ru-RU", { maximumFractionDigits: 4 })} SOL`
+                  : `${solБаланс.token.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} ${token.ticker}`)
+              : isBuy
+                ? `${spendableTon.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON`
+                : balanceKnown ? `${holdingTokens.toLocaleString("ru-RU")} ${token.ticker}` : "…"}
           </span>
         </div>
         <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3 mt-1.5" style={{ background: T.bg, border: `1px solid ${overMax ? T.rose : T.line}` }}>
