@@ -8,6 +8,15 @@
         "debug": false,
         "external": false
       }
+    },
+    {
+      "name": "liquidity_pool",
+      "path": "./src/liquidity_pool.tact",
+      "output": "./build",
+      "options": {
+        "debug": false,
+        "external": false
+      }
     }
   ]
 }

@@ -147,6 +147,10 @@ contract BondingCurve with Deployable {
     const GasJettonTransfer: Int = ton("0.08");
     // Неснижаемый остаток на контракте — на хранение.
     const MinContractBalance: Int = ton("0.05");
+    // Перевод ликвидности в пул. Дороже обычной выдачи: к жетонам
+    // прикладывается уведомление, без которого пул не узнает о приходе.
+    const GasGraduationTransfer: Int = ton("0.15");
+    const GasGraduationNotify: Int = ton("0.05");
 
     init(
         admin: Address,
@@ -537,9 +541,14 @@ contract BondingCurve with Deployable {
         let leftover: Int = self.supplyReceived - self.tokensSold;
         if (leftover > 0) {
             self.tokensSold = self.supplyReceived;
+            // Получатель ликвидности — контракт пула, а он узнаёт о
+            // приходе токенов только из уведомления, и приходит оно
+            // лишь когда к переводу приложены TON. С нулём, как было
+            // раньше, пул получил бы жетоны и не понял этого: половина
+            // ликвидности повисла бы мёртвым грузом.
             send(SendParameters{
                 to: wallet,
-                value: self.GasJettonTransfer,
+                value: self.GasGraduationTransfer,
                 mode: SendIgnoreErrors,
                 bounce: false,
                 body: JettonTransfer{
@@ -548,7 +557,7 @@ contract BondingCurve with Deployable {
                     destination: self.graduationDestination,
                     responseDestination: self.graduationDestination,
                     customPayload: null,
-                    forwardTonAmount: 0,
+                    forwardTonAmount: self.GasGraduationNotify,
                     forwardPayload: beginCell().storeBool(false).asSlice(),
                 }.toCell(),
             });
