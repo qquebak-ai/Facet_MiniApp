@@ -1719,7 +1719,7 @@ function CyberGrid({ showStars = true, hidden = false }) {
   const [снят, setСнят] = useState(hidden);
   useEffect(() => {
     if (!hidden) { setСнят(false); return; }
-    const id = setTimeout(() => setСнят(true), 560);
+    const id = setTimeout(() => setСнят(true), 900);
     return () => clearTimeout(id);
   }, [hidden]);
   // Слой не выкидываем из разметки, а прячем: иначе при возвращении он
@@ -1740,24 +1740,35 @@ function CyberGrid({ showStars = true, hidden = false }) {
           светлые швы. */}
       <div style={{
         position: "absolute", inset: 0, isolation: "isolate", contain: "paint",
-        transform: hidden ? "translate3d(0,-42%,0) scale(0.92)" : "translateZ(0)",
-        opacity: hidden ? 0 : 1,
         visibility: убран ? "hidden" : "visible",
-        // Уход быстрый, но с торможением — иначе читается как рывок.
-        transition: "transform 520ms cubic-bezier(0.22,0.61,0.36,1), opacity 420ms ease-out",
       }}>
         {пятна.map((п, i) => (
+          // Внешний слой отвечает за уход вверх, внутренний — за
+          // собственный дрейф пятна. Разделены потому, что анимация
+          // перебивает transform: на одном элементе полёт бы не начался.
+          // Пятна стартуют с разбегом — так видно движение, а не общее
+          // затемнение.
           <div
             key={`aura${i}`}
             style={{
               position: "absolute",
               left: п.left, top: п.top, width: п.w, height: п.h,
-              background: `radial-gradient(50% 50% at 50% 50%, ${hexA(п.цвет, п.доля * сила)} 0%, ${hexA(п.цвет, п.доля * сила * 0.35)} 45%, transparent 72%)`,
-              animation: `${п.анимация} ease-in-out ${-i * 7}s infinite`,
-              animationPlayState: убран ? "paused" : "running",
-              backfaceVisibility: "hidden",
+              transform: hidden ? "translate3d(0,-115%,0) scale(0.86)" : "translateZ(0)",
+              opacity: hidden ? 0 : 1,
+              transition: `transform 620ms cubic-bezier(0.32,0,0.24,1) ${i * 75}ms, opacity 620ms cubic-bezier(0.7,0,0.9,1) ${i * 75}ms`,
+              willChange: "transform",
             }}
-          />
+          >
+            <div
+              style={{
+                width: "100%", height: "100%",
+                background: `radial-gradient(50% 50% at 50% 50%, ${hexA(п.цвет, п.доля * сила)} 0%, ${hexA(п.цвет, п.доля * сила * 0.35)} 45%, transparent 72%)`,
+                animation: `${п.анимация} ease-in-out ${-i * 7}s infinite`,
+                animationPlayState: убран ? "paused" : "running",
+                backfaceVisibility: "hidden",
+              }}
+            />
+          </div>
         ))}
       </div>
 
@@ -1766,13 +1777,13 @@ function CyberGrid({ showStars = true, hidden = false }) {
         position: "absolute", inset: 0,
         background: `radial-gradient(120% 80% at 50% 40%, transparent 0%, ${hexA(T.bg, 0.42)} 70%, ${hexA(T.bg, 0.82)} 100%)`,
         opacity: hidden ? 0 : 1,
-        transition: "opacity 420ms ease-out",
+        transition: "opacity 520ms ease-in 150ms",
       }} />
 
       <div style={{
         position: "absolute", inset: 0, backgroundImage: ЗЕРНО,
         opacity: hidden ? 0 : 0.05, mixBlendMode: "overlay",
-        transition: "opacity 420ms ease-out",
+        transition: "opacity 520ms ease-in 150ms",
       }} />
     </div>
   );
@@ -14850,7 +14861,27 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function goTab(name) { setTab(name); setView(name); }
+  // Фон уходит вверх раньше самого перехода на мемпад: если менять экран
+  // сразу, полёт свечений происходит уже за новым разделом и его просто
+  // не видно — кажется, что фон выключили рубильником.
+  const [фонВверх, setФонВверх] = useState(false);
+  const таймерФона = useRef(null);
+  useEffect(() => () => clearTimeout(таймерФона.current), []);
+
+  function goTab(name) {
+    clearTimeout(таймерФона.current);
+    if (name === "mempad" && view !== "mempad") {
+      setФонВверх(true);
+      // Столько же, сколько длится первый рывок пятен вверх: человек
+      // успевает увидеть начало полёта, но задержки не чувствует.
+      // Флаг снимаем сразу же: дальше фон держит скрытым сам раздел,
+      // а зависший флаг не давал бы фону вернуться на другие экраны.
+      таймерФона.current = setTimeout(() => { setTab(name); setView(name); setФонВверх(false); }, 240);
+      return;
+    }
+    setФонВверх(false);
+    setTab(name); setView(name);
+  }
   // Создание — отдельная страница, а не вкладка: пункт из нижнего меню
   // убран, поэтому tab не трогаем — подсветка остаётся на том разделе,
   // откуда пришли, и «назад» возвращает туда же.
@@ -15207,7 +15238,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           поджигала, убраны: на разных телефонах они ложились по-разному,
           а на тех, где острова нет, рамка выглядела случайной деталью. */}
       {rocketFlying && <LaunchRocket variant={rocketVariant} />}
-      <CyberGrid showStars={view !== "profile" && view !== "user"} hidden={view === "mempad"} />
+      <CyberGrid showStars={view !== "profile" && view !== "user"} hidden={view === "mempad" || фонВверх} />
       {/* Пришли за подписью — заставка только задерживает: человек ждёт
           кошелёк, а не знакомство с приложением. */}
       {!bootHidden && !сразуВКошелёк && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
