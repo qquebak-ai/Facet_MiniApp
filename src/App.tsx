@@ -1272,19 +1272,7 @@ function GlobalStyle() {
         background-size: 220% 100%;
         animation: barSweep 5s linear infinite;
       }
-      /* Медленное дыхание фирменной графики сети. Только transform и
-         opacity — их браузер считает на видеокарте, прокрутке не мешает.
-         Пятнадцать секунд на круг: движение должно ощущаться как свет в
-         комнате, а не как анимация. */
-      @keyframes netDrift {
-        0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: .92; }
-        50%      { transform: translate3d(-10px, 6px, 0) scale(1.035); opacity: 1; }
-      }
-      .fx-net-drift {
-        animation: netDrift 15s ease-in-out infinite;
-        transform-origin: center;
-        will-change: transform;
-      }
+
       /* Появление раздела: графика проступает и чуть подаётся вперёд —
          так переключение сети читается как смена места, а не как
          перекраска фона. */
@@ -8265,7 +8253,7 @@ function СетевойФон({ сеть = "ton" }) {
               {/* Три полосы знака Solana: одинаковый наклон, ровные
                   зазоры, уходят за оба края — как часть чего-то большего.
                   Дышит вся связка целиком, поэтому строй не ломается. */}
-              <g className="fx-net-drift">
+              <g>
                 {[0, 1, 2].map((i) => {
                   const y = 78 + i * 56;
                   return (
@@ -8304,7 +8292,7 @@ function СетевойФон({ сеть = "ton" }) {
                   фигура, стоявшая справа, уезжала в левый верхний угол,
                   то есть за пределы экрана. */}
               <g transform="translate(322 224)">
-              <g className="fx-net-drift">
+              <g>
                 <path d="M0,-84 L72,-18 L0,100 L-72,-18 Z" fill={`url(#face-${сеть})`} opacity="0.85" />
                 <path d="M0,-84 L-72,-18 L0,100 Z" fill="#0098EA" opacity="0.14" />
                 <path d="M0,-84 L72,-18 L0,100 L-72,-18 Z" fill="none" stroke={`url(#edge-${сеть})`} strokeWidth="1.8" />
@@ -8443,9 +8431,10 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
 
   return (
     <div className="flex flex-col gap-5" style={{ paddingBottom: 12, position: "relative" }}>
-      {/* Ключ по сети: смена перерисовывает графику заново, вместе с её
-          появлением. Без него SVG остался бы прежним с новым цветом. */}
-      <СетевойФон key={сеть} сеть={сеть} />
+      {/* Без ключа намеренно: с ним React создавал новый слой, а старый
+          иногда оставался в разметке — графика двух сетей накладывалась
+          друг на друга. */}
+      <СетевойФон сеть={сеть} />
 
       <div className="flex items-center justify-between" style={{ position: "relative", zIndex: 1 }}>
         <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("navMempad")}</span>
