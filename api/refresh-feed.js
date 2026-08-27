@@ -116,8 +116,14 @@ export default async function handler(req, res) {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
+  // Сеть можно спросить по одной: обход обеих подряд — это десять
+  // страниц с паузами, и в отведённое функции время он не укладывался.
+  // Solana просто не доходила до записи, и её лента оставалась пустой.
+  const выбор = String((req.query && req.query.chain) || "").toLowerCase();
+  const сети = выбор === "ton" || выбор === "solana" ? [выбор] : ["ton", "solana"];
+
   const итог = {};
-  for (const сеть of ["ton", "solana"]) {
+  for (const сеть of сети) {
     const строки = await лента(сеть);
     итог[сеть] = строки.length;
     if (!строки.length) continue;
