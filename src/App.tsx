@@ -8318,7 +8318,7 @@ function СетевойФон({ сеть = "ton" }) {
   );
 }
 
-function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
+function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen, onLaunch }) {
   const [filter, setFilter] = useState("new");
   // Сеть выбирается сверху, отдельно от фильтров: это не «ещё один
   // способ отсортировать», а другой рынок целиком — свои токены, свои
@@ -8429,6 +8429,14 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
     return arr;
   }, [tokens, filter, spotlightTop, localTokens, solTokens, сеть]);
 
+  // Что считать загрузкой, зависит от того, что сейчас на экране:
+  // «Новые» на TON — это свои токены из базы, остальное — биржевая
+  // лента. Раньше здесь всегда стояла биржевая, и раздел успевал
+  // сказать «пусто» до того, как приезжали свои.
+  const идётЗагрузка = сеть === "sol"
+    ? (solLoading || !solTokens)
+    : (filter === "new" ? myTokensLoading : loading);
+
   return (
     <div className="flex flex-col gap-5" style={{ paddingBottom: 12, position: "relative" }}>
       {/* Без ключа намеренно: с ним React создавал новый слой, а старый
@@ -8497,7 +8505,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
         onOpen={onOpen}
       />
 
-      {(сеть === "sol" ? solLoading : loading) && !spotlight ? (
+      {идётЗагрузка && !spotlight ? (
         <div className="fx-card rounded-[22px] p-6 flex flex-col items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
           <div className="fx-skeleton" style={{ width: 92, height: 92, borderRadius: "50%" }} />
           <div className="fx-skeleton" style={{ width: 90, height: 16, borderRadius: 4 }} />
@@ -8570,12 +8578,12 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
       </div>
 
       <div className="flex flex-col gap-2" key={`${сеть}:${filter}`}>
-        {(сеть === "sol" ? solLoading : loading) && !list.length
+        {идётЗагрузка && !list.length
           ? <PageLoader minHeight={220} />
-          : loading
+          : идётЗагрузка
             ? Array.from({ length: 4 }).map((_, i) => <MempadRowSkeleton key={i} index={i} />)
             : list.map((tok, i) => <MempadRow key={tok.id} t={tok} onOpen={onOpen} index={i} />)}
-        {!loading && list.length === 0 && (
+        {!идётЗагрузка && list.length === 0 && (
           <div className="fx-view" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14.5, textAlign: "center", padding: "24px 0" }}>
             {t("emptyFilter")}
           </div>
@@ -14039,6 +14047,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // owner_id above). RLS on `tokens` allows public select, so this works
   // even for signed-out visitors.
   const [communityTokens, setCommunityTokens] = useState([]);
+
   const [communityLoaded, setCommunityLoaded] = useState(false);
   // Сколько кеш считается свежим. Обход ходит раз в минуту; три минуты
   // запаса — на случай, если один заход подзадержался. Пока кеш свежий,
@@ -15733,7 +15742,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             <HomeView onGoTab={goTab} onGoCreate={openCreate} curveTokens={communityTokens} onOpenToken={openToken} onOpenProfile={openUserProfile} />
           </KeepAlive>
           <KeepAlive show={view === "mempad"}>
-            <MempadView tokens={tokens} loading={tokensLoading} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />
+            <MempadView tokens={tokens} loading={tokensLoading} myTokensLoading={!communityLoaded} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />
           </KeepAlive>
           <KeepAlive show={view === "wallet"}>
             <WalletView
