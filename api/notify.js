@@ -22,6 +22,10 @@
 //
 // Расписание в vercel.json стоит раз в сутки: на бесплатном тарифе Vercel
 // чаще нельзя, и деплой с более частым расписанием просто не собирается.
+// Поэтому основной источник вызовов — крон на своём сервере, каждые пять
+// минут; расписание Vercel остаётся подстраховкой на случай, если сервер
+// молчит. Оба пути безопасны: состояние «уже отправляли» лежит в базе,
+// и лишний заход ничего не продублирует.
 // Если нужны уведомления раз в несколько минут, есть два пути: тариф Pro
 // или любой внешний планировщик, который дёргает
 //   POST https://<домен>/api/notify
@@ -49,10 +53,17 @@ const CRON_SECRET = process.env.CRON_SECRET;
 const TESTNET = process.env.TON_TESTNET !== "0";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
 
-// Сколько токенов проверяем за один заход. Ограничение не про базу, а
-// про tonapi: без ключа он пускает считанные запросы в секунду, и
-// длинный список упрётся в 429 на середине.
-const BATCH = 25;
+// Сколько токенов проверяем за один заход. Состояние берём из
+// curve_cache — там оно уже посчитано обходом (api/refresh-curves.js),
+// и упереться в лимиты tonapi нечем. В цепочку ходим только за теми,
+// кого в кеше нет или чья запись протухла, и таких за заход берём
+// немного — отсюда два разных числа.
+const BATCH = 200;
+const ЧИТАТЬ_ИЗ_ЦЕПОЧКИ = 15;
+
+// Насколько свежей должна быть запись кеша, чтобы ей верить. Обход
+// ходит раз в минуту; пять минут — это запас на его пропуски.
+const КЕШ_СВЕЖ_МС = 5 * 60 * 1000;
 
 // Порог по умолчанию — для тех, кто ничего не выбирал. Свой каждый
 // задаёт в настройках приложения (profiles.notify_min_ton): у кого токен
@@ -144,6 +155,15 @@ export default async function handler(req, res) {
     minTon: Number(p.notify_min_ton) >= 0 ? Number(p.notify_min_ton) : MIN_BUY_TON,
   }]));
 
+  // Готовые числа по кривым. Одним запросом на всю пачку — раньше на
+  // каждый токен уходил отдельный поход в цепочку, и заход упирался в
+  // лимиты уже на третьем десятке.
+  const { data: cached } = await admin
+    .from("curve_cache")
+    .select("token_id, real_ton, graduation_ton, graduated, updated_at")
+    .in("token_id", tokens.map((t) => t.id));
+  const кешОт = new Map((cached || []).map((c) => [c.token_id, c]));
+
   const { data: states } = await admin
     .from("token_notify")
     .select("token_id, last_real_ton, sent_half, sent_almost, sent_closed")
@@ -153,9 +173,22 @@ export default async function handler(req, res) {
   let sent = 0;
   let checked = 0;
 
+  let дочитано = 0;
+
   for (const tok of tokens) {
     let curve = null;
-    try { curve = await curveState(tok.curve_address); } catch { /* сеть подведёт — попробуем в следующий заход */ }
+    const кеш = кешОт.get(tok.id);
+    const свежий = кеш && кеш.updated_at && Date.now() - new Date(кеш.updated_at).getTime() < КЕШ_СВЕЖ_МС;
+    if (свежий && кеш.graduation_ton != null) {
+      curve = {
+        realTon: Number(кеш.real_ton) || 0,
+        graduationTon: Number(кеш.graduation_ton) || 0,
+        graduated: !!кеш.graduated,
+      };
+    } else if (дочитано < ЧИТАТЬ_ИЗ_ЦЕПОЧКИ) {
+      дочитано += 1;
+      try { curve = await curveState(tok.curve_address); } catch { /* сеть подведёт — попробуем в следующий заход */ }
+    }
     if (!curve) continue;
     checked += 1;
 
@@ -179,10 +212,24 @@ export default async function handler(req, res) {
     const known = prev.last_real_ton != null;
     const grew = known ? curve.realTon - prev.last_real_ton : 0;
 
+    // Веха токена и то, достигнута ли она прямо сейчас. Считаем до
+    // рассылки: при частых заходах обход держателей ради уже разосланной
+    // вехи стоил бы запроса к базе на каждого из них каждые пять минут.
+    const событие = curve.graduated ? "closed" : pct >= 90 ? "almost" : pct >= 50 ? "half" : null;
+    const впервые = событие === "closed" ? !prev.sent_closed
+      : событие === "almost" ? !prev.sent_almost
+        : событие === "half" ? !prev.sent_half : false;
+
     const pref = prefOf.get(tok.owner_id) || { buys: true, progress: true, minTon: MIN_BUY_TON };
     if (chat) {
-      if (pref.buys && grew >= Math.max(0, pref.minTon)) {
+      const порог = Math.max(0, pref.minTon);
+      if (pref.buys && grew >= порог) {
         if (await tell(chat, `Купили <b>${label}</b> на ${fmt(grew)} TON\nВ кривой уже ${fmt(curve.realTon)} из ${fmt(target)} TON`)) sent += 1;
+      } else if (pref.buys && grew > 0) {
+        // Покупка меньше порога: точку отсчёта не сдвигаем, иначе при
+        // частых заходах мелкие сделки просто исчезали бы одна за другой,
+        // так и не сложившись в сумму, о которой стоит написать.
+        next.last_real_ton = prev.last_real_ton;
       }
       if (!pref.progress) {
         // Вехи выключены — отметки всё равно ставим, иначе после
@@ -200,14 +247,19 @@ export default async function handler(req, res) {
         if (await tell(chat, `<b>${label}</b> прошёл половину пути до биржи\nВ кривой ${fmt(curve.realTon)} из ${fmt(target)} TON`)) sent += 1;
         next.sent_half = true;
       }
+    } else {
+      // Владельца в Telegram нет — отметки всё равно ставим, иначе
+      // веха считалась бы новой при каждом заходе.
+      next.sent_closed = curve.graduated || prev.sent_closed;
+      next.sent_almost = pct >= 90 || prev.sent_almost;
+      next.sent_half = pct >= 50 || prev.sent_half;
     }
 
     // Держателям — свои вехи. Владельцу приложение писало давно, а
     // тому, кто просто купил чужой токен, не приходило ничего: ни
     // «вышел на биржу», ни «прошёл половину пути». Начинается это с
     // первой же покупки — держатель определяется по своим сделкам.
-    const событие = curve.graduated ? "closed" : pct >= 90 ? "almost" : pct >= 50 ? "half" : null;
-    if (событие) {
+    if (событие && впервые) {
       const { data: holders } = await admin.rpc("token_holders", { p_token: tok.id });
       for (const h of holders || []) {
         if (!h.telegram_id || h.user_id === tok.owner_id) continue; // владельцу уже написали
