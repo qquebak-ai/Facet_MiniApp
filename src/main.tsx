@@ -44,9 +44,14 @@ if (typeof document !== "undefined") {
   // gesture-события не срабатывают вовсе, и страницу удавалось растянуть
   // и увести вбок. Вернуть её обратно человеку нечем — в Telegram нет
   // адресной строки, чтобы перезагрузить, — поэтому глушим на входе.
-  document.addEventListener("touchmove", (e) => {
+  const мультитач = (e) => {
     if (e.touches && e.touches.length > 1) e.preventDefault();
-  }, { passive: false });
+  };
+  // Гасим с самого касания: к moveу браузер уже решил, что начинается
+  // масштабирование, и отменять бывает поздно.
+  document.addEventListener("touchstart", мультитач, { passive: false, capture: true });
+  document.addEventListener("touchmove", мультитач, { passive: false, capture: true });
+  document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
 
   // Тот же щипок на трекпаде и мыши с Ctrl — в десктопном Telegram.
   document.addEventListener("wheel", (e) => {

@@ -1297,12 +1297,16 @@ function GlobalStyle() {
          стоит за краем: постоянно бегущая полоса читалась бы как
          неисправность, а редкая — как отражение света. */
       @keyframes netShine {
-        0%   { transform: translate3d(0, 0, 0); opacity: 0; }
-        12%  { opacity: 1; }
-        58%  { opacity: 1; }
-        70%, 100% { transform: translate3d(620px, 0, 0); opacity: 0; }
+        0%        { transform: translate3d(0, 0, 0);     opacity: 0; }
+        8%        { opacity: 0.9; }
+        50%       { opacity: 0.9; }
+        62%       { transform: translate3d(760px, 0, 0); opacity: 0; }
+        100%      { transform: translate3d(760px, 0, 0); opacity: 0; }
       }
-      .fx-net-shine { animation: netShine 7s ease-in-out infinite; will-change: transform; }
+      /* Блик идёт от левого края за правый и гаснет ещё в пути: если он
+         пропадал на месте, был виден край полосы — казалось, что
+         картинка обрезана. */
+      .fx-net-shine { animation: netShine 6s linear infinite; will-change: transform; }
       @keyframes mcapGlow { 0%,100%{text-shadow:0 0 10px currentColor,0 0 2px currentColor;} 50%{text-shadow:0 0 18px currentColor,0 0 4px currentColor;} }
       @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
       /* Появляется на месте — только проявлением и лёгким укрупнением,
@@ -8311,7 +8315,7 @@ function СетевойФон({ сеть = "ton" }) {
                 })}
                 {/* Блик поперёк полос. */}
                 <g className="fx-net-shine">
-                  <rect x="-160" y="40" width="120" height="290" fill={`url(#shine-${сеть})`} opacity="0.5" />
+                  <rect x="-320" y="-60" width="160" height="480" fill={`url(#shine-${сеть})`} opacity="0.55" transform="rotate(-6)" />
                 </g>
               </g>
             </>
@@ -8338,7 +8342,7 @@ function СетевойФон({ сеть = "ton" }) {
                 <path d="M0,-84 L36,-18 L0,38 L-36,-18 Z" fill="none" stroke="#7FDBFF" strokeOpacity="0.2" strokeWidth="0.9" />
 
                 <g className="fx-net-shine">
-                  <rect x="-170" y="-110" width="56" height="240" fill={`url(#shine-${сеть})`} opacity="0.45" />
+                  <rect x="-420" y="-260" width="150" height="560" fill={`url(#shine-${сеть})`} opacity="0.5" transform="rotate(16)" />
                 </g>
               </g>
               </g>
