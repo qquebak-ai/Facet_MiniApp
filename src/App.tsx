@@ -223,7 +223,7 @@ const STR = {
     mempadSpotlight: "В центре внимания",
     mempadLaunchToken: "Запустить токен",
     tickerBought: "купил", tickerSold: "продал",
-    sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionProfile: "Профиль",
+    sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", mempadFilterSol: "Solana", homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionProfile: "Профиль",
     feedTitle: "Прямо сейчас",
     feedSub: "Что происходит на площадке",
     feedTrade: "{who} купил ${ticker} на {ton} TON",
@@ -475,6 +475,11 @@ const STR = {
     accountDeleted: "Аккаунт удалён",
     accountDeleteFailed: "Не удалось удалить аккаунт — база не дала. Ты остался в аккаунте.",
     connectWalletTrade: "Подключи TON-кошелёк, чтобы торговать",
+    solConnecting: "Открываю Phantom — подтверди подключение",
+    solSignInWallet: "Подпиши сделку в Phantom",
+    solDone: "Сделка ушла в сеть",
+    solSent: "Отправлено",
+    solFailed: "Не вышло",
     rateLoadingRetry: "Курс TON ещё загружается, попробуй через секунду",
     insufficientTon: "Не хватает TON: на кошельке {have}, нужно {need} с газом",
     tokenSaveFailed: "Токен создан в сети, но не сохранился: {reason}. Попробуем ещё раз при следующем запуске.",
@@ -591,7 +596,7 @@ const STR = {
     mempadSpotlight: "Spotlight",
     mempadLaunchToken: "Launch token",
     tickerBought: "bought", tickerSold: "sold",
-    sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionProfile: "Profile",
+    sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", mempadFilterSol: "Solana", homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionProfile: "Profile",
     feedTitle: "Right now",
     feedSub: "What's happening here",
     feedTrade: "{who} bought ${ticker} for {ton} TON",
@@ -843,6 +848,11 @@ const STR = {
     accountDeleted: "Account deleted",
     accountDeleteFailed: "Could not delete the account — the database refused. You are still signed in.",
     connectWalletTrade: "Connect a TON wallet to trade",
+    solConnecting: "Opening Phantom — approve the connection",
+    solSignInWallet: "Sign the swap in Phantom",
+    solDone: "Swap sent to the network",
+    solSent: "Sent",
+    solFailed: "Didn't go through",
     rateLoadingRetry: "TON rate is still loading, try again in a second",
     insufficientTon: "Not enough TON: wallet has {have}, need {need} incl. gas",
     tokenSaveFailed: "Token is live on-chain but wasn't saved: {reason}. We'll retry on next launch.",
@@ -2030,7 +2040,7 @@ async function fetchTonMemePools(limit = 18, pages = 1) {
 
 /* Разбор ответа GeckoTerminal в карточки ленты. Вынесен отдельно,
    потому что тем же путём идёт и один пул, открытый по ссылке из бота. */
-function normalizePools(json) {
+function normalizePools(json, network = GT_NETWORK) {
   const rows = json?.data || [];
   const included = json?.included || [];
   const tokensById = new Map(included.filter(x => x.type === "token").map(x => [x.id, x.attributes || {}]));
@@ -2058,6 +2068,10 @@ function normalizePools(json) {
       };
       return {
         id: row.id,
+        // Сеть токена. От неё зависит и график, и то, каким кошельком
+        // человек будет платить: TON-токены подписывает TonConnect,
+        // Solana — Phantom, и перепутать их нельзя.
+        chain: network === GT_NETWORK_SOL ? "solana" : "ton",
         poolAddress: a.address,
         tokenAddress: bt.address || null,
         name,
@@ -2089,7 +2103,7 @@ async function fetchPoolsPage(page, network = GT_NETWORK) {
     // trades on, for every pool in one request.
     const res = await gtFetch(`${GT_BASE}/networks/${network}/trending_pools?page=${page}&include=base_token,dex`);
     if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
-    return normalizePools(await res.json());
+    return normalizePools(await res.json(), network);
   } catch (err) {
     return null; // caller keeps showing the last successfully fetched list
   }
@@ -2110,7 +2124,7 @@ async function fetchPoolByAddress(poolAddress, network = GT_NETWORK) {
     const строка = json && json.data;
     if (!строка || Array.isArray(строка) || !строка.id) return null;
     // Дальше разбор ровно тот же, что и у ленты.
-    const один = normalizePools({ data: [строка], included: json.included || [] });
+    const один = normalizePools({ data: [строка], included: json.included || [] }, network);
     return один.length ? один[0] : null;
   } catch (err) {
     console.warn("[mintly] не удалось прочитать пул:", err && err.message);
@@ -2123,6 +2137,12 @@ async function fetchPoolByAddress(poolAddress, network = GT_NETWORK) {
 // token address and only fetched lazily when a token is actually opened —
 // calling this for every card in the feed would blow through the free API's
 // rate limit for no benefit, since the list view never shows the description.
+// Сеть токена в терминах справочника: у пришедших из ленты Solana она
+// своя, у всех остальных — TON.
+function сетьТокена(tok) {
+  return tok && tok.chain === "solana" ? GT_NETWORK_SOL : GT_NETWORK;
+}
+
 const tokenInfoCache = new Map(); // tokenAddress -> info | null
 async function fetchTokenInfo(tokenAddress, network = GT_NETWORK) {
   if (!tokenAddress) return null;
@@ -4802,6 +4822,10 @@ const MEMPAD_FILTERS = [
   { id: "new", labelKey: "mempadFilterNew" },
   { id: "dex", labelKey: "mempadFilterDex" },
   { id: "hot", labelKey: "mempadFilterHot" },
+  // Мемкоины Solana. Лента у них своя и читается отдельно: запросов к
+  // источнику она стоит столько же, сколько основная, а нужна не всем —
+  // поэтому грузится только когда фильтр выбран.
+  { id: "sol", labelKey: "mempadFilterSol" },
 ];
 
 function MempadRow({ t: tok, onOpen, index }) {
@@ -8108,6 +8132,21 @@ function ShopView({ cosmetics, owned, coins, onBuy, onOpenLook, onOpenChest, ach
 function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   const [filter, setFilter] = useState("new");
 
+  // Лента Solana. Тот же источник и тот же разбор, что у основной, но
+  // читается только по требованию: две сети сразу — это вдвое больше
+  // запросов к источнику с общим лимитом на всё приложение.
+  const [solTokens, setSolTokens] = useState(null);
+  const [solLoading, setSolLoading] = useState(false);
+  useEffect(() => {
+    if (filter !== "sol" || solTokens) return;
+    let cancelled = false;
+    setSolLoading(true);
+    fetchPoolsPage(1, GT_NETWORK_SOL)
+      .then((rows) => { if (!cancelled) setSolTokens(rows || []); })
+      .finally(() => { if (!cancelled) setSolLoading(false); });
+    return () => { cancelled = true; };
+  }, [filter, solTokens]);
+
   // «В центре внимания» — пятёрка токенов, по которым прошло больше всего
   // сделок за последний час, и она прокручивается по кругу. Час берём как
   // основное окно: он показывает, где движение прямо сейчас, а не кто
@@ -8146,6 +8185,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
     // "New" now means what it literally says: tokens launched through
     // this app, not the newest items in the external real-market feed.
     if (filter === "new") return localTokens;
+    if (filter === "sol") return solTokens || [];
     const featured = new Set(spotlightTop.map((tok) => tok.id));
     let arr = tokens.filter((tok) => !featured.has(tok.id));
     switch (filter) {
@@ -8154,7 +8194,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
       default: break;
     }
     return arr;
-  }, [tokens, filter, spotlightTop, localTokens]);
+  }, [tokens, filter, spotlightTop, localTokens, solTokens]);
 
   return (
     <div className="flex flex-col gap-5" style={{ paddingBottom: 12 }}>
@@ -8255,7 +8295,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
       </div>
 
       <div className="flex flex-col gap-2" key={filter}>
-        {loading && !list.length
+        {(filter === "sol" ? solLoading : loading) && !list.length
           ? <PageLoader minHeight={220} />
           : loading
             ? Array.from({ length: 4 }).map((_, i) => <MempadRowSkeleton key={i} index={i} />)
@@ -8941,7 +8981,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       let result = null;
       let src = null;
       if (token.poolAddress) {
-        result = await fetchPoolOHLCV(token.poolAddress, tf, GT_PRIORITY.chart, abort ? abort.signal : undefined);
+        result = await fetchPoolOHLCV(token.poolAddress, tf, GT_PRIORITY.chart, abort ? abort.signal : undefined, сетьТокена(token));
         if (result) src = "pool";
       }
       // Курс передаём тот же, по которому посчитана цена в шапке. Раньше
@@ -9028,7 +9068,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       } else {
         // Только биржа. Если она не ответила — на экране остаётся то, что
         // уже нарисовано, и следующий круг спросит снова.
-        fresh = token.poolAddress ? await fetchPoolOHLCV(token.poolAddress, tf, GT_PRIORITY.chart, abort ? abort.signal : undefined) : null;
+        fresh = token.poolAddress ? await fetchPoolOHLCV(token.poolAddress, tf, GT_PRIORITY.chart, abort ? abort.signal : undefined, сетьТокена(token)) : null;
         if (fresh) chartSrcRef.current = "pool";
       }
       if (cancelled || reqTf !== tfRef.current || !fresh?.candles?.length) return;
@@ -9109,7 +9149,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     setInfo(null);
     setInfoLoading(!!token.tokenAddress);
     if (token.tokenAddress) {
-      fetchTokenInfo(token.tokenAddress).then((res) => {
+      fetchTokenInfo(token.tokenAddress, сетьТокена(token)).then((res) => {
         if (cancelled) return;
         setInfo(res);
         setInfoLoading(false);
@@ -9151,7 +9191,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
     if (cached) setTrades(cached);
     setTradesLoading(!cached);
     async function load() {
-      const res = await fetchPoolTrades(token.poolAddress, 300, GT_PRIORITY.trades);
+      const res = await fetchPoolTrades(token.poolAddress, 300, GT_PRIORITY.trades, сетьТокена(token));
       if (cancelled) return;
       // null = запрос не прошёл. Уже показанный список в этом случае
       // оставляем на месте: мигать пустым экраном из-за одного 429 хуже,
@@ -9388,7 +9428,11 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
               торговля продолжается там же, теми же кнопками. Прячем их
               только когда торговать действительно негде: пул ещё не
               наполнен. */}
-          {curve && curve.graduated && !рынокОткрыт ? null : connected ? (
+          {/* Токен Solana подписывается своим кошельком, и TON-кошелёк
+              для него ни при чём: требовать подключить его — значит
+              запирать сделку за ненужным шагом. Phantom спросит себя
+              сам, при первом подтверждении. */}
+          {curve && curve.graduated && !рынокОткрыт ? null : (connected || token.chain === "solana") ? (
             <div className="flex gap-2">
               <button onClick={onBuy} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15, background: PRISM, color: PRISM_TEXT, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("buy")}</button>
               <button onClick={onSell} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15, background: "transparent", color: T.rose, border: `1px solid ${T.rose}`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("sell")}</button>
@@ -9877,6 +9921,9 @@ function TokenShareSheet({ token: tokenProp, curve, holders, userId, onClose, sh
    chips), see the live conversion, pick slippage tolerance, and confirm.
    Shared between the Buy and Sell CTAs so switching tabs mid-flow works. */
 function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, walletTonBalance = 0, tonPriceUsd = 0, heldAmount = null, curveState = null }) {
+  // Курс SOL нужен только окну сделки по токену Solana — там он один раз
+  // пересчитывает введённую сумму в примерное количество токенов.
+  const [solPriceUsd, setSolPriceUsd] = useState(0);
   // Первым делом: остальные хуки читают tradeModal, и объявить его ниже
   // значит обратиться к нему до создания.
   const [tradeModal, closing] = useClosing(tradeModalProp);
@@ -9885,6 +9932,19 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
   // готовая покупка ровно на то, что человек ввёл в форме создания.
   const [amountStr, setAmountStr] = useState(tradeModal?.prefill ? String(tradeModal.prefill) : "");
   const [slippage, setSlippage] = useState(1);
+
+  useEffect(() => {
+    if (!tradeModal || !token || token.chain !== "solana" || solPriceUsd > 0) return;
+    let cancelled = false;
+    fetch(`${GT_BASE}/networks/${GT_NETWORK_SOL}/tokens/So11111111111111111111111111111111111111112`)
+      .then((r) => r.json())
+      .then((j) => {
+        const цена = parseFloat(j?.data?.attributes?.price_usd) || 0;
+        if (!cancelled && цена > 0) setSolPriceUsd(цена);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [tradeModal, token && token.chain, solPriceUsd]);
 
   useEffect(() => {
     if (tradeModal) {
@@ -9911,7 +9971,7 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
 
   // Покупка теперь считается в TON, а не в долларах: пользователь вводит
   // сумму в TON, и она напрямую ограничена доступным балансом кошелька.
-  const maxAmount = isBuy ? spendableTon : holdingTokens;
+  const maxAmount = isBuy ? (соло ? Infinity : spendableTon) : holdingTokens;
   const overMax = amount > maxAmount;
   // Курс токена (token.price) хранится в USD, поэтому для оценки
   // количества токенов TON всё ещё конвертируется через tonPriceUsd —
@@ -9920,6 +9980,11 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
   // нельзя: раньше отсюда приходила Infinity, она уезжала в локальный
   // счётчик, и в окне продажи значилось «Доступно: ∞».
   const priceUsd = token.price > 0 ? token.price : 0;
+  // Чем платят за этот токен. У ленты Solana это SOL, у всего
+  // остального — TON: подписать поле «TON» там, где спишется SOL, значит
+  // прямо ввести человека в заблуждение.
+  const соло = token.chain === "solana";
+  const монета = соло ? "SOL" : "TON";
   // У токенов на кривой сумма считается её же формулой — той самой, что
   // применит контракт. По цене из ленты считать нельзя: она обновляется
   // редко, а для свежего токена её просто нет.
@@ -9937,22 +10002,32 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
       const net = gross - gross * feeBps / 10000n;
       estimate = (Number(net) / 1e9) * tonPriceUsd;
     }
+  } else if (соло) {
+    // Точный маршрут посчитает Jupiter при подтверждении; здесь — грубая
+    // прикидка по цене из ленты, чтобы поле не было пустым.
+    const solUsd = solPriceUsd > 0 ? solPriceUsd : 0;
+    estimate = isBuy
+      ? (priceUsd > 0 && solUsd > 0 ? (amount * solUsd) / priceUsd : 0)
+      : amount * priceUsd;
   } else {
     estimate = isBuy
       ? (priceUsd > 0 ? (amount * tonPriceUsd) / priceUsd : 0)
       : amount * priceUsd;
   }
   const feeUsd = NETWORK_FEE_TON * tonPriceUsd;
-  const canConfirm = amount > 0 && !overMax && (isBuy ? tonPriceUsd > 0 : balanceKnown);
+  // В Solana точную сумму покажет сам кошелёк, поэтому курс TON здесь
+  // ни при чём и ждать его незачем.
+  const canConfirm = amount > 0 && !overMax && (соло || (isBuy ? tonPriceUsd > 0 : balanceKnown));
 
   function setPct(pct) {
+    if (!Number.isFinite(maxAmount)) return;
     const v = maxAmount * pct;
     setAmountStr(isBuy ? v.toFixed(v < 10 ? 4 : 2) : v.toFixed(v < 10 ? 4 : 0));
   }
 
   function handleConfirm() {
     if (!canConfirm) return;
-    const payAmount = isBuy ? `${amount.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON` : `${amount.toLocaleString("ru-RU")}`;
+    const payAmount = isBuy ? `${amount.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} ${монета}` : `${amount.toLocaleString("ru-RU")}`;
     const receiveAmount = isBuy ? estimate.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) : `$${estimate.toFixed(2)}`;
     const unit = isBuy ? "" : "";
     onConfirm(mode, payAmount, receiveAmount, unit, amount, estimate);
@@ -9992,7 +10067,9 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{isBuy ? t("youPay") : t("youSell")}</span>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>
             {t("available")}: {isBuy
-              ? `${spendableTon.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON`
+              // Баланс Solana-кошелька приложению неизвестен: он живёт в
+              // Phantom, и спрашивать его до подключения не у кого.
+              ? (соло ? "—" : `${spendableTon.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON`)
               : balanceKnown ? `${holdingTokens.toLocaleString("ru-RU")} ${token.ticker}` : "…"}
           </span>
         </div>
@@ -10004,7 +10081,7 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
             inputMode="decimal"
             style={{ fontFamily: displayFont, fontWeight: 700, color: T.ice, fontSize: 21.5, background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 0 }}
           />
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 14.5 }}>{isBuy ? "TON" : `$${token.ticker}`}</span>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 14.5 }}>{isBuy ? монета : `$${token.ticker}`}</span>
         </div>
         {overMax && <div style={{ fontFamily: bodyFont, color: T.rose, fontSize: 12, marginTop: 4 }}>{t("insufficientFunds")}</div>}
 
@@ -10049,7 +10126,7 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
           opacity: canConfirm ? 1 : 0.6,
           boxShadow: canConfirm ? `0 0 20px ${isBuy ? glow(0.3) : hexA(T.rose, 0.25)}` : "none",
         }}>
-          {amount > 0 ? (isBuy ? `${t("buyFor")} ${amount.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON` : `${t("sellFor")} ${amount.toLocaleString("ru-RU")} ${token.ticker}`) : (isBuy && tonPriceUsd <= 0 ? t("rateLoading") : !isBuy && holdingTokens <= 0 ? t("nothingToSell") : t("enterAmount"))}
+          {amount > 0 ? (isBuy ? `${t("buyFor")} ${amount.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} ${монета}` : `${t("sellFor")} ${amount.toLocaleString("ru-RU")} ${token.ticker}`) : (isBuy && tonPriceUsd <= 0 ? t("rateLoading") : !isBuy && holdingTokens <= 0 ? t("nothingToSell") : t("enterAmount"))}
         </button>
       </div>
     </div>
@@ -14844,7 +14921,81 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     }
   }
 
+  /* Сделка в Solana. Кошелёк там свой (Phantom), маршрут считает
+     Jupiter, а подпись человек ставит в самом кошельке — приложение
+     только собирает и показывает. Ключей мы, как и в TON, не касаемся.
+
+     Модули грузятся по требованию: шифрование сессии и разбор base58
+     нужны единицам, а весят прилично — тащить их в общий пакет ради
+     раздела, куда заходят не все, незачем. */
+  async function свопSolana({ token, amountSol, продажа = false, количество = 0 }) {
+    /* eslint-disable-next-line no-param-reassign */
+    const { подключить, сохранённаяСессия, подписатьИОтправить } = await import("./phantom");
+    let сессия = сохранённаяСессия();
+    if (!сессия) {
+      showToast(t("solConnecting"));
+      сессия = await подключить();
+    }
+
+    const SOL = "So11111111111111111111111111111111111111112";
+    // Точность токена у каждого своя, и ошибка здесь — это ошибка в
+    // тысячу раз по сумме. Поэтому не угадываем: спрашиваем сеть вместе
+    // с балансом, там она приходит вместе со счётом.
+    let десятичные = 6;
+    if (продажа) {
+      const b = await fetch(`/api/solana?action=balances&wallet=${сессия.wallet}&mint=${token.tokenAddress}`)
+        .then((r) => r.json())
+        .catch(() => null);
+      if (b && b.decimals > 0) десятичные = b.decimals;
+      if (b && b.token > 0 && количество > b.token) количество = b.token;
+    }
+    const параметры = new URLSearchParams(продажа
+      ? {
+        input: token.tokenAddress,
+        output: SOL,
+        amount: String(Math.round(количество * 10 ** десятичные)),
+        slippage: "150",
+      }
+      : {
+        input: SOL,
+        output: token.tokenAddress,
+        amount: String(Math.round(amountSol * 1e9)),
+        slippage: "150",
+      });
+
+    const кот = await fetch(`/api/solana?action=quote&${параметры}`).then((r) => r.json());
+    if (!кот || кот.error || !кот.quote) throw new Error("маршрут не найден");
+
+    const собранная = await fetch("/api/solana?action=swap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quote: кот.quote, wallet: сессия.wallet }),
+    }).then((r) => r.json());
+    if (!собранная || собранная.error || !собранная.transaction) throw new Error("сделка не собралась");
+
+    showToast(t("solSignInWallet"));
+    return await подписатьИОтправить(собранная.transaction, сессия);
+  }
+
   async function confirmTrade(mode, payAmount, receiveAmount, unit, rawAmount, rawEstimate) {
+    // Токен из ленты Solana торгуется в своей сети и своим кошельком:
+    // ни кривой, ни TonConnect тут нет.
+    if (token && token.chain === "solana") {
+      try {
+        const подпись = await свопSolana({
+          token,
+          amountSol: mode === "buy" ? rawAmount : 0,
+          продажа: mode === "sell",
+          количество: mode === "sell" ? rawAmount : 0,
+        });
+        setTradeModal(null);
+        showToast(подпись ? t("solDone") : t("solSent"));
+      } catch (e) {
+        showToast(`${t("solFailed")}: ${String((e && e.message) || e).slice(0, 80)}`);
+      }
+      return;
+    }
+
     if (mode === "buy") {
       // rawAmount is now the TON amount the person typed directly (the
       // modal is denominated in TON, not USD), so no USD conversion is
