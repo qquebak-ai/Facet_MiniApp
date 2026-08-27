@@ -476,6 +476,13 @@ const STR = {
     accountDeleteFailed: "Не удалось удалить аккаунт — база не дала. Ты остался в аккаунте.",
     connectWalletTrade: "Подключи TON-кошелёк, чтобы торговать",
     solConnecting: "Открываю Phantom — подтверди подключение",
+    solWalletTitle: "Кошелёк Solana",
+    solWalletNote: "Нужен для мемкоинов Solana. TON-кошелёк остаётся на месте.",
+    solWalletConnect: "Подключить",
+    solWalletOpening: "Открываю…",
+    solWalletLoading: "Считаю баланс…",
+    solWalletDisconnect: "Отключить кошелёк Solana",
+    solDisconnected: "Кошелёк Solana отключён",
     solSignInWallet: "Подпиши сделку в Phantom",
     solDone: "Сделка ушла в сеть",
     solSent: "Отправлено",
@@ -849,6 +856,13 @@ const STR = {
     accountDeleteFailed: "Could not delete the account — the database refused. You are still signed in.",
     connectWalletTrade: "Connect a TON wallet to trade",
     solConnecting: "Opening Phantom — approve the connection",
+    solWalletTitle: "Solana wallet",
+    solWalletNote: "For Solana memecoins. Your TON wallet stays as it is.",
+    solWalletConnect: "Connect",
+    solWalletOpening: "Opening…",
+    solWalletLoading: "Reading balance…",
+    solWalletDisconnect: "Disconnect Solana wallet",
+    solDisconnected: "Solana wallet disconnected",
     solSignInWallet: "Sign the swap in Phantom",
     solDone: "Swap sent to the network",
     solSent: "Sent",
@@ -8632,7 +8646,112 @@ function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenPr
 /* WalletView — кошелёк отдельным разделом. Раньше он лежал карточкой
    посреди профиля, между аватаркой и своими токенами: чтобы посмотреть
    баланс, приходилось идти в личные настройки. */
-function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0, onConnect, onDisconnect, onCopy, holdings = [], holdingsReady = false }) {
+/* Второй кошелёк — в сети Solana.
+
+   TON-кошелёк подключается через TonConnect и живёт своей жизнью; здесь
+   Phantom, и связь с ним хранится в браузере. Один человек спокойно
+   держит оба: TON-кошелёк платит за свои токены, Solana-кошелёк — за
+   мемкоины из ленты Solana. Ни один из них не заменяет другой, поэтому
+   и подключаются они по отдельности. */
+function SolanaWalletCard({ showToast }) {
+  const [сессия, setСессия] = useState(null);
+  const [баланс, setБаланс] = useState(null);
+  const [идёт, setИдёт] = useState(false);
+  const [скопировано, setСкопировано] = useState(false);
+
+  // Связь могла остаться с прошлого раза: тогда подключать заново
+  // незачем, достаточно вспомнить адрес.
+  useEffect(() => {
+    let cancelled = false;
+    import("./phantom").then(({ сохранённаяСессия }) => {
+      if (!cancelled) setСессия(сохранённаяСессия());
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!сессия) { setБаланс(null); return; }
+    let cancelled = false;
+    fetch(`/api/solana?action=balances&wallet=${сессия.wallet}`)
+      .then((r) => r.json())
+      .then((b) => { if (!cancelled && b && !b.error) setБаланс(Number(b.sol) || 0); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [сессия]);
+
+  async function подключиться() {
+    setИдёт(true);
+    try {
+      const { подключить } = await import("./phantom");
+      showToast(t("solConnecting"));
+      setСессия(await подключить());
+    } catch (e) {
+      showToast(`${t("solFailed")}: ${String((e && e.message) || e).slice(0, 60)}`);
+    } finally {
+      setИдёт(false);
+    }
+  }
+
+  async function отключиться() {
+    const { забыть } = await import("./phantom");
+    забыть();
+    setСессия(null);
+    showToast(t("solDisconnected"));
+  }
+
+  const короткий = сессия ? `${сессия.wallet.slice(0, 4)}…${сессия.wallet.slice(-4)}` : "";
+
+  return (
+    <div className="w-full rounded-[22px] p-4" style={{ marginTop: 20, background: T.surface, border: `1px solid ${T.line}` }}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{t("solWalletTitle")}</div>
+          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 3, lineHeight: 1.4 }}>
+            {сессия
+              ? (баланс == null ? t("solWalletLoading") : `${баланс.toFixed(4)} SOL`)
+              : t("solWalletNote")}
+          </div>
+        </div>
+        {сессия ? (
+          <button
+            onClick={() => { navigator.clipboard?.writeText(сессия.wallet); setСкопировано(true); setTimeout(() => setСкопировано(false), 1400); }}
+            className="fx-tap flex items-center gap-1.5 rounded-full flex-shrink-0"
+            style={{ padding: "7px 12px", background: T.bg, border: `1px solid ${T.line}` }}
+          >
+            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12.5 }}>{короткий}</span>
+            {скопировано ? <CheckCircle2 size={12} color={T.up} /> : <Copy size={12} color={T.muted} />}
+          </button>
+        ) : (
+          <button
+            onClick={подключиться}
+            disabled={идёт}
+            className="fx-tap flex items-center gap-1.5 rounded-full flex-shrink-0"
+            style={{
+              padding: "8px 14px", background: hexA(T.electric, 0.14),
+              border: `1px solid ${hexA(T.electric, 0.4)}`,
+              fontFamily: bodyFont, color: T.electric, fontSize: 13.5, fontWeight: 700,
+              opacity: идёт ? 0.6 : 1,
+            }}
+          >
+            <Wallet size={13} /> {идёт ? t("solWalletOpening") : t("solWalletConnect")}
+          </button>
+        )}
+      </div>
+
+      {сессия && (
+        <button
+          onClick={отключиться}
+          className="fx-tap flex items-center gap-1.5"
+          style={{ marginTop: 12, background: "transparent", border: "none", padding: 0, fontFamily: bodyFont, fontSize: 13, color: T.rose }}
+        >
+          <LogOut size={12} /> {t("solWalletDisconnect")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0, onConnect, onDisconnect, onCopy, holdings = [], holdingsReady = false, showToast = () => {} }) {
   const [copied, setCopied] = useState(false);
   const balance = useCountUp(connected ? tonBalance : 0, 900, connected);
   const usd = useCountUp(connected ? tonBalance * tonPriceUsd : 0, 900, connected);
@@ -8650,6 +8769,12 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
         >
           <Wallet size={16} /> {t("connectWallet")}
         </button>
+
+        {/* Кошельки друг от друга не зависят: мемкоины Solana можно
+            торговать и не подключая TON-кошелёк вовсе. */}
+        <div style={{ width: "100%", maxWidth: 300 }}>
+          <SolanaWalletCard showToast={showToast} />
+        </div>
       </div>
     );
   }
@@ -8672,6 +8797,8 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
         <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13 }}>{short}</span>
         {copied ? <CheckCircle2 size={13} color={T.up} /> : <Copy size={13} color={T.muted} />}
       </button>
+
+      <SolanaWalletCard showToast={showToast} />
 
       {/* Что куплено на этом кошельке. Только состав: сколько чего лежит.
           Прибыль, счётчик строк и кнопка продажи отсюда убраны — за
@@ -15315,6 +15442,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               }}
               holdings={walletHoldings}
               holdingsReady={holdingsReady}
+              showToast={showToast}
             />
           </KeepAlive>
           <KeepAlive show={view === "shop"}>
