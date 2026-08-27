@@ -32,7 +32,7 @@ function admin() {
 
 // Страница возврата. Ничего не спрашивает и ничего не умеет — её задача
 // сказать человеку, что дело сделано, и не мешать ему закрыть вкладку.
-function страницаВозврата(ошибка) {
+function страницаВозврата(ошибка, подробности = "") {
   return `<!doctype html>
 <html lang="ru"><head>
 <meta charset="utf-8">
@@ -45,12 +45,16 @@ function страницаВозврата(ошибка) {
   h1 { font-size:20px; margin:0 0 10px; }
   p { font-size:14.5px; line-height:1.5; color:#8B93A1; margin:0; }
   .err { color:#FF6B35; }
+  /* Текст отказа как есть: без него причина остаётся неизвестной и
+     чинить приходится вслепую. */
+  .tech { margin-top:14px; font-size:12.5px; color:#5C626C; word-break:break-word; }
 </style></head>
 <body><div class="box">
   <h1>${ошибка ? "Не получилось" : "Готово"}</h1>
   <p class="${ошибка ? "err" : ""}">${ошибка
     ? "Кошелёк отказал в подтверждении. Вернись в Mintly и попробуй ещё раз."
     : "Возвращайся в Mintly — приложение уже приняло ответ кошелька."}</p>
+  ${подробности ? `<p class="tech">${подробности}</p>` : ""}
 </div></body></html>`;
 }
 
@@ -80,7 +84,10 @@ export default async function handler(req, res) {
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-    return res.status(200).send(страницаВозврата(ошибка));
+    const подробности = ошибка
+      ? [параметры.errorCode, параметры.errorMessage].filter(Boolean).join(" · ").slice(0, 300)
+      : "";
+    return res.status(200).send(страницаВозврата(ошибка, подробности));
   }
 
   // Опрос из приложения: пришёл ли ответ.
