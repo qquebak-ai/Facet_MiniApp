@@ -8431,7 +8431,15 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   }, [tokens, filter, spotlightTop, localTokens, solTokens, сеть]);
 
   return (
-    <div className="flex flex-col gap-5" style={{ paddingBottom: 12, position: "relative" }}>
+    <div className="flex flex-col gap-5" style={{
+      paddingBottom: 12, position: "relative",
+      // Фон намеренно шире экрана, чтобы графика уходила за края. Без
+      // обрезки эта ширина превращалась в горизонтальную прокрутку: весь
+      // раздел можно было утащить вбок пальцем. clip, а не hidden —
+      // hidden здесь сделал бы колонку отдельной областью прокрутки и
+      // сломал бы прилипание.
+      overflowX: "clip",
+    }}>
       {/* Ключ по сети: смена перерисовывает графику заново, вместе с её
           появлением. Без него SVG остался бы прежним с новым цветом. */}
       <СетевойФон key={сеть} сеть={сеть} />
