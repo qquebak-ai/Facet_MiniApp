@@ -2062,6 +2062,54 @@ function fillCandleGaps(candles, stepSec, limit = CHART_TOTAL, nowSec = Math.flo
 // the app's existing token model so every screen (cards, detail, stats)
 // keeps working unchanged. Falls back to null on any failure so callers
 // can keep showing the bundled fallback list instead of an empty feed.
+/* Лента из базы: её собрал сервер (api/refresh-feed.js), обходя источник
+   раз в минуту одним адресом вместо тысячи телефонов. Отсюда список
+   приходит одним запросом и мгновенно; поход в сам источник остаётся
+   запасным путём на случай, если обход почему-то молчит. */
+async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT) {
+  try {
+    const { data, error } = await supabase
+      .from("feed_cache")
+      .select("*")
+      .eq("chain", network === GT_NETWORK_SOL ? "solana" : "ton")
+      .order("tx24", { ascending: false })
+      .limit(limit);
+    if (error || !data || !data.length) return null;
+
+    // Свежесть проверяем по самой новой строке: если обход встал, лучше
+    // сходить в источник самим, чем показывать вчерашние цены.
+    const свежесть = Math.max(...data.map((r) => new Date(r.updated_at).getTime() || 0));
+    if (Date.now() - свежесть > 10 * 60 * 1000) return null;
+
+    return data.map((r) => ({
+      id: r.id,
+      chain: r.chain === "solana" ? "solana" : "ton",
+      poolAddress: r.pool_address,
+      tokenAddress: r.token_address || null,
+      name: r.name,
+      ticker: r.ticker,
+      logoUrl: r.logo_url || null,
+      emoji: emojiForTicker(r.ticker),
+      price: Number(r.price) || 0,
+      change: Number(r.change24) || 0,
+      mcapNum: Number(r.mcap) || 0,
+      liq: fmtCompact(Number(r.liq) || 0),
+      vol: fmtCompact(Number(r.vol24) || 0),
+      tx1h: Number(r.tx1h) || 0,
+      tx6h: Number(r.tx6h) || 0,
+      tx24h: Number(r.tx24) || 0,
+      cat: "Мемы",
+      seed: hashSeed(r.id),
+      verified: (Number(r.liq) || 0) > 50_000,
+      live: true,
+      dexName: r.dex_name || null,
+      createdAt: r.pool_created_at || null,
+    })).filter((t) => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING);
+  } catch (err) {
+    return null;
+  }
+}
+
 async function fetchTonMemePools(limit = 18, pages = 1, network = GT_NETWORK) {
   // Одна страница GeckoTerminal — это 20 пулов, и на «Горячие» с «DEX»
   // такого списка мало. Ходим по нескольким страницам подряд и склеиваем
@@ -8343,9 +8391,10 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
     // раздел оставался пустым. Сначала первая страница, чтобы список
     // появился сразу, потом добор остального в фоне.
     async function загрузить(глубоко) {
-      const rows = глубоко
-        ? await fetchTonMemePools(FEED_LIMIT, FEED_PAGES, GT_NETWORK_SOL)
-        : await fetchTonMemePools(20, 1, GT_NETWORK_SOL);
+      const rows = (await fetchFeedFromCache(GT_NETWORK_SOL))
+        || (глубоко
+          ? await fetchTonMemePools(FEED_LIMIT, FEED_PAGES, GT_NETWORK_SOL)
+          : await fetchTonMemePools(20, 1, GT_NETWORK_SOL));
       if (cancelled) return;
       // null означает, что источник не ответил. Затирать им уже
       // показанный список нельзя — лучше оставить прежние цифры.
@@ -13521,9 +13570,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // сети: с появлением выбора сети в мемпаде она перестала мешаться
       // со своими токенами — те лежат под фильтром «Новые», — а без неё
       // раздел TON был пустым рядом с полным разделом Solana.
-      const live = deep
-        ? await fetchTonMemePools(FEED_LIMIT, FEED_PAGES)
-        : await fetchTonMemePools(20, 1);
+      // Сначала готовая лента из базы — она приходит за один запрос.
+      // В источник идём, только если обход молчит.
+      const live = (await fetchFeedFromCache(GT_NETWORK))
+        || (deep ? await fetchTonMemePools(FEED_LIMIT, FEED_PAGES) : await fetchTonMemePools(20, 1));
       if (cancelled || !live || !live.length) { setTokensLoading(false); return; }
 
       setTokens((prev) => {
