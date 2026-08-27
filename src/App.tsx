@@ -1203,9 +1203,6 @@ function GlobalStyle() {
       @keyframes spotlightSweep { 0%{ transform: translateX(-120%); } 55%,100%{ transform: translateX(320%); } }
       @keyframes candleBreathe { 0%,100%{ transform: scaleY(0.72); } 50%{ transform: scaleY(1); } }
       @keyframes tickerSwap { 0%{opacity:0; transform:translateY(6px);} 12%,88%{opacity:1; transform:translateY(0);} 100%{opacity:0; transform:translateY(-6px);} }
-      @media (prefers-reduced-motion: reduce) {
-        [data-bg-fx] * { animation: none !important; }
-      }
       @keyframes starDriftRight { from{ transform: translateX(-24px); } to{ transform: translateX(560px); } }
       @keyframes starDriftLeft { from{ transform: translateX(560px); } to{ transform: translateX(-24px); } }
       @keyframes glowPulse { 0%,100%{opacity:.35;} 50%{opacity:.75;} }
@@ -1238,38 +1235,10 @@ function GlobalStyle() {
         background-size: 220% 100%;
         animation: barSweep 5s linear infinite;
       }
-      /* Свечение в углу сводки: неподвижное пятно читалось как пятно
-         на картинке, поэтому оно дышит и чуть смещается — два слоя с
-         разным ритмом, чтобы движение не выглядело зациклённым. */
-      @keyframes heroGlowA {
-        0%,100% { transform: translate3d(0,0,0) scale(1);      opacity: .85; }
-        50%     { transform: translate3d(-6%,4%,0) scale(1.18); opacity: 1;   }
-      }
-      @keyframes heroGlowB {
-        0%,100% { transform: translate3d(0,0,0) scale(1.1);    opacity: .45; }
-        50%     { transform: translate3d(8%,-6%,0) scale(.92);  opacity: .9;  }
-      }
-      .fx-hero-glow-a { animation: heroGlowA 6s ease-in-out infinite; }
-      .fx-hero-glow-b { animation: heroGlowB 9s ease-in-out -2s infinite; }
       @keyframes mcapGlow { 0%,100%{text-shadow:0 0 10px currentColor,0 0 2px currentColor;} 50%{text-shadow:0 0 18px currentColor,0 0 4px currentColor;} }
       @keyframes ringPulse { 0%{box-shadow:0 0 0 0 ${glow(0.35)};} 100%{box-shadow:0 0 0 14px ${glow(0)};} }
       /* Появляется на месте — только проявлением и лёгким укрупнением,
          без наезда сверху. Уходит вверх и растворяется. */
-      /* Пятна фона. Ходят по своим траекториям и с разной длительностью:
-         при одинаковом движении они дышали бы в такт и читались бы как
-         мигание, а не как медленный свет. */
-      @keyframes auraDrift1 {
-        0%,100% { transform: translate3d(0,0,0) scale(1); }
-        50%     { transform: translate3d(7%,5%,0) scale(1.16); }
-      }
-      @keyframes auraDrift2 {
-        0%,100% { transform: translate3d(0,0,0) scale(1.12); }
-        50%     { transform: translate3d(-9%,-6%,0) scale(0.94); }
-      }
-      @keyframes auraDrift3 {
-        0%,100% { transform: translate3d(0,0,0) scale(1.05); }
-        50%     { transform: translate3d(5%,-8%,0) scale(1.22); }
-      }
       /* Заливка листа в индикаторе загрузки: бежит снизу вверх и уходит
          за верхний край, потом начинается заново. */
       @keyframes leafLoaderFill {
@@ -1410,16 +1379,6 @@ function GlobalStyle() {
         0%, 100% { opacity: 0.75; transform: scale(0.94); }
         50%      { opacity: 1;    transform: scale(1.06); }
       }
-      /* Пролёт ракеты по кнопке запуска: справа налево, с паузой между
-         заходами. Поворот на 135 градусов — картинка нарисована носом
-         вверх-вправо, а лететь она должна носом вперёд, то есть влево. */
-      @keyframes buttonRocketFly {
-        0%   { transform: translateX(220px) rotate(-135deg); opacity: 0; }
-        6%   { opacity: 1; }
-        34%  { opacity: 1; }
-        40%  { transform: translateX(-40px) rotate(-135deg); opacity: 0; }
-        100% { transform: translateX(-40px) rotate(-135deg); opacity: 0; }
-      }
       /* Ракета: строго снизу вверх по центру, к концу — уменьшение и
          растворение за верхним краем. Конечная точка приходит переменной
          --fly-to. Сама картинка нарисована носом вверх-вправо, поэтому
@@ -1538,7 +1497,6 @@ function GlobalStyle() {
       @keyframes shake { 0%,100%{ transform:translateX(0); } 20%{ transform:translateX(-8px); } 40%{ transform:translateX(8px); } 60%{ transform:translateX(-6px); } 80%{ transform:translateX(6px); } }
       @keyframes heroRocketFlame { 0%,100%{ opacity:0.55; transform: scaleY(0.85) scaleX(0.9); } 50%{ opacity:1; transform: scaleY(1.15) scaleX(1.05); } }
       @keyframes heroRocketFloat { 0%,100%{ transform: translateY(0) rotate(-3deg); } 50%{ transform: translateY(-5px) rotate(3deg); } }
-      @keyframes widgetSparkRise { 0%{ transform:translateY(0) scale(0.7); opacity:0; } 15%{ opacity:0.9; } 85%{ opacity:0.5; } 100%{ transform:translateY(-130px) scale(1.05); opacity:0; } }
       button { touch-action: manipulation; cursor: pointer; }
       /* Заполнение backwards, а не both, и никаких will-change.
          Оставленная после анимации трансформация делает элемент
@@ -1693,106 +1651,6 @@ const LEAF_KINDS = [
   },
 ];
 
-
-/* CyberGrid — живой фон вместо плоской чёрной заливки: несколько
-   крупных размытых пятен мяты и оранжевого медленно ходят по экрану,
-   поверх — едва заметное зерно и виньетка по краям. Всё на CSS, без rAF
-   и канваса, чтобы не жечь батарею в Telegram WebView. Слой под
-   pointer-events:none и на zIndex 0 — контент приложения лежит выше.
-
-   Листья убраны: осенний силуэт спорил с названием и с торговыми
-   экранами, где на фоне и так много мелких деталей. */
-
-// Зерно поверх градиентов. Без него большие мягкие пятна на телефоне
-// расслаиваются полосами — экран не вытягивает столько близких оттенков.
-const ЗЕРНО = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E\")";
-
-function CyberGrid({ showStars = true, hidden = false }) {
-  // В профиле и на чужой странице фон приглушаем: там своя
-  // карточка-подложка, и два слоя друг на друге читаются как шум.
-  const сила = showStars ? 1 : 0.45;
-
-  // На мемпаде фон убирается совсем: пятна уезжают вверх и гаснут, под
-  // ними остаётся чистый чёрный. Полёт начинается не сразу, а через
-  // мгновение после перехода — иначе раздел открывается уже пустым и
-  // движения никто не видит. Пока уезжают — слой ещё в разметке, после
-  // снимаем его, чтобы анимации пятен не крутились впустую.
-  const [снят, setСнят] = useState(hidden);
-  useEffect(() => {
-    if (!hidden) { setСнят(false); return; }
-    const id = setTimeout(() => setСнят(true), 1300);
-    return () => clearTimeout(id);
-  }, [hidden]);
-  // Слой не выкидываем из разметки, а прячем: иначе при возвращении он
-  // появлялся бы уже на месте, без обратного полёта.
-  const убран = hidden && снят;
-
-  const пятна = [
-    { цвет: T.mintGlass, доля: 0.27, left: "-32%", top: "-20%", w: "115%", h: "72%", анимация: "auraDrift1 26s" },
-    { цвет: T.electric, доля: 0.19, left: "34%", top: "18%", w: "100%", h: "64%", анимация: "auraDrift2 34s" },
-    { цвет: T.mintGlass, доля: 0.18, left: "-20%", top: "58%", w: "104%", h: "66%", анимация: "auraDrift3 42s" },
-    { цвет: T.electric, доля: 0.12, left: "10%", top: "80%", w: "90%", h: "58%", анимация: "auraDrift2 30s" },
-  ];
-
-  return (
-    <div aria-hidden data-bg-fx style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
-      {/* Пятна лежат в одном изолированном слое: так браузер собирает
-          фон целиком, а не кусками — иначе на границах проступают
-          светлые швы. */}
-      <div style={{
-        position: "absolute", inset: 0, isolation: "isolate", contain: "paint",
-        visibility: убран ? "hidden" : "visible",
-      }}>
-        {пятна.map((п, i) => (
-          // Внешний слой отвечает за уход вверх, внутренний — за
-          // собственный дрейф пятна. Разделены потому, что анимация
-          // перебивает transform: на одном элементе полёт бы не начался.
-          // Пятна стартуют с разбегом — так видно движение, а не общее
-          // затемнение.
-          <div
-            key={`aura${i}`}
-            style={{
-              position: "absolute",
-              left: п.left, top: п.top, width: п.w, height: п.h,
-              transform: hidden ? "translate3d(0,-115%,0) scale(0.86)" : "translateZ(0)",
-              opacity: hidden ? 0 : 1,
-              // Пауза перед стартом только на уходе: возвращается фон
-              // сразу, ждать его на других экранах незачем.
-              transition: hidden
-                ? `transform 640ms cubic-bezier(0.32,0,0.24,1) ${260 + i * 80}ms, opacity 640ms cubic-bezier(0.7,0,0.9,1) ${260 + i * 80}ms`
-                : "transform 520ms cubic-bezier(0.22,0.61,0.36,1), opacity 420ms ease-out",
-              willChange: "transform",
-            }}
-          >
-            <div
-              style={{
-                width: "100%", height: "100%",
-                background: `radial-gradient(50% 50% at 50% 50%, ${hexA(п.цвет, п.доля * сила)} 0%, ${hexA(п.цвет, п.доля * сила * 0.35)} 45%, transparent 72%)`,
-                animation: `${п.анимация} ease-in-out ${-i * 7}s infinite`,
-                animationPlayState: убран ? "paused" : "running",
-                backfaceVisibility: "hidden",
-              }}
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* Виньетка: к краям темнее, чтобы текст не спорил с пятнами. */}
-      <div style={{
-        position: "absolute", inset: 0,
-        background: `radial-gradient(120% 80% at 50% 40%, transparent 0%, ${hexA(T.bg, 0.42)} 70%, ${hexA(T.bg, 0.82)} 100%)`,
-        opacity: hidden ? 0 : 1,
-        transition: hidden ? "opacity 640ms ease-in 420ms" : "opacity 420ms ease-out",
-      }} />
-
-      <div style={{
-        position: "absolute", inset: 0, backgroundImage: ЗЕРНО,
-        opacity: hidden ? 0 : 0.05, mixBlendMode: "overlay",
-        transition: hidden ? "opacity 640ms ease-in 420ms" : "opacity 420ms ease-out",
-      }} />
-    </div>
-  );
-}
 
 /* animated 0 -> value counter, no external deps */
 function useCountUp(target, duration = 900, active = true) {
@@ -3519,7 +3377,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     const { startI, endI, min, max, range, yFor, xFor, bodyW, plotW, padTop, padBottom, drawHeight, gutter } = layout;
     const fmt = valueFmt || fmtPrice;
 
-    // Фоновая сетка — та же идея, что и в CyberGrid на фоне приложения,
+    // Фоновая сетка внутри карточки —
     // только статичная и приглушённая, чтобы не спорить со свечами
     ctx.strokeStyle = hexA(T.ice, 0.05);
     ctx.lineWidth = 1;
@@ -4708,36 +4566,6 @@ function RocketIconFX() {
   );
 }
 
-/* WidgetSparks — orange embers rising from the bottom edge all the way
-   up through the whole "Создать токен" card, spread across its width. */
-function WidgetSparks() {
-  const items = useMemo(() => {
-    const rand = seededRand(1 + Math.floor(Math.random() * 999999));
-    return Array.from({ length: 5 }).map(() => ({
-      left: 6 + rand() * 88,
-      delay: rand() * 2.6,
-      dur: 3.6 + rand() * 2.2,
-      size: 2 + rand() * 2.2,
-    }));
-  }, []);
-  return (
-    <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", borderRadius: "inherit" }}>
-      {items.map((it, i) => (
-        <span
-          key={i}
-          style={{
-            position: "absolute", left: `${it.left}%`, bottom: -6,
-            width: it.size, height: it.size, borderRadius: "50%",
-            background: T.electric,
-            filter: `drop-shadow(0 0 3px ${T.electric})`,
-            animation: `widgetSparkRise ${it.dur}s cubic-bezier(0.3,0.1,0.4,1) ${it.delay}s infinite`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
 /* Шапка главной: приветствие и живая сводка по площадке.
  *
  * Раньше здесь стояли заголовок с обещанием и три круглые иконки: ни
@@ -4829,15 +4657,13 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
       {/* Сводка. Крупным — сколько человек на площадке прямо сейчас,
           рядом бейджи с тем, сколько собрано и сколько уже на бирже. */}
       <div className="fx-view relative rounded-[24px] overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.line}`, padding: 16 }}>
-        <div className="fx-hero-glow-a" style={{
+        {/* Свечение в углу. Раньше два слоя дышали и размывались фильтром
+            — на слабых телефонах это перерисовывало карточку каждый кадр
+            и роняло прокрутку. Остался один статичный градиент. */}
+        <div style={{
           position: "absolute", right: "-20%", top: "-40%", width: "70%", height: "160%",
-          background: `radial-gradient(50% 50% at 50% 50%, ${hexA(T.electric, 0.42)} 0%, ${hexA(T.electric, 0.14)} 45%, transparent 72%)`,
-          filter: "blur(2px)", pointerEvents: "none",
-        }} />
-        <div className="fx-hero-glow-b" style={{
-          position: "absolute", right: "6%", bottom: "-70%", width: "55%", height: "150%",
-          background: `radial-gradient(50% 50% at 50% 50%, ${hexA(T.electric, 0.3)} 0%, transparent 70%)`,
-          filter: "blur(6px)", pointerEvents: "none",
+          background: `radial-gradient(50% 50% at 50% 50%, ${hexA(T.electric, 0.34)} 0%, ${hexA(T.electric, 0.12)} 45%, transparent 72%)`,
+          pointerEvents: "none",
         }} />
         <div className="relative flex items-center gap-2">
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15.5, fontWeight: 700 }}>{t("homeEcoTitle")}</span>
@@ -4890,7 +4716,6 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
                   position: "relative", overflow: "hidden",
                 }}
               >
-                {isLaunch && <WidgetSparks />}
                 <div style={{
                   position: "relative", zIndex: 1,
                   width: 40, height: 40, borderRadius: 14, flexShrink: 0,
@@ -6036,8 +5861,11 @@ function GraduationBar({ raisedTon = 0, targetTon = 0, compact = false }) {
   const done = left <= 0;
   if (compact) {
     return (
+      // Блик по бегущему градиенту оставлен только крупной шкале: в
+      // списке таких полосок два десятка, и каждая перекрашивалась
+      // каждый кадр — прокрутка от этого дёргалась.
       <div style={{ height: 3, borderRadius: 2, background: T.surfaceHi, overflow: "hidden", marginTop: 6 }}>
-        <div className={done ? "fx-shine-bar-up" : "fx-shine-bar"} style={{ width: `${pct}%`, height: "100%" }} />
+        <div style={{ width: `${pct}%`, height: "100%", background: done ? T.up : T.electric }} />
       </div>
     );
   }
@@ -6118,7 +5946,9 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         boxShadow: f.halo
           ? `0 0 ${size * 0.34}px ${ring * 2.4}px ${hexA(f.glow, 0.42)}`
           : `0 0 ${size * 0.18}px ${ring}px ${hexA(f.glow, 0.35)}`,
-        animation: "glowPulse 3.2s ease-in-out infinite", zIndex: 0,
+        // Мелкие копии не пульсируют: на экране их бывает полтора
+        // десятка, а разницы на таком размере не видно.
+        animation: крупно ? "glowPulse 3.2s ease-in-out infinite" : undefined, zIndex: 0,
       }} />
       {/* само кольцо — вращающийся конический градиент */}
       <div style={{
@@ -7167,7 +6997,6 @@ function BootSplash({ steps, done, insetTop = 0 }) {
         transition: "opacity 420ms ease-out",
       }}
     >
-      <CyberGrid />
 
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
         <LeafLoader progress={progress} size={104} />
@@ -8007,9 +7836,10 @@ function glassPane(радиус, { сила = 1 } = {}) {
     /* Стекло без бликов: тело почти прозрачное, форму держит одна тонкая
        кромка. Косой блик и светлая линия по верху отсюда убраны — на
        мелких плашках они читались не стеклом, а белым свечением. */
-    background: `linear-gradient(155deg, ${hexA("#FFFFFF", 0.04 * сила)} 0%, ${hexA("#EAFFF4", 0.02 * сила)} 55%, ${hexA(T.mintGlass, 0.01 * сила)} 100%)`,
-    backdropFilter: "blur(14px) saturate(1.3)",
-    WebkitBackdropFilter: "blur(14px) saturate(1.3)",
+    // Тело плотное, а не размытое: под плашками едет витрина, и
+    // backdrop-filter пересчитывался на каждом кадре прокрутки.
+    background: `linear-gradient(155deg, ${hexA("#FFFFFF", 0.05 * сила)} 0%, ${hexA("#EAFFF4", 0.03 * сила)} 55%, ${hexA(T.mintGlass, 0.02 * сила)} 100%), ${hexA(T.bg, 0.88)}`,
+
     border: `1px solid ${hexA("#DFFFF0", 0.16)}`,
     boxShadow: "0 8px 22px rgba(0,0,0,0.5)",
     borderRadius: радиус,
@@ -8293,7 +8123,6 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
             position: "relative", overflow: "hidden",
           }}
         >
-          <ButtonRocketFlyby size={34} />
           <LeafIcon size={17} color={T.electric} kind={2} />
           <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 14, fontWeight: 700, position: "relative", zIndex: 1 }}>{t("mempadLaunchToken")}</span>
         </button>
@@ -8435,7 +8264,7 @@ function AlmostListed({ tokens = [], onOpen }) {
                   <span style={{ fontFamily: monoFont, color: T.electric, fontSize: 13, fontWeight: 700 }}>{pct.toFixed(0)}%</span>
                 </div>
                 <div style={{ height: 4, borderRadius: 2, background: T.surfaceHi, overflow: "hidden", marginTop: 6 }}>
-                  <div className="fx-shine-bar" style={{ width: `${Math.min(100, pct)}%`, height: "100%" }} />
+                  <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: T.electric }} />
                 </div>
                 <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 5 }}>
                   {tf("homeAlmostLeft", { left: fmtTon(Math.max(0, tok.graduationTon - tok.raisedTon)) })}
@@ -12844,56 +12673,6 @@ function useDevice() {
   return DEVICE;
 }
 
-/* Ракета, пролетающая на фоне кнопки запуска.
-
-   Та же анимация Telegram, что и при самом запуске, только маленькая и
-   по горизонтали: справа налево. Картинка нарисована носом вверх-вправо,
-   поэтому доворачивается так, чтобы нос смотрел по ходу движения.
-   Проигрыватель и данные подгружаются один раз на всё приложение — те
-   же самые, что для большой ракеты. */
-function ButtonRocketFlyby({ size = 26 }) {
-  const holderRef = useRef(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    let anim = null;
-    (async () => {
-      const [{ default: lottie }, data] = await Promise.all([
-        import("lottie-web/build/player/lottie_light"),
-        loadRocketAnimation(),
-      ]);
-      if (cancelled || !data || !holderRef.current) return;
-      anim = lottie.loadAnimation({
-        container: holderRef.current,
-        renderer: "svg",
-        loop: true,
-        autoplay: true,
-        animationData: data,
-      });
-    })();
-    return () => { cancelled = true; if (anim) anim.destroy(); };
-  }, []);
-
-  return (
-    <div
-      aria-hidden
-      style={{
-        position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none",
-        borderRadius: "inherit", opacity: 0.8,
-      }}
-    >
-      <div
-        ref={holderRef}
-        style={{
-          position: "absolute", top: "50%", left: 0,
-          width: size, height: size, marginTop: -size / 2,
-          animation: "buttonRocketFly 9s linear infinite",
-        }}
-      />
-    </div>
-  );
-}
-
 /* Ракета запуска.
 
    Летит снизу вверх и уходит за верхний край, уменьшаясь и гасая.
@@ -15223,7 +15002,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           поджигала, убраны: на разных телефонах они ложились по-разному,
           а на тех, где острова нет, рамка выглядела случайной деталью. */}
       {rocketFlying && <LaunchRocket variant={rocketVariant} />}
-      <CyberGrid showStars={view !== "profile" && view !== "user"} hidden={view === "mempad"} />
       {/* Пришли за подписью — заставка только задерживает: человек ждёт
           кошелёк, а не знакомство с приложением. */}
       {!bootHidden && !сразуВКошелёк && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
@@ -15425,7 +15203,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             width: "92%", maxWidth: 420,
             padding: "10px 10px",
             borderRadius: 999,
-            background: hexA(T.bg, 0.28), backdropFilter: "blur(20px) saturate(1.6)", WebkitBackdropFilter: "blur(20px) saturate(1.6)",
+            // Размытие подложки убрано: панель висит над прокруткой, и
+            // браузер пересчитывал её на каждом кадре списка. Плотная
+            // заливка выглядит так же, но ничего не стоит.
+            background: hexA(T.bg, 0.92),
             border: `1px solid ${T.lineHi}`,
             boxShadow: "0 10px 34px rgba(0,0,0,0.4)",
           }}
