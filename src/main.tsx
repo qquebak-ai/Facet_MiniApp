@@ -38,6 +38,26 @@ if (tg) {
 if (typeof document !== "undefined") {
   document.addEventListener("gesturestart", (e) => e.preventDefault());
   document.addEventListener("gesturechange", (e) => e.preventDefault());
+  document.addEventListener("gestureend", (e) => e.preventDefault());
+
+  // Щипок в Android-обёртке приходит не жестом, а двумя касаниями: там
+  // gesture-события не срабатывают вовсе, и страницу удавалось растянуть
+  // и увести вбок. Вернуть её обратно человеку нечем — в Telegram нет
+  // адресной строки, чтобы перезагрузить, — поэтому глушим на входе.
+  document.addEventListener("touchmove", (e) => {
+    if (e.touches && e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+
+  // Тот же щипок на трекпаде и мыши с Ctrl — в десктопном Telegram.
+  document.addEventListener("wheel", (e) => {
+    if (e.ctrlKey) e.preventDefault();
+  }, { passive: false });
+
+  // Если страницу всё же сдвинули (например обёрткой), возвращаем её
+  // к левому краю: перекошенный экран сам собой не выправляется.
+  window.addEventListener("scroll", () => {
+    if (window.scrollX !== 0) window.scrollTo(0, window.scrollY);
+  }, { passive: true });
 }
 
 const manifestUrl = `${window.location.origin}/tonconnect-manifest.json`;

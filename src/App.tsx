@@ -1218,7 +1218,11 @@ function GlobalStyle() {
          правилом отключается и приближение по двойному тапу: любое
          значение кроме auto его снимает. Гасить двойной тап вручную,
          отменяя touchend, нельзя — вместе с ним отменяется и нажатие. */
-      html, body { touch-action: pan-x pan-y; }
+      /* Только вертикальная прокрутка. Двумя пальцами страницу удавалось
+         растянуть и увести вбок — приложение оставалось в таком виде, и
+         вернуть его назад было нечем: в Telegram нет адресной строки,
+         чтобы перезагрузить. */
+      html, body { touch-action: pan-y; overflow-x: hidden; overscroll-behavior-x: none; }
       /* iOS Safari (incl. Telegram's in-app WebView) auto-zooms the whole
          viewport when a focused input/textarea/select has a computed
          font-size under 16px. Forcing a 16px floor here — on top of the
