@@ -8221,7 +8221,13 @@ function СетевойФон({ сеть = "ton" }) {
       aria-hidden
       className="fx-net-in"
       style={{
-        position: "absolute", left: "-16%", right: "-16%", top: -110, height: 470,
+        // Ровно ширина экрана, отсчитанная от его середины: раньше слой
+        // был шире колонки на 16% с каждой стороны, и эта лишняя ширина
+        // превращалась в горизонтальную прокрутку — раздел утаскивался
+        // пальцем вбок. Обрезать колонку нельзя: тогда по краям
+        // появляются чёрные поля, ведь у неё свои отступы.
+        position: "absolute", left: "50%", width: "100vw", transform: "translateX(-50%)",
+        top: -110, height: 470,
         pointerEvents: "none", zIndex: 0, overflow: "hidden",
       }}
     >
@@ -8431,15 +8437,7 @@ function MempadView({ tokens, loading, myTokens, onOpen, onLaunch }) {
   }, [tokens, filter, spotlightTop, localTokens, solTokens, сеть]);
 
   return (
-    <div className="flex flex-col gap-5" style={{
-      paddingBottom: 12, position: "relative",
-      // Фон намеренно шире экрана, чтобы графика уходила за края. Без
-      // обрезки эта ширина превращалась в горизонтальную прокрутку: весь
-      // раздел можно было утащить вбок пальцем. clip, а не hidden —
-      // hidden здесь сделал бы колонку отдельной областью прокрутки и
-      // сломал бы прилипание.
-      overflowX: "clip",
-    }}>
+    <div className="flex flex-col gap-5" style={{ paddingBottom: 12, position: "relative" }}>
       {/* Ключ по сети: смена перерисовывает графику заново, вместе с её
           появлением. Без него SVG остался бы прежним с новым цветом. */}
       <СетевойФон key={сеть} сеть={сеть} />
