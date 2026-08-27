@@ -9968,6 +9968,12 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
   const spendableTon = Math.max(0, walletTonBalance - NETWORK_FEE_TON);
   const amount = parseAmount(amountStr);
   const isBuy = mode === "buy";
+  // Чем платят за этот токен. У ленты Solana это SOL, у всего
+  // остального — TON: подписать поле «TON» там, где спишется SOL, значит
+  // прямо ввести человека в заблуждение. Объявлено до первого
+  // использования — ниже на него смотрят и предел суммы, и подписи.
+  const соло = token.chain === "solana";
+  const монета = соло ? "SOL" : "TON";
 
   // Покупка теперь считается в TON, а не в долларах: пользователь вводит
   // сумму в TON, и она напрямую ограничена доступным балансом кошелька.
@@ -9980,11 +9986,6 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
   // нельзя: раньше отсюда приходила Infinity, она уезжала в локальный
   // счётчик, и в окне продажи значилось «Доступно: ∞».
   const priceUsd = token.price > 0 ? token.price : 0;
-  // Чем платят за этот токен. У ленты Solana это SOL, у всего
-  // остального — TON: подписать поле «TON» там, где спишется SOL, значит
-  // прямо ввести человека в заблуждение.
-  const соло = token.chain === "solana";
-  const монета = соло ? "SOL" : "TON";
   // У токенов на кривой сумма считается её же формулой — той самой, что
   // применит контракт. По цене из ленты считать нельзя: она обновляется
   // редко, а для свежего токена её просто нет.
