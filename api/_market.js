@@ -419,15 +419,53 @@ const escape = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;
 
 /* Полная сводка по одному токену: и текст сообщения, и короткая строка
    для списка в inline-подсказке. */
+/* Состояние кривой из готового кеша.
+ *
+ * Обход (api/refresh-curves.js) ходит по кривым раз в минуту и
+ * складывает числа в curve_cache. Спрашивать те же числа у цепочки на
+ * каждую подсказку в чате — значит ждать секунду там, где Telegram даёт
+ * доли секунды: подсказка успевала истечь раньше, чем приходил ответ.
+ *
+ * Поэтому сначала смотрим кеш и только при его отсутствии идём в сеть.
+ */
+const КЕШ_СВЕЖ_МС = 3 * 60 * 1000;
+
+async function состояниеИзКеша(tokenId) {
+  const admin = adminClient();
+  if (!admin || !tokenId) return null;
+  const { data } = await admin
+    .from("curve_cache")
+    .select("real_ton, graduation_ton, tokens_sold, price_ton, fee_bps, graduated, updated_at")
+    .eq("token_id", tokenId)
+    .maybeSingle();
+  if (!data || !data.updated_at) return null;
+  if (Date.now() - new Date(data.updated_at).getTime() > КЕШ_СВЕЖ_МС) return null;
+  const нано = (v) => BigInt(Math.round((Number(v) || 0) * 1e9));
+  return {
+    virtualTon: 0n,
+    virtualTokens: 0n,
+    realTon: нано(data.real_ton),
+    tokensSold: нано(data.tokens_sold),
+    tokensForSale: 0n,
+    graduationTon: нано(data.graduation_ton),
+    feeBps: BigInt(Number(data.fee_bps) || 100),
+    graduated: !!data.graduated,
+    // Цена уже посчитана обходом — брать её оттуда точнее, чем считать
+    // по резервам без виртуальных: их в кеше нет.
+    ценаГотовая: Number(data.price_ton) || 0,
+  };
+}
+
 export async function tokenCard(token) {
   const [state, история, логотип, курс] = await Promise.all([
-    curveState(token.curve_address),
+    // Сначала кеш, и только если он пуст или протух — цепочка.
+    состояниеИзКеша(token.id).then((к) => к || curveState(token.curve_address)),
     tradeHistory(token.id),
     token.logo_url ? Promise.resolve(token.logo_url) : логотипЖетона(token.address),
     курсTon(),
   ]);
 
-  const цена = priceFromState(state);
+  const цена = state && state.ценаГотовая > 0 ? state.ценаГотовая : priceFromState(state);
   const собрано = state ? nano(state.realTon) : 0;
   const цель = state ? nano(state.graduationTon) : 0;
   const выпуск = state ? nano(state.tokensSold) : 0;
@@ -552,13 +590,20 @@ export async function externalCard(token) {
 /* Общий вход: сперва своё, потом биржа. Свои токены впереди намеренно —
    бот всё-таки про Mintly, и запущенное здесь должно находиться первым. */
 export async function searchAll(query, limit = 8) {
-  const свои = await findTokens(query, limit).catch(() => []);
-  if (свои.length >= limit || !String(query || "").trim()) return свои;
-  const чужие = await findExternal(query, limit - свои.length).catch(() => []);
+  // Свои токены и биржевые ищем одновременно. По очереди это стоило двух
+  // ожиданий подряд, а подсказке в чате Telegram отводит доли секунды:
+  // лишний поход в сеть — и она исчезает, не дождавшись ответа.
+  const строка = String(query || "").trim();
+  const [свои, чужие] = await Promise.all([
+    findTokens(query, limit).catch(() => []),
+    строка ? findExternal(строка, limit).catch(() => []) : Promise.resolve([]),
+  ]);
+  if (свои.length >= limit || !строка) return свои.slice(0, limit);
   // Один и тот же токен мог и запуститься здесь, и уехать на биржу:
   // показываем его один раз, своей карточкой.
   const адреса = new Set(свои.map((t) => t.address).filter(Boolean));
-  return [...свои, ...чужие.filter((t) => !t.token_address || !адреса.has(t.token_address))];
+  const добор = чужие.filter((t) => !t.token_address || !адреса.has(t.token_address));
+  return [...свои, ...добор].slice(0, limit);
 }
 
 /* Карточка для любого из двух видов. */
