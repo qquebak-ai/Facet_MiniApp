@@ -248,7 +248,7 @@ const STR = {
     reportSent: "Жалоба отправлена на проверку",
     back: "Назад",
     perToken: "/ токен", chartNoData: "История не загрузилась — биржа не ответила", chartRetry: "Повторить", ohlcHigh: "В", ohlcLow: "Н", ohlcClose: "З",
-    statPrice: "Цена", statLiquidity: "Ликвидность", statHolders: "Держателей", statVolume24h: "Объём 24ч",
+    statPrice: "Цена", statLiquidity: "Ликвидность", statHolders: "Держателей", statTx24h: "Сделок 24ч", statVolume24h: "Объём 24ч",
     trustTitle: "Проверка токена",
     trustCreatorHolds: "У создателя на руках",
     trustCreatorBought: "Купил при запуске",
@@ -629,7 +629,7 @@ const STR = {
     reportSent: "Report sent for review",
     back: "Back",
     perToken: "/ token", chartNoData: "History didn't load — the exchange didn't answer", chartRetry: "Try again", ohlcHigh: "H", ohlcLow: "L", ohlcClose: "C",
-    statPrice: "Price", statLiquidity: "Liquidity", statHolders: "Holders", statVolume24h: "24h Volume",
+    statPrice: "Price", statLiquidity: "Liquidity", statHolders: "Holders", statTx24h: "Trades 24h", statVolume24h: "24h Volume",
     trustTitle: "Token check",
     trustCreatorHolds: "Creator still holds",
     trustCreatorBought: "Bought at launch",
@@ -4852,7 +4852,13 @@ function MempadRow({ t: tok, onOpen, index }) {
       <div className="flex-1 min-w-0">
         <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>${tok.ticker}</div>
         <div className="flex items-center gap-2.5">
-          <HoldersBadge tokenAddress={tok.tokenAddress} testnet={!!tok.curveAddress && TON_TESTNET_NETWORK} />
+          {/* Держателей в Solana взять неоткуда: их считает tonapi, и
+              только для жетонов TON. Вместо вечной серой заглушки
+              показываем то, что про эти токены известно точно, — сколько
+              сделок прошло за сутки. */}
+          {tok.chain === "solana"
+            ? <CardStat icon={RefreshCw}>{(tok.tx24h || 0).toLocaleString("ru-RU")}</CardStat>
+            : <HoldersBadge tokenAddress={tok.tokenAddress} testnet={!!tok.curveAddress && TON_TESTNET_NETWORK} />}
           <CardStat icon={Flame}>${tok.vol}</CardStat>
         </div>
         {/* Насколько токен близок к листингу — видно прямо в списке, не
@@ -9617,7 +9623,9 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           <div className="grid grid-cols-2 gap-2">
             <StatChip icon={TrendingUp} label={tr("statPrice")} value={fmtPrice(token.price)} />
             <StatChip icon={Wallet} label={tr("statLiquidity")} value={`$${token.liq}`} />
-            <StatChip icon={User} label={tr("statHolders")} value={holdersCount == null ? "…" : holdersCount.toLocaleString("ru-RU")} />
+            {token.chain === "solana"
+              ? <StatChip icon={RefreshCw} label={tr("statTx24h")} value={(token.tx24h || 0).toLocaleString("ru-RU")} />
+              : <StatChip icon={User} label={tr("statHolders")} value={holdersCount == null ? "…" : holdersCount.toLocaleString("ru-RU")} />}
             <StatChip icon={Flame} label={tr("statVolume24h")} value={`$${token.vol}`} />
           </div>
           {infoLoading && !info ? (
