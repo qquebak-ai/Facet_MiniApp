@@ -41,43 +41,56 @@ function загрузитьЗапуск() {
    DESIGN TOKENS — shared by every screen (Home, Token, Create, Profile)
 --------------------------------------------------------- */
 
+/* Палитра: спокойный тёмный интерфейс финансового продукта.
+ *
+ * Оранжевый ушёл из основного цвета намеренно. Он лез в каждую кнопку и
+ * каждую подсветку, и приложение читалось как витрина, а не как место,
+ * где считают деньги. Акцент теперь холодный синий и появляется редко:
+ * главная кнопка, выбранная вкладка, активное состояние, ссылка. Всё
+ * остальное держится на трёх оттенках серого и одном белом.
+ *
+ * Зелёный и красный оставлены только за ростом и падением цены — это
+ * язык рынка, и подменять его нечем.
+ */
 const DARK_THEME = {
-  bg: "#000000",
-  surface: "#0A0A0B",
-  surfaceHi: "#121214",
-  line: "#1C1C1F",
-  lineHi: "#28282C",
-  ice: "#FFFFFF",
-  paper: "#EAEAEA",
-  muted: "#7C828B",
-  electric: "#FF6B35",
-  turquoise: "#FF6B35",
-  violet: "#FF6B35",
-  rose: "#7C828B",
-  up: "#38D39F",
-  down: "#FF4D5A",
-  warning: "#F5B041",
-  // Стекло фоновых листьев. Мятный тут не украшение, а имя приложения:
-  // на чёрном он читается холодным светом, а не зеленью.
-  mintGlass: "#7FE7C4",
+  bg: "#08090B",
+  surface: "#101216",
+  surfaceHi: "#15181D",
+  line: "#242830",
+  lineHi: "#2E333C",
+  ice: "#F5F7FA",
+  paper: "#E4E7EC",
+  muted: "#8B929D",
+  // Приглушённый серый для второстепенных подписей: между muted и
+  // границей, чтобы третий уровень текста не спорил со вторым.
+  faint: "#5F6670",
+  electric: "#6C7CFF",
+  turquoise: "#6C7CFF",
+  violet: "#6C7CFF",
+  rose: "#8B929D",
+  up: "#2ED47A",
+  down: "#F0616D",
+  warning: "#E5A83C",
+  mintGlass: "#6C7CFF",
 };
 
 /* White theme: same structural logic, inverted — a paper-white canvas,
    near-black ink, identical Ember accent so the brand reads the same in
    either mode. Kept flat (no translucency), same reason as Dark below. */
 const WHITE_THEME = {
-  bg: "#FAFAF9",
+  bg: "#F7F8FA",
   surface: "#FFFFFF",
-  surfaceHi: "#F2F1EE",
-  line: "#E4E2DD",
-  lineHi: "#D4D1CA",
-  ice: "#14151A",
-  paper: "#14151A",
-  muted: "#6B6F76",
-  electric: "#FF6B35",
-  turquoise: "#FF6B35",
-  violet: "#FF6B35",
-  rose: "#6B6F76",
+  surfaceHi: "#F1F3F7",
+  line: "#E3E6EC",
+  lineHi: "#D3D7E0",
+  ice: "#12141A",
+  paper: "#12141A",
+  muted: "#666D79",
+  faint: "#8A919C",
+  electric: "#4F5DE8",
+  turquoise: "#4F5DE8",
+  violet: "#4F5DE8",
+  rose: "#666D79",
   up: "#1C9A6C",
   down: "#D93A49",
   warning: "#C77A16",
@@ -110,7 +123,7 @@ let T = { ...DARK_THEME };
 function applyTheme(mode) {
   Object.assign(T, THEMES[mode] || DARK_THEME);
   PRISM = mode === "White" ? LIGHT_PRISM : DARK_PRISM;
-  PRISM_TEXT = "#0D1117";
+  PRISM_TEXT = "#FFFFFF";
 }
 function glow(alpha) { return hexA(T.turquoise, alpha); }
 function ink(alpha) { return hexA(T.ice, alpha); }
@@ -910,10 +923,10 @@ function tf(key, vars) {
 /* Flat, not gradient — the brief is explicit that the accent should read
    as confident and solid, not decorative. Both themes share one Ember so
    the brand doesn't shift when the user switches appearance. */
-const DARK_PRISM = "#FF6B35";
-const LIGHT_PRISM = "#FF6B35";
+const DARK_PRISM = "#6C7CFF";
+const LIGHT_PRISM = "#6C7CFF";
 let PRISM = DARK_PRISM;
-let PRISM_TEXT = "#0D1117"; // Midnight ink reads best set on solid Ember in both themes
+let PRISM_TEXT = "#FFFFFF"; // Midnight ink reads best set on solid Ember in both themes
 const FACET = "polygon(18% 0%, 100% 0%, 100% 82%, 82% 100%, 0% 100%, 0% 18%)";
 
 /* Editorial serif for display type (hero numbers, page titles, section
@@ -4700,96 +4713,74 @@ function HomeHero({ onGoTab, onGoCreate, live = [] }) {
   ];
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="pt-1">
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 27, fontWeight: 700, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
+    <div className="flex flex-col" style={{ gap: 32 }}>
+      {/* Приветствие. Мелким шрифтом и без карточки: это подпись к
+          экрану, а не заголовок во весь его верх. */}
+      <div>
+        <h1 style={{ fontFamily: displayFont, color: T.ice, fontSize: 24, fontWeight: 600, lineHeight: 1.2, letterSpacing: "-0.01em", margin: 0 }}>
           {t("homeWelcome")}
-        </div>
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, marginTop: 6, lineHeight: 1.45 }}>
+        </h1>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, marginTop: 6, lineHeight: 1.45 }}>
           {t("homeWelcomeSub")}
-        </div>
+        </p>
       </div>
 
-      {/* Сводка. Крупным — сколько человек на площадке прямо сейчас,
-          рядом бейджи с тем, сколько собрано и сколько уже на бирже. */}
-      <div className="fx-view relative rounded-[24px] overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.line}`, padding: 16 }}>
-        {/* Свечение в углу. Раньше два слоя дышали и размывались фильтром
-            — на слабых телефонах это перерисовывало карточку каждый кадр
-            и роняло прокрутку. Остался один статичный градиент. */}
-        <div style={{
-          position: "absolute", right: "-20%", top: "-40%", width: "70%", height: "160%",
-          background: `radial-gradient(50% 50% at 50% 50%, ${hexA(T.electric, 0.34)} 0%, ${hexA(T.electric, 0.12)} 45%, transparent 72%)`,
-          pointerEvents: "none",
-        }} />
-        <div className="relative flex items-center gap-2">
-          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15.5, fontWeight: 700 }}>{t("homeEcoTitle")}</span>
+      {/* Сводка по площадке. Раньше это была карточка со свечением и
+          двумя плашками внутри; теперь просто число и строка показателей
+          под ним — данных столько же, шума меньше. */}
+      <section>
+        <div style={{ fontFamily: displayFont, color: T.muted, fontSize: 13, fontWeight: 500, letterSpacing: "0.02em", textTransform: "uppercase" }}>
+          {t("homeEcoTitle")}
         </div>
 
-        <div className="relative" style={{ marginTop: 10 }}>
-          <span style={{ fontFamily: displayFont, color: T.electric, fontSize: 42, fontWeight: 800, lineHeight: 1 }}>
+        <div className="flex items-baseline gap-2" style={{ marginTop: 10 }}>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 600, lineHeight: 1, letterSpacing: "-0.02em" }}>
             {Math.round(онлайнПлавно).toLocaleString("ru-RU")}
           </span>
-          <div className="flex items-center gap-1.5" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 4 }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.up, boxShadow: `0 0 8px ${hexA(T.up, 0.8)}` }} />
+          <span className="flex items-center gap-1.5" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.up }} />
             {t("homeLive")}
-          </div>
+          </span>
         </div>
 
-        <div className="relative flex flex-wrap gap-2" style={{ marginTop: 12 }}>
+        <div className="flex items-center" style={{ gap: 24, marginTop: 16 }}>
           {[
-            { рост: false, число: fmtTon(собраноПлавно), подпись: t("homeEcoRaised") },
-            { рост: false, число: String(наБирже), подпись: t("homeEcoDex") },
-          ].map((б, i) => (
-            <div key={i} className="flex items-center gap-1.5 rounded-full"
-              style={{ padding: "6px 12px", background: T.bg, border: `1px solid ${T.line}` }}>
-              {б.рост && <TrendingUp size={13} color={T.up} />}
-              <span style={{ fontFamily: monoFont, color: б.рост ? T.up : T.ice, fontSize: 13, fontWeight: 700 }}>{б.число}</span>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{б.подпись}</span>
+            { число: fmtTon(собраноПлавно), подпись: t("homeEcoRaised") },
+            { число: String(наБирже), подпись: t("homeEcoDex") },
+          ].map((п, i) => (
+            <div key={i}>
+              <div style={{ fontFamily: monoFont, color: T.ice, fontSize: 16, fontWeight: 600 }}>{п.число}</div>
+              <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 2 }}>{п.подпись}</div>
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      {/* Действия строками: видно не только иконку, но и зачем нажимать. */}
-      <div>
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700, marginBottom: 10 }}>
-          {t("homeDoNow")}
-        </div>
-        <div className="flex flex-col gap-2">
-          {actions.map((a) => {
-            const isLaunch = a.key === "homeActionLaunch";
-            return (
-              <button
-                key={a.key}
-                onClick={a.onClick}
-                className="fx-card fx-tap w-full flex items-center gap-3 rounded-[20px] text-left"
-                style={{
-                  padding: "12px 14px",
-                  background: isLaunch
-                    ? `linear-gradient(120deg, ${hexA(T.electric, 0.14)} 0%, ${hexA(T.electric, 0.03)} 60%, transparent 100%)`
-                    : T.surface,
-                  border: `1px solid ${isLaunch ? hexA(T.electric, 0.4) : T.line}`,
-                  position: "relative", overflow: "hidden",
-                }}
-              >
-                <div style={{
-                  position: "relative", zIndex: 1,
-                  width: 40, height: 40, borderRadius: 14, flexShrink: 0,
-                  background: isLaunch ? hexA(T.electric, 0.12) : T.bg,
-                  border: `1px solid ${isLaunch ? hexA(T.electric, 0.3) : T.line}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <a.icon size={20} strokeWidth={1.7} color={isLaunch ? T.electric : T.turquoise} />
-                </div>
-                <div className="flex-1 min-w-0" style={{ position: "relative", zIndex: 1 }}>
-                  <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{t(a.key)}</div>
-                  <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, marginTop: 2 }}>{t(a.note)}</div>
-                </div>
-                <ChevronRight size={16} color={isLaunch ? T.electric : T.muted} style={{ position: "relative", zIndex: 1, flexShrink: 0 }} />
-              </button>
-            );
-          })}
-        </div>
+      {/* Два действия. Первое — главное, оно и единственное цветное. */}
+      <div className="flex flex-col" style={{ gap: 8 }}>
+        <button
+          onClick={onGoCreate}
+          className="fx-tap w-full flex items-center justify-center gap-2"
+          style={{
+            padding: "13px 16px", borderRadius: 14,
+            background: T.electric, color: PRISM_TEXT, border: "none",
+            fontFamily: displayFont, fontSize: 15, fontWeight: 600,
+          }}
+        >
+          <Rocket size={17} strokeWidth={1.8} /> {t("homeActionLaunch")}
+        </button>
+        <button
+          onClick={() => onGoTab("mempad")}
+          className="fx-tap w-full flex items-center justify-center gap-2"
+          style={{
+            padding: "13px 16px", borderRadius: 14,
+            background: "transparent", color: T.ice,
+            border: `1px solid ${T.line}`,
+            fontFamily: displayFont, fontSize: 15, fontWeight: 600,
+          }}
+        >
+          {t("homeActionMempad")}
+        </button>
       </div>
     </div>
   );
@@ -8963,13 +8954,13 @@ function Leaderboard({ onOpenToken, onOpenProfile, live = [] }) {
 
 function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile }) {
   return (
-    <div className="flex flex-col gap-5" style={{ paddingBottom: 12 }}>
-      {/* Полосы с тремя числами больше нет: те же цифры теперь стоят в
-          самой шапке, и повторять их ниже незачем. */}
+    // Между блоками — воздух вместо рамок: разделы главной больше не
+    // обёрнуты каждый в свою карточку, и держит их расстояние.
+    <div className="flex flex-col" style={{ gap: 32, paddingTop: 8, paddingBottom: 16 }}>
       <HomeHero onGoTab={onGoTab} onGoCreate={onGoCreate} live={curveTokens} />
+      <AlmostListed tokens={curveTokens} onOpen={onOpenToken} />
       <HomePopular tokens={curveTokens} onOpen={onOpenToken} onAll={() => onGoTab("mempad")} />
       <ActivityFeed />
-      <AlmostListed tokens={curveTokens} onOpen={onOpenToken} />
       <Leaderboard onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} live={curveTokens} />
     </div>
   );
@@ -15821,7 +15812,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             behind the bar instead of just a flat tinted strip. paddingBottom
             below reserves the nav's own height so the last row of content
             can still scroll clear of it. */}
-        <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), paddingBottom: 116 + insetBottom }} key={view}>
+        <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), /* Панель разделов стала ниже капсулы: и запас под неё нужен меньше. */
+          paddingBottom: 78 + insetBottom }} key={view}>
           <KeepAlive show={view === "home"}>
             <HomeView onGoTab={goTab} onGoCreate={openCreate} curveTokens={communityTokens} onOpenToken={openToken} onOpenProfile={openUserProfile} />
           </KeepAlive>
@@ -15915,21 +15907,17 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           </KeepAlive>
         </div>
 
+        {/* Панель разделов. Раньше это была плавающая капсула с рамкой и
+            тенью — отдельный предмет поверх приложения, забиравший
+            изрядно высоты. Теперь обычная нижняя панель: тонкая линия
+            сверху, плотный фон, ничего больше. */}
         <div
-          className="flex items-center justify-around"
+          className="flex items-stretch"
           style={{
-            // Ниже прежнего: отступ в шестнадцать пикселей поднимал
-            // панель над самым краем, и она отъедала середину экрана.
-            position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: insetBottom + 6, zIndex: 5,
-            width: "92%", maxWidth: 420,
-            padding: "10px 10px",
-            borderRadius: 999,
-            // Размытие подложки убрано: панель висит над прокруткой, и
-            // браузер пересчитывал её на каждом кадре списка. Плотная
-            // заливка выглядит так же, но ничего не стоит.
-            background: hexA(T.bg, 0.92),
-            border: `1px solid ${T.lineHi}`,
-            boxShadow: "0 10px 34px rgba(0,0,0,0.4)",
+            position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 5,
+            paddingBottom: insetBottom,
+            background: hexA(T.bg, 0.94),
+            borderTop: `1px solid ${T.line}`,
           }}
         >
           {[
@@ -15947,16 +15935,16 @@ const FEE_PERCENT = 0.01; // 1% комиссии
                 // строится десятую долю секунды, и без него кажется, что
                 // нажатие не прошло — человек жмёт второй раз.
                 onClick={() => { haptic("light"); goTab(id); }}
-                className="fx-tap flex flex-col items-center gap-1.5"
-                style={{ position: "relative" }}
+                className="fx-tap flex flex-col items-center justify-center gap-1"
+                style={{ position: "relative", flex: 1, padding: "9px 0 7px", background: "transparent", border: "none" }}
               >
-                <Icon size={22} strokeWidth={1.75} color={active ? T.turquoise : T.muted} style={{ transition: `color ${EASE}` }} />
+                <Icon size={20} strokeWidth={1.6} color={active ? T.electric : T.faint} style={{ transition: `color ${EASE}` }} />
                 {locked && (
-                  <div style={{ position: "absolute", top: -3, right: -3, width: 14, height: 14, borderRadius: "50%", background: T.surface, border: `1px solid ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Lock size={8} color={T.muted} />
+                  <div style={{ position: "absolute", top: 4, right: "26%", width: 12, height: 12, borderRadius: "50%", background: T.surface, border: `1px solid ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Lock size={7} color={T.muted} />
                   </div>
                 )}
-                <span style={{ fontFamily: bodyFont, fontSize: 14, color: active ? T.ice : T.muted, transition: `color ${EASE}` }}>{label}</span>
+                <span style={{ fontFamily: bodyFont, fontSize: 11, fontWeight: active ? 600 : 500, color: active ? T.ice : T.faint, transition: `color ${EASE}` }}>{label}</span>
               </button>
             );
           })}
