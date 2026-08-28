@@ -8047,40 +8047,18 @@ function ChestReveal({ prize, onClose }) {
 
 /* Карточка сундука в магазине. Показывает цену и сколько вещей ещё не
    куплено: без этого непонятно, есть ли смысл открывать. */
-/* Стекло — тот же приём, что у фоновых листьев: мятная плёнка, светлее
-   у верхней грани, куда падает свет, тонкая светлая кромка и оранжевое
-   только линиями, как жилы-схема внутри листа.
-
-   Размытие здесь не украшение: и счётчик, и сундук висят над витриной,
-   под ними проезжают карточки, и через просто прозрачную плёнку читался
-   бы чужой текст. */
-function glassPane(радиус) {
-  // От стекла остался только смысл «плашка над витриной»: плотный фон,
-  // одна линия по краю. Градиенты, блики и тень читались не стеклом, а
-  // подложкой за текстом — на тёмном фоне это лишний слой.
-  return {
-    background: T.surface,
-    border: `1px solid ${T.line}`,
-    borderRadius: радиус,
-  };
-}
-
 function ChestCard({ coins, owned, onOpen }) {
   const left = chestPool(owned).length;
   const canOpen = left > 0 && coins >= CHEST_PRICE;
   return (
-    <div
-      className="fx-card p-4 flex items-center gap-3"
-      style={glassPane(18)}
-    >
+    // Без подложки: кейс — строка витрины, а не отдельный виджет.
+    // Карточка вокруг названия и подписи читалась лишним слоем.
+    <div className="flex items-center gap-3" style={{ padding: "2px 0" }}>
       <div style={{
-        width: 44, height: 44, flexShrink: 0,
-        borderRadius: 12,
-        background: T.surfaceHi,
-        border: `1px solid ${T.line}`,
+        width: 40, height: 40, flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
-        <Gift size={20} color={T.electric} />
+        <Gift size={22} color={T.electric} />
       </div>
       <div className="flex-1 min-w-0">
         <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15.5, fontWeight: 600 }}>{t("chestTitle")}</div>
