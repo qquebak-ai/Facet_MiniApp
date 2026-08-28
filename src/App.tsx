@@ -7573,65 +7573,79 @@ const ROLL_TICKS = rollTickTimes(ROLL_WIN_INDEX, ROLL_MS);
 
 /* Сам кейс.
 
-   Не коробка с крышкой, а гранёный ларец в том же ключе, что и всё
-   остальное: скошенные углы, тонкая оранжевая обводка, тёмные грани с
-   разной светимостью — так же нарисованы карточки токенов и рамки в
-   магазине. Рисуется в изометрии: ромб сверху, два параллелограмма по
-   бокам. Плоская коробка «в лоб» выглядела наклейкой, а не предметом.
+   Не ларец, а транспортный кейс: низкий широкий короб с металлическими
+   накладками по углам, двумя защёлками и светящимися линиями по швам.
+   Знак приложения вынесен на лицевую панель шестигранным бейджем — по
+   нему предмет и опознаётся с любого размера.
 
-   Крышка откидывается назад вокруг дальнего ребра, и одновременно из
-   короба бьёт свет — он же подсвечивает изнутри верхние кромки. */
+   Рисуется в перспективе три четверти: крышка уходит вглубь трапецией,
+   лицевая стенка стоит фронтально. Откидываясь, крышка встаёт на ребро
+   и показывает изнанку, а из короба бьёт свет. */
 function ChestArt({ open }) {
-  /* Кейс. Смотрим сверху и спереди: видно лицевую стенку и крышку,
-     уходящую вглубь трапецией. Всё держится на тонких оранжевых линиях
-     и тёмных гранях — тот же приём, что у карточек токенов.
-
-     Деталей ровно столько, чтобы предмет читался как вещь: накладные
-     уголки с заклёпками, замок со скважиной, светящаяся щель под
-     крышкой, ножки и блик. Больше добавлять нельзя — на ста двадцати
-     точках экрана лишнее сливается в шум. */
   const cx = 80;
-  const кшир = 48;      // половина ширины короба
-  const пшир = 53;      // половина ширины крышки: она шире и нависает
-  const зшир = 41;      // половина дальней кромки крышки — перспектива
-  const тлщ = 7;        // толщина крышки, видна полосой над коробом
-  const верх = 84;      // переднее ребро верхней плоскости
+  const кшир = 54;      // половина ширины короба
+  const пшир = 57;      // половина ширины крышки: она шире и нависает
+  const зшир = 45;      // половина дальней кромки крышки — перспектива
+  const тлщ = 9;        // торец крышки, видный полосой над коробом
+  const верх = 88;      // переднее ребро верхней плоскости
   const плечо = верх + тлщ; // верх короба — уходит под крышку
-  const шов = плечо + 2;    // нижняя кромка крышки, откуда бьёт свет
-  const низ = 128;      // дно
-  const глуб = 24;      // насколько крышка уходит назад
-  const скос = 10;      // срез нижних углов, как у кнопок приложения
+  const шов = плечо + 2;    // стык крышки и короба
+  const низ = 124;      // дно
+  const глуб = 20;      // насколько крышка уходит назад
+  const скос = 9;       // срез углов, как у кнопок приложения
   const взшир = зшир - (пшир - кшир); // дальняя кромка проёма в коробе
 
   const крышка = `${cx - пшир},${верх} ${cx - зшир},${верх - глуб} ${cx + зшир},${верх - глуб} ${cx + пшир},${верх}`;
-  // Проём короба — он уже крышки ровно на её свес, поэтому изнутри
-  // ничего не выглядывает за края.
   const проём = `${cx - кшир},${плечо} ${cx - взшир},${плечо - глуб} ${cx + взшир},${плечо - глуб} ${cx + кшир},${плечо}`;
-  const уголки = [cx - кшир + 6, cx + кшир - 16];
+
+  // Шестигранный бейдж: вершины слева и справа, верх и низ плоские.
+  const гекс = (x, y, w, h) => [
+    [x - w, y], [x - w * 0.5, y - h], [x + w * 0.5, y - h],
+    [x + w, y], [x + w * 0.5, y + h], [x - w * 0.5, y + h],
+  ].map((p) => p.join(",")).join(" ");
+
+  const лист = LEAF_KINDS[2];
+  // Знак внутри бейджа. Лист нарисован в своих координатах ростом около
+  // тридцати точек с центром выше нуля — отсюда и сдвиг.
+  const Знак = ({ x, y, s, opacity = 1 }) => (
+    <g transform={`translate(${x} ${y + 14 * s}) scale(${s})`} opacity={opacity}>
+      <path d={лист.outline} fill="#fff" opacity="0.92" />
+      {лист.veins.slice(0, 5).map((v, i) => (
+        <path key={i} d={v} fill="none" stroke={T.electric} strokeWidth="0.9" strokeLinecap="round" opacity="0.55" />
+      ))}
+    </g>
+  );
 
   return (
     <svg width="196" height="188" viewBox="0 0 160 160" style={{ position: "relative", overflow: "visible" }}>
       <defs>
+        {/* Металл накладок: сверху светлее, снизу уходит в тень. */}
+        <linearGradient id="chSteel" x1="0" y1="0" x2="0.3" y2="1">
+          <stop offset="0%" stopColor="#6E7480" />
+          <stop offset="45%" stopColor="#3D414B" />
+          <stop offset="100%" stopColor="#20232A" />
+        </linearGradient>
         <linearGradient id="chFront" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#212127" />
-          <stop offset="55%" stopColor="#131317" />
-          <stop offset="100%" stopColor="#08080a" />
+          <stop offset="0%" stopColor="#1A1C22" />
+          <stop offset="55%" stopColor="#0F1014" />
+          <stop offset="100%" stopColor="#07080A" />
         </linearGradient>
         <linearGradient id="chLid" x1="0.1" y1="1" x2="0.9" y2="0">
-          <stop offset="0%" stopColor="#2b2b32" />
-          <stop offset="45%" stopColor="#1a1a1f" />
-          <stop offset="100%" stopColor="#101014" />
+          <stop offset="0%" stopColor="#24262E" />
+          <stop offset="45%" stopColor="#16181D" />
+          <stop offset="100%" stopColor="#0D0E12" />
         </linearGradient>
         {/* Блик на крышке: узкая светлая полоса поперёк. */}
         <linearGradient id="chSheen" x1="0" y1="0" x2="1" y2="0.6">
           <stop offset="0%" stopColor="#fff" stopOpacity="0" />
-          <stop offset="45%" stopColor="#fff" stopOpacity="0.14" />
+          <stop offset="45%" stopColor="#fff" stopOpacity="0.1" />
           <stop offset="60%" stopColor="#fff" stopOpacity="0" />
         </linearGradient>
-        <linearGradient id="chPlate" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#191920" />
-          <stop offset="100%" stopColor="#0a0a0d" />
-        </linearGradient>
+        <radialGradient id="chBadge" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stopColor={T.electric} stopOpacity="0.95" />
+          <stop offset="70%" stopColor={T.electric} stopOpacity="0.5" />
+          <stop offset="100%" stopColor={T.electric} stopOpacity="0.18" />
+        </radialGradient>
         <linearGradient id="chInner" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={T.electric} stopOpacity="0.95" />
           <stop offset="100%" stopColor={T.electric} stopOpacity="0.1" />
@@ -7647,14 +7661,12 @@ function ChestArt({ open }) {
           <stop offset="55%" stopColor="#141418" stopOpacity="1" />
           <stop offset="100%" stopColor="#0a0a0d" stopOpacity="1" />
         </linearGradient>
-        {/* Свечение щели: ярче к середине, к краям сходит. */}
+        {/* Светящаяся линия: ярче к середине, к краям сходит на нет. */}
         <linearGradient id="chSlit" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor={T.electric} stopOpacity="0" />
           <stop offset="50%" stopColor={T.electric} stopOpacity="0.9" />
           <stop offset="100%" stopColor={T.electric} stopOpacity="0" />
         </linearGradient>
-        {/* Сердцевина щели: там, где свет плотнее всего, он уже не
-            оранжевый, а белый — как у любого источника на пределе. */}
         <linearGradient id="chSlitHot" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor={T.electric} stopOpacity="0" />
           <stop offset="30%" stopColor={T.electric} stopOpacity="0.8" />
@@ -7664,12 +7676,13 @@ function ChestArt({ open }) {
         </linearGradient>
       </defs>
 
-      {/* Тень: широкая мягкая плюс узкая плотная у самых ножек. */}
-      <ellipse cx={cx} cy={низ + 11} rx="62" ry="9" fill="#000" opacity="0.5" />
-      <ellipse cx={cx} cy={низ + 9} rx="34" ry="4.5" fill="#000" opacity="0.7" />
+      {/* Тень: широкая мягкая плюс узкая плотная под самым коробом. */}
+      <ellipse cx={cx} cy={низ + 10} rx="66" ry="9" fill="#000" opacity="0.5" />
+      <ellipse cx={cx} cy={низ + 8} rx="38" ry="4.5" fill="#000" opacity="0.7" />
+      {/* Отсвет неона на полу: кейс светится, значит светит и вокруг. */}
+      <ellipse cx={cx} cy={низ + 7} rx="52" ry="6" fill={T.electric} opacity="0.16" style={{ filter: "blur(5px)" }} />
 
-      {/* Луч наружу — только когда открыт. Бьёт из проёма короба, а не
-          из-под крышки: свет идёт оттуда, где дыра. */}
+      {/* Луч наружу — только когда открыт. Бьёт из проёма короба. */}
       {open && (
         <path
           d={`M${cx - взшир},${плечо - глуб} L${cx + взшир},${плечо - глуб} L${cx + взшир + 36},-50 L${cx - взшир - 36},-50 Z`}
@@ -7689,70 +7702,121 @@ function ChestArt({ open }) {
         </>
       )}
 
-      {/* Ножки — кейс стоит, а не висит. Отодвинуты от срезанных углов,
-          иначе сливаются с ними в одну корягу. */}
-      <path d={`M${cx - кшир + 16},${низ} h12 l-2,6 h-8 z`} fill="#0b0b0d" stroke={T.electric} strokeWidth="1.4" strokeLinejoin="round" />
-      <path d={`M${cx + кшир - 28},${низ} h12 l-2,6 h-8 z`} fill="#0b0b0d" stroke={T.electric} strokeWidth="1.4" strokeLinejoin="round" />
-
-      {/* Лицевая стенка со срезанными нижними углами. */}
+      {/* Лицевая стенка короба со срезанными углами. */}
       <path
         d={`M${cx - кшир},${плечо} H${cx + кшир} V${низ - скос} L${cx + кшир - скос},${низ} H${cx - кшир + скос} L${cx - кшир},${низ - скос} Z`}
-        fill="url(#chFront)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round"
-      />
-      {/* Вторая линия внутри контура: даёт толщину металла. */}
-      <path
-        d={`M${cx - кшир + 4},${плечо + 4} H${cx + кшир - 4} V${низ - скос - 2} L${cx + кшир - скос - 2},${низ - 4} H${cx - кшир + скос + 2} L${cx - кшир + 4},${низ - скос - 2} Z`}
-        fill="none" stroke={T.electric} strokeWidth="1" opacity="0.28"
+        fill="url(#chFront)" stroke="#333741" strokeWidth="1.6" strokeLinejoin="round"
       />
 
-      {/* Накладные уголки с заклёпками по краям лицевой стенки. */}
-      {уголки.map((x, i) => (
-        <g key={i}>
-          <rect x={x} y={плечо + 4} width="10" height={низ - плечо - 10} rx="3" fill="#0d0d10" stroke={T.electric} strokeWidth="1.2" opacity="0.75" />
-          <circle cx={x + 5} cy={плечо + 9} r="1.4" fill={T.electric} opacity="0.85" />
-          <circle cx={x + 5} cy={низ - 11} r="1.4" fill={T.electric} opacity="0.85" />
-        </g>
-      ))}
+      {/* Ломаная неоновая линия по низу лицевой стенки — та самая
+          «подсветка корпуса», по которой кейс и читается техникой, а не
+          деревянным ящиком. Идёт двумя отрезками, огибая бейдж. */}
+      {[-1, 1].map((s) => {
+        const внеш = cx + s * (кшир - 14);
+        const внутр = cx + s * 20;
+        const y = низ - 9;
+        const d = `M${внеш},${y} H${внутр}`;
+        return (
+          <g key={s}>
+            <path d={d} fill="none" stroke={T.electric} strokeWidth="4.5" opacity="0.35" strokeLinecap="round" strokeLinejoin="round" style={{ filter: "blur(2.5px)" }} />
+            <path d={d} fill="none" stroke={T.electric} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        );
+      })}
 
-      {/* Замок: пластина со знаком приложения и скважиной под ним. */}
-      <g transform={`translate(${cx - 16}, ${плечо + 4})`}>
-        <path d="M4 0 H24 L28 4 V24 L24 28 H4 L0 24 V4 Z"
-          fill="url(#chPlate)" stroke={T.electric} strokeWidth="1.7" strokeLinejoin="round" />
-        <path d="M7 16 V6.5 L14 12 L21 6.5 V16" fill="none" stroke={T.electric}
-          strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="14" cy="21" r="2.4" fill="none" stroke={T.electric} strokeWidth="1.4" />
-        <path d="M14 23 v2.5" stroke={T.electric} strokeWidth="1.4" strokeLinecap="round" />
+      {/* Металлические уголки корпуса: накладка по краю с завёрнутым
+          низом, как на транспортных ящиках, и парой заклёпок. */}
+      {[-1, 1].map((s) => {
+        const x = cx + s * кшир;
+        return (
+          <g key={s}>
+            <path
+              d={`M${x},${плечо + 1} H${x - s * 11} V${низ - 1} H${x - s * скос} L${x},${низ - скос - 1} Z`}
+              fill="url(#chSteel)" stroke="#4A4F5A" strokeWidth="0.8" strokeLinejoin="round"
+            />
+            <circle cx={x - s * 5.5} cy={плечо + 6} r="1.3" fill="#0E1013" opacity="0.9" />
+            <circle cx={x - s * 5.5} cy={низ - 8} r="1.3" fill="#0E1013" opacity="0.9" />
+          </g>
+        );
+      })}
+
+      {/* Бейдж со знаком приложения — центр лицевой панели. */}
+      <g>
+        <polygon points={гекс(cx, низ - 15, 19, 11)} fill={T.electric} opacity="0.25" style={{ filter: "blur(4px)" }} />
+        <polygon points={гекс(cx, низ - 15, 16, 9.5)} fill="#0C0D11" stroke="#41465142" strokeWidth="3" strokeLinejoin="round" />
+        <polygon points={гекс(cx, низ - 15, 13, 7.7)} fill="url(#chBadge)" stroke={T.electric} strokeWidth="1.2" strokeLinejoin="round" />
+        <Знак x={cx} y={низ - 20} s={0.42} />
       </g>
 
-      {/* Крышка целиком: верхняя плоскость и её торец. Плита лежит на
-          коробе и свешивается с боков — по этому свесу и читается, что
-          она отдельная вещь, а не рисунок на стенке.
+      {/* Нижняя половина защёлок — она на коробе и остаётся на месте,
+          когда крышка откидывается. Верхний язычок нарисован внутри
+          группы крышки и уезжает вместе с ней. */}
+      {[-1, 1].map((s) => {
+        const x = cx + s * 33;
+        return (
+          <g key={s}>
+            <rect x={x - 6} y={шов + 1} width="12" height="12" rx="2.5" fill="url(#chSteel)" stroke="#565C68" strokeWidth="0.8" />
+            <line x1={x - 3.2} y1={шов + 5} x2={x + 3.2} y2={шов + 5} stroke="#0E1013" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1={x - 3.2} y1={шов + 9} x2={x + 3.2} y2={шов + 9} stroke="#0E1013" strokeWidth="1.5" strokeLinecap="round" />
+          </g>
+        );
+      })}
 
-          Откидываясь, крышка почти встаёт на ребро: плоскость
-          сокращается по высоте, торец уходит вниз, и показывается
-          изнанка — её подсвечивает свет из короба. */}
+      {/* Крышка целиком: верхняя плоскость и её торец. Откидываясь, она
+          почти встаёт на ребро и показывает изнанку. */}
       <g style={{
         transformOrigin: `${cx}px ${верх - глуб}px`,
         animation: open ? "chestLidOpen 660ms cubic-bezier(0.32,1.2,0.5,1) both" : "none",
       }}>
-        {/* Торец — под плоскостью, ровно в её ширину: раньше он шёл
-            поверх и торчал за скошенные бока двумя заусенцами. Нижние
-            углы срезаны, как у короба.
-
-            Нижней кромкой торец заходит на пару точек ниже верха короба
-            и закрывает его обводку: иначе две линии встают вплотную и
-            весь стык выглядит одной жирной полосой. */}
+        {/* Торец крышки: тёмная полоса с неоновой линией вдоль. */}
         <path
           d={`M${cx - пшир},${верх} H${cx + пшир} V${шов - 3} L${cx + пшир - 3},${шов} H${cx - пшир + 3} L${cx - пшир},${шов - 3} Z`}
-          fill="#15151a" stroke={T.electric} strokeWidth="1.6" strokeLinejoin="round"
+          fill="#14161B" stroke="#333741" strokeWidth="1.4" strokeLinejoin="round"
           opacity={open ? 0.85 : 1}
         />
+        {/* Верхние язычки защёлок — на торце крышки. */}
+        {[-1, 1].map((s) => (
+          <rect
+            key={s} x={cx + s * 33 - 7} y={верх + 1} width="14" height={тлщ + 1} rx="2"
+            fill="url(#chSteel)" stroke="#565C68" strokeWidth="0.8"
+          />
+        ))}
+
         {/* Плоскость крышки. */}
-        <polygon points={крышка} fill="url(#chLid)" stroke={T.electric} strokeWidth="2" strokeLinejoin="round" />
+        <polygon points={крышка} fill="url(#chLid)" stroke="#3A3F49" strokeWidth="1.8" strokeLinejoin="round" />
         <polygon points={крышка} fill="url(#chSheen)" />
 
-        {/* Изнанка: проступает, когда крышка развернулась. Рисуется
-            поверх лицевой и гасит её. */}
+        {/* Тёмные панели на крышке — по одной слева и справа от бейджа,
+            как люки на настоящем ящике. */}
+        {!open && [-1, 1].map((s) => (
+          <polygon
+            key={s}
+            points={`${cx + s * 16},${верх - 4} ${cx + s * 15},${верх - глуб + 5} ${cx + s * (зшир - 6)},${верх - глуб + 5} ${cx + s * (пшир - 9)},${верх - 4}`}
+            fill="#0B0C10" opacity="0.75" stroke="#2C3039" strokeWidth="0.8" strokeLinejoin="round"
+          />
+        ))}
+
+        {/* Неоновые вставки в углах крышки. */}
+        {!open && [-1, 1].map((s) => (
+          <line
+            key={s}
+            x1={cx + s * (пшир - 5)} y1={верх - 4}
+            x2={cx + s * (зшир - 3)} y2={верх - глуб + 4}
+            stroke={T.electric} strokeWidth="2.2" strokeLinecap="round" opacity="0.9"
+          />
+        ))}
+
+        {/* Бейдж на крышке — тот же знак, но мельче. */}
+        {!open && (
+          <g>
+            <polygon points={гекс(cx, верх - 10, 12, 6.5)} fill={T.electric} opacity="0.2" style={{ filter: "blur(3px)" }} />
+            <polygon points={гекс(cx, верх - 10, 10, 5.4)} fill="#0C0D11" stroke="#41465166" strokeWidth="2" strokeLinejoin="round" />
+            <polygon points={гекс(cx, верх - 10, 8, 4.4)} fill="url(#chBadge)" stroke={T.electric} strokeWidth="1" strokeLinejoin="round" />
+            <Знак x={cx} y={верх - 13} s={0.26} />
+          </g>
+        )}
+
+        {/* Изнанка: проступает, когда крышка развернулась. */}
         {open && (
           <polygon
             points={крышка}
@@ -7763,33 +7827,19 @@ function ChestArt({ open }) {
             style={{ animation: "lidFlip 660ms ease-in both" }}
           />
         )}
-
-        {/* Рёбра по скатам и ручка — на лицевой стороне. */}
-        <g style={open ? { opacity: 0, transition: `opacity ${EASE}` } : undefined}>
-          <line x1={cx - пшир + 13} y1={верх - 3} x2={cx - зшир + 11} y2={верх - глуб + 3}
-            stroke={T.electric} strokeWidth="1.1" opacity="0.42" />
-          <line x1={cx + пшир - 13} y1={верх - 3} x2={cx + зшир - 11} y2={верх - глуб + 3}
-            stroke={T.electric} strokeWidth="1.1" opacity="0.42" />
-          <path d={`M${cx - 9},${верх - глуб + 5} q9,-7 18,0`} fill="none" stroke={T.electric} strokeWidth="1.8" strokeLinecap="round" opacity="0.9" />
-          <circle cx={cx} cy={верх - глуб + 10} r="2.6" fill={T.electric} opacity="0.85" />
-        </g>
       </g>
 
-      {/* Щель между крышкой и коробом: пока закрыт — оттуда пробивается
-          свет и тихо пульсирует, будто внутри что-то есть. Рисуется
-          после крышки, иначе её обводка съедает половину свечения.
-
-          Свет — не линия, а пятно с раскалённой сердцевиной: одной
-          полоской он читался ещё одной обводкой, каких на кейсе и без
-          того хватает. */}
+      {/* Свет из щели, пока кейс закрыт: пятно с раскалённой сердцевиной,
+          тихо пульсирующее. Рисуется после крышки, иначе её обводка
+          съедает половину свечения. */}
       {!open && (
         <g style={{ animation: "glowPulse 2.6s ease-in-out infinite" }}>
           <rect
-            x={cx - кшир + 3} y={шов - 3.5} width={кшир * 2 - 6} height="8" rx="4"
+            x={cx - кшир + 3} y={шов - 4.5} width={кшир * 2 - 6} height="8" rx="4"
             fill="url(#chSlit)" opacity="0.6" style={{ filter: "blur(3px)" }}
           />
           <rect
-            x={cx - кшир + 9} y={шов - 0.9} width={кшир * 2 - 18} height="1.8" rx="0.9"
+            x={cx - кшир + 9} y={шов - 1.9} width={кшир * 2 - 18} height="1.8" rx="0.9"
             fill="url(#chSlitHot)"
           />
         </g>
