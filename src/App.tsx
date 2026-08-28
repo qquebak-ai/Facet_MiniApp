@@ -1583,11 +1583,8 @@ function GlobalStyle() {
          касания и не снимается до тапа в стороне, а !important перебивал
          рамку выбранного предмета — выделение выглядело залипшим. */
       @media (hover: hover) and (pointer: fine) {
-        .fx-card:not(.fx-picked):hover { border-color: ${T.lineHi}; }
+        .fx-card:hover { border-color: ${T.lineHi}; }
       }
-      /* Рамка выбора рисуется тенью, а не border: она не входит в поток и
-         не заставляет пересчитывать раскладку карточки при переключении. */
-      .fx-picked { border-color: ${T.electric} !important; box-shadow: 0 0 0 1.5px ${T.electric}; }
       .fx-tap { transition: transform ${SPRING}; }
       .fx-tap:active { transform: scale(0.96); transition: transform ${PRESS}; }
       /* Нажатие внутри виджета не должно вдавливать виджет целиком.
@@ -7195,7 +7192,11 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
       // рамки, и витрина превращалась в сетку контейнеров вместо сетки
       // предметов. Сам предмет остаётся в своём окне, подпись и цена —
       // просто под ним.
-      className={`fx-card flex flex-col items-center gap-2.5 p-0${equipped ? " fx-picked" : ""}${наЭкране ? "" : " fx-frozen"}`}
+      // Надетое отмечается самим окном предмета, а не рамкой вокруг всей
+      // плитки: та обводила заодно подпись и слово «Надето», упиралась в
+      // края сетки и рисовалась прямыми углами поверх скруглённого
+      // превью.
+      className={`fx-card flex flex-col items-center gap-2.5 p-0${наЭкране ? "" : " fx-frozen"}`}
       style={{
         background: "transparent", border: "none",
         position: "relative", overflow: "hidden", contain: "paint",
@@ -7211,7 +7212,15 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
     >
       {/* Некупленное не гасим прозрачностью: предмет видно целиком, на
           то он и витрина, а что он ещё не твой — сказано ценой. */}
-      <div style={{ position: "relative", width: "100%", height: 104, borderRadius: 16, overflow: "hidden", background: T.surface, border: `1px solid ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{
+        position: "relative", width: "100%", height: 104, borderRadius: 16, overflow: "hidden",
+        background: T.surface,
+        border: `1px solid ${equipped ? T.electric : T.line}`,
+        // Второй контур внутрь: снаружи его срезал бы overflow плитки, а
+        // так надетое видно с одного взгляда и по краю ничего не торчит.
+        boxShadow: equipped ? `inset 0 0 0 1px ${hexA(T.electric, 0.45)}` : "none",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
         {kind === "card" && <ProfileCardBg cardId={item.id} height={96} radius={16} showcase />}
         <div style={{ position: "relative", zIndex: 1 }}>
           {/* Внутри рамки — просто чёрный кружок: витрина про сам
