@@ -5209,9 +5209,25 @@ const AVATAR_FRAMES = [
     // Не оранжевое кольцо, а тлеющий уголь: жар по кольцу дышит
     // вразнобой, и с него срываются искры, которые гаснут на лету.
     id: "ember", label: { RU: "Уголёк", EN: "Ember" }, price: 120,
-    colors: ["#FF6B35", "#FFC46B", "#FF3D00", "#FF6B35"], spin: 7, glow: "#FF6B35",
+    // Кольцо толще прочих: под ним не полоска цвета, а корка прогоревших
+    // углей, и трещинам между ними нужна ширина.
+    ring: 0.075,
+    // Снизу — сама лава: от белого жара к тёмно-багровому, чтобы сквозь
+    // разрывы корки было видно разную температуру.
+    colors: ["#FF7A18", "#FFD08A", "#FF3B00", "#8E1400", "#FF7A18"], spin: 9, glow: "#FF4D0A",
     heat: { color: "#FFC46B", dur: 2.4 },
-    rise: { count: 5, color: "#FF8A3D", dur: 2.8 },
+    rise: { count: 7, color: "#FF8A3D", dur: 2.8 },
+    // Корка: тёмная порода кладётся поверх лавы рваными пятнами, и там,
+    // где её нет, остаются светящиеся трещины.
+    crust: {
+      color: "#140B09", edge: "#FF6A1A",
+      // Два слоя породы: крупные куски и мелкий щебень поверх, каждый
+      // со своей скоростью — так корка не выглядит одним узором.
+      layers: [
+        { freq: 0.055, seed: 11, dur: 38, порог: [4.6, -1.5] },
+        { freq: 0.14, seed: 3, dur: 27, порог: [3.6, -1.55], opacity: 0.9, reverse: true },
+      ],
+    },
     // Огонь: мелкая частая рябь на быстром повороте — язычки пламени
     // бегут по кромке.
     warp: {
@@ -6062,7 +6078,10 @@ function GraduationBar({ raisedTon = 0, targetTon = 0, compact = false }) {
 // заметной задержкой.
 const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, children }) {
   const f = FRAME_BY_ID[frameId] || FRAME_BY_ID.none;
-  const ring = Math.max(2, Math.round(size * 0.035));
+  // Толщина кольца по умолчанию одна на все рамки, но вещество бывает
+  // разной толщины: корка углей на волосяной окружности не читается —
+  // трещинам просто негде быть.
+  const ring = Math.max(2, Math.round(size * (f.ring || 0.035)));
   // Чёрная середина лежит выше кольца явным этажом, а не просто следом
   // за ним в разметке. Кольцо крутится и из-за этого уезжает на
   // отдельный слой отрисовки, а такой слой в WebKit (в том числе внутри
@@ -6289,6 +6308,65 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
             animation: "spotlightSweep 3.8s ease-in-out infinite",
           }} />
         </div>
+      )}
+
+      {/* Корка углей.
+
+          Кольцо снизу — сплошная лава; сверху на неё кладётся тёмная
+          порода, но не ровным слоем, а рваными пятнами: шум прогоняется
+          через резкую кривую прозрачности, и от него остаются острова
+          вместо мягкой дымки. Между островами лава и видна — это и есть
+          трещины, рисовать их отдельно не нужно.
+
+          Только для крупных копий: на витрине в шестьдесят точек
+          отдельные трещины не различимы, а фильтр считается честно. */}
+      {f.crust && крупно && f.crust.layers.map((L, i) => {
+        const uid = `cr-${f.id}-${i}-${size}`;
+        // Толщина кольца в единицах viewBox — оно рисуется в системе
+        // 0..100 независимо от размера на экране.
+        const ш = (ring / size) * 100;
+        const [к, сдвиг] = L.порог;
+        return (
+          <svg
+            key={uid} width={size} height={size} viewBox="0 0 100 100"
+            style={{ position: "absolute", inset: 0, zIndex: 1, pointerEvents: "none", opacity: L.opacity || 1 }}
+            aria-hidden
+          >
+            <defs>
+              <filter id={uid} x="-15%" y="-15%" width="130%" height="130%">
+                <feTurbulence type="fractalNoise" baseFrequency={L.freq} numOctaves="3" seed={L.seed} result="n" />
+                {/* Прозрачность берётся из шума и растягивается так, что
+                    полутона исчезают: остаётся либо порода, либо
+                    просвет. */}
+                <feColorMatrix in="n" type="matrix" values={`0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${к} 0 0 0 ${сдвиг}`} result="m" />
+                <feComposite in="SourceGraphic" in2="m" operator="in" />
+              </filter>
+            </defs>
+            <g style={{
+              transformOrigin: "50px 50px",
+              animation: `spin360 ${L.dur}s linear infinite${L.reverse ? " reverse" : ""}`,
+            }}>
+              <circle cx="50" cy="50" r={50 - ш / 2} fill="none" stroke={f.crust.color} strokeWidth={ш} filter={`url(#${uid})`} />
+            </g>
+          </svg>
+        );
+      })}
+
+      {/* Раскалённые кромки: край корки всегда горячее её середины. */}
+      {f.crust && (
+        <>
+          <div style={{
+            position: "absolute", inset: 0, borderRadius: "50%",
+            boxShadow: `inset 0 0 ${Math.max(2, ring * 0.7)}px ${hexA(f.crust.edge, 0.85)}`,
+            zIndex: 1, WebkitMaskImage: ringMask, maskImage: ringMask,
+          }} />
+          <div style={{
+            position: "absolute", inset: ring - 1, borderRadius: "50%",
+            border: `1px solid ${hexA(f.crust.edge, 0.75)}`,
+            boxShadow: `0 0 ${ring}px ${hexA(f.crust.edge, 0.6)}`,
+            zIndex: 1,
+          }} />
+        </>
       )}
 
       {inner}
