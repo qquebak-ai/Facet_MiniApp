@@ -4133,7 +4133,7 @@ function fmtSince(iso) {
    что и вкладка транзакций у токена; показываем по одной сделке за раз и
    раз в несколько секунд переключаем — так строка остаётся узкой и не
    отвлекает от виджета под ней. */
-function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
+function RecentBuysTicker({ tokens, curveTokens, onOpen, onReady }) {
   const [buys, setBuys] = useState([]);
   // Пока не пришёл первый ответ, на месте ленты стоит скелет той же
   // высоты: пустого прыгающего места на экране быть не должно.
@@ -4235,6 +4235,15 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
     const poll = setInterval(() => load(false), INTERVAL_MS);
     return () => { cancelled = true; clearInterval(poll); };
   }, [pools, curves]);
+
+  // Раздел ждёт ленту наравне со списком токенов, поэтому о первом
+  // ответе нужно сказать наружу — сам компонент про экран ничего не
+  // знает.
+  const готовность = useRef(onReady);
+  готовность.current = onReady;
+  useEffect(() => {
+    if (loaded && готовность.current) готовность.current();
+  }, [loaded]);
 
   // Показанные сделки запоминаются: лента должна идти вперёд, а не
   // крутить по кругу одну и ту же покупку. Когда непоказанных не
@@ -8542,6 +8551,25 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
     ? (solLoading || !solTokens)
     : (filter === "new" ? myTokensLoading : loading);
 
+  /* Раздел показывается целиком или не показывается вовсе.
+     Раньше он собирался на глазах: сначала пустая лента сделок, следом
+     скелеты списка, потом «в центре внимания» — три перестроения подряд
+     на каждом открытии. Теперь экран ждёт и список, и первый ответ
+     ленты, а до тех пор стоит один загрузчик.
+
+     Смена сети — это другой рынок целиком, поэтому ожидание начинается
+     заново. */
+  const [лентаГотова, setЛентаГотова] = useState(false);
+  useEffect(() => {
+    setЛентаГотова(false);
+    // Страховка: у токена может не быть ни одной сделки, а источник
+    // может и вовсе не ответить — держать человека перед загрузчиком
+    // дольше нескольких секунд нельзя.
+    const to = setTimeout(() => setЛентаГотова(true), 7000);
+    return () => clearTimeout(to);
+  }, [сеть]);
+  const разделГотов = !идётЗагрузка && лентаГотова;
+
   return (
     <div className="flex flex-col" style={{ gap: 20, paddingTop: 8, paddingBottom: 16 }}>
       {/* Шапка раздела: название, поиск и выбор сети — одной строкой и
@@ -8578,20 +8606,24 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
           касанием по краю экрана. */}
       <NetworkSlider value={сеть} onChange={setСеть} />
 
+      {/* Пока раздел не готов, его содержимое скрыто, но смонтировано:
+          лента сама ходит за сделками, и без неё на экране ждать было бы
+          нечего. */}
+      {!разделГотов && <PageLoader minHeight={360} />}
+
+      <div
+        className="flex flex-col"
+        style={{ gap: 20, display: разделГотов ? undefined : "none" }}
+      >
       <RecentBuysTicker
         key={сеть}
         tokens={сеть === "sol" ? (solTokens || []) : tokens}
         curveTokens={сеть === "sol" ? [] : myTokens}
         onOpen={onOpen}
+        onReady={() => setЛентаГотова(true)}
       />
 
-      {идётЗагрузка && !spotlight ? (
-        <div className="fx-card rounded-[22px] p-6 flex flex-col items-center gap-3" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-          <div className="fx-skeleton" style={{ width: 92, height: 92, borderRadius: "50%" }} />
-          <div className="fx-skeleton" style={{ width: 90, height: 16, borderRadius: 4 }} />
-          <div className="fx-skeleton" style={{ width: 130, height: 24, borderRadius: 4 }} />
-        </div>
-      ) : spotlight && (
+      {spotlight && (
         <div>
           <div style={{ fontFamily: displayFont, color: T.muted, fontSize: 13, fontWeight: 500, letterSpacing: "0.02em", textTransform: "uppercase", marginBottom: 10 }}>
             {t("mempadSpotlight")}
@@ -8661,16 +8693,17 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
       </div>
 
       <div className="flex flex-col gap-2" key={`${сеть}:${filter}`}>
-        {идётЗагрузка && !list.length
-          ? <PageLoader minHeight={220} />
-          : идётЗагрузка
-            ? Array.from({ length: 4 }).map((_, i) => <MempadRowSkeleton key={i} index={i} />)
-            : list.map((tok, i) => <MempadRow key={tok.id} t={tok} onOpen={onOpen} index={i} />)}
+        {/* Смена фильтра внутри готового раздела — не повод гасить весь
+            экран: там достаточно скелетов на месте строк. */}
+        {идётЗагрузка
+          ? Array.from({ length: 4 }).map((_, i) => <MempadRowSkeleton key={i} index={i} />)
+          : list.map((tok, i) => <MempadRow key={tok.id} t={tok} onOpen={onOpen} index={i} />)}
         {!идётЗагрузка && list.length === 0 && (
           <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, padding: "16px 0" }}>
             {t("emptyFilter")}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
