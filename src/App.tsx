@@ -1950,6 +1950,17 @@ function fmtTon(n) {
   return n.toFixed(3).replace(/\.?0+$/, "");
 }
 
+/* Сумма в монете, когда монета дорогая. fmtTon режет всё мельче тысячной
+   в ноль — для TON это копейки, а для SOL по паре сотен долларов так
+   выглядит любая сделка на доллар. Здесь мелочь остаётся видимой. */
+function fmtCoin(n) {
+  if (!(n > 0)) return "0";
+  if (n >= 1) return fmtTon(n);
+  if (n >= 0.001) return n.toFixed(3).replace(/\.?0+$/, "");
+  if (n >= 0.00001) return n.toFixed(5).replace(/\.?0+$/, "");
+  return "<0.00001";
+}
+
 function fmtCompact(n) {
   const v = Number(n) || 0;
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
@@ -4286,7 +4297,14 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen }) {
             const соло = b.token && b.token.chain === "solana";
             const курс = соло ? solUsd() : tonUsd();
             const сумма = !соло && b.volTon != null ? b.volTon : (курс > 0 ? b.volUsd / курс : 0);
-            return `${fmtTon(сумма)} ${соло ? "SOL" : "TON"}`;
+            // Без курса пересчитывать нечего, и «0 SOL» здесь означало бы
+            // не мелкую сделку, а незагруженный курс — показываем доллары,
+            // они у источника есть всегда.
+            if (!(сумма > 0)) return `$${b.volUsd < 1 ? b.volUsd.toFixed(2) : fmtCompact(b.volUsd)}`;
+            // SOL стоит сотни долларов, поэтому обычная сделка на доллар —
+            // это тысячные доли монеты. Прежние три знака округляли их в
+            // ноль, и лента писала «купил 0 SOL».
+            return `${fmtCoin(сумма)} ${соло ? "SOL" : "TON"}`;
           })()}
         </span>
         <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>${b.token.ticker}</span>
