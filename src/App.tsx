@@ -7266,8 +7266,9 @@ function AchievementsView({ achievements = [], onGoShop, onBack }) {
         <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, marginTop: 4 }}>{t("achievementsIntro")}</p>
       </div>
 
-      {/* Общий прогресс */}
-      <div className="rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+      {/* Общий прогресс — без подложки: сама полоса и есть виджет, а
+          карточка вокруг двух строк только добавляла слой. */}
+      <div>
         <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("achProgress")}</span>
           <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{tf("achUnlockedOf", { done, total: achievements.length })}</span>
@@ -8066,27 +8067,18 @@ function ChestCard({ coins, owned, onOpen }) {
           {left > 0 ? t("chestSub") : t("chestEmpty")}
         </div>
       </div>
-      {/* Цена: монета тёмная по оранжевому, число крупнее подписей вокруг.
-          Раньше монета была того же цвета, что и кнопка, и от неё
-          оставалось смутное пятно — виднелось одно число. */}
+      {/* Цена без плашки: монета и число акцентом прямо на фоне —
+          подложка вокруг двух знаков читалась лишним слоем. */}
       <button
         onClick={() => canOpen && onOpen && onOpen()}
         disabled={!canOpen}
-        className="fx-tap flex items-center gap-1.5 rounded-full"
-        style={{
-          flexShrink: 0, padding: "9px 14px",
-          // Открыть сундук — главное действие блока, поэтому кнопка
-          // залита акцентом, а не обведена им: обводка со свечением
-          // читалась подсветкой, а не кнопкой.
-          background: canOpen ? T.electric : T.surfaceHi,
-          border: `1px solid ${canOpen ? T.electric : T.line}`,
-          opacity: left > 0 ? 1 : 0.5,
-        }}
+        className="fx-tap flex items-center gap-1.5"
+        style={{ flexShrink: 0, padding: "6px 2px", opacity: left > 0 ? 1 : 0.5 }}
       >
-        <CoinIcon size={16} tone={canOpen ? PRISM_TEXT : T.muted} />
+        <CoinIcon size={16} tone={canOpen ? T.electric : T.muted} />
         <span style={{
           fontFamily: displayFont, fontWeight: 600, fontSize: 15,
-          color: canOpen ? PRISM_TEXT : T.muted, letterSpacing: "-0.01em",
+          color: canOpen ? T.electric : T.muted, letterSpacing: "-0.01em",
         }}>
           {CHEST_PRICE}
         </span>
@@ -12981,7 +12973,7 @@ function ProfileView({
               {t("achAll")} <ChevronRight size={13} />
             </button>
           }>{t("achievementsTitle")}</SectionTitle>
-          <button onClick={onOpenAchievements} className="fx-tap w-full text-left rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+          <button onClick={onOpenAchievements} className="fx-tap w-full text-left" style={{ padding: "2px 0" }}>
             <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
               <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("achProgress")}</span>
               <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>
