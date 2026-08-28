@@ -4363,7 +4363,10 @@ function StatChip({ icon: Icon, label, value }) {
 function SectionTitle({ children, action }) {
   return (
     <div className="flex items-center justify-between mb-2.5">
-      <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 23, fontWeight: 700, letterSpacing: "-0.01em" }}>{children}</span>
+      {/* Заголовок секции, а не экрана: 17 пунктов и полужирный. Прежние
+          23 и жирный спорили с названием раздела и делали каждый блок
+          похожим на отдельную страницу. */}
+      <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em" }}>{children}</span>
       {action}
     </div>
   );
@@ -4872,7 +4875,7 @@ function SpotlightAura({ src, ticker }) {
       aria-hidden
       style={{
         position: "absolute", inset: 0, pointerEvents: "none",
-        background: `radial-gradient(80% 60% at 50% 22%, ${тон(0.5)} 0%, ${тон(0.18)} 42%, transparent 72%), linear-gradient(180deg, ${тон(0.12)} 0%, transparent 60%)`,
+        background: `radial-gradient(70% 120% at 8% 50%, ${тон(0.22)} 0%, ${тон(0.06)} 45%, transparent 78%)`,
         // Смена токена в подборке не должна выглядеть как вспышка.
         transition: "background 520ms ease-out",
       }}
@@ -8437,23 +8440,25 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
         </div>
       )}
 
-      <div className="no-scrollbar flex items-center gap-2 overflow-x-auto" style={{ touchAction: "pan-x", overscrollBehaviorX: "contain", overflowY: "hidden" }}>
-        {MEMPAD_FILTERS.map(f => {
+      <div className="no-scrollbar flex items-center overflow-x-auto" style={{ gap: 18, touchAction: "pan-x", overscrollBehaviorX: "contain", overflowY: "hidden" }}>
+        {MEMPAD_FILTERS.map((f) => {
           const active = filter === f.id;
           return (
-            <button key={f.id} onClick={() => setFilter(f.id)} className="fx-tap fx-chip rounded-full px-3.5 py-1.5 whitespace-nowrap flex-shrink-0"
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className="fx-tap whitespace-nowrap flex-shrink-0"
               style={{
-                fontFamily: bodyFont, fontSize: 14, fontWeight: 600, background: active ? T.ice : "transparent",
-                color: active ? T.bg : T.muted, border: `1px solid ${active ? T.ice : "transparent"}`,
-              }}>
+                background: "transparent", border: "none", padding: 0,
+                fontFamily: displayFont, fontSize: 14, fontWeight: active ? 600 : 500,
+                color: active ? T.ice : T.faint,
+                transition: `color ${EASE}`,
+              }}
+            >
               {t(f.labelKey)}
             </button>
           );
         })}
-        <div style={{ flex: 1 }} />
-        <button className="fx-tap flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, borderRadius: "50%", background: T.surface, border: `1px solid ${T.line}` }}>
-          <Search size={14} color={T.muted} />
-        </button>
       </div>
 
       <div className="flex flex-col gap-2" key={`${сеть}:${filter}`}>
@@ -8463,7 +8468,7 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
             ? Array.from({ length: 4 }).map((_, i) => <MempadRowSkeleton key={i} index={i} />)
             : list.map((tok, i) => <MempadRow key={tok.id} t={tok} onOpen={onOpen} index={i} />)}
         {!идётЗагрузка && list.length === 0 && (
-          <div className="fx-view" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14.5, textAlign: "center", padding: "24px 0" }}>
+          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, padding: "16px 0" }}>
             {t("emptyFilter")}
           </div>
         )}
@@ -8490,15 +8495,14 @@ function AlmostListed({ tokens = [], onOpen }) {
   return (
     <div className="fx-view">
       <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("homeAlmostTitle")}</span>
-        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("homeAlmostSub")}</span>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 600 }}>{t("homeAlmostTitle")}</span>
+        <span style={{ fontFamily: bodyFont, color: T.faint, fontSize: 12.5 }}>{t("homeAlmostSub")}</span>
       </div>
 
       {!top.length ? (
-        <div className="rounded-[22px] p-5 flex flex-col items-center text-center gap-2" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
-          <Sparkles size={20} color={T.muted} />
-          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, lineHeight: 1.5 }}>{t("homeAlmostEmpty")}</div>
-        </div>
+        // Пустое состояние — одна строка. Пунктирный контейнер с иконкой
+        // занимал полэкрана и сообщал ровно то же самое.
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("homeAlmostEmpty")}</div>
       ) : (
         <div className="flex flex-col gap-2">
           {top.map(({ tok, pct }, i) => (
@@ -8907,44 +8911,49 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
 
   if (!connected) {
     return (
-      <div className="fx-view flex flex-col items-center justify-center text-center" style={{ minHeight: 420, gap: 18, padding: "0 8px" }}>
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 21.5, fontWeight: 700 }}>{t("walletEmptyTitle")}</div>
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, maxWidth: 260 }}>{t("walletEmptyBody")}</p>
+      <div className="flex flex-col" style={{ gap: 24, paddingTop: 8 }}>
+        <div>
+          <h1 style={{ fontFamily: displayFont, color: T.ice, fontSize: 24, fontWeight: 600, margin: 0 }}>{t("navWallet")}</h1>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, marginTop: 6, lineHeight: 1.45 }}>{t("walletEmptyBody")}</p>
+        </div>
         <button
           onClick={onConnect}
-          className="fx-tap w-full rounded-[22px] py-3.5 flex items-center justify-center gap-2"
-          style={{ maxWidth: 300, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 15.5 }}
+          className="fx-tap w-full flex items-center justify-center gap-2"
+          style={{ padding: "13px 16px", borderRadius: 14, background: T.electric, color: PRISM_TEXT, border: "none", fontFamily: displayFont, fontSize: 15, fontWeight: 600 }}
         >
-          <Wallet size={16} /> {t("connectWallet")}
+          <Wallet size={16} strokeWidth={1.8} /> {t("connectWallet")}
         </button>
 
         {/* Кошельки друг от друга не зависят: мемкоины Solana можно
             торговать и не подключая TON-кошелёк вовсе. */}
-        <div style={{ width: "100%", maxWidth: 300 }}>
-          <SolanaWalletCard showToast={showToast} />
-        </div>
+        <SolanaWalletCard showToast={showToast} />
       </div>
     );
   }
 
   return (
-    <div className="fx-view flex flex-col items-center" style={{ paddingTop: 26, gap: 6 }}>
-      {/* Баланс — главное и единственное крупное на экране. */}
-      <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("walletBalanceLabel")}</span>
-      <div className="flex items-end gap-2">
-        <span style={{ fontFamily: displayFont, fontSize: 46, fontWeight: 800, color: T.ice, lineHeight: 1, letterSpacing: "-0.02em" }}>{balance.toFixed(2)}</span>
-        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 16, marginBottom: 6 }}>TON</span>
-      </div>
-      <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 14.5 }}>≈ ${usd.toFixed(2)}</span>
+    <div className="flex flex-col" style={{ gap: 28, paddingTop: 8, paddingBottom: 16 }}>
+      {/* Баланс. Крупно только само число — это единственная цифра на
+          экране, ради которой сюда заходят. */}
+      <section>
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("walletBalanceLabel")}</div>
+        <div className="flex items-baseline" style={{ gap: 8, marginTop: 6 }}>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 600, lineHeight: 1, letterSpacing: "-0.02em" }}>
+            {balance.toFixed(2)}
+          </span>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 15 }}>TON</span>
+        </div>
+        <div style={{ fontFamily: monoFont, color: T.faint, fontSize: 13.5, marginTop: 6 }}>≈ ${usd.toFixed(2)}</div>
 
-      <button
-        onClick={() => { onCopy(); setCopied(true); setTimeout(() => setCopied(false), 1400); }}
-        className="fx-tap flex items-center gap-2 rounded-full"
-        style={{ marginTop: 18, padding: "8px 14px", background: T.surface, border: `1px solid ${T.line}` }}
-      >
-        <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13 }}>{short}</span>
-        {copied ? <CheckCircle2 size={13} color={T.up} /> : <Copy size={13} color={T.muted} />}
-      </button>
+        <button
+          onClick={() => { onCopy(); setCopied(true); setTimeout(() => setCopied(false), 1400); }}
+          className="fx-tap flex items-center gap-2"
+          style={{ marginTop: 14, padding: "8px 12px", borderRadius: 10, background: T.surface, border: `1px solid ${T.line}` }}
+        >
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12.5 }}>{short}</span>
+          {copied ? <CheckCircle2 size={13} color={T.up} /> : <Copy size={13} color={T.faint} />}
+        </button>
+      </section>
 
       <SolanaWalletCard showToast={showToast} />
 
@@ -8952,40 +8961,38 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
           Прибыль, счётчик строк и кнопка продажи отсюда убраны — за
           сделкой человек идёт на экран токена, где видно и цену, и
           график, а не решает вслепую по одной цифре. */}
-      <div className="w-full" style={{ marginTop: 26 }}>
-        <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
-          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("walletHoldings")}</span>
-        </div>
+      <section className="w-full">
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 600, marginBottom: 4 }}>{t("walletHoldings")}</div>
 
         {!holdingsReady ? (
-          <PageLoader minHeight={120} />
+          <PageLoader minHeight={100} />
         ) : !holdings.length ? (
-          <div className="rounded-[22px] p-5 text-center" style={{ background: T.surface, border: `1px dashed ${T.line}` }}>
-            <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, lineHeight: 1.5 }}>{t("walletHoldingsEmpty")}</div>
-          </div>
+          // Пустое состояние строкой, а не пустым контейнером во весь
+          // экран: сказать тут нечего, и занимать место незачем.
+          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, marginTop: 8 }}>{t("walletHoldingsEmpty")}</div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             {holdings.map(({ tok, amount }) => (
               <div
                 key={tok.id}
-                className="fx-card w-full flex items-center gap-3 rounded-[22px] p-3"
-                style={{ background: T.surface, border: `1px solid ${T.line}` }}
+                className="w-full flex items-center"
+                style={{ gap: 12, padding: "12px 0", borderBottom: `1px solid ${T.line}` }}
               >
-                <TokenAvatar size={40} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+                <TokenAvatar size={36} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
                 <div className="flex-1 min-w-0 text-left">
-                  <span className="truncate block" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${tok.ticker}</span>
-                  <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12, marginTop: 3 }}>{fmtCompact(amount)} ${tok.ticker}</div>
+                  <span className="truncate block" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>${tok.ticker}</span>
                 </div>
+                <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>{fmtCompact(amount)}</div>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
       <button
         onClick={onDisconnect}
-        className="fx-tap flex items-center gap-1.5"
-        style={{ marginTop: 22, background: "transparent", border: "none", fontFamily: bodyFont, fontSize: 14, color: T.rose }}
+        className="fx-tap flex items-center gap-1.5 self-start"
+        style={{ background: "transparent", border: "none", padding: 0, fontFamily: bodyFont, fontSize: 13.5, color: T.faint }}
       >
         <LogOut size={13} /> {t("disconnectShort")}
       </button>
@@ -12911,10 +12918,7 @@ function ProfileView({
 
         <div className="mt-5">
           <SectionTitle>{t("activityTitle")}</SectionTitle>
-          <GlassCard style={{ padding: 22 }} className="flex flex-col items-center text-center gap-2">
-            <MintlyFrame size={40} glow={`${T.muted}33`}><Clock size={16} color={T.muted} /></MintlyFrame>
-            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("noActivityYet")}</p>
-          </GlassCard>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("noActivityYet")}</p>
         </div>
 
         <div className="mt-5">
