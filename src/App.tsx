@@ -4881,30 +4881,35 @@ function SpotlightAura({ src, ticker }) {
 }
 
 function MempadRow({ t: tok, onOpen, index }) {
+  const рост = (tok.change || 0) >= 0;
   return (
-    <button onClick={() => onOpen(tok)} className="fx-tap w-full flex items-center gap-3 py-3 text-left" style={{ animationDelay: `${index * 55}ms` }}>
-      <TokenAvatar size={44} tone={tok.change >= 0 ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+    <button
+      onClick={() => onOpen(tok)}
+      className="fx-tap w-full flex items-center text-left"
+      style={{ gap: 12, padding: "12px 0", borderBottom: `1px solid ${T.line}`, animationDelay: `${index * 40}ms` }}
+    >
+      <TokenAvatar size={38} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+
       <div className="flex-1 min-w-0">
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>${tok.ticker}</div>
-        <div className="flex items-center gap-2.5">
-          {/* Держателей в Solana взять неоткуда: их считает tonapi, и
-              только для жетонов TON. Вместо вечной серой заглушки
-              показываем то, что про эти токены известно точно, — сколько
-              сделок прошло за сутки. */}
-          {tok.chain === "solana"
-            ? <CardStat icon={RefreshCw}>{(tok.tx24h || 0).toLocaleString("ru-RU")}</CardStat>
-            : <HoldersBadge tokenAddress={tok.tokenAddress} testnet={!!tok.curveAddress && TON_TESTNET_NETWORK} />}
-          <CardStat icon={Flame}>${tok.vol}</CardStat>
+        <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 600 }}>
+          ${tok.ticker}
         </div>
-        {/* Насколько токен близок к листингу — видно прямо в списке, не
-            открывая карточку. Ради этого числа уже едут вместе с ценой. */}
+        {/* Вторая строка — то, по чему токен сравнивают: оборот и либо
+            держатели, либо, где их не сосчитать, число сделок. */}
+        <div className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 2 }}>
+          ${tok.vol}
+          {tok.chain === "solana"
+            ? ` · ${(tok.tx24h || 0).toLocaleString("ru-RU")} сделок`
+            : null}
+        </div>
         <GraduationBar raisedTon={tok.raisedTon} targetTon={tok.graduationTon} compact />
       </div>
+
       <div className="text-right flex-shrink-0">
-        <div style={{ fontFamily: displayFont, color: T.up, fontSize: 14.5, fontWeight: 700 }}>{fmtUSD(tok.mcapNum)}</div>
-        {fmtAge(tok.createdAt) && (
-          <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 11, marginTop: 2 }}>{fmtAge(tok.createdAt)}</div>
-        )}
+        <div style={{ fontFamily: monoFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>{fmtUSD(tok.mcapNum)}</div>
+        <div style={{ fontFamily: monoFont, color: рост ? T.up : T.down, fontSize: 12.5, marginTop: 3 }}>
+          {рост ? "+" : ""}{(tok.change || 0).toFixed(1)}%
+        </div>
       </div>
     </button>
   );
@@ -8187,183 +8192,6 @@ function ShopView({ cosmetics, owned, coins, onBuy, onOpenLook, onOpenChest, ach
   );
 }
 
-/* Фон раздела под выбранную сеть.
-
-   Ровное цветное пятно за заголовком выглядело как недоделка: цвет есть,
-   а сказать ему нечего. Здесь у каждой сети её собственная геометрия —
-   та, по которой её узнают без единой подписи.
-
-   TON — кристалл: ромб её знака, разложенный на грани, стоящий в
-   решётке диагоналей и подсвеченный снизу.
-
-   Solana — три наклонные полосы из их логотипа, от фиолетового к
-   мятному, с бегущим по ним бликом.
-
-   Всё нарисовано одним SVG и гасится маской к низу, чтобы список
-   начинался с чистого чёрного. Из движущегося — блик и очень медленное
-   дыхание фигуры: только transform и opacity, то есть работа
-   видеокарты, а не пересчёт разметки. */
-const СЕТЬ_ЦВЕТА = {
-  ton: { основной: "#0098EA", второй: "#7FDBFF" },
-  sol: { основной: "#9945FF", второй: "#14F195" },
-};
-
-function СетевойФон({ сеть = "ton" }) {
-  const цвета = СЕТЬ_ЦВЕТА[сеть] || СЕТЬ_ЦВЕТА.ton;
-  const sol = сеть === "sol";
-
-  return (
-    <div
-      aria-hidden
-      style={{
-        // Ровно ширина экрана, отсчитанная от его середины: раньше слой
-        // был шире колонки на 16% с каждой стороны, и эта лишняя ширина
-        // превращалась в горизонтальную прокрутку — раздел утаскивался
-        // пальцем вбок. Обрезать колонку нельзя: тогда по краям
-        // появляются чёрные поля, ведь у неё свои отступы.
-        //
-        // Центрирование и анимация появления — на разных слоях: CSS-
-        // анимация задаёт свой transform и затирает центрирование, из-за
-        // чего фон уезжал на полэкрана вправо.
-        position: "absolute", left: "50%", width: "100vw", transform: "translateX(-50%)",
-        top: -110, height: 470,
-        pointerEvents: "none", zIndex: 0, overflow: "hidden",
-      }}
-    >
-      <div className="fx-net-in" style={{ width: "100%", height: "100%" }}>
-      <svg width="100%" height="100%" viewBox="0 0 420 470" preserveAspectRatio="xMidYMid slice" style={{ display: "block" }}>
-        <defs>
-          {/* Маска: к низу графика сходит на нет, иначе она спорила бы с
-              карточками списка. */}
-          <linearGradient id={`fade-${сеть}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#fff" stopOpacity="0.85" />
-            <stop offset="38%" stopColor="#fff" stopOpacity="1" />
-            <stop offset="72%" stopColor="#fff" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="#fff" stopOpacity="0" />
-          </linearGradient>
-          <mask id={`mask-${сеть}`}>
-            <rect width="420" height="470" fill={`url(#fade-${сеть})`} />
-          </mask>
-
-          <linearGradient id={`face-${сеть}`} x1="0.1" y1="0" x2="0.9" y2="1">
-            <stop offset="0%" stopColor={цвета.второй} stopOpacity="0.55" />
-            <stop offset="60%" stopColor={цвета.основной} stopOpacity="0.3" />
-            <stop offset="100%" stopColor={цвета.основной} stopOpacity="0.05" />
-          </linearGradient>
-
-          <linearGradient id={`edge-${сеть}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor={цвета.второй} stopOpacity="1" />
-            <stop offset="100%" stopColor={цвета.основной} stopOpacity="0.4" />
-          </linearGradient>
-
-          <linearGradient id={`bar-${сеть}`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#9945FF" stopOpacity="0.9" />
-            <stop offset="55%" stopColor="#7B5CFF" stopOpacity="0.7" />
-            <stop offset="100%" stopColor="#14F195" stopOpacity="0.85" />
-          </linearGradient>
-
-          <radialGradient id={`halo-${сеть}`} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={цвета.основной} stopOpacity="0.6" />
-            <stop offset="55%" stopColor={цвета.основной} stopOpacity="0.16" />
-            <stop offset="100%" stopColor={цвета.основной} stopOpacity="0" />
-          </radialGradient>
-
-          <radialGradient id={`halo2-${сеть}`} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={цвета.второй} stopOpacity="0.4" />
-            <stop offset="100%" stopColor={цвета.второй} stopOpacity="0" />
-          </radialGradient>
-
-          {/* Блик, бегущий по фигуре. Узкая светлая полоса, которая
-              проходит раз в несколько секунд и оживляет статичную форму. */}
-          <linearGradient id={`shine-${сеть}`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#fff" stopOpacity="0" />
-            <stop offset="45%" stopColor="#fff" stopOpacity="0.5" />
-            <stop offset="55%" stopColor="#fff" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="#fff" stopOpacity="0" />
-          </linearGradient>
-
-          {!sol && (
-            <pattern id="grid-ton" width="30" height="30" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2="30" stroke="#7FDBFF" strokeOpacity="0.3" strokeWidth="0.9" />
-              <line x1="0" y1="0" x2="30" y2="0" stroke="#7FDBFF" strokeOpacity="0.3" strokeWidth="0.9" />
-            </pattern>
-          )}
-        </defs>
-
-        <g mask={`url(#mask-${сеть})`}>
-          {sol ? (
-            <>
-              <ellipse cx="120" cy="150" rx="240" ry="150" fill={`url(#halo-${сеть})`} />
-              <ellipse cx="370" cy="215" rx="180" ry="120" fill={`url(#halo2-${сеть})`} />
-
-              {/* Три полосы знака Solana: одинаковый наклон, ровные
-                  зазоры, уходят за оба края — как часть чего-то большего.
-                  Дышит вся связка целиком, поэтому строй не ломается. */}
-              <g>
-                {[0, 1, 2].map((i) => {
-                  const y = 78 + i * 56;
-                  return (
-                    <g key={i}>
-                      <path
-                        d={`M-60,${y + 34} L500,${y - 30} L500,${y - 2} L-60,${y + 62} Z`}
-                        fill={`url(#bar-${сеть})`}
-                        opacity={0.5 - i * 0.06}
-                      />
-                      <path
-                        d={`M-60,${y + 34} L500,${y - 30}`}
-                        stroke={i === 2 ? "#14F195" : "#B37BFF"}
-                        strokeOpacity="0.6"
-                        strokeWidth="1.3"
-                        fill="none"
-                      />
-                    </g>
-                  );
-                })}
-                {/* Блик поперёк полос. */}
-                <g className="fx-net-shine">
-                  <rect x="-320" y="-60" width="160" height="480" fill={`url(#shine-${сеть})`} opacity="0.55" transform="rotate(-6)" />
-                </g>
-              </g>
-            </>
-          ) : (
-            <>
-              <rect width="420" height="470" fill="url(#grid-ton)" opacity="0.75" mask={`url(#mask-${сеть})`} />
-              <ellipse cx="250" cy="150" rx="230" ry="160" fill={`url(#halo-${сеть})`} />
-
-              {/* Кристалл TON. Крупный, чуть выходит за правый край —
-                  так он читается как форма, а не как значок.
-
-                  Позиция и дыхание — на разных слоях намеренно: CSS-
-                  анимация задаёт свой transform и затирает атрибут, и
-                  фигура, стоявшая справа, уезжала в левый верхний угол,
-                  то есть за пределы экрана. */}
-              <g transform="translate(322 224)">
-              <g>
-                <path d="M0,-84 L72,-18 L0,100 L-72,-18 Z" fill={`url(#face-${сеть})`} opacity="0.85" />
-                <path d="M0,-84 L-72,-18 L0,100 Z" fill="#0098EA" opacity="0.14" />
-                <path d="M0,-84 L72,-18 L0,100 L-72,-18 Z" fill="none" stroke={`url(#edge-${сеть})`} strokeWidth="1.8" />
-                <path d="M0,-84 L0,100" stroke="#7FDBFF" strokeOpacity="0.5" strokeWidth="1.1" />
-                <path d="M-72,-18 L72,-18" stroke="#7FDBFF" strokeOpacity="0.32" strokeWidth="1.1" />
-                {/* Внутренняя огранка: грань поменьше внутри большой. */}
-                <path d="M0,-84 L36,-18 L0,38 L-36,-18 Z" fill="none" stroke="#7FDBFF" strokeOpacity="0.2" strokeWidth="0.9" />
-
-                <g className="fx-net-shine">
-                  <rect x="-420" y="-260" width="150" height="560" fill={`url(#shine-${сеть})`} opacity="0.5" transform="rotate(16)" />
-                </g>
-              </g>
-              </g>
-
-              {/* Горизонт, вдоль которого стоит кристалл. */}
-              <path d="M-40,282 L460,236" stroke="#0098EA" strokeOpacity="0.4" strokeWidth="1.2" fill="none" />
-            </>
-          )}
-        </g>
-      </svg>
-      </div>
-    </div>
-  );
-}
-
 function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen, onLaunch }) {
   const [filter, setFilter] = useState("new");
   // Сеть выбирается сверху, отдельно от фильтров: это не «ещё один
@@ -8492,56 +8320,54 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
     : (filter === "new" ? myTokensLoading : loading);
 
   return (
-    <div className="flex flex-col gap-5" style={{ paddingBottom: 12, position: "relative" }}>
-      {/* Без ключа намеренно: с ним React создавал новый слой, а старый
-          иногда оставался в разметке — графика двух сетей накладывалась
-          друг на друга. */}
-      <СетевойФон сеть={сеть} />
-
-      <div className="flex items-center justify-between" style={{ position: "relative", zIndex: 1 }}>
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("navMempad")}</span>
-        {/* Кнопка в цвете приложения: зелёный здесь был из набора
-            «рост цены», к запуску токена отношения не имеющего. Фирменный
-            оранжевый, лист тем же цветом. Лист мятный: его силуэт цельный
-            и на такой величине читается ровнее кленового, у которого
-            лопасти сливаются. */}
-        <button
-          onClick={onLaunch}
-          className="fx-tap flex items-center gap-1.5 rounded-full px-3.5 py-2"
-          style={{
-            background: hexA(T.electric, 0.13),
-            border: `1px solid ${hexA(T.electric, 0.4)}`,
-            boxShadow: `0 0 14px ${hexA(T.electric, 0.18)}`,
-            position: "relative", overflow: "hidden",
-            // В Solana мы не запускаем токены, только показываем чужие.
-            display: сеть === "sol" ? "none" : undefined,
-          }}
-        >
-          <LeafIcon size={17} color={T.electric} kind={2} />
-          <span style={{ fontFamily: bodyFont, color: T.electric, fontSize: 14, fontWeight: 700, position: "relative", zIndex: 1 }}>{t("mempadLaunchToken")}</span>
-        </button>
+    <div className="flex flex-col" style={{ gap: 20, paddingTop: 8, paddingBottom: 16 }}>
+      {/* Шапка раздела: название, поиск и выбор сети — одной строкой и
+          двумя. Декоративная графика сети отсюда убрана: она занимала
+          треть экрана и ничего не сообщала. */}
+      <div className="flex items-center justify-between">
+        <h1 style={{ fontFamily: displayFont, color: T.ice, fontSize: 24, fontWeight: 600, letterSpacing: "-0.01em", margin: 0 }}>
+          {t("navMempad")}
+        </h1>
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <button
+            className="fx-tap flex items-center justify-center"
+            style={{ width: 34, height: 34, borderRadius: 10, background: "transparent", border: `1px solid ${T.line}` }}
+          >
+            <Search size={15} color={T.muted} />
+          </button>
+          <button
+            onClick={onLaunch}
+            className="fx-tap flex items-center gap-1.5"
+            style={{
+              padding: "8px 14px", borderRadius: 10,
+              background: T.electric, color: PRISM_TEXT, border: "none",
+              fontFamily: displayFont, fontSize: 13.5, fontWeight: 600,
+              // В Solana мы не запускаем токены, только показываем чужие.
+              display: сеть === "sol" ? "none" : undefined,
+            }}
+          >
+            <Rocket size={14} strokeWidth={1.8} /> {t("mempadLaunchToken")}
+          </button>
+        </div>
       </div>
 
-      {/* Выбор сети. Два рынка не смешиваются: слева свои токены на TON,
-          справа чужие мемкоины Solana. */}
-      <div className="flex items-center gap-1 rounded-full" style={{ padding: 3, background: hexA(T.surface, 0.86), border: `1px solid ${T.line}`, alignSelf: "flex-start", position: "relative", zIndex: 1 }}>
+      {/* Сеть — подчёркиванием, а не заливкой: это переключатель рынка,
+          и кричать о себе ему незачем. */}
+      <div className="flex items-center" style={{ gap: 20, borderBottom: `1px solid ${T.line}` }}>
         {[["ton", "TON"], ["sol", "SOL"]].map(([id, подпись]) => {
           const активна = сеть === id;
           return (
             <button
               key={id}
               onClick={() => { haptic("light"); setСеть(id); }}
-              className="fx-tap rounded-full"
+              className="fx-tap"
               style={{
-                padding: "7px 18px",
-                // Выбранная сеть подсвечивается своим цветом, а не
-                // общим белым: тогда переключатель и фон читаются как
-                // одно целое.
-                background: активна ? (id === "sol" ? "#9945FF" : "#0098EA") : "transparent",
-                color: активна ? "#FFFFFF" : T.muted,
-                border: "none",
-                fontFamily: displayFont, fontSize: 14, fontWeight: 700,
-                transition: `background ${EASE}, color ${EASE}`,
+                padding: "0 0 10px", background: "transparent", border: "none",
+                borderBottom: `2px solid ${активна ? T.electric : "transparent"}`,
+                marginBottom: -1,
+                fontFamily: displayFont, fontSize: 14.5, fontWeight: 600,
+                color: активна ? T.ice : T.faint,
+                transition: `color ${EASE}, border-color ${EASE}`,
               }}
             >
               {подпись}
@@ -8550,8 +8376,6 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
         })}
       </div>
 
-      {/* Ключ по сети: без него собранные сделки оставались в памяти
-          компонента, и в ленте Solana продолжали идти покупки из TON. */}
       <RecentBuysTicker
         key={сеть}
         tokens={сеть === "sol" ? (solTokens || []) : tokens}
@@ -8567,48 +8391,49 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
         </div>
       ) : spotlight && (
         <div>
-          <SectionTitle>{t("mempadSpotlight")}</SectionTitle>
-          {/* key по токену — карточка переигрывает своё появление на каждой
-              смене, поэтому подмена не выглядит как рывок. */}
-          <button key={spotlight.id} onClick={() => onOpen(spotlight)} className="fx-card w-full flex flex-col items-center text-center gap-2.5 rounded-[22px] p-6" style={{ background: T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden" }}>
+          <div style={{ fontFamily: displayFont, color: T.muted, fontSize: 13, fontWeight: 500, letterSpacing: "0.02em", textTransform: "uppercase", marginBottom: 10 }}>
+            {t("mempadSpotlight")}
+          </div>
+          {/* Один компактный блок вместо карусели крупных карточек:
+              логотип, тикер, капитализация и движение — всё, что нужно,
+              чтобы решить, открывать ли токен. */}
+          <button
+            key={spotlight.id}
+            onClick={() => onOpen(spotlight)}
+            className="fx-tap w-full flex items-center text-left"
+            style={{ gap: 12, padding: 14, borderRadius: 16, background: T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden" }}
+          >
             <SpotlightAura src={spotlight.logoUrl} ticker={spotlight.ticker} />
-            <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-              <TokenAvatar size={92} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl}>{spotlight.emoji}</TokenAvatar>
-              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 21.5, fontWeight: 800 }}>${spotlight.ticker}</span>
-              <div className="flex items-center gap-3">
-                <HoldersBadge tokenAddress={spotlight.tokenAddress} testnet={!!spotlight.curveAddress && TON_TESTNET_NETWORK} />
-                <CardStat icon={Flame}>${spotlight.vol}</CardStat>
-              </div>
-              <span style={{ fontFamily: displayFont, color: T.up, fontSize: 28.5, fontWeight: 800, lineHeight: 1 }}>{fmtUSD(spotlight.mcapNum)}</span>
-              {fmtAge(spotlight.createdAt) && (
-                <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>{fmtAge(spotlight.createdAt)}</span>
-              )}
+            <div style={{ position: "relative", zIndex: 1 }}>
+              <TokenAvatar size={44} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl}>{spotlight.emoji}</TokenAvatar>
             </div>
-          </button>
-
-          {/* Точки показывают, что токен здесь не один: их столько же,
-              сколько в подборке, и по ним можно переключиться руками. */}
-          {spotlightTop.length > 1 && (
-            <div className="flex items-center justify-center gap-1.5" style={{ marginTop: 10 }}>
-              {spotlightTop.map((tok, i) => {
-                const active = i === spotIdx % spotlightTop.length;
-                return (
-                  <button
+            <div className="flex-1 min-w-0" style={{ position: "relative", zIndex: 1 }}>
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15.5, fontWeight: 600 }}>${spotlight.ticker}</span>
+                <span style={{ fontFamily: monoFont, color: spotlight.change >= 0 ? T.up : T.down, fontSize: 13 }}>
+                  {spotlight.change >= 0 ? "+" : ""}{(spotlight.change || 0).toFixed(1)}%
+                </span>
+              </div>
+              <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 3 }}>
+                {fmtUSD(spotlight.mcapNum)} · ${spotlight.vol}
+              </div>
+            </div>
+            {spotlightTop.length > 1 && (
+              <div className="flex items-center" style={{ gap: 4, position: "relative", zIndex: 1 }}>
+                {spotlightTop.map((tok, i) => (
+                  <span
                     key={tok.id}
-                    onClick={() => setSpotIdx(i)}
-                    aria-label={tok.ticker}
-                    className="fx-tap"
+                    onClick={(e) => { e.stopPropagation(); setSpotIdx(i); }}
                     style={{
-                      width: active ? 18 : 6, height: 6, borderRadius: 999,
-                      background: active ? T.electric : T.lineHi,
-                      border: "none", padding: 0,
-                      transition: `width ${EASE}, background ${EASE}`,
+                      width: 5, height: 5, borderRadius: 999,
+                      background: i === spotIdx % spotlightTop.length ? T.electric : T.lineHi,
+                      transition: `background ${EASE}`,
                     }}
                   />
-                );
-              })}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </button>
         </div>
       )}
 
