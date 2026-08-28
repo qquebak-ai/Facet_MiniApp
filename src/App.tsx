@@ -7977,17 +7977,13 @@ function ChestReveal({ prize, onClose }) {
    Размытие здесь не украшение: и счётчик, и сундук висят над витриной,
    под ними проезжают карточки, и через просто прозрачную плёнку читался
    бы чужой текст. */
-function glassPane(радиус, { сила = 1 } = {}) {
+function glassPane(радиус) {
+  // От стекла остался только смысл «плашка над витриной»: плотный фон,
+  // одна линия по краю. Градиенты, блики и тень читались не стеклом, а
+  // подложкой за текстом — на тёмном фоне это лишний слой.
   return {
-    /* Стекло без бликов: тело почти прозрачное, форму держит одна тонкая
-       кромка. Косой блик и светлая линия по верху отсюда убраны — на
-       мелких плашках они читались не стеклом, а белым свечением. */
-    // Тело плотное, а не размытое: под плашками едет витрина, и
-    // backdrop-filter пересчитывался на каждом кадре прокрутки.
-    background: `linear-gradient(155deg, ${hexA("#FFFFFF", 0.05 * сила)} 0%, ${hexA("#EAFFF4", 0.03 * сила)} 55%, ${hexA(T.mintGlass, 0.02 * сила)} 100%), ${hexA(T.bg, 0.88)}`,
-
-    border: `1px solid ${hexA("#DFFFF0", 0.16)}`,
-    boxShadow: "0 8px 22px rgba(0,0,0,0.5)",
+    background: T.surface,
+    border: `1px solid ${T.line}`,
     borderRadius: радиус,
   };
 }
@@ -7998,21 +7994,20 @@ function ChestCard({ coins, owned, onOpen }) {
   return (
     <div
       className="fx-card p-4 flex items-center gap-3"
-      style={glassPane(22)}
+      style={glassPane(18)}
     >
       <div style={{
-        width: 46, height: 46, flexShrink: 0,
-        ...glassPane(14, { сила: 1.6 }),
-        // Оранжевый — только обводкой и значком: на листьях он тоже
-        // живёт линиями, а не заливкой.
-        border: `1px solid ${hexA(T.electric, 0.45)}`,
+        width: 44, height: 44, flexShrink: 0,
+        borderRadius: 12,
+        background: T.surfaceHi,
+        border: `1px solid ${T.line}`,
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
-        <Gift size={22} color={T.electric} />
+        <Gift size={20} color={T.electric} />
       </div>
       <div className="flex-1 min-w-0">
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15.5, fontWeight: 700 }}>{t("chestTitle")}</div>
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.4, marginTop: 2 }}>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15.5, fontWeight: 600 }}>{t("chestTitle")}</div>
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.4, marginTop: 2 }}>
           {left > 0 ? t("chestSub") : t("chestEmpty")}
         </div>
       </div>
@@ -8025,19 +8020,18 @@ function ChestCard({ coins, owned, onOpen }) {
         className="fx-tap flex items-center gap-1.5 rounded-full"
         style={{
           flexShrink: 0, padding: "9px 14px",
-          ...glassPane(999, { сила: 1.4 }),
-          // Цена остаётся действием, поэтому кромка и свечение у неё
-          // оранжевые — заливкой, как раньше, стекло бы перестало быть
-          // стеклом.
-          border: `1px solid ${hexA(T.electric, canOpen ? 0.6 : 0.2)}`,
-          boxShadow: canOpen ? `0 0 20px ${hexA(T.electric, 0.28)}` : "none",
+          // Открыть сундук — главное действие блока, поэтому кнопка
+          // залита акцентом, а не обведена им: обводка со свечением
+          // читалась подсветкой, а не кнопкой.
+          background: canOpen ? T.electric : T.surfaceHi,
+          border: `1px solid ${canOpen ? T.electric : T.line}`,
           opacity: left > 0 ? 1 : 0.5,
         }}
       >
-        <CoinIcon size={17} tone={canOpen ? T.electric : T.muted} />
+        <CoinIcon size={16} tone={canOpen ? PRISM_TEXT : T.muted} />
         <span style={{
-          fontFamily: displayFont, fontWeight: 700, fontSize: 16,
-          color: canOpen ? T.electric : T.muted, letterSpacing: "-0.01em",
+          fontFamily: displayFont, fontWeight: 600, fontSize: 15,
+          color: canOpen ? PRISM_TEXT : T.muted, letterSpacing: "-0.01em",
         }}>
           {CHEST_PRICE}
         </span>
@@ -8083,18 +8077,18 @@ function ShopView({ cosmetics, owned, coins, onBuy, onOpenLook, onOpenChest, ach
   if (!accountCreated) {
     return (
       <div className="flex flex-col gap-4 pt-2">
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("shopTitle")}</span>
-        <div className="flex flex-col items-center text-center gap-3" style={{
-          background: T.surface, border: `1px solid ${T.line}`, borderRadius: 24,
-          padding: "34px 22px 26px", marginTop: 6,
-        }}>
-          <MintlyFrame size={58} glow={`${T.electric}44`}><Lock size={22} color={T.electric} /></MintlyFrame>
-          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 18.5, fontWeight: 700, marginTop: 4 }}>{t("shopLockedTitle")}</div>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.55, maxWidth: 270 }}>{t("shopLockedBody")}</p>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 24, fontWeight: 600, letterSpacing: "-0.02em" }}>{t("shopTitle")}</span>
+        {/* Закрытая витрина — это состояние экрана, а не объект на нём:
+            текст лежит прямо на фоне, карточка вокруг него только
+            добавляла лишний слой. */}
+        <div className="flex flex-col gap-3" style={{ marginTop: 4 }}>
+          <Lock size={20} color={T.muted} />
+          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 600 }}>{t("shopLockedTitle")}</div>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.55, maxWidth: 300, marginTop: -4 }}>{t("shopLockedBody")}</p>
           <button
             onClick={() => onOpenLogin && onOpenLogin()}
-            className="fx-tap flex items-center justify-center gap-1.5 rounded-[20px] px-5 py-3 mt-1"
-            style={{ width: "100%", maxWidth: 280, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 700, fontSize: 14.5 }}
+            className="fx-tap flex items-center justify-center gap-1.5 rounded-[14px] px-5 py-3"
+            style={{ alignSelf: "flex-start", background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 600, fontSize: 14.5 }}
           >
             <Send size={14} /> {t("tgAuthCta")}
           </button>
@@ -8105,7 +8099,7 @@ function ShopView({ cosmetics, owned, coins, onBuy, onOpenLook, onOpenChest, ach
 
   return (
     <div className="flex flex-col gap-4 pt-2">
-      <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>{t("shopTitle")}</span>
+      <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 24, fontWeight: 600, letterSpacing: "-0.02em" }}>{t("shopTitle")}</span>
       {/* Счётчик монет живёт только здесь: тратить их больше негде, а на
           остальных экранах он был бы просто цифрой без применения.
           Стоит вровень с заголовком и выше не поднимается, а при
@@ -8114,20 +8108,21 @@ function ShopView({ cosmetics, owned, coins, onBuy, onOpenLook, onOpenChest, ach
           заголовка: сама она — отдельный блок колонки, иначе прилипать
           было бы не к чему. Подложка непрозрачная: под плашкой проезжают
           карточки. */}
-      <div style={{ position: "sticky", top: 4, zIndex: 5, alignSelf: "flex-end", marginTop: -59 }}>
+      <div style={{ position: "sticky", top: 4, zIndex: 5, alignSelf: "flex-end", marginTop: -46 }}>
         <button
           onClick={onOpenAchievements}
           className="fx-tap flex items-center gap-1.5 px-3 py-1.5"
           style={{
-            ...glassPane(999, { сила: 1.4 }),
-            border: `1px solid ${hexA(T.electric, 0.45)}`,
+            borderRadius: 999,
+            background: T.surface,
+            border: `1px solid ${T.line}`,
           }}
         >
           <CoinIcon size={15} />
-          <span style={{ fontFamily: monoFont, fontSize: 14.5, fontWeight: 700, color: T.electric }}>{coins}</span>
+          <span style={{ fontFamily: monoFont, fontSize: 14, fontWeight: 600, color: T.ice }}>{coins}</span>
         </button>
       </div>
-      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("shopCoinsHint")}</p>
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5, marginTop: -8 }}>{t("shopCoinsHint")}</p>
 
       {/* Сундук — единственное, на что монеты уходят бесконечно: рамки и
           карточки рано или поздно скупаются все. */}
@@ -8358,9 +8353,13 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
         </div>
       </div>
 
-      {/* Сеть — подчёркиванием, а не заливкой: это переключатель рынка,
-          и кричать о себе ему незачем. */}
-      <div className="flex items-center" style={{ gap: 20, borderBottom: `1px solid ${T.line}` }}>
+      {/* Сеть — сегментами: два рынка стоят рядом и переключаются одним
+          касанием. Заливка спокойная, без цвета: выбранное состояние
+          показывает светлый фон и белый текст, а не яркая кнопка. */}
+      <div
+        className="flex items-center self-start"
+        style={{ gap: 2, padding: 3, borderRadius: 12, background: T.surface, border: `1px solid ${T.line}` }}
+      >
         {[["ton", "TON"], ["sol", "SOL"]].map(([id, подпись]) => {
           const активна = сеть === id;
           return (
@@ -8369,12 +8368,11 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
               onClick={() => { haptic("light"); setСеть(id); }}
               className="fx-tap"
               style={{
-                padding: "0 0 10px", background: "transparent", border: "none",
-                borderBottom: `2px solid ${активна ? T.electric : "transparent"}`,
-                marginBottom: -1,
-                fontFamily: displayFont, fontSize: 14.5, fontWeight: 600,
+                padding: "6px 16px", borderRadius: 9, border: "none",
+                background: активна ? T.surfaceHi : "transparent",
+                fontFamily: displayFont, fontSize: 13.5, fontWeight: 600,
                 color: активна ? T.ice : T.faint,
-                transition: `color ${EASE}, border-color ${EASE}`,
+                transition: `background ${EASE}, color ${EASE}`,
               }}
             >
               {подпись}
@@ -12911,10 +12909,7 @@ function ProfileView({
             </div>
           }>{t("myTokensTitle")}</SectionTitle>
           {myTokens.length === 0 ? (
-            <GlassCard style={{ padding: 22 }} className="flex flex-col items-center text-center gap-2">
-              <MintlyFrame size={40} glow={`${T.electric}44`}><Rocket size={16} color={T.electric} /></MintlyFrame>
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("noTokensYet")}</p>
-            </GlassCard>
+            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("noTokensYet")}</p>
           ) : (
             <div className="flex flex-col gap-2">{myTokens.map(t => <MyTokenCard key={t.id} t={t} onManage={onManageToken} />)}</div>
           )}
@@ -12955,7 +12950,9 @@ function ProfileView({
 
         <div className="mt-5">
           <SectionTitle>{t("verificationTitle")}</SectionTitle>
-          <GlassCard style={{ padding: 18 }} className="flex items-center gap-3">
+          {/* Без подложки: это строка состояния, а не отдельный объект —
+              карточка вокруг двух строк текста только добавляла слой. */}
+          <div className="flex items-center gap-3" style={{ padding: "4px 0" }}>
             {verifyStatus === "verified" ? (
               <>
                 <ShieldCheck size={22} color={T.electric} />
@@ -12984,7 +12981,7 @@ function ProfileView({
                 </button>
               </>
             )}
-          </GlassCard>
+          </div>
         </div>
 
         <div className="mt-5">
