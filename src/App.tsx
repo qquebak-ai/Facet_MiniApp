@@ -8241,6 +8241,102 @@ function ShopView({ cosmetics, owned, coins, onBuy, onOpenLook, onOpenChest, ach
   );
 }
 
+/* Переключатель сети ползунком.
+ *
+ * Два рынка — это два разных списка, и переключение между ними должно
+ * стоить движения, а не случайного касания: ползунок перетаскивается и
+ * прилипает к ближней стороне. Короткое нажатие по свободной половине
+ * тоже переключает — тащить ради одного шага никто не обязан.
+ *
+ * Ползунок ведётся указателем, а не касанием: одни и те же события
+ * приходят и от пальца, и от мыши, и захват указателя не теряется, если
+ * палец ушёл за пределы дорожки. */
+function NetworkSlider({ value, onChange, ширина = 168, высота = 38 }) {
+  const дорожка = useRef(null);
+  const тяга = useRef(null);
+  const [сдвиг, setСдвиг] = useState(null);
+
+  const пад = 3;
+  const шаг = (ширина - пад * 2) / 2;
+  const база = value === "sol" ? шаг : 0;
+  const x = сдвиг == null ? база : сдвиг;
+
+  function начать(e) {
+    тяга.current = { x0: e.clientX, база, ушёл: false };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* мышь без захвата */ }
+  }
+  function вести(e) {
+    const t = тяга.current;
+    if (!t) return;
+    const d = e.clientX - t.x0;
+    if (Math.abs(d) > 3) t.ушёл = true;
+    setСдвиг(Math.max(0, Math.min(шаг, t.база + d)));
+  }
+  function отпустить(e) {
+    const t = тяга.current;
+    if (!t) return;
+    тяга.current = null;
+    let цель;
+    if (t.ушёл) {
+      цель = (сдвиг ?? база) > шаг / 2 ? "sol" : "ton";
+    } else {
+      // Нажатие без движения: выбираем ту половину, по которой попали.
+      const rect = дорожка.current ? дорожка.current.getBoundingClientRect() : null;
+      цель = rect && e.clientX - rect.left > rect.width / 2 ? "sol" : "ton";
+    }
+    setСдвиг(null);
+    if (цель !== value) { haptic("light"); onChange(цель); }
+  }
+
+  return (
+    <div
+      ref={дорожка}
+      onPointerDown={начать}
+      onPointerMove={вести}
+      onPointerUp={отпустить}
+      onPointerCancel={отпустить}
+      className="self-start"
+      style={{
+        position: "relative", width: ширина, height: высота, flexShrink: 0,
+        borderRadius: 999, background: T.surface, border: `1px solid ${T.line}`,
+        // Иначе первое же движение пальца уводит страницу в прокрутку и
+        // ползунок остаётся на месте.
+        touchAction: "none", userSelect: "none", cursor: "grab",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute", top: пад, left: пад,
+          width: шаг, height: высота - пад * 2 - 2, borderRadius: 999,
+          background: T.surfaceHi, border: `1px solid ${T.lineHi}`,
+          transform: `translateX(${x}px)`,
+          transition: сдвиг == null ? `transform 220ms cubic-bezier(0.32,1.2,0.5,1)` : "none",
+        }}
+      />
+      {[["ton", "TON"], ["sol", "SOL"]].map(([id, подпись], i) => {
+        // Подпись светлеет по мере подхода ползунка, а не скачком в
+        // момент отпускания: иначе при перетаскивании ничего не
+        // происходит до самого конца.
+        const близость = 1 - Math.min(1, Math.abs(x - i * шаг) / шаг);
+        return (
+          <span
+            key={id}
+            style={{
+              position: "absolute", top: 0, bottom: 0, left: пад + i * шаг, width: шаг,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: displayFont, fontSize: 13.5, fontWeight: 600,
+              color: близость > 0.5 ? T.ice : T.faint,
+              pointerEvents: "none",
+            }}
+          >
+            {подпись}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen, onLaunch }) {
   const [filter, setFilter] = useState("new");
   // Сеть выбирается сверху, отдельно от фильтров: это не «ещё один
@@ -8400,33 +8496,9 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
         </div>
       </div>
 
-      {/* Сеть — сегментами: два рынка стоят рядом и переключаются одним
-          касанием. Заливка спокойная, без цвета: выбранное состояние
-          показывает светлый фон и белый текст, а не яркая кнопка. */}
-      <div
-        className="flex items-center self-start"
-        style={{ gap: 2, padding: 3, borderRadius: 12, background: T.surface, border: `1px solid ${T.line}` }}
-      >
-        {[["ton", "TON"], ["sol", "SOL"]].map(([id, подпись]) => {
-          const активна = сеть === id;
-          return (
-            <button
-              key={id}
-              onClick={() => { haptic("light"); setСеть(id); }}
-              className="fx-tap"
-              style={{
-                padding: "6px 16px", borderRadius: 9, border: "none",
-                background: активна ? T.surfaceHi : "transparent",
-                fontFamily: displayFont, fontSize: 13.5, fontWeight: 600,
-                color: активна ? T.ice : T.faint,
-                transition: `background ${EASE}, color ${EASE}`,
-              }}
-            >
-              {подпись}
-            </button>
-          );
-        })}
-      </div>
+      {/* Сеть — ползунком: рынок меняется движением, а не случайным
+          касанием по краю экрана. */}
+      <NetworkSlider value={сеть} onChange={setСеть} />
 
       <RecentBuysTicker
         key={сеть}
