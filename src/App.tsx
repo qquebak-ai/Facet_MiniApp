@@ -7173,9 +7173,13 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
     <button
       ref={плитка}
       onClick={handle}
-      className={`fx-card flex flex-col items-center gap-2.5 rounded-[22px] p-3${equipped ? " fx-picked" : ""}${наЭкране ? "" : " fx-frozen"}`}
+      // Подложки у плитки больше нет: рамка вокруг рамки — это две
+      // рамки, и витрина превращалась в сетку контейнеров вместо сетки
+      // предметов. Сам предмет остаётся в своём окне, подпись и цена —
+      // просто под ним.
+      className={`fx-card flex flex-col items-center gap-2.5 p-0${equipped ? " fx-picked" : ""}${наЭкране ? "" : " fx-frozen"}`}
       style={{
-        background: T.surface, border: `1px solid ${T.line}`,
+        background: "transparent", border: "none",
         position: "relative", overflow: "hidden", contain: "paint",
         // Витрина длинная, а на экране помещается четыре плитки. Всё
         // остальное браузер до сих пор честно рисовал и анимировал —
@@ -7189,7 +7193,7 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
     >
       {/* Некупленное не гасим прозрачностью: предмет видно целиком, на
           то он и витрина, а что он ещё не твой — сказано ценой. */}
-      <div style={{ position: "relative", width: "100%", height: 96, borderRadius: 16, overflow: "hidden", background: T.surfaceHi, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ position: "relative", width: "100%", height: 104, borderRadius: 16, overflow: "hidden", background: T.surface, border: `1px solid ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
         {kind === "card" && <ProfileCardBg cardId={item.id} height={96} radius={16} showcase />}
         <div style={{ position: "relative", zIndex: 1 }}>
           {/* Внутри рамки — просто чёрный кружок: витрина про сам
@@ -7200,7 +7204,7 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
         </div>
       </div>
       <div className="flex items-center gap-1.5">
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>{pickLabel(item.label)}</span>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 600 }}>{pickLabel(item.label)}</span>
         {equipped && <CheckCircle2 size={13} color={T.electric} />}
       </div>
       {owned ? (
@@ -7208,7 +7212,7 @@ const ShopItem = React.memo(function ShopItem({ item, kind, equipped, owned, pri
           {equipped ? t("shopEquipped") : t("shopOwned")}
         </span>
       ) : (
-        <span className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 12.5, fontWeight: 700, color: affordable ? T.electric : T.muted }}>
+        <span className="flex items-center gap-1" style={{ fontFamily: monoFont, fontSize: 12.5, fontWeight: 600, color: affordable ? T.electric : T.muted }}>
           <CoinIcon size={12} dim={!affordable} /> {price}
         </span>
       )}
