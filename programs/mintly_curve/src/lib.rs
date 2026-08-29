@@ -29,20 +29,71 @@
 //! деньги: ни создатель токена, ни площадка не могут забрать их раньше
 //! срока или отправить куда-то ещё.
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint,
     entrypoint::ProgramResult,
+    instruction::{AccountMeta, Instruction as SolInstruction},
     msg,
     program::{invoke, invoke_signed},
     program_error::ProgramError,
-    program_pack::Pack,
     pubkey::Pubkey,
     rent::Rent,
     system_instruction,
     sysvar::Sysvar,
 };
+
+/// Программа токенов. Зашита адресом, а не берётся из зависимости: ради
+/// трёх инструкций тащить всю библиотеку spl-token — это два десятка
+/// килобайт в готовой программе, а каждый килобайт стоит аренды.
+pub const TOKEN_PROGRAM: Pubkey =
+    solana_program::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+
+/// Выпуск токенов на счёт. Раскладка инструкции у программы токенов
+/// простая: номер и сумма.
+fn выпустить(mint: &Pubkey, кому: &Pubkey, кто: &Pubkey, сколько: u64) -> SolInstruction {
+    let mut data = Vec::with_capacity(9);
+    data.push(7u8);
+    data.extend_from_slice(&сколько.to_le_bytes());
+    SolInstruction {
+        program_id: TOKEN_PROGRAM,
+        accounts: vec![
+            AccountMeta::new(*mint, false),
+            AccountMeta::new(*кому, false),
+            AccountMeta::new_readonly(*кто, true),
+        ],
+        data,
+    }
+}
+
+/// Сжигание токенов со счёта их владельцем.
+fn сжечь(счёт: &Pubkey, mint: &Pubkey, владелец: &Pubkey, сколько: u64) -> SolInstruction {
+    let mut data = Vec::with_capacity(9);
+    data.push(8u8);
+    data.extend_from_slice(&сколько.to_le_bytes());
+    SolInstruction {
+        program_id: TOKEN_PROGRAM,
+        accounts: vec![
+            AccountMeta::new(*счёт, false),
+            AccountMeta::new(*mint, false),
+            AccountMeta::new_readonly(*владелец, true),
+        ],
+        data,
+    }
+}
+
+/// Снятие права выпуска навсегда: тип права 0 (MintTokens), новый
+/// владелец — никто.
+fn снять_право_выпуска(mint: &Pubkey, кто: &Pubkey) -> SolInstruction {
+    SolInstruction {
+        program_id: TOKEN_PROGRAM,
+        accounts: vec![
+            AccountMeta::new(*mint, false),
+            AccountMeta::new_readonly(*кто, true),
+        ],
+        data: vec![6u8, 0u8, 0u8],
+    }
+}
 
 /// Место под состояние кривой. С запасом: менять размер у уже созданного
 /// счёта нельзя, а поля со временем добавляются.
@@ -58,7 +109,10 @@ pub const CURVE_SEED: &[u8] = b"curve";
 /// честной, а поменять программу без апгрейда нельзя.
 pub const MAX_FEE_BPS: u16 = 500; // 5%
 
-#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
+/// Состояние кривой лежит в счёте простой раскладкой, а не через borsh:
+/// библиотека сериализации тянет за собой заметный кусок кода, а полей
+/// здесь чёртова дюжина и все фиксированной длины. Порядок полей менять
+/// нельзя — по нему читают и приложение, и сервер.
 pub struct Curve {
     /// Версия раскладки полей: по ней читатель поймёт, что перед ним.
     pub version: u8,
@@ -83,6 +137,64 @@ pub struct Curve {
 }
 
 impl Curve {
+    /// Сколько байт занимает состояние в счёте.
+    pub const РАЗМЕР: usize = 3 + 32 * 4 + 8 * 4 + 2 + 8 + 8;
+
+    fn ключ(данные: &[u8], с: usize) -> Pubkey {
+        let mut b = [0u8; 32];
+        b.copy_from_slice(&данные[с..с + 32]);
+        Pubkey::new_from_array(b)
+    }
+
+    fn число(данные: &[u8], с: usize) -> u64 {
+        let mut b = [0u8; 8];
+        b.copy_from_slice(&данные[с..с + 8]);
+        u64::from_le_bytes(b)
+    }
+
+    pub fn из_байтов(данные: &[u8]) -> Option<Curve> {
+        if данные.len() < Self::РАЗМЕР {
+            return None;
+        }
+        Some(Curve {
+            version: данные[0],
+            bump: данные[1],
+            graduated: данные[2] == 1,
+            mint: Self::ключ(данные, 3),
+            creator: Self::ключ(данные, 35),
+            fee_wallet: Self::ключ(данные, 67),
+            destination: Self::ключ(данные, 99),
+            virtual_sol: Self::число(данные, 131),
+            virtual_tokens: Self::число(данные, 139),
+            tokens_for_sale: Self::число(данные, 147),
+            graduation_sol: Self::число(данные, 155),
+            fee_bps: u16::from_le_bytes([данные[163], данные[164]]),
+            real_sol: Self::число(данные, 165),
+            tokens_sold: Self::число(данные, 173),
+        })
+    }
+
+    pub fn в_байты(&self, куда: &mut [u8]) -> Option<()> {
+        if куда.len() < Self::РАЗМЕР {
+            return None;
+        }
+        куда[0] = self.version;
+        куда[1] = self.bump;
+        куда[2] = self.graduated as u8;
+        куда[3..35].copy_from_slice(&self.mint.to_bytes());
+        куда[35..67].copy_from_slice(&self.creator.to_bytes());
+        куда[67..99].copy_from_slice(&self.fee_wallet.to_bytes());
+        куда[99..131].copy_from_slice(&self.destination.to_bytes());
+        куда[131..139].copy_from_slice(&self.virtual_sol.to_le_bytes());
+        куда[139..147].copy_from_slice(&self.virtual_tokens.to_le_bytes());
+        куда[147..155].copy_from_slice(&self.tokens_for_sale.to_le_bytes());
+        куда[155..163].copy_from_slice(&self.graduation_sol.to_le_bytes());
+        куда[163..165].copy_from_slice(&self.fee_bps.to_le_bytes());
+        куда[165..173].copy_from_slice(&self.real_sol.to_le_bytes());
+        куда[173..181].copy_from_slice(&self.tokens_sold.to_le_bytes());
+        Some(())
+    }
+
     /// Постоянное произведение. Считается в u128: произведение резервов
     /// не влезает в u64 уже на обычных для мемкоина числах.
     fn k(&self) -> u128 {
@@ -125,7 +237,8 @@ fn комиссия(сумма: u64, bps: u16) -> u64 {
     ((сумма as u128) * (bps as u128) / 10_000u128) as u64
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
+/// Инструкции читаются вручную: номер варианта первым байтом, дальше
+/// поля подряд в том же порядке, в каком их складывает сервер.
 pub enum Instruction {
     /// Создать кривую для уже выпущенного токена. Право выпуска к этому
     /// моменту должно принадлежать самой кривой — иначе продавать нечего.
@@ -147,6 +260,41 @@ pub enum Instruction {
     Graduate,
 }
 
+impl Instruction {
+    fn число(данные: &[u8], с: usize) -> u64 {
+        let mut b = [0u8; 8];
+        b.copy_from_slice(&данные[с..с + 8]);
+        u64::from_le_bytes(b)
+    }
+
+    pub fn разобрать(данные: &[u8]) -> Option<Instruction> {
+        match *данные.first()? {
+            0 if данные.len() >= 1 + 8 * 4 + 2 + 32 => {
+                let mut b = [0u8; 32];
+                b.copy_from_slice(&данные[35..67]);
+                Some(Instruction::Initialize {
+                    virtual_sol: Self::число(данные, 1),
+                    virtual_tokens: Self::число(данные, 9),
+                    tokens_for_sale: Self::число(данные, 17),
+                    graduation_sol: Self::число(данные, 25),
+                    fee_bps: u16::from_le_bytes([данные[33], данные[34]]),
+                    destination: Pubkey::new_from_array(b),
+                })
+            }
+            1 if данные.len() >= 17 => Some(Instruction::Buy {
+                sol_in: Self::число(данные, 1),
+                min_tokens_out: Self::число(данные, 9),
+            }),
+            2 if данные.len() >= 17 => Some(Instruction::Sell {
+                tokens_in: Self::число(данные, 1),
+                min_sol_out: Self::число(данные, 9),
+            }),
+            3 => Some(Instruction::Graduate),
+            _ => None,
+        }
+    }
+}
+
 entrypoint!(process_instruction);
 
 pub fn process_instruction(
@@ -154,7 +302,7 @@ pub fn process_instruction(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    let ix = Instruction::try_from_slice(data).map_err(|_| ProgramError::InvalidInstructionData)?;
+    let ix = Instruction::разобрать(data).ok_or(ProgramError::InvalidInstructionData)?;
     match ix {
         Instruction::Initialize {
             virtual_sol,
@@ -197,10 +345,8 @@ fn прочитать(
     }
     // Читаем из среза, а не целиком: под состояние отведено с запасом, и
     // хвост из нулей ещё не значит, что данные испорчены.
-    let данные = curve_ai.data.borrow();
-    let состояние = Curve::deserialize(&mut &данные[..])
-        .map_err(|_| ProgramError::InvalidAccountData)?;
-    drop(данные);
+    let состояние = Curve::из_байтов(&curve_ai.data.borrow())
+        .ok_or(ProgramError::InvalidAccountData)?;
     if &состояние.mint != mint {
         return Err(ProgramError::InvalidArgument);
     }
@@ -212,12 +358,9 @@ fn прочитать(
 }
 
 fn записать(curve_ai: &AccountInfo, состояние: &Curve) -> ProgramResult {
-    let байты = borsh::to_vec(состояние).map_err(|_| ProgramError::InvalidAccountData)?;
-    if байты.len() > curve_ai.data_len() {
-        return Err(ProgramError::AccountDataTooSmall);
-    }
-    curve_ai.data.borrow_mut()[..байты.len()].copy_from_slice(&байты);
-    Ok(())
+    состояние
+        .в_байты(&mut curve_ai.data.borrow_mut())
+        .ok_or(ProgramError::AccountDataTooSmall)
 }
 
 /// Сколько лямпортов со счёта кривой можно тронуть. Ниже минимума для
@@ -274,20 +417,28 @@ fn initialize(
     // Право выпуска должно быть уже у кривой. Проверяем до создания
     // счёта: с чужим правом выпуска кривая не смогла бы выдать ни одного
     // токена, а деньги покупателей уже приняла бы.
-    let mint = spl_token::state::Mint::unpack(&mint_ai.data.borrow())?;
-    match mint.mint_authority {
-        solana_program::program_option::COption::Some(a) if a == pda => {}
-        _ => {
-            msg!("право выпуска должно принадлежать кривой");
-            return Err(ProgramError::InvalidArgument);
-        }
+    //
+    // Раскладка счёта токена (82 байта) зафиксирована стандартом:
+    // 0..4 — есть ли право выпуска, 4..36 — чьё оно, 36..44 — эмиссия,
+    // 44 — разрядность, 45 — заведён ли, 46..50 — есть ли заморозка.
+    if mint_ai.owner != &TOKEN_PROGRAM {
+        return Err(ProgramError::IllegalOwner);
+    }
+    let данные = mint_ai.data.borrow();
+    if данные.len() < 82 {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    if данные[0..4] != [1, 0, 0, 0] || данные[4..36] != pda.to_bytes() {
+        msg!("право выпуска должно принадлежать кривой");
+        return Err(ProgramError::InvalidArgument);
     }
     // Заморозка должна быть отключена: с ней создатель мог бы запереть
     // токены покупателей, и продать их обратно кривой стало бы нельзя.
-    if mint.freeze_authority.is_some() {
+    if данные[46..50] != [0, 0, 0, 0] {
         msg!("у токена должна быть отключена заморозка");
         return Err(ProgramError::InvalidArgument);
     }
+    drop(данные);
 
     let rent = Rent::get()?;
     let аренда = rent.minimum_balance(CURVE_SPACE);
@@ -387,15 +538,11 @@ fn buy(
         )?;
     }
 
+    if token_program.key != &TOKEN_PROGRAM {
+        return Err(ProgramError::IncorrectProgramId);
+    }
     invoke_signed(
-        &spl_token::instruction::mint_to(
-            token_program.key,
-            mint_ai.key,
-            buyer_ata.key,
-            curve_ai.key,
-            &[],
-            выдача,
-        )?,
+        &выпустить(mint_ai.key, buyer_ata.key, curve_ai.key, выдача),
         &[
             mint_ai.clone(),
             buyer_ata.clone(),
@@ -412,7 +559,6 @@ fn buy(
         .ok_or(ProgramError::ArithmeticOverflow)?;
     записать(curve_ai, &состояние)?;
 
-    msg!("куплено {} токенов за {} лямпортов", выдача, sol_in);
     Ok(())
 }
 
@@ -467,15 +613,11 @@ fn sell(
     // Сначала сжигаем токены, потом отдаём деньги: обратный порядок
     // оставил бы окно, в котором продавец уже с монетами, а токены ещё у
     // него.
+    if token_program.key != &TOKEN_PROGRAM {
+        return Err(ProgramError::IncorrectProgramId);
+    }
     invoke(
-        &spl_token::instruction::burn(
-            token_program.key,
-            seller_ata.key,
-            mint_ai.key,
-            seller.key,
-            &[],
-            tokens_in,
-        )?,
+        &сжечь(seller_ata.key, mint_ai.key, seller.key, tokens_in),
         &[
             seller_ata.clone(),
             mint_ai.clone(),
@@ -497,7 +639,6 @@ fn sell(
     состояние.real_sol -= выплата;
     записать(curve_ai, &состояние)?;
 
-    msg!("продано {} токенов за {} лямпортов", tokens_in, продавцу);
     Ok(())
 }
 
@@ -523,15 +664,11 @@ fn graduate(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
 
     // Право выпуска снимается навсегда: после закрытия кривой никто —
     // включая площадку — не может допечатать токены.
+    if token_program.key != &TOKEN_PROGRAM {
+        return Err(ProgramError::IncorrectProgramId);
+    }
     invoke_signed(
-        &spl_token::instruction::set_authority(
-            token_program.key,
-            mint_ai.key,
-            None,
-            spl_token::instruction::AuthorityType::MintTokens,
-            curve_ai.key,
-            &[],
-        )?,
+        &снять_право_выпуска(mint_ai.key, curve_ai.key),
         &[mint_ai.clone(), curve_ai.clone(), token_program.clone()],
         &[&[CURVE_SEED, mint_ai.key.as_ref(), &[состояние.bump]]],
     )?;
@@ -544,7 +681,7 @@ fn graduate(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     состояние.real_sol -= сумма;
     записать(curve_ai, &состояние)?;
 
-    msg!("кривая закрыта, {} лямпортов ушли в пул", сумма);
+    msg!("кривая закрыта");
     Ok(())
 }
 

@@ -74,13 +74,28 @@ sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
 # 2. Кошелёк, с которого идёт развёртывание
 solana-keygen new -o ~/mintly-deployer.json
 solana config set --keypair ~/mintly-deployer.json --url https://api.mainnet-beta.solana.com
-solana address                  # пополнить: аренда программы ~0.73 SOL плюс комиссии
+solana address                  # пополнить: аренда программы 0.64 SOL плюс комиссии
 
 # 3. Развернуть
 solana program deploy programs/mintly_curve/build/mintly_curve-v3.so
 ```
 
 Команда напечатает `Program Id` — это и есть адрес программы.
+
+## Бесплатная проверка в devnet
+
+Если денег на мейннет пока нет, всё то же самое работает в тестовой сети —
+монеты там выдаются даром:
+
+```sh
+solana config set --url https://api.devnet.solana.com
+solana airdrop 2
+solana program deploy programs/mintly_curve/build/mintly_curve-v3.so
+```
+
+В настройках приложения тогда `SOLANA_RPC=https://api.devnet.solana.com`,
+а кошелёк в Phantom нужно переключить на devnet. Токены там ненастоящие,
+зато весь путь — запуск, покупка, продажа — проходится целиком.
 
 ## Настройки приложения
 
