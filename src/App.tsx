@@ -321,6 +321,7 @@ const STR = {
     connectWalletCta: "Подключить кошелёк",
     launchTokenTitle: "Запусти токен",
     launchTokenSub: "Эмиссия происходит в сети TON сразу после подтверждения",
+    launchTokenSubSol: "Эмиссия в сети Solana: миллиард штук, из них 800 млн продаёт кривая",
     logoLabel: "Логотип",
     logoShort: "Лого",
     bannerOptional: "Баннер 1200×400 (необязательно)",
@@ -702,6 +703,7 @@ const STR = {
     connectWalletCta: "Connect wallet",
     launchTokenTitle: "Launch a token",
     launchTokenSub: "Minting happens on the TON network right after confirmation",
+    launchTokenSubSol: "Minted on Solana: one billion units, 800M of them sold by the curve",
     logoLabel: "Logo",
     logoShort: "Logo",
     bannerOptional: "Banner 1200×400 (optional)",
@@ -8424,7 +8426,7 @@ function NetworkSlider({ value, onChange, ширина = 168, высота = 38 
   );
 }
 
-function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen, onLaunch }) {
+function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen, onLaunch, solДоступен = false }) {
   const [filter, setFilter] = useState("new");
   // Сеть выбирается сверху, отдельно от фильтров: это не «ещё один
   // способ отсортировать», а другой рынок целиком — свои токены, свои
@@ -8593,8 +8595,9 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
               padding: "8px 14px", borderRadius: 10,
               background: T.electric, color: PRISM_TEXT, border: "none",
               fontFamily: displayFont, fontSize: 13.5, fontWeight: 600,
-              // В Solana мы не запускаем токены, только показываем чужие.
-              display: сеть === "sol" ? "none" : undefined,
+              // В Solana кнопка появляется только когда программа
+              // кривой развёрнута: до этого запускать там нечем.
+              display: сеть === "sol" && !solДоступен ? "none" : undefined,
             }}
           >
             <Rocket size={14} strokeWidth={1.8} /> {t("mempadLaunchToken")}
@@ -11105,8 +11108,13 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
   );
 }
 
-function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCreateProfile, onOpenConnectModal, onLaunch }) {
+function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCreateProfile, onOpenConnectModal, onLaunch, solДоступен = false }) {
   const [form, setForm] = useState({ name: "", ticker: "", buyAmount: "", desc: "", tg: "", x: "", site: "" });
+  // В какой сети запускать. Пока программа кривой в Solana не
+  // развёрнута, выбора нет вовсе — предлагать действие, которое всё
+  // равно не пройдёт, хуже, чем не предлагать его.
+  const [сетьЗапуска, setСетьЗапуска] = useState("ton");
+  const вSolana = solДоступен && сетьЗапуска === "sol";
   // Подпись обязательна: сама транзакция запуска эту сумму не тратит —
   // покупка идёт отдельным шагом сразу после создания. Без пояснения
   // человек ждёт токены на кошельке и не понимает, почему их нет.
@@ -11173,19 +11181,26 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
       return;
     }
     // Порог задан в долларах, поэтому проверять его без курса нельзя:
-    // при нуле любая сумма выглядела бы недостаточной.
-    const rate = tonUsd();
+    // при нуле любая сумма выглядела бы недостаточной. Курс берётся той
+    // сети, в которой идёт запуск, — иначе доллары считались бы по чужой
+    // монете.
+    const rate = вSolana ? solUsd() : tonUsd();
     if (MIN_LAUNCH_ENFORCED && rate > 0) {
-      const minBuyTon = MIN_LAUNCH_USD / rate;
+      const минимум = MIN_LAUNCH_USD / rate;
       if (buyNum * rate < MIN_LAUNCH_USD) {
-        showToast(trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(2) }));
+        showToast(trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: минимум.toFixed(вSolana ? 3 : 2) }));
         return;
       }
     }
     // Real launch: hands off to the root app, which deploys an actual
     // jetton on-chain via TonConnect and seeds a STON.fi pool with the
     // committed buyAmount (see tonLaunch.js / handleLaunchRequest).
-    onLaunch({ form, category, logoUrl, logoFile, buyAmount: form.buyAmount.trim(), onFinish: finishLaunch });
+    onLaunch({
+      form, category, logoUrl, logoFile,
+      buyAmount: form.buyAmount.trim(),
+      chain: вSolana ? "solana" : "ton",
+      onFinish: finishLaunch,
+    });
   }
 
   function resetForm() {
@@ -11233,7 +11248,16 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
     <div className="fx-view flex flex-col gap-7" style={{ position: "relative" }}>
       <div>
         <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 20.5, fontWeight: 700 }}>{t("launchTokenTitle")}</div>
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 2 }}>{t("launchTokenSub")}</div>
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 2 }}>
+          {вSolana ? t("launchTokenSubSol") : t("launchTokenSub")}
+        </div>
+        {/* Сеть выбирается тем же ползунком, что и в мемпаде: это один и
+            тот же выбор рынка, и выглядеть он должен одинаково. */}
+        {solДоступен && (
+          <div style={{ marginTop: 12 }}>
+            <NetworkSlider value={сетьЗапуска} onChange={setСетьЗапуска} />
+          </div>
+        )}
       </div>
 
       <div>
@@ -11267,7 +11291,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
 
       <div className="flex flex-col gap-1.5">
         <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("launchAmountLabel")}</span>
-        <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surface, border: `1px solid ${touched && MIN_LAUNCH_ENFORCED && tonUsd() > 0 && !(parseFloat(form.buyAmount.replace(",", ".")) * tonUsd() >= MIN_LAUNCH_USD) ? T.down : T.line}` }}>
+        <div className="flex items-center gap-2 rounded-[20px] px-3.5 py-3" style={{ background: T.surface, border: `1px solid ${touched && MIN_LAUNCH_ENFORCED && (вSolana ? solUsd() : tonUsd()) > 0 && !(parseFloat(form.buyAmount.replace(",", ".")) * (вSolana ? solUsd() : tonUsd()) >= MIN_LAUNCH_USD) ? T.down : T.line}` }}>
           <input
             value={form.buyAmount}
             onChange={setBuyAmount}
@@ -11282,14 +11306,14 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
             // текста.
             style={{ fontFamily: displayFont, fontWeight: 700, color: T.ice, fontSize: 17.5, lineHeight: "20px", height: 20, background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 0, padding: 0 }}
           />
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 14.5 }}>TON</span>
+          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 14.5 }}>{вSolana ? "SOL" : "TON"}</span>
         </div>
         <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12, lineHeight: 1.5, marginTop: 6 }}>
           {t("initialBuyHint")}
         </p>
         {(() => {
           const buyNum = parseFloat(form.buyAmount.replace(",", "."));
-          const rate = tonUsd();
+          const rate = вSolana ? solUsd() : tonUsd();
           const minBuyTon = rate > 0 ? MIN_LAUNCH_USD / rate : 0;
           if (!Number.isFinite(buyNum) || buyNum <= 0) {
             return (
@@ -11301,7 +11325,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
           if (MIN_LAUNCH_ENFORCED && rate > 0 && buyNum * rate < MIN_LAUNCH_USD) {
             return (
               <p style={{ fontFamily: bodyFont, color: T.down, fontSize: 12, lineHeight: 1.5 }}>
-                {trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(2) })}
+                {trf("buyAmountTooLow", { min: MIN_LAUNCH_USD, tons: minBuyTon.toFixed(вSolana ? 3 : 2) })}
               </p>
             );
           }
@@ -14117,6 +14141,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       buyAmount: row.buy_amount,
       logoUrl: row.logo_url,
       network: row.network || "mainnet",
+      // Сеть токена: по ней решается, у какой цепочки спрашивать цену и
+      // каким кошельком торговать.
+      chain: row.chain || "ton",
       ownerId: row.owner_id || null,
       createdAt: new Date(row.created_at).getTime(),
     };
@@ -14898,6 +14925,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       explorer_url: result.explorerUrl || null,
       category: result.category || null,
       network: result.network || (TON_TESTNET ? "testnet" : "mainnet"),
+      // Сеть токена: по ней приложение решает, у какой цепочки
+      // спрашивать цену и каким кошельком торговать.
+      chain: result.chain || "ton",
     };
 
     // Токен уже в сети — потерять его из-за одной неудачной записи
@@ -14976,6 +15006,20 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   const [launchProgress, setLaunchProgress] = useState({ stepIndex: 0, done: false, error: null, result: null });
   const EMPTY_LAUNCH_FORM = { name: "", ticker: "", buyAmount: "", desc: "", tg: "", x: "", site: "" };
 
+  /* Запуск в Solana включается сам, когда программа кривой развёрнута:
+     сервер отвечает, есть ли её адрес в настройках. Пока нет — выбора
+     сети в форме не появляется, и кнопка запуска в разделе Solana не
+     показывается. */
+  const [solЗапуск, setSolЗапуск] = useState(false);
+  useEffect(() => {
+    let жив = true;
+    import("./solLaunch")
+      .then((m) => m.запускВSolanaДоступен())
+      .then((да) => { if (жив) setSolЗапуск(!!да); })
+      .catch(() => {});
+    return () => { жив = false; };
+  }, []);
+
   function handleLaunchRequest(req) {
     setLaunchRequest(req);
     runRealLaunch(req);
@@ -14985,6 +15029,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   // TonConnect. Every stage the user sees in TokenLaunchOverlay reflects
   // a real transaction/confirmation, not a timer.
   async function runRealLaunch(req) {
+    // Solana — другая сеть целиком: свой кошелёк, своя программа кривой
+    // и другая транзакция. Общего с запуском на TON у неё только форма,
+    // поэтому дальше идёт отдельная ветка, а не ещё десяток условий
+    // внутри этой.
+    if (req.chain === "solana") return runSolanaLaunch(req);
+
     setLaunchProgress({ stepIndex: 0, done: false, error: null, result: null });
     const buyNum = parseFloat(String(req.buyAmount || "0").replace(",", "."));
 
@@ -15103,6 +15153,71 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     }
   }
 
+  /* Запуск в Solana. Одна подпись в Phantom создаёт токен, записывает
+     метаданные, отдаёт право выпуска кривой и заводит её саму — сборкой
+     транзакции занимается сервер (api/solana-launch.js), потому что
+     тащить ради этого пол-Solana-SDK в браузер незачем.
+
+     Эмиссия здесь не настраивается: миллиард штук, из них восемьсот
+     миллионов продаёт кривая. Это правило площадки, а не выбор
+     запускающего — иначе у каждого токена была бы своя математика, и
+     сравнивать их было бы нельзя. */
+  async function runSolanaLaunch(req) {
+    setLaunchProgress({ stepIndex: 0, done: false, error: null, result: null });
+    const buyNum = parseFloat(String(req.buyAmount || "0").replace(",", "."));
+
+    try {
+      // Логотип уезжает в хранилище до запуска: на него ссылаются
+      // метаданные токена, которые пишутся той же транзакцией.
+      let logo = null;
+      if (req.logoFile && userId) {
+        try {
+          const path = `${userId}/token-${Date.now()}.${safeImageExt(req.logoFile)}`;
+          const { error: ошибка } = await supabase.storage.from("avatars").upload(path, req.logoFile, { upsert: true });
+          if (!ошибка) {
+            const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+            if (pub && pub.publicUrl) logo = pub.publicUrl;
+          }
+        } catch (e) { console.error("[mintly] логотип не загрузился:", e); }
+      }
+      if (!logo && req.logoUrl && !String(req.logoUrl).startsWith("blob:")) logo = req.logoUrl;
+
+      setLaunchProgress((p) => ({ ...p, stepIndex: 1 }));
+      const { запуститьТокенSol } = await import("./solLaunch");
+      setLaunchProgress((p) => ({ ...p, stepIndex: 2 }));
+
+      const итог = await запуститьТокенSol({
+        имя: req.form.name.trim() || t("unnamedToken"),
+        тикер: (req.form.ticker.trim() || "TOKEN").toUpperCase(),
+        стартовыйВзносSol: Number.isFinite(buyNum) && buyNum > 0 ? buyNum : 0,
+      });
+
+      setLaunchProgress({
+        stepIndex: LAUNCH_STEPS.length,
+        done: true,
+        error: null,
+        result: {
+          name: req.form.name.trim() || t("unnamedToken"),
+          ticker: (req.form.ticker.trim() || "TOKEN").toUpperCase(),
+          supply: (1_000_000_000).toLocaleString("ru-RU"),
+          buyAmount: req.buyAmount && String(req.buyAmount).trim() ? req.buyAmount : "0",
+          buyTokens: 0,
+          category: req.category || null,
+          logoUrl: logo,
+          chain: "solana",
+          network: "mainnet",
+          address: итог.mint,
+          curveAddress: итог.curve,
+          creatorWallet: итог.creatorWallet,
+          explorerUrl: итог.explorerUrl,
+          createdAt: Date.now(),
+        },
+      });
+    } catch (err) {
+      setLaunchProgress({ stepIndex: 0, done: false, error: (err && err.message) || String(err), result: null });
+    }
+  }
+
   function retryLaunch() {
     if (launchRequest) runRealLaunch(launchRequest);
   }
@@ -15116,7 +15231,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // Стартовая покупка едет внутри транзакции запуска, поэтому окно
     // покупки здесь больше не открывается — иначе создатель купил бы
     // дважды. На страницу токена он попадёт кнопкой с экрана успеха.
-    if (result) openLaunchBuy(result, { openTradeSheet: false });
+    // Токен Solana сюда не идёт: карточка читает состояние у кривой на
+    // TON, и открывать её для чужой сети — значит показывать прочерки.
+    if (result && result.chain !== "solana") openLaunchBuy(result, { openTradeSheet: false });
   }
   // Создатель покупает первым: кроме него о токене ещё никто не знает,
   // а размер этой покупки и задаёт стартовую цену — кривая сдвигается
@@ -15878,7 +15995,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             <HomeView onGoTab={goTab} onGoCreate={openCreate} curveTokens={communityTokens} onOpenToken={openToken} onOpenProfile={openUserProfile} />
           </KeepAlive>
           <KeepAlive show={view === "mempad"}>
-            <MempadView tokens={tokens} loading={tokensLoading} myTokensLoading={!communityLoaded} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} />
+            <MempadView tokens={tokens} loading={tokensLoading} myTokensLoading={!communityLoaded} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} solДоступен={solЗапуск} />
           </KeepAlive>
           <KeepAlive show={view === "wallet"}>
             <WalletView
@@ -15936,6 +16053,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               onOpenCreateProfile={openCreateProfile}
               onOpenConnectModal={() => setConnectModalOpen(true)}
               onLaunch={handleLaunchRequest}
+              solДоступен={solЗапуск}
             />
           )}
           <KeepAlive show={view === "profile"}>

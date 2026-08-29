@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@solana/spl-token": "^0.4.15",
+    "@solana/web3.js": "^1.98.4",
     "@ston-fi/sdk": "^2.0.0",
     "@supabase/supabase-js": "^2.45.0",
     "@ton-community/assets-sdk": "*",

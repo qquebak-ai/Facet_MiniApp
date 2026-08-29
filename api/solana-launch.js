@@ -1,0 +1,421 @@
+/* Запуск и торговля токеном на своей кривой в Solana.
+ *
+ * Зачем через сервер. Транзакция здесь непростая: создать счёт токена,
+ * записать метаданные Metaplex, передать право выпуска кривой и завести
+ * саму кривую — пять инструкций подряд, часть из которых требует знания
+ * адресов программ и точной раскладки байтов. Собирать это в браузере
+ * значит тащить туда полкилобайта библиотек и держать там же ключи
+ * площадки. Поэтому сервер собирает готовую транзакцию, а подписывает её
+ * человек в своём кошельке — приватных ключей мы по-прежнему не видим.
+ *
+ * Единственный ключ, который рождается здесь, — одноразовая пара самого
+ * токена: она нужна ровно на одну подпись при создании счёта и после
+ * этого не значит ничего, потому что право выпуска сразу уходит кривой.
+ *
+ * Переменные окружения:
+ *   SOLANA_CURVE_PROGRAM — адрес развёрнутой программы кривой. Пока не
+ *                          задан, запуск в Solana выключен целиком.
+ *   SOLANA_FEE_ACCOUNT   — кошелёк площадки: туда идёт комиссия сделок.
+ *   SOLANA_LIQUIDITY     — куда уходит ликвидность после закрытия кривой.
+ *   SOLANA_RPC           — узел сети.
+ *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY — для метаданных токена.
+ */
+
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  TransactionInstruction,
+} from "@solana/web3.js";
+import {
+  AuthorityType,
+  MINT_SIZE,
+  TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountIdempotentInstruction,
+  createInitializeMint2Instruction,
+  createSetAuthorityInstruction,
+  getAssociatedTokenAddressSync,
+  getMinimumBalanceForRentExemptMint,
+} from "@solana/spl-token";
+import { createClient } from "@supabase/supabase-js";
+
+const RPC = process.env.SOLANA_RPC || "https://api.mainnet-beta.solana.com";
+const PROGRAM = (process.env.SOLANA_CURVE_PROGRAM || "").trim();
+const FEE_ACCOUNT = (process.env.SOLANA_FEE_ACCOUNT || "").trim();
+const LIQUIDITY = (process.env.SOLANA_LIQUIDITY || FEE_ACCOUNT || "").trim();
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const METADATA_PROGRAM = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+
+// Разрядность токена. Шесть знаков — то же, что у большинства мемкоинов
+// сети: девять дают числа, которые не помещаются в u64 при миллиардной
+// эмиссии.
+const DECIMALS = 6;
+const ЕДИНИЦА = 10 ** DECIMALS;
+const LAMPORTS = 1_000_000_000;
+
+/* Параметры кривой. Те же пропорции, что и у кривой на TON: виртуальные
+   резервы задают стартовую цену и крутизну, а порог закрытия — момент,
+   когда собранное уходит в пул. Считаются здесь, а не приходят из
+   браузера: это правила площадки, а не настройка запуска. */
+export const КРИВАЯ = {
+  virtualSol: 30 * LAMPORTS,
+  virtualTokens: 1_073_000_000 * ЕДИНИЦА,
+  tokensForSale: 800_000_000 * ЕДИНИЦА,
+  graduationSol: 85 * LAMPORTS,
+  feeBps: 100,
+};
+
+const адресОк = (s) => {
+  try { new PublicKey(s); return true; } catch { return false; }
+};
+
+function программа() {
+  if (!PROGRAM || !адресОк(PROGRAM)) return null;
+  return new PublicKey(PROGRAM);
+}
+
+function кривуюДля(mint, programId) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("curve"), mint.toBuffer()],
+    programId,
+  )[0];
+}
+
+function метаданныеДля(mint) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("metadata"), METADATA_PROGRAM.toBuffer(), mint.toBuffer()],
+    METADATA_PROGRAM,
+  )[0];
+}
+
+/* --- Раскладка байтов ------------------------------------------------
+   Программа читает инструкции борщом: первый байт — номер варианта,
+   дальше поля в порядке объявления. Собираем вручную: ради четырёх
+   инструкций тянуть клиент Anchor незачем. */
+
+function u64(n) {
+  const b = Buffer.alloc(8);
+  b.writeBigUInt64LE(BigInt(Math.trunc(n)));
+  return b;
+}
+
+function u16(n) {
+  const b = Buffer.alloc(2);
+  b.writeUInt16LE(n);
+  return b;
+}
+
+function строка(s) {
+  const тело = Buffer.from(String(s), "utf8");
+  const длина = Buffer.alloc(4);
+  длина.writeUInt32LE(тело.length);
+  return Buffer.concat([длина, тело]);
+}
+
+function инструкцияИнициализации(destination) {
+  return Buffer.concat([
+    Buffer.from([0]),
+    u64(КРИВАЯ.virtualSol),
+    u64(КРИВАЯ.virtualTokens),
+    u64(КРИВАЯ.tokensForSale),
+    u64(КРИВАЯ.graduationSol),
+    u16(КРИВАЯ.feeBps),
+    destination.toBuffer(),
+  ]);
+}
+
+const инструкцияПокупки = (sol, минимум) =>
+  Buffer.concat([Buffer.from([1]), u64(sol), u64(минимум)]);
+
+const инструкцияПродажи = (токены, минимум) =>
+  Buffer.concat([Buffer.from([2]), u64(токены), u64(минимум)]);
+
+/* Метаданные Metaplex. Формат CreateMetadataAccountV3: номер инструкции,
+   имя, тикер, ссылка на описание, роялти, три необязательных поля и
+   признак изменяемости. Изменяемость выключаем — иначе создатель мог бы
+   подменить имя и картинку уже купленного людьми токена. */
+function инструкцияМетаданных({ mint, payer, name, symbol, uri }) {
+  const data = Buffer.concat([
+    Buffer.from([33]),
+    строка(name.slice(0, 32)),
+    строка(symbol.slice(0, 10)),
+    строка(uri.slice(0, 200)),
+    u16(0),
+    Buffer.from([0]), // creators: нет
+    Buffer.from([0]), // collection: нет
+    Buffer.from([0]), // uses: нет
+    Buffer.from([0]), // isMutable: нет
+    Buffer.from([0]), // collectionDetails: нет
+  ]);
+  return new TransactionInstruction({
+    programId: METADATA_PROGRAM,
+    keys: [
+      { pubkey: метаданныеДля(mint), isSigner: false, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: payer, isSigner: true, isWritable: false },  // право выпуска ещё у создателя
+      { pubkey: payer, isSigner: true, isWritable: true },   // и он же платит
+      { pubkey: payer, isSigner: false, isWritable: false }, // и он же владелец записи
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+}
+
+/* --- Сборка транзакций ---------------------------------------------- */
+
+async function свежийБлок(connection) {
+  const { blockhash } = await connection.getLatestBlockhash("finalized");
+  return blockhash;
+}
+
+function вBase64(tx) {
+  return tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString("base64");
+}
+
+/* Запуск: один вызов кошелька создаёт токен, записывает метаданные,
+   отдаёт право выпуска кривой и заводит саму кривую. Порядок важен:
+   метаданные требуют подписи того, у кого право выпуска, поэтому оно
+   уходит кривой уже после их записи. */
+async function собратьЗапуск({ wallet, name, symbol, base, buySol }) {
+  const programId = программа();
+  if (!programId) throw new Error("программа кривой не развёрнута");
+  if (!адресОк(wallet)) throw new Error("плохой адрес кошелька");
+  if (!FEE_ACCOUNT || !адресОк(FEE_ACCOUNT)) throw new Error("не задан кошелёк комиссии");
+  if (!LIQUIDITY || !адресОк(LIQUIDITY)) throw new Error("не задан получатель ликвидности");
+
+  const connection = new Connection(RPC, "confirmed");
+  const payer = new PublicKey(wallet);
+  const mintPair = Keypair.generate();
+  const mint = mintPair.publicKey;
+  const curve = кривуюДля(mint, programId);
+  const feeWallet = new PublicKey(FEE_ACCOUNT);
+  const destination = new PublicKey(LIQUIDITY);
+
+  // Ссылка на описание указывает сюда же: имя и картинку кошельки
+  // прочитают у нас, а адрес токена известен только после генерации его
+  // пары ключей — поэтому ссылка собирается здесь, а не в браузере.
+  const uri = `${base}/api/solana-launch?action=meta&mint=${mint.toBase58()}`;
+
+  const аренда = await getMinimumBalanceForRentExemptMint(connection);
+  const tx = new Transaction();
+
+  tx.add(SystemProgram.createAccount({
+    fromPubkey: payer,
+    newAccountPubkey: mint,
+    lamports: аренда,
+    space: MINT_SIZE,
+    programId: TOKEN_PROGRAM_ID,
+  }));
+  // Заморозки нет вовсе: с ней создатель мог бы запереть токены
+  // покупателей, и продать их обратно кривой стало бы нельзя.
+  tx.add(createInitializeMint2Instruction(mint, DECIMALS, payer, null, TOKEN_PROGRAM_ID));
+  tx.add(инструкцияМетаданных({ mint, payer, name, symbol, uri }));
+  tx.add(createSetAuthorityInstruction(mint, payer, AuthorityType.MintTokens, curve, [], TOKEN_PROGRAM_ID));
+
+  tx.add(new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: payer, isSigner: true, isWritable: true },
+      { pubkey: curve, isSigner: false, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: feeWallet, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data: инструкцияИнициализации(destination),
+  }));
+
+  // Стартовая покупка создателя — той же транзакцией: иначе между
+  // запуском и первой покупкой успевает влезть чужой бот.
+  const лямпорты = Math.round(Number(buySol || 0) * LAMPORTS);
+  if (лямпорты > 0) {
+    const ata = getAssociatedTokenAddressSync(mint, payer);
+    tx.add(createAssociatedTokenAccountIdempotentInstruction(payer, ata, payer, mint));
+    tx.add(new TransactionInstruction({
+      programId,
+      keys: [
+        { pubkey: payer, isSigner: true, isWritable: true },
+        { pubkey: curve, isSigner: false, isWritable: true },
+        { pubkey: mint, isSigner: false, isWritable: true },
+        { pubkey: ata, isSigner: false, isWritable: true },
+        { pubkey: feeWallet, isSigner: false, isWritable: true },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      data: инструкцияПокупки(лямпорты, 0),
+    }));
+  }
+
+  tx.feePayer = payer;
+  tx.recentBlockhash = await свежийБлок(connection);
+  // Счёт токена подписывает себя сам — это единственное, для чего нужна
+  // его пара ключей. Кошелёк добавит свою подпись поверх.
+  tx.partialSign(mintPair);
+
+  return {
+    transaction: вBase64(tx),
+    mint: mint.toBase58(),
+    curve: curve.toBase58(),
+    decimals: DECIMALS,
+  };
+}
+
+/* Покупка и продажа на уже заведённой кривой. */
+async function собратьСделку({ wallet, mint, продажа, amount, minOut }) {
+  const programId = программа();
+  if (!programId) throw new Error("программа кривой не развёрнута");
+  if (!адресОк(wallet) || !адресОк(mint)) throw new Error("плохой адрес");
+
+  const connection = new Connection(RPC, "confirmed");
+  const payer = new PublicKey(wallet);
+  const mintKey = new PublicKey(mint);
+  const curve = кривуюДля(mintKey, programId);
+  const feeWallet = new PublicKey(FEE_ACCOUNT);
+  const ata = getAssociatedTokenAddressSync(mintKey, payer);
+
+  const tx = new Transaction();
+  if (!продажа) {
+    tx.add(createAssociatedTokenAccountIdempotentInstruction(payer, ata, payer, mintKey));
+  }
+  tx.add(new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: payer, isSigner: true, isWritable: true },
+      { pubkey: curve, isSigner: false, isWritable: true },
+      { pubkey: mintKey, isSigner: false, isWritable: true },
+      { pubkey: ata, isSigner: false, isWritable: true },
+      { pubkey: feeWallet, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      ...(продажа ? [] : [{ pubkey: SystemProgram.programId, isSigner: false, isWritable: false }]),
+    ],
+    data: продажа
+      ? инструкцияПродажи(Math.round(Number(amount) * ЕДИНИЦА), Math.round(Number(minOut || 0) * LAMPORTS))
+      : инструкцияПокупки(Math.round(Number(amount) * LAMPORTS), Math.round(Number(minOut || 0) * ЕДИНИЦА)),
+  }));
+
+  tx.feePayer = payer;
+  tx.recentBlockhash = await свежийБлок(connection);
+  return { transaction: вBase64(tx), curve: curve.toBase58() };
+}
+
+/* Состояние кривой: по нему считаются цена, собранная сумма и полоса до
+   листинга. Раскладка та же, что в программе. */
+async function состояние(mint) {
+  const programId = программа();
+  if (!programId || !адресОк(mint)) return null;
+  const connection = new Connection(RPC, "confirmed");
+  const curve = кривуюДля(new PublicKey(mint), programId);
+  const info = await connection.getAccountInfo(curve);
+  if (!info || info.data.length < 160) return null;
+
+  const d = info.data;
+  let p = 0;
+  const версия = d.readUInt8(p); p += 1;
+  p += 1; // bump
+  const закрыта = d.readUInt8(p) === 1; p += 1;
+  p += 32 * 4; // mint, creator, fee_wallet, destination
+  const virtualSol = Number(d.readBigUInt64LE(p)); p += 8;
+  const virtualTokens = Number(d.readBigUInt64LE(p)); p += 8;
+  const tokensForSale = Number(d.readBigUInt64LE(p)); p += 8;
+  const graduationSol = Number(d.readBigUInt64LE(p)); p += 8;
+  const feeBps = d.readUInt16LE(p); p += 2;
+  const realSol = Number(d.readBigUInt64LE(p)); p += 8;
+  const tokensSold = Number(d.readBigUInt64LE(p));
+
+  const цена = (virtualSol + realSol) / (virtualTokens - tokensSold);
+  return {
+    версия,
+    закрыта,
+    curve: curve.toBase58(),
+    solСобрано: realSol / LAMPORTS,
+    solЦель: graduationSol / LAMPORTS,
+    продано: tokensSold / ЕДИНИЦА,
+    вПродаже: tokensForSale / ЕДИНИЦА,
+    // Цена одной штуки в SOL: резервы считаются в мельчайших единицах,
+    // поэтому переводим обе стороны разом.
+    ценаSol: (цена * ЕДИНИЦА) / LAMPORTS,
+    feeBps,
+  };
+}
+
+/* Метаданные для кошельков и обозревателей. Ссылка на этот адрес
+   записывается в токен при запуске, поэтому отвечать нужно всегда — даже
+   когда токена в базе ещё нет: кошельки перечитают позже. */
+async function метаданные(mint) {
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return null;
+  const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { data } = await db
+    .from("tokens")
+    .select("name, ticker, logo_url")
+    .eq("address", mint)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    name: data.name,
+    symbol: data.ticker,
+    description: `${data.name} — токен, запущенный в Mintly.`,
+    image: data.logo_url || "",
+  };
+}
+
+export default async function handler(req, res) {
+  const действие = String((req.query && req.query.action) || "");
+  try {
+    if (действие === "meta") {
+      const m = await метаданные(String(req.query.mint || ""));
+      if (!m) return res.status(404).json({ error: "not_found" });
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.status(200).json(m);
+    }
+
+    if (действие === "state") {
+      const s = await состояние(String(req.query.mint || ""));
+      if (!s) return res.status(404).json({ error: "not_found" });
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json(s);
+    }
+
+    if (действие === "enabled") {
+      return res.status(200).json({ enabled: !!программа(), program: PROGRAM || null });
+    }
+
+    if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+    const тело = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+
+    if (действие === "launch") {
+      const имя = String(тело.name || "").trim();
+      const тикер = String(тело.ticker || "").trim().toUpperCase();
+      if (!имя || !тикер) return res.status(400).json({ error: "bad_request" });
+      const хост = req.headers["x-forwarded-host"] || req.headers.host || "";
+      const итог = await собратьЗапуск({
+        wallet: тело.wallet,
+        name: имя,
+        symbol: тикер,
+        base: хост ? `https://${хост}` : "",
+        buySol: тело.buySol,
+      });
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json(итог);
+    }
+
+    if (действие === "trade") {
+      const итог = await собратьСделку({
+        wallet: тело.wallet,
+        mint: тело.mint,
+        продажа: !!тело.sell,
+        amount: тело.amount,
+        minOut: тело.minOut,
+      });
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json(итог);
+    }
+
+    return res.status(400).json({ error: "unknown_action" });
+  } catch (err) {
+    console.warn("[solana-launch]", err && err.message);
+    return res.status(502).json({ error: "failed", detail: String((err && err.message) || err).slice(0, 200) });
+  }
+}
