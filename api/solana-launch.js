@@ -324,6 +324,7 @@ async function собратьСделку({ wallet, mint, продажа, amount
 async function состояние(mint) {
   if (!запускВключён() || !адресОк(mint)) return null;
   await библиотеки();
+  const programId = программа();
   const connection = new Connection(RPC, "confirmed");
   const curve = кривуюДля(new PublicKey(mint), programId);
   const info = await connection.getAccountInfo(curve);
