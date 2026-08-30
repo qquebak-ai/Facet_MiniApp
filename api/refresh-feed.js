@@ -109,6 +109,21 @@ export default async function handler(req, res) {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
     return res.status(500).json({ error: "not_configured" });
   }
+
+  /* Проверка обхода без записи и без секрета: сколько строк источник
+     отдаёт по каждому списку. Нужна, чтобы отличить «источник молчит» от
+     «база не приняла» — по логам Vercel этого не видно, а расписание
+     работает молча. */
+  if (req.query && req.query.probe === "1") {
+    const сеть = String(req.query.chain || "solana") === "ton" ? "ton" : "solana";
+    const [популярные, новые] = [await лента(сеть, "trending_pools", 1), await лента(сеть, "new_pools", 1)];
+    return res.status(200).json({
+      сеть,
+      популярных: популярные.length,
+      новых: новые.length,
+      примеры: новые.slice(0, 3).map((t) => ({ тикер: t.ticker, создан: t.pool_created_at, сделок: t.tx24 })),
+    });
+  }
   const auth = req.headers.authorization || "";
   if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
     return res.status(401).json({ error: "unauthorized" });
