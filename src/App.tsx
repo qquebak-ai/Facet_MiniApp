@@ -4994,6 +4994,7 @@ function localTokenToFeedShape(entry) {
     ownerId: entry.ownerId || null,
     curveAddress: entry.curveAddress || null,
     curveJettonWallet: entry.curveJettonWallet || null,
+    chain: entry.chain === "solana" ? "solana" : "ton",
     createdAt: entry.createdAt ? new Date(entry.createdAt).toISOString() : null,
   };
 }
@@ -8507,6 +8508,12 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
   // окно расширяется до 6 часов, потом до суток — так карточка никогда не
   // остаётся пустой.
   const localTokens = useMemo(() => (myTokens || []).map(localTokenToFeedShape), [myTokens]);
+  // Свои запуски делятся по сетям: в разделе Solana нечего показывать
+  // токенам TON и наоборот.
+  const свои = useMemo(() => {
+    const нужная = сеть === "sol" ? "solana" : "ton";
+    return localTokens.filter((tok) => (tok.chain || "ton") === нужная);
+  }, [localTokens, сеть]);
 
   const spotlightTop = useMemo(() => {
     // Биржевой ленты может не быть вовсе — в тестовой сети её нет по
@@ -8545,17 +8552,20 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
     // В Solana своих запусков нет, поэтому «Новые» там означает не
     // «запущенные здесь», а самые свежие пары рынка — по возрасту.
     if (сеть === "sol") {
+      // «Новые» означает одно и то же в обеих сетях: токены, запущенные
+      // здесь. Раньше в Solana это была свежая часть биржевой ленты —
+      // чужие пары, к площадке отношения не имеющие.
+      if (filter === "new") return свои;
       const featured = new Set(spotlightTop.map((tok) => tok.id));
       let arr = (solTokens || []).filter((tok) => !featured.has(tok.id));
       switch (filter) {
         case "hot": arr = [...arr].sort((a, b) => b.change - a.change); break;
         case "dex": arr = arr.filter((tok) => tok.verified); break;
-        case "new": arr = [...arr].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)); break;
         default: break;
       }
       return arr;
     }
-    if (filter === "new") return localTokens;
+    if (filter === "new") return свои;
     const featured = new Set(spotlightTop.map((tok) => tok.id));
     let arr = tokens.filter((tok) => !featured.has(tok.id));
     switch (filter) {
@@ -8564,15 +8574,17 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
       default: break;
     }
     return arr;
-  }, [tokens, filter, spotlightTop, localTokens, solTokens, сеть]);
+  }, [tokens, filter, spotlightTop, свои, solTokens, сеть]);
 
   // Что считать загрузкой, зависит от того, что сейчас на экране:
   // «Новые» на TON — это свои токены из базы, остальное — биржевая
   // лента. Раньше здесь всегда стояла биржевая, и раздел успевал
   // сказать «пусто» до того, как приезжали свои.
-  const идётЗагрузка = сеть === "sol"
-    ? (solLoading || !solTokens)
-    : (filter === "new" ? myTokensLoading : loading);
+  const идётЗагрузка = filter === "new"
+    // «Новые» в обеих сетях — это свои токены из базы, а не биржевая
+    // лента: ждать нужно именно их.
+    ? myTokensLoading
+    : (сеть === "sol" ? (solLoading || !solTokens) : loading);
 
   /* Раздел показывается целиком или не показывается вовсе.
      Раньше он собирался на глазах: сначала пустая лента сделок, следом
