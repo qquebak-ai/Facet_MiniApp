@@ -8560,11 +8560,21 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
     // this app, not the newest items in the external real-market feed.
     // В Solana своих запусков нет, поэтому «Новые» там означает не
     // «запущенные здесь», а самые свежие пары рынка — по возрасту.
+    /* «Новые» — хроника рынка целиком: и запуски из приложения, и
+       свежие пары, заведённые где угодно. Показывать только своё значило
+       бы держать раздел пустым в первые дни, а видеть, что вообще
+       появилось в сети за последний час, людям нужнее.
+
+       Свои идут в общий список наравне и сортируются по времени вместе
+       со всеми, а повторы отсекаются по адресу токена: одна и та же
+       монета может прийти и из базы, и из биржевой ленты. */
+    if (filter === "new") {
+      const рынок = сеть === "sol" ? (solTokens || []) : tokens;
+      const занято = new Set(свои.map((tok) => tok.tokenAddress || tok.id));
+      return [...свои, ...рынок.filter((tok) => !занято.has(tok.tokenAddress || tok.id))]
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    }
     if (сеть === "sol") {
-      // «Новые» означает одно и то же в обеих сетях: токены, запущенные
-      // здесь. Раньше в Solana это была свежая часть биржевой ленты —
-      // чужие пары, к площадке отношения не имеющие.
-      if (filter === "new") return свои;
       const featured = new Set(spotlightTop.map((tok) => tok.id));
       let arr = (solTokens || []).filter((tok) => !featured.has(tok.id));
       switch (filter) {
@@ -8574,7 +8584,6 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
       }
       return arr;
     }
-    if (filter === "new") return свои;
     const featured = new Set(spotlightTop.map((tok) => tok.id));
     let arr = tokens.filter((tok) => !featured.has(tok.id));
     switch (filter) {
@@ -8589,11 +8598,13 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
   // «Новые» на TON — это свои токены из базы, остальное — биржевая
   // лента. Раньше здесь всегда стояла биржевая, и раздел успевал
   // сказать «пусто» до того, как приезжали свои.
+  // «Новые» собираются из двух источников сразу, поэтому ждут оба:
+  // показать половину списка и дописать остальное через секунду — это
+  // прыжок под пальцем.
+  const рынокГрузится = сеть === "sol" ? (solLoading || !solTokens) : loading;
   const идётЗагрузка = filter === "new"
-    // «Новые» в обеих сетях — это свои токены из базы, а не биржевая
-    // лента: ждать нужно именно их.
-    ? myTokensLoading
-    : (сеть === "sol" ? (solLoading || !solTokens) : loading);
+    ? (myTokensLoading || рынокГрузится)
+    : рынокГрузится;
 
   /* Раздел показывается целиком или не показывается вовсе.
      Раньше он собирался на глазах: сначала пустая лента сделок, следом
