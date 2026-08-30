@@ -32,9 +32,9 @@ const GAP_MS = 400;
 
 const пауза = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function страница(сеть, page) {
+async function страница(сеть, page, список = "trending_pools") {
   try {
-    const res = await fetch(`${GT}/networks/${сеть}/trending_pools?page=${page}&include=base_token,dex`);
+    const res = await fetch(`${GT}/networks/${сеть}/${список}?page=${page}&include=base_token,dex`);
     if (!res.ok) {
       console.warn("[refresh-feed]", сеть, "стр.", page, "->", res.status);
       return null;
@@ -88,12 +88,12 @@ function разобрать(json, сеть) {
   }).filter((t) => t.pool_address && t.price > 0);
 }
 
-async function лента(сеть) {
+async function лента(сеть, список = "trending_pools", страниц = PAGES) {
   const собрано = [];
   const видели = new Set();
-  for (let page = 1; page <= PAGES; page++) {
+  for (let page = 1; page <= страниц; page++) {
     if (page > 1) await пауза(GAP_MS);
-    const json = await страница(сеть, page);
+    const json = await страница(сеть, page, список);
     if (!json) break;
     for (const t of разобрать(json, сеть)) {
       if (видели.has(t.id)) continue;
@@ -126,6 +126,27 @@ export default async function handler(req, res) {
   for (const сеть of сети) {
     const строки = await лента(сеть);
     итог[сеть] = строки.length;
+
+    /* Свежие пулы источник отдаёт отдельным списком: в популярных лежат
+       пары с месяцами истории и десятками тысяч сделок, и раздел «Новые»
+       из них не собрать. Помечаем такие строки временем, когда встретили
+       их среди новых, — по этой отметке приложение и отбирает их.
+
+       Две страницы: дальше идут пулы старше суток, а они уже не новые. */
+    await пауза(GAP_MS);
+    const свежие = await лента(сеть, "new_pools", 2);
+    итог[`${сеть}_new`] = свежие.length;
+    if (свежие.length) {
+      const сейчас = new Date().toISOString();
+      const { error: ошибка } = await admin
+        .from("feed_cache")
+        .upsert(свежие.map((t) => ({ ...t, new_at: сейчас })), { onConflict: "id" });
+      if (ошибка) {
+        console.warn("[refresh-feed] новые", сеть, "->", ошибка.message);
+        итог[`${сеть}_new`] = 0;
+      }
+    }
+
     if (!строки.length) continue;
 
     const { error } = await admin.from("feed_cache").upsert(строки, { onConflict: "id" });

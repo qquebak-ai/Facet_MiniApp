@@ -2089,14 +2089,23 @@ function fillCandleGaps(candles, stepSec, limit = CHART_TOTAL, nowSec = Math.flo
    раз в минуту одним адресом вместо тысячи телефонов. Отсюда список
    приходит одним запросом и мгновенно; поход в сам источник остаётся
    запасным путём на случай, если обход почему-то молчит. */
-async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT) {
+async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT, { свежие = false } = {}) {
   try {
-    const { data, error } = await supabase
+    let запрос = supabase
       .from("feed_cache")
       .select("*")
-      .eq("chain", network === GT_NETWORK_SOL ? "solana" : "ton")
-      .order("tx24", { ascending: false })
-      .limit(limit);
+      .eq("chain", network === GT_NETWORK_SOL ? "solana" : "ton");
+
+    /* «Новые» — это не начало списка популярных, а отдельная выборка:
+       обход помечает пулы, встреченные среди новых, временем встречи.
+       Берём помеченные за последние сутки и ставим по возрасту пула. */
+    запрос = свежие
+      ? запрос
+        .gt("new_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .order("pool_created_at", { ascending: false, nullsFirst: false })
+      : запрос.order("tx24", { ascending: false });
+
+    const { data, error } = await запрос.limit(limit);
     if (error || !data || !data.length) return null;
 
     // Свежесть проверяем по самой новой строке: если обход встал, лучше
@@ -2127,7 +2136,7 @@ async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT) {
       live: true,
       dexName: r.dex_name || null,
       createdAt: r.pool_created_at || null,
-    })).filter((t) => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING);
+    })).filter((t) => t.poolAddress && t.price > 0 && (свежие || t.mcapNum < MCAP_FEED_CEILING));
   } catch (err) {
     return null;
   }
@@ -8512,6 +8521,23 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
   // окно расширяется до 6 часов, потом до суток — так карточка никогда не
   // остаётся пустой.
   const localTokens = useMemo(() => (myTokens || []).map(localTokenToFeedShape), [myTokens]);
+
+  /* Свежие пулы рынка — отдельная выборка, а не начало списка
+     популярных: там пары с месяцами истории и десятками тысяч сделок,
+     и «Новые» из них не собираются. */
+  const [свежиеРынка, setСвежиеРынка] = useState(null);
+  useEffect(() => {
+    let жив = true;
+    setСвежиеРынка(null);
+    const грузить = () => fetchFeedFromCache(сеть === "sol" ? GT_NETWORK_SOL : GT_NETWORK, 60, { свежие: true })
+      .then((rows) => { if (жив) setСвежиеРынка(rows || []); })
+      .catch(() => { if (жив) setСвежиеРынка([]); });
+    грузить();
+    const iv = setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") грузить();
+    }, 60000);
+    return () => { жив = false; clearInterval(iv); };
+  }, [сеть]);
   // Свои запуски делятся по сетям: в разделе Solana нечего показывать
   // токенам TON и наоборот.
   const свои = useMemo(() => {
@@ -8569,7 +8595,13 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
        со всеми, а повторы отсекаются по адресу токена: одна и та же
        монета может прийти и из базы, и из биржевой ленты. */
     if (filter === "new") {
-      const рынок = сеть === "sol" ? (solTokens || []) : tokens;
+      // Рынок здесь — только что заведённые пулы. Пока обход их не
+      // принёс (старая база, вставшее расписание), откатываемся к общей
+      // ленте, отобранной по возрасту: пустой раздел хуже неточного.
+      const сутки = Date.now() - 24 * 60 * 60 * 1000;
+      const общая = (сеть === "sol" ? (solTokens || []) : tokens)
+        .filter((tok) => new Date(tok.createdAt || 0).getTime() > сутки);
+      const рынок = (свежиеРынка && свежиеРынка.length) ? свежиеРынка : общая;
       const занято = new Set(свои.map((tok) => tok.tokenAddress || tok.id));
       return [...свои, ...рынок.filter((tok) => !занято.has(tok.tokenAddress || tok.id))]
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -8592,7 +8624,7 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
       default: break;
     }
     return arr;
-  }, [tokens, filter, spotlightTop, свои, solTokens, сеть]);
+  }, [tokens, filter, spotlightTop, свои, solTokens, свежиеРынка, сеть]);
 
   // Что считать загрузкой, зависит от того, что сейчас на экране:
   // «Новые» на TON — это свои токены из базы, остальное — биржевая
@@ -8603,7 +8635,7 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
   // прыжок под пальцем.
   const рынокГрузится = сеть === "sol" ? (solLoading || !solTokens) : loading;
   const идётЗагрузка = filter === "new"
-    ? (myTokensLoading || рынокГрузится)
+    ? (myTokensLoading || свежиеРынка == null)
     : рынокГрузится;
 
   /* Раздел показывается целиком или не показывается вовсе.
