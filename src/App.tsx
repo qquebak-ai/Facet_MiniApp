@@ -2101,7 +2101,7 @@ async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT, { с
        Берём помеченные за последние сутки и ставим по возрасту пула. */
     запрос = свежие
       ? запрос
-        .gt("new_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .gt("new_at", new Date(Date.now() - НОВЫЕ_ОКНО_МС).toISOString())
         .order("pool_created_at", { ascending: false, nullsFirst: false })
       : запрос.order("tx24", { ascending: false });
 
@@ -4646,6 +4646,11 @@ const HoldersBadge = React.memo(function HoldersBadge({ tokenAddress, testnet = 
 // свежий токен появляется почти сразу, а база не отвечает на запрос
 // каждые несколько секунд от каждого открытого приложения.
 const СВОИ_ОБНОВЛЕНИЕ_МС = 60000;
+// Каким считать «только что запущенный». Шесть часов: за сутки на
+// Solana успевают появиться пары с десятками тысяч сделок, и в разделе
+// новых им не место. Если за это окно пусто, оно расширяется до суток —
+// пустой список хуже неточного.
+const НОВЫЕ_ОКНО_МС = 6 * 60 * 60 * 1000;
 const TOKEN_REFRESH_MS = 15000;
 
 // Сколько пулов держим в ленте и с какой глубины их собираем. Одна
@@ -8598,10 +8603,15 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
       // Рынок здесь — только что заведённые пулы. Пока обход их не
       // принёс (старая база, вставшее расписание), откатываемся к общей
       // ленте, отобранной по возрасту: пустой раздел хуже неточного.
-      const сутки = Date.now() - 24 * 60 * 60 * 1000;
-      const общая = (сеть === "sol" ? (solTokens || []) : tokens)
-        .filter((tok) => new Date(tok.createdAt || 0).getTime() > сутки);
-      const рынок = (свежиеРынка && свежиеРынка.length) ? свежиеРынка : общая;
+      const свежее = (список, окно) => список.filter(
+        (tok) => new Date(tok.createdAt || 0).getTime() > Date.now() - окно,
+      );
+      const лента = сеть === "sol" ? (solTokens || []) : tokens;
+      const общая = свежее(лента, НОВЫЕ_ОКНО_МС).length
+        ? свежее(лента, НОВЫЕ_ОКНО_МС)
+        : свежее(лента, 24 * 60 * 60 * 1000);
+      const помеченные = свежиеРынка && свежиеРынка.length ? свежее(свежиеРынка, НОВЫЕ_ОКНО_МС) : [];
+      const рынок = помеченные.length ? помеченные : общая;
       const занято = new Set(свои.map((tok) => tok.tokenAddress || tok.id));
       return [...свои, ...рынок.filter((tok) => !занято.has(tok.tokenAddress || tok.id))]
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
