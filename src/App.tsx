@@ -8387,6 +8387,7 @@ function NetworkSlider({ value, onChange, ширина = 168, высота = 38 
       className="self-start"
       style={{
         position: "relative", width: ширина, height: высота, flexShrink: 0,
+        boxSizing: "border-box",
         borderRadius: 999, background: T.surface, border: `1px solid ${T.line}`,
         // Иначе первое же движение пальца уводит страницу в прокрутку и
         // ползунок остаётся на месте.
@@ -8396,7 +8397,10 @@ function NetworkSlider({ value, onChange, ширина = 168, высота = 38 
       <div
         style={{
           position: "absolute", top: пад, left: пад,
-          width: шаг, height: высота - пад * 2 - 2, borderRadius: 999,
+          width: шаг, height: высота - пад * 2, borderRadius: 999,
+          // Рамка считается внутрь ширины: иначе бегунок шире половины
+          // дорожки на её толщину и в правом положении вылезает за край.
+          boxSizing: "border-box",
           background: T.surfaceHi, border: `1px solid ${T.lineHi}`,
           transform: `translateX(${x}px)`,
           transition: сдвиг == null ? `transform 220ms cubic-bezier(0.32,1.2,0.5,1)` : "none",
@@ -8431,7 +8435,17 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
   // Сеть выбирается сверху, отдельно от фильтров: это не «ещё один
   // способ отсортировать», а другой рынок целиком — свои токены, свои
   // кошельки, своя лента.
-  const [сеть, setСеть] = useState("ton");
+  const [сеть, setСеть] = useState(() => {
+    try {
+      const с = typeof window !== "undefined" && window.localStorage.getItem("mintly.network");
+      return с === "sol" || с === "ton" ? с : "ton";
+    } catch {
+      return "ton";
+    }
+  });
+  useEffect(() => {
+    try { if (typeof window !== "undefined") window.localStorage.setItem("mintly.network", сеть); } catch { /* приватный режим */ }
+  }, [сеть]);
 
   // Лента Solana. Тот же источник и тот же разбор, что у основной, но
   // читается только по требованию: две сети сразу — это вдвое больше
@@ -11113,7 +11127,19 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
   // В какой сети запускать. Пока программа кривой в Solana не
   // развёрнута, выбора нет вовсе — предлагать действие, которое всё
   // равно не пройдёт, хуже, чем не предлагать его.
-  const [сетьЗапуска, setСетьЗапуска] = useState("ton");
+  const [сетьЗапуска, setСетьЗапуска] = useState(() => {
+    // Тот же выбор рынка, что и в мемпаде: пришёл из раздела Solana —
+    // запускать, скорее всего, тоже там.
+    try {
+      const с = typeof window !== "undefined" && window.localStorage.getItem("mintly.network");
+      return с === "sol" ? "sol" : "ton";
+    } catch {
+      return "ton";
+    }
+  });
+  useEffect(() => {
+    try { if (typeof window !== "undefined") window.localStorage.setItem("mintly.network", сетьЗапуска); } catch { /* приватный режим */ }
+  }, [сетьЗапуска]);
   const вSolana = solДоступен && сетьЗапуска === "sol";
   // Подпись обязательна: сама транзакция запуска эту сумму не тратит —
   // покупка идёт отдельным шагом сразу после создания. Без пояснения
