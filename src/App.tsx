@@ -8530,9 +8530,10 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
     //
     // В Solana источник один — её собственная лента: своих запусков там
     // нет, и подмешивать TON-токены было бы враньём.
+    const свои = localTokens.filter((tok) => (tok.chain || "ton") === (сеть === "sol" ? "solana" : "ton"));
     const источник = сеть === "sol"
-      ? (solTokens || [])
-      : (tokens.length ? tokens : localTokens);
+      ? (свои.length ? свои : (solTokens || []))
+      : (tokens.length ? tokens : свои);
     if (!источник.length) return [];
     const ranked = (win) =>
       [...источник]
@@ -15292,7 +15293,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           category: req.category || null,
           logoUrl: logo,
           chain: "solana",
-          network: "mainnet",
+          network: CURRENT_NETWORK,
           address: итог.mint,
           curveAddress: итог.curve,
           creatorWallet: итог.creatorWallet,
