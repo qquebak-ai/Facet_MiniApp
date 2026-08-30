@@ -110,31 +110,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "not_configured" });
   }
 
-  /* Проверка обхода без записи и без секрета: сколько строк источник
-     отдаёт по каждому списку. Нужна, чтобы отличить «источник молчит» от
-     «база не приняла» — по логам Vercel этого не видно, а расписание
-     работает молча. */
-  if (req.query && req.query.probe === "1") {
-    const сеть = String(req.query.chain || "solana") === "ton" ? "ton" : "solana";
-    const [популярные, новые] = [await лента(сеть, "trending_pools", 1), await лента(сеть, "new_pools", 1)];
-    const итог = {
-      сеть,
-      популярных: популярные.length,
-      новых: новые.length,
-      примеры: новые.slice(0, 3).map((t) => ({ тикер: t.ticker, создан: t.pool_created_at, сделок: t.tx24 })),
-    };
-    // С записью — чтобы увидеть, принимает ли база отметку новых строк:
-    // молчаливый отказ на этом шаге выглядит так же, как молчащий
-    // источник.
-    if (req.query.write === "1" && новые.length) {
-      const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-      const { error } = await admin
-        .from("feed_cache")
-        .upsert(новые.slice(0, 3).map((t) => ({ ...t, new_at: new Date().toISOString() })), { onConflict: "id" });
-      итог.запись = error ? error.message : "ок";
-    }
-    return res.status(200).json(итог);
-  }
   const auth = req.headers.authorization || "";
   if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
     return res.status(401).json({ error: "unauthorized" });
