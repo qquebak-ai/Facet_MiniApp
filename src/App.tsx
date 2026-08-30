@@ -8346,7 +8346,13 @@ function NetworkSlider({ value, onChange, ширина = 168, высота = 38 
   const [сдвиг, setСдвиг] = useState(null);
 
   const пад = 3;
-  const шаг = (ширина - пад * 2) / 2;
+  // Рамка дорожки съедает по точке с каждой стороны, а бегунок стоит
+  // внутри неё: без этой поправки половина считалась от внешней ширины,
+  // и в правом положении он вылезал за край, а по вертикали сидел ниже
+  // середины.
+  const рамка = 1;
+  const внутри = ширина - рамка * 2 - пад * 2;
+  const шаг = внутри / 2;
   const база = value === "sol" ? шаг : 0;
   const x = сдвиг == null ? база : сдвиг;
 
@@ -8397,7 +8403,7 @@ function NetworkSlider({ value, onChange, ширина = 168, высота = 38 
       <div
         style={{
           position: "absolute", top: пад, left: пад,
-          width: шаг, height: высота - пад * 2, borderRadius: 999,
+          width: шаг, height: высота - рамка * 2 - пад * 2, borderRadius: 999,
           // Рамка считается внутрь ширины: иначе бегунок шире половины
           // дорожки на её толщину и в правом положении вылезает за край.
           boxSizing: "border-box",
@@ -8416,6 +8422,7 @@ function NetworkSlider({ value, onChange, ширина = 168, высота = 38 
             key={id}
             style={{
               position: "absolute", top: 0, bottom: 0, left: пад + i * шаг, width: шаг,
+              boxSizing: "border-box",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontFamily: displayFont, fontSize: 13.5, fontWeight: 600,
               color: близость > 0.5 ? T.ice : T.faint,
