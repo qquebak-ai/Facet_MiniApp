@@ -11067,9 +11067,9 @@ function TokenLaunchOverlay({ open, form, category, logoUrl, buyAmount, stepInde
             <div className="flex items-center justify-between rounded-[20px] px-3 py-2.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
               <span style={{ fontFamily: bodyFont, fontSize: 12, color: T.muted }}>{t("initialBuy")}</span>
               <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice, textAlign: "right" }}>
-                {result.buyAmount} TON<br />
+                {result.buyAmount} {result.chain === "solana" ? "SOL" : "TON"}<br />
                 <span style={{ fontSize: 11.5, color: T.muted }}>
-                  {result.buyTokens.toLocaleString("ru-RU")} ${result.ticker} · {result.buyPct.toFixed(result.buyPct < 1 ? 3 : 1)}%
+                  {(Number(result.buyTokens) || 0).toLocaleString("ru-RU")} ${result.ticker} · {(Number(result.buyPct) || 0).toFixed((Number(result.buyPct) || 0) < 1 ? 3 : 1)}%
                 </span>
               </span>
             </div>
@@ -15192,6 +15192,19 @@ const FEE_PERCENT = 0.01; // 1% комиссии
         стартовыйВзносSol: Number.isFinite(buyNum) && buyNum > 0 ? buyNum : 0,
       });
 
+      // Сколько токенов получил создатель, знает сама кривая. Считать это
+      // в браузере — значит держать вторую копию формулы, которая живёт в
+      // программе; спрашиваем у неё, давая пару секунд на подтверждение.
+      let куплено = 0;
+      if (Number.isFinite(buyNum) && buyNum > 0) {
+        const { состояниеКривойSol } = await import("./solLaunch");
+        for (let попытка = 0; попытка < 3 && !куплено; попытка++) {
+          if (попытка) await new Promise((r) => setTimeout(r, 1500));
+          const состояние = await состояниеКривойSol(итог.mint);
+          if (состояние && состояние.продано > 0) куплено = состояние.продано;
+        }
+      }
+
       setLaunchProgress({
         stepIndex: LAUNCH_STEPS.length,
         done: true,
@@ -15201,7 +15214,8 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           ticker: (req.form.ticker.trim() || "TOKEN").toUpperCase(),
           supply: (1_000_000_000).toLocaleString("ru-RU"),
           buyAmount: req.buyAmount && String(req.buyAmount).trim() ? req.buyAmount : "0",
-          buyTokens: 0,
+          buyTokens: куплено,
+          buyPct: (куплено / 1_000_000_000) * 100,
           category: req.category || null,
           logoUrl: logo,
           chain: "solana",
