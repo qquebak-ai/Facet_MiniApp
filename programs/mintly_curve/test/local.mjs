@@ -6,7 +6,9 @@ import { Connection, Keypair, PublicKey, Transaction, LAMPORTS_PER_SOL } from "@
 import { getAssociatedTokenAddressSync, getAccount } from "@solana/spl-token";
 import fs from "node:fs";
 
-const RPC = "http://127.0.0.1:8899";
+// Узел задаётся снаружи: тот же скрипт годится и для локальной сети, и
+// для devnet.
+const RPC = process.env.RPC || "http://127.0.0.1:8899";
 const conn = new Connection(RPC, "confirmed");
 
 const кошелёк = Keypair.fromSecretKey(

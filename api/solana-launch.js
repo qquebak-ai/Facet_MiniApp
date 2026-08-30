@@ -21,25 +21,33 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY — для метаданных токена.
  */
 
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-  TransactionInstruction,
-} from "@solana/web3.js";
-import {
-  AuthorityType,
-  MINT_SIZE,
-  TOKEN_PROGRAM_ID,
-  createAssociatedTokenAccountIdempotentInstruction,
-  createInitializeMint2Instruction,
-  createSetAuthorityInstruction,
-  getAssociatedTokenAddressSync,
-  getMinimumBalanceForRentExemptMint,
-} from "@solana/spl-token";
 import { createClient } from "@supabase/supabase-js";
+
+/* Библиотеки Solana подтягиваются в момент, когда действительно нужны.
+   Так функция отвечает на «включён ли запуск» и на метаданные, не
+   разворачивая мегабайт кода, а если какая-то из библиотек не встала —
+   ошибка приходит в ответе, а не роняет вызов целиком. */
+let PublicKey, Connection, Keypair, SystemProgram, Transaction, TransactionInstruction;
+let MINT_SIZE, TOKEN_PROGRAM_ID, AuthorityType;
+let createAssociatedTokenAccountIdempotentInstruction, createInitializeMint2Instruction;
+let createSetAuthorityInstruction, getAssociatedTokenAddressSync, getMinimumBalanceForRentExemptMint;
+
+async function библиотеки() {
+  if (PublicKey) return;
+  const [web3, spl] = await Promise.all([
+    import("@solana/web3.js"),
+    import("@solana/spl-token"),
+  ]);
+  ({ PublicKey, Connection, Keypair, SystemProgram, Transaction, TransactionInstruction } = web3);
+  ({
+    MINT_SIZE, TOKEN_PROGRAM_ID, AuthorityType,
+    createAssociatedTokenAccountIdempotentInstruction,
+    createInitializeMint2Instruction,
+    createSetAuthorityInstruction,
+    getAssociatedTokenAddressSync,
+    getMinimumBalanceForRentExemptMint,
+  } = spl);
+}
 
 const RPC = process.env.SOLANA_RPC || "https://api.mainnet-beta.solana.com";
 const PROGRAM = (process.env.SOLANA_CURVE_PROGRAM || "").trim();
@@ -48,7 +56,7 @@ const LIQUIDITY = (process.env.SOLANA_LIQUIDITY || FEE_ACCOUNT || "").trim();
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const METADATA_PROGRAM = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+const METADATA_ADDRESS = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
 
 // Разрядность токена. Шесть знаков — то же, что у большинства мемкоинов
 // сети: девять дают числа, которые не помещаются в u64 при миллиардной
@@ -69,12 +77,15 @@ export const КРИВАЯ = {
   feeBps: 100,
 };
 
-const адресОк = (s) => {
-  try { new PublicKey(s); return true; } catch { return false; }
-};
+// Адрес в Solana — base58 длиной 32–44 символа. Проверка без библиотеки:
+// она нужна и до её загрузки, когда спрашивают всего лишь «включён ли
+// запуск».
+const адресОк = (s) => typeof s === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
+
+const запускВключён = () => !!PROGRAM && адресОк(PROGRAM);
 
 function программа() {
-  if (!PROGRAM || !адресОк(PROGRAM)) return null;
+  if (!запускВключён()) return null;
   return new PublicKey(PROGRAM);
 }
 
@@ -85,10 +96,15 @@ function кривуюДля(mint, programId) {
   )[0];
 }
 
+function метаПрограмма() {
+  return new PublicKey(METADATA_ADDRESS);
+}
+
 function метаданныеДля(mint) {
+  const мета = метаПрограмма();
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("metadata"), METADATA_PROGRAM.toBuffer(), mint.toBuffer()],
-    METADATA_PROGRAM,
+    [Buffer.from("metadata"), мета.toBuffer(), mint.toBuffer()],
+    мета,
   )[0];
 }
 
@@ -152,7 +168,7 @@ function инструкцияМетаданных({ mint, payer, name, symbol, u
     Buffer.from([0]), // collectionDetails: нет
   ]);
   return new TransactionInstruction({
-    programId: METADATA_PROGRAM,
+    programId: метаПрограмма(),
     keys: [
       { pubkey: метаданныеДля(mint), isSigner: false, isWritable: true },
       { pubkey: mint, isSigner: false, isWritable: false },
@@ -181,6 +197,7 @@ function вBase64(tx) {
    метаданные требуют подписи того, у кого право выпуска, поэтому оно
    уходит кривой уже после их записи. */
 async function собратьЗапуск({ wallet, name, symbol, base, buySol }) {
+  await библиотеки();
   const programId = программа();
   if (!programId) throw new Error("программа кривой не развёрнута");
   if (!адресОк(wallet)) throw new Error("плохой адрес кошелька");
@@ -265,6 +282,7 @@ async function собратьЗапуск({ wallet, name, symbol, base, buySol }
 
 /* Покупка и продажа на уже заведённой кривой. */
 async function собратьСделку({ wallet, mint, продажа, amount, minOut }) {
+  await библиотеки();
   const programId = программа();
   if (!programId) throw new Error("программа кривой не развёрнута");
   if (!адресОк(wallet) || !адресОк(mint)) throw new Error("плохой адрес");
@@ -304,8 +322,8 @@ async function собратьСделку({ wallet, mint, продажа, amount
 /* Состояние кривой: по нему считаются цена, собранная сумма и полоса до
    листинга. Раскладка та же, что в программе. */
 async function состояние(mint) {
-  const programId = программа();
-  if (!programId || !адресОк(mint)) return null;
+  if (!запускВключён() || !адресОк(mint)) return null;
+  await библиотеки();
   const connection = new Connection(RPC, "confirmed");
   const curve = кривуюДля(new PublicKey(mint), programId);
   const info = await connection.getAccountInfo(curve);
@@ -379,7 +397,7 @@ export default async function handler(req, res) {
     }
 
     if (действие === "enabled") {
-      return res.status(200).json({ enabled: !!программа(), program: PROGRAM || null });
+      return res.status(200).json({ enabled: запускВключён(), program: PROGRAM || null });
     }
 
     if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
