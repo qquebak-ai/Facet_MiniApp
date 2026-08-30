@@ -32,6 +32,51 @@ const GAP_MS = 400;
 
 const пауза = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/* Узел Solana для метаданных. Лента всегда мейннетовская, а рабочая сеть
+   приложения может быть тестовой — поэтому адрес узла приводится к
+   мейннету. Картинки свежих токенов лежат только здесь: у источника
+   лент их нет вовсе, а без них лента показывает эмодзи-заглушки. */
+const META_RPC = (process.env.SOLANA_RPC || "https://api.mainnet-beta.solana.com")
+  .replace("devnet.", "mainnet.")
+  .replace("api.devnet.solana.com", "api.mainnet-beta.solana.com");
+
+async function логотипыSolana(строки) {
+  const без = строки.filter((t) => !t.logo_url && t.token_address).slice(0, 100);
+  if (!без.length) return;
+  try {
+    const res = await fetch(META_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "mintly",
+        // Метод расширенного узла (Helius). На простом узле его нет —
+        // тогда просто останемся без картинок, а не уроним обход.
+        method: "getAssetBatch",
+        params: { ids: без.map((t) => t.token_address) },
+      }),
+    });
+    if (!res.ok) return;
+    const json = await res.json();
+    const активы = (json && json.result) || [];
+    const карта = new Map();
+    for (const a of активы) {
+      if (!a || !a.id) continue;
+      const c = a.content || {};
+      const url = (c.links && c.links.image)
+        || (Array.isArray(c.files) && c.files[0] && (c.files[0].cdn_uri || c.files[0].uri))
+        || null;
+      if (url) карта.set(a.id, String(url));
+    }
+    for (const t of без) {
+      const url = карта.get(t.token_address);
+      if (url) t.logo_url = url;
+    }
+  } catch (err) {
+    console.warn("[refresh-feed] логотипы ->", err && err.message);
+  }
+}
+
 async function страница(сеть, page, список = "trending_pools") {
   try {
     const res = await fetch(`${GT}/networks/${сеть}/${список}?page=${page}&include=base_token,dex`);
@@ -143,6 +188,7 @@ export default async function handler(req, res) {
        Две страницы: дальше идут пулы старше суток, а они уже не новые. */
     const свежие = await лента(сеть, "new_pools", 2);
     итог[`${сеть}_new`] = свежие.length;
+    if (сеть === "solana") await логотипыSolana(свежие);
     if (свежие.length) {
       const сейчас = new Date().toISOString();
       const { error: ошибка } = await admin
@@ -157,6 +203,7 @@ export default async function handler(req, res) {
     await пауза(GAP_MS);
     const строки = await лента(сеть);
     итог[сеть] = строки.length;
+    if (сеть === "solana") await логотипыSolana(строки);
     if (!строки.length) continue;
 
     const { error } = await admin.from("feed_cache").upsert(строки, { onConflict: "id" });
