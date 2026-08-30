@@ -21,6 +21,11 @@ import bs58 from "bs58";
 const APP_URL = typeof window !== "undefined" ? window.location.origin : "";
 const PHANTOM = "https://phantom.app/ul/v1";
 
+/* Сеть, к которой подключается кошелёк. Пока она была зашита в мейннет,
+   любая сделка в тестовой сети отвергалась кошельком без объяснений:
+   он видел блок из чужой цепочки и отвечал «неожиданной ошибкой». */
+const CLUSTER = String(import.meta.env.VITE_SOLANA_CLUSTER || "mainnet-beta");
+
 // Где лежит сессия между открытиями приложения. Ключ подписи хранить
 // негде и незачем — он одноразовый, но связь с кошельком переживает
 // перезапуск, иначе человеку пришлось бы подключаться перед каждой
@@ -42,7 +47,11 @@ export function сохранённаяСессия() {
     const raw = localStorage.getItem(ХРАНИЛИЩЕ);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    return s && s.wallet && s.session && s.secret ? s : null;
+    if (!s || !s.wallet || !s.session || !s.secret) return null;
+    // Сессия привязана к сети: с ключом от мейннета подписать сделку в
+    // тестовой сети нельзя, и лучше переподключиться, чем ловить отказ.
+    if ((s.cluster || "mainnet-beta") !== CLUSTER) return null;
+    return s;
   } catch {
     return null;
   }
@@ -103,7 +112,7 @@ export async function подключить() {
     // дописывает ответ через «?», и на ссылке, где вопрос уже стоит,
     // получается мусор, который кошелёк отвергает целиком.
     redirect_link: `${APP_URL}/phantom/${id}`,
-    cluster: "mainnet-beta",
+    cluster: CLUSTER,
   });
 
   открыть(url);
@@ -123,6 +132,7 @@ export async function подключить() {
     // без них Phantom не примет запрос на подпись.
     secret: bs58.encode(секрет),
     pub: bs58.encode(пара.publicKey),
+    cluster: CLUSTER,
   };
   сохранить(сессия);
   return сессия;
