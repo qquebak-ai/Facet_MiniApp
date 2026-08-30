@@ -4633,6 +4633,10 @@ const HoldersBadge = React.memo(function HoldersBadge({ tokenAddress, testnet = 
 // GeckoTerminal (24 запроса в минуту из ~30), и всем остальным — графику,
 // транзакциям, ленте покупок — доставались 429. Цены на мемкоинах не
 // меняются настолько быстро, чтобы это того стоило.
+// Как часто перечитывается список своих запусков. Минута — компромисс:
+// свежий токен появляется почти сразу, а база не отвечает на запрос
+// каждые несколько секунд от каждого открытого приложения.
+const СВОИ_ОБНОВЛЕНИЕ_МС = 60000;
 const TOKEN_REFRESH_MS = 15000;
 
 // Сколько пулов держим в ленте и с какой глубины их собираем. Одна
@@ -8512,7 +8516,11 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
   // токенам TON и наоборот.
   const свои = useMemo(() => {
     const нужная = сеть === "sol" ? "solana" : "ton";
-    return localTokens.filter((tok) => (tok.chain || "ton") === нужная);
+    return localTokens
+      .filter((tok) => (tok.chain || "ton") === нужная)
+      // Сверху — только что запущенные: «Новые» читаются как хроника, а
+      // не как список в порядке, в котором база их вернула.
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
   }, [localTokens, сеть]);
 
   const spotlightTop = useMemo(() => {
@@ -14475,7 +14483,27 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       loadProfileForUser(session?.user || null);
     });
     loadCommunityTokens();
-    return () => { active = false; listener.subscription.unsubscribe(); };
+
+    /* Лента запусков живая: токен, созданный кем-то минуту назад, должен
+       появиться сам, без перезахода в приложение. Обновляемся только
+       когда экран открыт — фоновому приложению лента не нужна, а запросы
+       в базу стоят денег и батареи. */
+    const обновление = setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        loadCommunityTokens();
+      }
+    }, СВОИ_ОБНОВЛЕНИЕ_МС);
+    const приВозврате = () => {
+      if (document.visibilityState === "visible") loadCommunityTokens();
+    };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", приВозврате);
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+      clearInterval(обновление);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", приВозврате);
+    };
   }, []);
 
   const [profileModalOpen, setProfileModalOpen] = useState(false);
