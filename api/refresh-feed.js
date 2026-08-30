@@ -46,6 +46,15 @@ async function страница(сеть, page, список = "trending_pools")
   }
 }
 
+/* Подделки под известные монеты. В списке свежих пулов их всегда
+   десятки: «USDT», «Wrapped SOL», «Tether» — имена, на которые ловят
+   невнимательных. В мемпаде им не место, и держать их в кеше незачем. */
+const ПОДДЕЛЬНЫЕ_ТИКЕРЫ = /^(usdt|usdc|usd1|usde|usds|fdusd|dai|busd|tusd|pyusd|sol|wsol|msol|jitosol|bsol|btc|wbtc|cbbtc|tbtc|eth|weth|steth|ton|wton|bnb|xrp|ada|doge|usd)$/i;
+const ПОДДЕЛЬНЫЕ_ИМЕНА = /(tether|usd\s?coin|wrapped|staked\s|liquid\s?stak|circle|binance\s?coin|bitcoin|ethereum|solana\s?$|toncoin)/i;
+
+const подделка = (t) => ПОДДЕЛЬНЫЕ_ТИКЕРЫ.test(String(t.ticker || "").trim())
+  || ПОДДЕЛЬНЫЕ_ИМЕНА.test(String(t.name || "").trim());
+
 /* Разбор ответа в те же поля, что раньше собирало приложение. Держать их
    одинаковыми обязательно: витрина рисует карточки по этим именам. */
 function разобрать(json, сеть) {
@@ -85,7 +94,7 @@ function разобрать(json, сеть) {
       pool_created_at: a.pool_created_at || null,
       updated_at: new Date().toISOString(),
     };
-  }).filter((t) => t.pool_address && t.price > 0);
+  }).filter((t) => t.pool_address && t.price > 0 && !подделка(t));
 }
 
 async function лента(сеть, список = "trending_pools", страниц = PAGES) {

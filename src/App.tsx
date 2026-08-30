@@ -2089,6 +2089,18 @@ function fillCandleGaps(candles, stepSec, limit = CHART_TOTAL, nowSec = Math.flo
    раз в минуту одним адресом вместо тысячи телефонов. Отсюда список
    приходит одним запросом и мгновенно; поход в сам источник остаётся
    запасным путём на случай, если обход почему-то молчит. */
+/* Подделки под известные монеты. В свежих пулах их всегда десятки:
+   «USDT», «Wrapped SOL», «Tether» — имена, на которые ловят невнимательных.
+   Настоящие такие пары в мемпаде и не нужны: раздел про мемкоины. */
+const ПОДДЕЛЬНЫЕ_ТИКЕРЫ = /^(usdt|usdc|usd1|usde|usds|fdusd|dai|busd|tusd|pyusd|sol|wsol|msol|jitosol|bsol|btc|wbtc|cbbtc|tbtc|eth|weth|steth|ton|wton|bnb|xrp|ada|doge|usd)$/i;
+const ПОДДЕЛЬНЫЕ_ИМЕНА = /(tether|usd\s?coin|wrapped|staked\s|liquid\s?stak|circle|binance\s?coin|bitcoin|ethereum|solana\s?$|toncoin)/i;
+
+function похожеНаПодделку(tok) {
+  const тикер = String(tok.ticker || "").trim();
+  const имя = String(tok.name || "").trim();
+  return ПОДДЕЛЬНЫЕ_ТИКЕРЫ.test(тикер) || ПОДДЕЛЬНЫЕ_ИМЕНА.test(имя);
+}
+
 async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT, { свежие = false } = {}) {
   try {
     let запрос = supabase
@@ -2136,7 +2148,8 @@ async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT, { с
       live: true,
       dexName: r.dex_name || null,
       createdAt: r.pool_created_at || null,
-    })).filter((t) => t.poolAddress && t.price > 0 && (свежие || t.mcapNum < MCAP_FEED_CEILING));
+    })).filter((t) => t.poolAddress && t.price > 0 && !похожеНаПодделку(t)
+      && (свежие || t.mcapNum < MCAP_FEED_CEILING));
   } catch (err) {
     return null;
   }
@@ -2216,7 +2229,7 @@ function normalizePools(json, network = GT_NETWORK) {
         dexName: dex.name || (dexId ? dexId.replace(/[-_]/g, ".").replace(/\b\w/g, c => c.toUpperCase()) : null),
         createdAt: a.pool_created_at || null,
       };
-  }).filter(t => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING);
+  }).filter(t => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING && !похожеНаПодделку(t));
 }
 
 async function fetchPoolsPage(page, network = GT_NETWORK) {
@@ -4927,13 +4940,16 @@ function SpotlightAura({ src, ticker }) {
   );
 }
 
-function MempadRow({ t: tok, onOpen, index }) {
+const MempadRow = React.memo(function MempadRow({ t: tok, onOpen, index }) {
   const рост = (tok.change || 0) >= 0;
   return (
     <button
       onClick={() => onOpen(tok)}
       className="fx-tap w-full flex items-center text-left"
-      style={{ gap: 12, padding: "13px 0", animationDelay: `${index * 40}ms` }}
+      // Задержка появления копится только на первых строках: при сорока
+      // элементах прежние сорок миллисекунд на каждый растягивали список
+      // на полторы секунды, и переключение вкладки выглядело медленным.
+      style={{ gap: 12, padding: "13px 0", animationDelay: `${Math.min(index, 6) * 22}ms` }}
     >
       <TokenAvatar size={38} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
 
@@ -4960,7 +4976,7 @@ function MempadRow({ t: tok, onOpen, index }) {
       </div>
     </button>
   );
-}
+});
 
 function MempadRowSkeleton({ index }) {
   return (
@@ -8790,12 +8806,16 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
         })}
       </div>
 
-      <div className="flex flex-col gap-2" key={`${сеть}:${filter}`}>
+      <div className="flex flex-col gap-2" key={сеть}>
         {/* Смена фильтра внутри готового раздела — не повод гасить весь
-            экран: там достаточно скелетов на месте строк. */}
+            экран: там достаточно скелетов на месте строк.
+
+            Длина списка ограничена: дальше шестидесяти строк никто не
+            листает, а рисовать и анимировать их браузер обязан — на
+            переключении вкладки это заметная задержка. */}
         {идётЗагрузка
           ? Array.from({ length: 4 }).map((_, i) => <MempadRowSkeleton key={i} index={i} />)
-          : list.map((tok, i) => <MempadRow key={tok.id} t={tok} onOpen={onOpen} index={i} />)}
+          : list.slice(0, 60).map((tok, i) => <MempadRow key={tok.id} t={tok} onOpen={onOpen} index={i} />)}
         {!идётЗагрузка && list.length === 0 && (
           <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, padding: "16px 0" }}>
             {t("emptyFilter")}
