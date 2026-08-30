@@ -4915,7 +4915,7 @@ function MempadRow({ t: tok, onOpen, index }) {
     <button
       onClick={() => onOpen(tok)}
       className="fx-tap w-full flex items-center text-left"
-      style={{ gap: 12, padding: "12px 0", borderBottom: `1px solid ${T.line}`, animationDelay: `${index * 40}ms` }}
+      style={{ gap: 12, padding: "13px 0", animationDelay: `${index * 40}ms` }}
     >
       <TokenAvatar size={38} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
 
@@ -9244,7 +9244,7 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
               <div
                 key={tok.id}
                 className="w-full flex items-center"
-                style={{ gap: 12, padding: "12px 0", borderBottom: `1px solid ${T.line}` }}
+                style={{ gap: 12, padding: "13px 0" }}
               >
                 <TokenAvatar size={36} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
                 <div className="flex-1 min-w-0 text-left">
