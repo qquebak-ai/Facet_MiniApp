@@ -51,7 +51,9 @@ async function сохранитьЛоготипы(admin, строки) {
 }
 
 async function логотипыSolana(строки) {
-  const без = строки.filter((t) => !t.logo_url && t.token_address).slice(0, 100);
+  const без = строки
+    .filter((t) => t.token_address && (!t.logo_url || t.logo_url.includes("ipfs.io")))
+    .slice(0, 100);
   if (!без.length) return;
   try {
     const res = await fetch(META_RPC, {
@@ -73,8 +75,10 @@ async function логотипыSolana(строки) {
     for (const a of активы) {
       if (!a || !a.id) continue;
       const c = a.content || {};
-      const url = (c.links && c.links.image)
-        || (Array.isArray(c.files) && c.files[0] && (c.files[0].cdn_uri || c.files[0].uri))
+      const файл = Array.isArray(c.files) ? c.files[0] : null;
+      const url = (файл && файл.cdn_uri)
+        || (c.links && c.links.image)
+        || (файл && файл.uri)
         || null;
       if (url) карта.set(a.id, String(url));
     }

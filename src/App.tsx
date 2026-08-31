@@ -4406,8 +4406,32 @@ function MintlyFrame({ children, size = 52, glow }) {
 /* Premium circular token avatar: glass ring with a static gradient border.
    Used specifically for token logos (list cards, detail, portfolio) — the cut-corner
    MintlyFrame stays reserved for brand/utility chrome elsewhere. */
+/* Уменьшенная копия картинки токена.
+ *
+ * Логотипы мемкоинов лежат в IPFS и весят сколько угодно: попадаются
+ * двухмегабайтные PNG на кружок в тридцать восемь точек. На телефоне
+ * такая лента грузится минутами, и вместо аватарок человек всё это время
+ * видит эмодзи-заглушки.
+ *
+ * Прогоняем через пережимающий CDN: та же картинка приходит в три
+ * килобайта. Если CDN не справится, показ откатывается на исходную
+ * ссылку — она рабочая, просто тяжёлая. */
+function превьюКартинки(url, размер) {
+  const s = String(url || "");
+  if (!/^https?:\/\//i.test(s)) return s;
+  // Свои картинки (хранилище профилей) уже нужного размера — гонять их
+  // через чужой CDN незачем.
+  if (s.includes("supabase.co")) return s;
+  const w = Math.max(64, Math.round(размер * 2));
+  return `https://cdn.helius-rpc.com/cdn-cgi/image/width=${w},height=${w},fit=cover,format=auto/${s}`;
+}
+
 function TokenAvatar({ children, size = 52, tone = "neutral", src }) {
   const [broken, setBroken] = useState(false);
+  // Сначала пробуем лёгкую копию, при отказе — исходную ссылку, и только
+  // потом сдаёмся на эмодзи.
+  const [исходная, setИсходная] = useState(false);
+  useEffect(() => { setBroken(false); setИсходная(false); }, [src]);
   const ringColor = T.lineHi;
   return (
     <div
@@ -4424,9 +4448,11 @@ function TokenAvatar({ children, size = 52, tone = "neutral", src }) {
           or it fails to load (broken CDN link, blocked host, etc). */}
       {src && !broken ? (
         <img
-          src={src}
+          src={исходная ? src : превьюКартинки(src, size)}
           alt=""
-          onError={() => setBroken(true)}
+          loading="lazy"
+          decoding="async"
+          onError={() => (исходная ? setBroken(true) : setИсходная(true))}
           style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
         />
       ) : children}
