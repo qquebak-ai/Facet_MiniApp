@@ -144,6 +144,18 @@ const STR = {
   RU: {
     navHome: "Главная", navMempad: "Мемпад", navCreate: "Создать", navProfile: "Профиль", navShop: "Магазин", navWallet: "Кошелёк",
     walletBalanceLabel: "Баланс",
+    appWalletTitle: "Баланс приложения",
+    appWalletHint: "Пополни этот адрес, и сделки в Solana будут уходить в сеть сразу, без подтверждения в кошельке.",
+    appWalletWarn: "Ключом от этого адреса управляет площадка. Держи здесь столько, сколько готов пустить в сделки, остальное — на своём кошельке.",
+    appWalletTopUp: "Пополнить",
+    appWalletWithdraw: "Вывести",
+    appWalletAddressCopied: "Адрес скопирован",
+    appWalletTopUpBody: "Отправь SOL на этот адрес — деньги появятся здесь через несколько секунд.",
+    appWalletWithdrawTo: "Адрес получателя",
+    appWalletAmount: "Сколько вывести",
+    appWalletAll: "Всё",
+    appWalletSent: "Отправлено",
+    appWalletFailed: "Не получилось",
     walletEmptyTitle: "Кошелёк не подключён",
     walletEmptyBody: "Подключи TON-кошелёк, чтобы покупать, продавать и запускать токены.",
     shopTitle: "Магазин",
@@ -553,6 +565,18 @@ const STR = {
   EN: {
     navHome: "Home", navMempad: "Mempad", navCreate: "Create", navProfile: "Profile", navShop: "Shop", navWallet: "Wallet",
     walletBalanceLabel: "Balance",
+    appWalletTitle: "App balance",
+    appWalletHint: "Top this address up and Solana trades go straight to the network, with no wallet confirmation.",
+    appWalletWarn: "The key to this address is held by the platform. Keep here only what you are ready to trade; the rest belongs in your own wallet.",
+    appWalletTopUp: "Top up",
+    appWalletWithdraw: "Withdraw",
+    appWalletAddressCopied: "Address copied",
+    appWalletTopUpBody: "Send SOL to this address — it shows up here within seconds.",
+    appWalletWithdrawTo: "Recipient address",
+    appWalletAmount: "Amount",
+    appWalletAll: "All",
+    appWalletSent: "Sent",
+    appWalletFailed: "Didn't work",
     walletEmptyTitle: "No wallet connected",
     walletEmptyBody: "Connect a TON wallet to buy, sell and launch tokens.",
     shopTitle: "Shop",
@@ -9654,6 +9678,150 @@ function SolanaWalletCard({ showToast }) {
   );
 }
 
+/* Баланс приложения — внутренний кошелёк в Solana.
+
+   Обычная сделка идёт через Phantom: ушёл в кошелёк, подтвердил,
+   вернулся. Пока ходишь, цена на кривой уезжает. Здесь ключ хранится у
+   площадки, поэтому покупка уходит в сеть сразу после нажатия — и за
+   это же приходится доверять нам хранение. Об этом сказано прямо в
+   карточке, а не мелким шрифтом: карман для сделок, а не второй кошелёк.
+
+   Ничего не показываем, пока сервер не ответил адресом: без входа в
+   аккаунт и без ключа площадки внутреннего кошелька просто нет. */
+function AppWalletCard({ showToast }) {
+  const [кош, setКош] = useState(null);
+  const [скопировано, setСкопировано] = useState(false);
+  const [панель, setПанель] = useState(null);   // null | "top" | "out"
+  const [куда, setКуда] = useState("");
+  const [сумма, setСумма] = useState("");
+  const [идёт, setИдёт] = useState(false);
+
+  const обновить = useCallback(async () => {
+    const { состояниеВнутреннего } = await import("./appWallet");
+    const s = await состояниеВнутреннего();
+    if (s && s.address) setКош(s);
+  }, []);
+
+  // Пополнение приходит мимо приложения — заметить его можно только
+  // переспросив сеть. Раз в 12 секунд достаточно, чтобы перевод
+  // «появился сам», пока человек смотрит на карточку.
+  useEffect(() => {
+    let жив = true;
+    const тик = () => { if (жив) обновить(); };
+    тик();
+    const id = setInterval(тик, 12000);
+    return () => { жив = false; clearInterval(id); };
+  }, [обновить]);
+
+  if (!кош) return null;
+
+  const короткий = `${кош.address.slice(0, 4)}…${кош.address.slice(-4)}`;
+  const остаток = Number(кош.sol) || 0;
+
+  function копировать() {
+    navigator.clipboard?.writeText(кош.address);
+    setСкопировано(true);
+    haptic("light");
+    setTimeout(() => setСкопировано(false), 1400);
+    showToast(t("appWalletAddressCopied"));
+  }
+
+  async function вывести(всё) {
+    if (идёт) return;
+    setИдёт(true);
+    try {
+      const { вывестиСВнутреннего } = await import("./appWallet");
+      await вывестиСВнутреннего({ to: куда.trim(), amount: Number(сумма) || 0, all: !!всё });
+      showToast(t("appWalletSent"));
+      setПанель(null); setКуда(""); setСумма("");
+      обновить();
+    } catch (e) {
+      showToast(`${t("appWalletFailed")}: ${String((e && e.message) || e).slice(0, 60)}`);
+    } finally {
+      setИдёт(false);
+    }
+  }
+
+  const кнопка = {
+    padding: "9px 14px", borderRadius: 12, background: hexA(T.electric, 0.14),
+    border: `1px solid ${hexA(T.electric, 0.4)}`, fontFamily: bodyFont,
+    color: T.electric, fontSize: 13.5, fontWeight: 700,
+  };
+  const поле = {
+    width: "100%", padding: "10px 12px", borderRadius: 12, background: T.bg,
+    border: `1px solid ${T.line}`, color: T.ice, fontFamily: monoFont, fontSize: 13,
+    outline: "none",
+  };
+
+  return (
+    <div className="w-full rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{t("appWalletTitle")}</div>
+          <div className="flex items-baseline" style={{ gap: 6, marginTop: 6 }}>
+            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 26, fontWeight: 600, lineHeight: 1, letterSpacing: "-0.02em" }}>
+              {остаток.toFixed(4)}
+            </span>
+            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 13 }}>SOL</span>
+          </div>
+        </div>
+        <button
+          onClick={копировать}
+          className="fx-tap flex items-center gap-1.5 rounded-full flex-shrink-0"
+          style={{ padding: "7px 12px", background: T.bg, border: `1px solid ${T.line}` }}
+        >
+          <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12.5 }}>{короткий}</span>
+          {скопировано ? <CheckCircle2 size={12} color={T.up} /> : <Copy size={12} color={T.muted} />}
+        </button>
+      </div>
+
+      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 10, lineHeight: 1.45 }}>{t("appWalletHint")}</p>
+
+      <div className="flex" style={{ gap: 8, marginTop: 12 }}>
+        <button className="fx-tap flex-1 flex items-center justify-center gap-1.5" style={кнопка}
+          onClick={() => setПанель(панель === "top" ? null : "top")}>
+          <ArrowDownRight size={14} /> {t("appWalletTopUp")}
+        </button>
+        <button className="fx-tap flex-1 flex items-center justify-center gap-1.5"
+          style={{ ...кнопка, background: T.bg, border: `1px solid ${T.line}`, color: T.ice }}
+          onClick={() => setПанель(панель === "out" ? null : "out")}>
+          <ArrowUpRight size={14} /> {t("appWalletWithdraw")}
+        </button>
+      </div>
+
+      {панель === "top" && (
+        <div style={{ marginTop: 12 }}>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.45 }}>{t("appWalletTopUpBody")}</p>
+          {/* Адрес целиком, а не сокращённый: его переносят руками, и
+              многоточие посередине тут ломает всё. */}
+          <button onClick={копировать} className="fx-tap w-full text-left"
+            style={{ ...поле, marginTop: 8, wordBreak: "break-all", lineHeight: 1.5 }}>
+            {кош.address}
+          </button>
+        </div>
+      )}
+
+      {панель === "out" && (
+        <div className="flex flex-col" style={{ gap: 8, marginTop: 12 }}>
+          <input value={куда} onChange={(e) => setКуда(e.target.value)} placeholder={t("appWalletWithdrawTo")} style={поле} />
+          <div className="flex" style={{ gap: 8 }}>
+            <input value={сумма} onChange={(e) => setСумма(e.target.value.replace(",", "."))}
+              inputMode="decimal" placeholder={t("appWalletAmount")} style={{ ...поле, flex: 1 }} />
+            <button className="fx-tap" style={{ ...кнопка, background: T.bg, border: `1px solid ${T.line}`, color: T.muted }}
+              onClick={() => вывести(true)} disabled={идёт}>{t("appWalletAll")}</button>
+          </div>
+          <button className="fx-tap w-full" style={{ ...кнопка, opacity: идёт || !куда.trim() ? 0.5 : 1 }}
+            onClick={() => вывести(false)} disabled={идёт || !куда.trim()}>
+            {t("appWalletWithdraw")}
+          </button>
+        </div>
+      )}
+
+      <p style={{ fontFamily: bodyFont, color: T.faint, fontSize: 11.5, marginTop: 12, lineHeight: 1.45 }}>{t("appWalletWarn")}</p>
+    </div>
+  );
+}
+
 function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0, onConnect, onDisconnect, onCopy, holdings = [], holdingsReady = false, showToast = () => {} }) {
   const [copied, setCopied] = useState(false);
   const balance = useCountUp(connected ? tonBalance : 0, 900, connected);
@@ -9677,6 +9845,7 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
 
         {/* Кошельки друг от друга не зависят: мемкоины Solana можно
             торговать и не подключая TON-кошелёк вовсе. */}
+        <AppWalletCard showToast={showToast} />
         <SolanaWalletCard showToast={showToast} />
       </div>
     );
@@ -9706,6 +9875,7 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
         </button>
       </section>
 
+      <AppWalletCard showToast={showToast} />
       <SolanaWalletCard showToast={showToast} />
 
       {/* Что куплено на этом кошельке. Только состав: сколько чего лежит.
@@ -16402,7 +16572,16 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   async function свопSolana({ token, amountSol, продажа = false, количество = 0 }) {
     /* eslint-disable-next-line no-param-reassign */
     const { подключить, сохранённаяСессия, подписать } = await import("./phantom");
-    let сессия = сохранённаяСессия();
+    const { состояниеВнутреннего, подписатьВнутренним } = await import("./appWallet");
+
+    /* Сначала внутренний кошелёк: на нём хватило — сделка уходит в сеть
+       сразу, без похода в Phantom. Именно этот поход и съедает время, за
+       которое цена успевает уехать. */
+    const нужно = продажа ? 0.003 : Number(amountSol || 0) + 0.003;
+    const внутренний = await состояниеВнутреннего();
+    let сессия = внутренний && внутренний.address && (внутренний.sol || 0) >= нужно
+      ? { wallet: внутренний.address, внутренний: true }
+      : сохранённаяСессия();
     if (!сессия) {
       showToast(t("solConnecting"));
       сессия = await подключить();
@@ -16443,6 +16622,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       body: JSON.stringify({ quote: кот.quote, wallet: сессия.wallet }),
     }).then((r) => r.json());
     if (!собранная || собранная.error || !собранная.transaction) throw new Error("сделка не собралась");
+
+    // Внутренний кошелёк подписывает и отправляет на сервере: ключ там
+    // же, где транзакция, и просить человека о подтверждении не нужно.
+    if (сессия.внутренний) return await подписатьВнутренним(собранная.transaction);
 
     showToast(t("solSignInWallet"));
     // Кошелёк только подписывает: отправку в сеть Phantom больше не
