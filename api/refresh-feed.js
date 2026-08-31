@@ -179,7 +179,10 @@ function разобрать(json, сеть) {
    метаданных пусто. Берём понемногу за проход: у него свои лимиты, а
    список всё равно доберётся за несколько минут. */
 async function логотипыTon(строки) {
-  const без = строки.filter((t) => !t.logo_url && t.token_address).slice(0, 8);
+  // Обозреватель пускает примерно запрос в секунду, поэтому за проход
+  // берём троих: за десяток минут список всё равно закроется целиком, а
+  // отказ по лимиту стоил бы всей пачки.
+  const без = строки.filter((t) => !t.logo_url && t.token_address).slice(0, 3);
   for (const t of без) {
     try {
       const res = await fetch(`https://tonapi.io/v2/jettons/${t.token_address}`);
@@ -188,7 +191,7 @@ async function логотипыTon(строки) {
       const url = (json && json.metadata && json.metadata.image) || (json && json.preview) || null;
       if (url) t.logo_url = String(url);
     } catch { /* обозреватель молчит — останемся без картинки */ }
-    await пауза(120);
+    await пауза(350);
   }
 }
 
