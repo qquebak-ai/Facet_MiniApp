@@ -40,6 +40,16 @@ const META_RPC = (process.env.SOLANA_RPC || "https://api.mainnet-beta.solana.com
   .replace("devnet.", "mainnet.")
   .replace("api.devnet.solana.com", "api.mainnet-beta.solana.com");
 
+async function сохранитьЛоготипы(admin, строки) {
+  const сКартинкой = строки.filter((t) => t.logo_url);
+  if (!сКартинкой.length) return;
+  const { error } = await admin.from("feed_cache").upsert(
+    сКартинкой.map((t) => ({ id: t.id, chain: t.chain, pool_address: t.pool_address, logo_url: t.logo_url })),
+    { onConflict: "id" },
+  );
+  if (error) console.warn("[refresh-feed] логотипы ->", error.message);
+}
+
 async function логотипыSolana(строки) {
   const без = строки.filter((t) => !t.logo_url && t.token_address).slice(0, 100);
   if (!без.length) return;
@@ -79,11 +89,11 @@ async function логотипыSolana(строки) {
        из-за них не успеть. */
     const описания = активы
       .filter((a) => a && a.id && !карта.has(a.id) && a.content && a.content.json_uri)
-      .slice(0, 6);
+      .slice(0, 3);
     for (const a of описания) {
       try {
         const управление = new AbortController();
-        const срок = setTimeout(() => управление.abort(), 2000);
+        const срок = setTimeout(() => управление.abort(), 1500);
         const res = await fetch(a.content.json_uri, { signal: управление.signal });
         clearTimeout(срок);
         if (!res.ok) continue;
@@ -230,11 +240,17 @@ export default async function handler(req, res) {
     итог[`${сеть}_new`] = свежие.length;
     if (сеть === "solana") await логотипыSolana(свежие);
     else await логотипыTon(свежие);
+    await сохранитьЛоготипы(admin, свежие);
     if (свежие.length) {
       const сейчас = new Date().toISOString();
-      const { error: ошибка } = await admin
-        .from("feed_cache")
-        .upsert(свежие.map((t) => ({ ...t, new_at: сейчас })), { onConflict: "id" });
+      const { error: ошибка } = await admin.from("feed_cache").upsert(
+        свежие.map((t) => {
+          const строка = { ...t, new_at: сейчас };
+          if (!строка.logo_url) delete строка.logo_url;
+          return строка;
+        }),
+        { onConflict: "id" },
+      );
       if (ошибка) {
         console.warn("[refresh-feed] новые", сеть, "->", ошибка.message);
         итог[`${сеть}_new`] = 0;
@@ -246,9 +262,12 @@ export default async function handler(req, res) {
     итог[сеть] = строки.length;
     if (сеть === "solana") await логотипыSolana(строки);
     else await логотипыTon(строки);
+    await сохранитьЛоготипы(admin, строки);
     if (!строки.length) continue;
 
-    const { error } = await admin.from("feed_cache").upsert(строки, { onConflict: "id" });
+    const { error } = await admin
+      .from("feed_cache")
+      .upsert(строки.map((t) => (t.logo_url ? t : (({ logo_url, ...без }) => без)(t))), { onConflict: "id" });
     if (error) {
       console.warn("[refresh-feed] запись", сеть, "->", error.message);
       итог[сеть] = 0;
