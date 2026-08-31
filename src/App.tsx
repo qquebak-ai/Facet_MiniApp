@@ -148,6 +148,18 @@ const STR = {
     walletEmptyBody: "Подключи TON-кошелёк, чтобы покупать, продавать и запускать токены.",
     shopTitle: "Магазин",
     tgAuthTitle: "Вход через Telegram",
+    welcomeTitle: "Мемкоины на TON и Solana — прямо в Telegram",
+    welcomeSub: "Запусти свой токен за минуту или торгуй чужими. Кривая площадки покупает и продаёт сама, поэтому рынок у монеты есть с первой секунды.",
+    welcomePoint1Title: "Свои контракты",
+    welcomePoint1Body: "Кривая и пул написаны нами и открыты: запас нельзя вывести мимо неё.",
+    welcomePoint2Title: "Две сети",
+    welcomePoint2Body: "TON и Solana в одном приложении, каждая со своим кошельком.",
+    welcomePoint3Title: "Запуск за минуту",
+    welcomePoint3Body: "Имя, тикер, картинка — и токен в сети, вместе с первой покупкой.",
+    welcomeCreate: "Создать аккаунт",
+    welcomeLogin: "У меня уже есть аккаунт",
+    welcomeSkip: "Осмотреться без входа",
+    welcomeRisk: "Мемкоины — рискованная затея: цена может уйти в ноль. Вкладывай только то, что готов потерять.",
     tgAuthCta: "Войти через Telegram",
     tgAuthHint: "Аккаунт создастся из твоего профиля Telegram — почта и пароль не нужны.",
     tgAuthCreateCta: "Создать аккаунт",
@@ -538,6 +550,18 @@ const STR = {
     walletEmptyBody: "Connect a TON wallet to buy, sell and launch tokens.",
     shopTitle: "Shop",
     tgAuthTitle: "Sign in with Telegram",
+    welcomeTitle: "Memecoins on TON and Solana — right inside Telegram",
+    welcomeSub: "Launch your own token in a minute or trade someone else's. The platform curve buys and sells on its own, so a coin has a market from its first second.",
+    welcomePoint1Title: "Our own contracts",
+    welcomePoint1Body: "The curve and the pool are written by us and open: the supply can't leave past them.",
+    welcomePoint2Title: "Two networks",
+    welcomePoint2Body: "TON and Solana in one app, each with its own wallet.",
+    welcomePoint3Title: "A minute to launch",
+    welcomePoint3Body: "Name, ticker, image — and the token is live, together with your first buy.",
+    welcomeCreate: "Create account",
+    welcomeLogin: "I already have an account",
+    welcomeSkip: "Look around first",
+    welcomeRisk: "Memecoins are risky: a price can go to zero. Only put in what you can afford to lose.",
     tgAuthCta: "Sign in with Telegram",
     tgAuthHint: "Your account is created from your Telegram profile — no email, no password.",
     tgAuthCreateCta: "Create account",
@@ -7330,6 +7354,103 @@ function PageLoader({ minHeight = 260 }) {
       <LeafLoader size={76} />
       <div style={{ width: 96, height: 3, borderRadius: 999, background: T.surfaceHi, overflow: "hidden" }}>
         <div style={{ width: "40%", height: "100%", borderRadius: 999, background: T.electric, animation: "leafLoaderBar 1.6s ease-in-out infinite" }} />
+      </div>
+    </div>
+  );
+}
+
+/* Первый экран приложения.
+ *
+ * До него человек попадал сразу в ленту и видел десятки чужих монет, не
+ * понимая, куда пришёл: ни что здесь можно сделать, ни зачем заводить
+ * аккаунт. Экран отвечает на это тремя строчками и двумя кнопками —
+ * войти или осмотреться.
+ *
+ * Показывается один раз: закрыл — больше не мешает. Тем, кто уже с
+ * аккаунтом, не показывается вовсе.
+ */
+function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
+  const лист = LEAF_KINDS[2];
+  const пункты = [
+    [ShieldCheck, "welcomePoint1Title", "welcomePoint1Body"],
+    [Globe2, "welcomePoint2Title", "welcomePoint2Body"],
+    [Rocket, "welcomePoint3Title", "welcomePoint3Body"],
+  ];
+  return (
+    <div
+      className="no-scrollbar"
+      style={{
+        position: "absolute", inset: 0, zIndex: 880, background: T.bg,
+        overflowY: "auto", paddingTop: insetTop,
+        animation: "fadeInUp 320ms cubic-bezier(0.16,1,0.3,1) both",
+      }}
+    >
+      <div className="flex flex-col" style={{ minHeight: "100%", padding: "28px 20px 24px", gap: 22 }}>
+        {/* Знак и имя: маленькие, чтобы не спорить с заголовком. */}
+        <div className="flex items-center" style={{ gap: 9 }}>
+          <svg width="22" height="25" viewBox="-15 -31 30 34" aria-hidden>
+            <path d={лист.outline} fill={T.electric} />
+            <path d={лист.stem} fill="none" stroke={T.electric} strokeWidth="1" strokeLinecap="round" />
+          </svg>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em" }}>Mintly</span>
+        </div>
+
+        <div className="flex flex-col" style={{ gap: 12, marginTop: 4 }}>
+          <h1 style={{ fontFamily: displayFont, color: T.ice, fontSize: 29, lineHeight: 1.15, fontWeight: 600, letterSpacing: "-0.03em", margin: 0 }}>
+            {t("welcomeTitle")}
+          </h1>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 15, lineHeight: 1.55, margin: 0, maxWidth: 460 }}>
+            {t("welcomeSub")}
+          </p>
+        </div>
+
+        {/* Три строки о проекте: что здесь своё, где торгуется и сколько
+            занимает запуск. Без карточек — это текст, а не витрина. */}
+        <div className="flex flex-col" style={{ gap: 18, marginTop: 2 }}>
+          {пункты.map(([Icon, заголовок, текст]) => (
+            <div key={заголовок} className="flex items-start" style={{ gap: 12 }}>
+              <div className="flex items-center justify-center flex-shrink-0" style={{
+                width: 34, height: 34, borderRadius: 11,
+                background: T.surface, border: `1px solid ${T.line}`,
+              }}>
+                <Icon size={16} color={T.electric} strokeWidth={1.8} />
+              </div>
+              <div className="min-w-0">
+                <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>{t(заголовок)}</div>
+                <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, lineHeight: 1.5, marginTop: 2 }}>{t(текст)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Кнопки прижаты к низу: между рассказом и решением остаётся
+            воздух, а на длинном экране они не уезжают за край. */}
+        <div className="flex flex-col" style={{ gap: 10, marginTop: "auto", paddingTop: 24 }}>
+          <button
+            onClick={onCreate}
+            className="fx-tap w-full flex items-center justify-center gap-2"
+            style={{ padding: "14px 0", borderRadius: 14, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 600, fontSize: 15 }}
+          >
+            {t("welcomeCreate")}
+          </button>
+          <button
+            onClick={onLogin}
+            className="fx-tap w-full flex items-center justify-center gap-2"
+            style={{ padding: "13px 0", borderRadius: 14, background: "transparent", color: T.ice, border: `1px solid ${T.lineHi}`, fontFamily: displayFont, fontWeight: 600, fontSize: 14.5 }}
+          >
+            <Send size={14} /> {t("welcomeLogin")}
+          </button>
+          <button
+            onClick={onSkip}
+            className="fx-tap w-full"
+            style={{ padding: "8px 0", background: "transparent", color: T.muted, fontFamily: bodyFont, fontSize: 13.5 }}
+          >
+            {t("welcomeSkip")}
+          </button>
+          <p style={{ fontFamily: bodyFont, color: T.faint, fontSize: 11.5, lineHeight: 1.5, textAlign: "center", margin: "6px 0 0" }}>
+            {t("welcomeRisk")}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -15432,6 +15553,18 @@ const FEE_PERCENT = 0.01; // 1% комиссии
      сервер отвечает, есть ли её адрес в настройках. Пока нет — выбора
      сети в форме не появляется, и кнопка запуска в разделе Solana не
      показывается. */
+  /* Первый экран: показывается ровно один раз тому, кто ещё не заводил
+     аккаунт. Отметка живёт в телефоне — на сервере ей делать нечего. */
+  const [приветствие, setПриветствие] = useState(() => {
+    try { return typeof window !== "undefined" && !window.localStorage.getItem("mintly.welcome"); }
+    catch { return false; }
+  });
+  function закрытьПриветствие() {
+    setПриветствие(false);
+    try { if (typeof window !== "undefined") window.localStorage.setItem("mintly.welcome", "1"); }
+    catch { /* приватный режим */ }
+  }
+
   const [solЗапуск, setSolЗапуск] = useState(false);
   useEffect(() => {
     let жив = true;
@@ -16328,6 +16461,16 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       {rocketFlying && <LaunchRocket variant={rocketVariant} />}
       {/* Пришли за подписью — заставка только задерживает: человек ждёт
           кошелёк, а не знакомство с приложением. */}
+      {/* Приветствие ждёт, пока догрузится приложение: показывать его
+          поверх заставки — значит перебивать одно ожидание другим. */}
+      {приветствие && !accountCreated && bootHidden && !сразуВКошелёк && (
+        <WelcomeScreen
+          insetTop={insetTop}
+          onCreate={() => { закрытьПриветствие(); openCreateProfile(); }}
+          onLogin={() => { закрытьПриветствие(); openLoginProfile(); }}
+          onSkip={закрытьПриветствие}
+        />
+      )}
       {!bootHidden && !сразуВКошелёк && <BootSplash steps={bootSteps} done={bootDone} insetTop={insetTop} />}
       <Toast key={toastSeq} toast={toast} insetTop={insetTop} leaving={toastLeaving} />
 
