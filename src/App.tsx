@@ -156,6 +156,13 @@ const STR = {
     welcomePoint2Body: "TON и Solana в одном приложении, каждая со своим кошельком.",
     welcomePoint3Title: "Запуск за минуту",
     welcomePoint3Body: "Имя, тикер, картинка — и токен в сети, вместе с первой покупкой.",
+    welcomeNext: "Дальше",
+    welcomeSlide2Title: "Рынок с первой секунды",
+    welcomeSlide2Body: "Кривая сама выступает второй стороной сделки: цена считается по формуле, а не по чужим заявкам. Купить можно сразу после запуска, не дожидаясь, пока кто-то нальёт ликвидность.",
+    welcomeSlide3Title: "TON и Solana рядом",
+    welcomeSlide3Body: "Две сети в одном приложении: свои токены на TON, живой рынок мемкоинов Solana. Каждая со своим кошельком — TON Connect и Phantom.",
+    welcomeSlide4Title: "Запуск за минуту",
+    welcomeSlide4Body: "Имя, тикер, картинка и первая покупка — одной подписью. Дальше токен живёт на кривой, а когда наберёт порог, уходит на биржу.",
     welcomeCreate: "Создать аккаунт",
     welcomeLogin: "У меня уже есть аккаунт",
     welcomeSkip: "Осмотреться без входа",
@@ -558,6 +565,13 @@ const STR = {
     welcomePoint2Body: "TON and Solana in one app, each with its own wallet.",
     welcomePoint3Title: "A minute to launch",
     welcomePoint3Body: "Name, ticker, image — and the token is live, together with your first buy.",
+    welcomeNext: "Next",
+    welcomeSlide2Title: "A market from second one",
+    welcomeSlide2Body: "The curve is the other side of every trade: price comes from a formula, not from someone else's orders. You can buy right after launch, without waiting for liquidity.",
+    welcomeSlide3Title: "TON and Solana side by side",
+    welcomeSlide3Body: "Two networks in one app: your own tokens on TON, the live Solana memecoin market. Each with its own wallet — TON Connect and Phantom.",
+    welcomeSlide4Title: "A minute to launch",
+    welcomeSlide4Body: "Name, ticker, image and the first buy — in one signature. Then the token lives on the curve, and once it hits the threshold it moves to a DEX.",
     welcomeCreate: "Create account",
     welcomeLogin: "I already have an account",
     welcomeSkip: "Look around first",
@@ -1298,6 +1312,31 @@ function GlobalStyle() {
       @keyframes starDriftRight { from{ transform: translateX(-24px); } to{ transform: translateX(560px); } }
       @keyframes starDriftLeft { from{ transform: translateX(560px); } to{ transform: translateX(-24px); } }
       @keyframes glowPulse { 0%,100%{opacity:.35;} 50%{opacity:.75;} }
+
+      /* Знакомство с приложением. Анимации здесь только на прозрачности
+         и сдвиге — их браузер отдаёт видеокарте и не пересчитывает
+         раскладку, поэтому пролистывание остаётся гладким даже на
+         слабом телефоне. */
+      @keyframes вступлениеВверх {
+        from { opacity: 0; transform: translateY(16px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      /* Линия кривой рисуется слева направо — как она и растёт. */
+      @keyframes линияРисуется {
+        from { stroke-dashoffset: var(--длина); }
+        to   { stroke-dashoffset: 0; }
+      }
+      /* Монета всплывает и мягко покачивается: движение подсказывает,
+         что рынок живой, но не отвлекает от текста. */
+      @keyframes монетаПлывёт {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(-7px); }
+      }
+      /* Медленное дыхание подложки под иллюстрацией. */
+      @keyframes аураДышит {
+        0%, 100% { opacity: .35; transform: scale(1); }
+        50%      { opacity: .6;  transform: scale(1.06); }
+      }
       @keyframes shimmer { from{background-position:-300px 0;} to{background-position:300px 0;} }
       /* Блик по тексту. Крайние точки — ровно 100% и 0%: подложка шире
          надписи, и в этих границах она всегда её закрывает. За ними
@@ -7359,98 +7398,267 @@ function PageLoader({ minHeight = 260 }) {
   );
 }
 
-/* Первый экран приложения.
+/* Иллюстрации к слайдам знакомства.
  *
- * До него человек попадал сразу в ленту и видел десятки чужих монет, не
- * понимая, куда пришёл: ни что здесь можно сделать, ни зачем заводить
- * аккаунт. Экран отвечает на это тремя строчками и двумя кнопками —
- * войти или осмотреться.
+ * Рисуются линиями в той же палитре, что и остальной интерфейс: картинки
+ * пришлось бы грузить по сети, а первый экран должен появляться сразу.
+ * Анимации идут только на прозрачности и сдвиге — их считает видеокарта,
+ * и пролистывание не дёргается.
+ */
+function ВступлениеКривая({ активен }) {
+  const линия = "M8 96 C 40 92, 62 78, 84 56 S 128 14, 156 8";
+  return (
+    <svg width="100%" height="132" viewBox="0 0 164 110" style={{ overflow: "visible" }} aria-hidden>
+      <defs>
+        <linearGradient id="встКривая" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stopColor={hexA(T.electric, 0.25)} />
+          <stop offset="100%" stopColor={T.electric} />
+        </linearGradient>
+      </defs>
+      {/* Сетка — чтобы линия читалась как график, а не как росчерк. */}
+      {[24, 48, 72, 96].map((y) => (
+        <line key={y} x1="0" y1={y} x2="164" y2={y} stroke={T.line} strokeWidth="1" />
+      ))}
+      <path
+        d={линия}
+        fill="none"
+        stroke="url(#встКривая)"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        style={активен ? {
+          ["--длина"]: 240,
+          strokeDasharray: 240,
+          animation: "линияРисуется 1100ms cubic-bezier(0.22,1,0.36,1) both",
+        } : { strokeDasharray: 240, strokeDashoffset: 240 }}
+      />
+      {/* Точка на конце линии — «сейчас». */}
+      <circle cx="156" cy="8" r="4" fill={T.electric}
+        style={активен ? { animation: "вступлениеВверх 400ms 900ms ease-out both" } : { opacity: 0 }} />
+    </svg>
+  );
+}
+
+function ВступлениеСети({ активен }) {
+  const монеты = [["TON", T.electric, -46], ["SOL", T.up, 46]];
+  return (
+    <div className="flex items-center justify-center" style={{ height: 132, position: "relative" }}>
+      <div style={{
+        position: "absolute", width: 150, height: 150, borderRadius: "50%",
+        background: `radial-gradient(circle, ${hexA(T.electric, 0.18)} 0%, transparent 70%)`,
+        animation: активен ? "аураДышит 3.6s ease-in-out infinite" : "none",
+      }} />
+      {монеты.map(([подпись, цвет, сдвиг], i) => (
+        <div
+          key={подпись}
+          className="flex items-center justify-center"
+          style={{
+            position: "absolute", transform: `translateX(${сдвиг}px)`,
+            width: 68, height: 68, borderRadius: "50%",
+            background: T.surface, border: `1px solid ${hexA(цвет, 0.5)}`,
+            fontFamily: displayFont, fontSize: 15, fontWeight: 600, color: цвет,
+            animation: активен ? `монетаПлывёт 3.2s ease-in-out ${i * 0.6}s infinite` : "none",
+          }}
+        >
+          {подпись}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ВступлениеЗапуск({ активен }) {
+  const шаги = ["welcomePoint1Title", "welcomePoint2Title", "welcomePoint3Title"];
+  return (
+    <div className="flex flex-col justify-center" style={{ height: 132, gap: 10 }}>
+      {шаги.map((ключ, i) => (
+        <div
+          key={ключ}
+          className="flex items-center"
+          style={{
+            gap: 10, padding: "9px 12px", borderRadius: 12,
+            background: T.surface, border: `1px solid ${T.line}`,
+            animation: активен ? `вступлениеВверх 460ms ${i * 140}ms cubic-bezier(0.16,1,0.3,1) both` : "none",
+            opacity: активен ? undefined : 0,
+          }}
+        >
+          <div className="flex items-center justify-center" style={{
+            width: 20, height: 20, borderRadius: 999, flexShrink: 0,
+            background: hexA(T.electric, 0.16), fontFamily: monoFont, fontSize: 11, color: T.electric,
+          }}>{i + 1}</div>
+          <span style={{ fontFamily: bodyFont, fontSize: 13.5, color: T.paper }}>{t(ключ)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Знакомство с приложением.
  *
- * Показывается один раз: закрыл — больше не мешает. Тем, кто уже с
- * аккаунтом, не показывается вовсе.
+ * Раньше здесь был один экран со списком: человек либо читал его целиком,
+ * либо не читал вовсе. Теперь это четыре страницы, которые листаются
+ * пальцем, — каждая говорит одну вещь и показывает её же картинкой.
+ *
+ * Листание сделано обычной прокруткой с прилипанием: браузер везёт её
+ * сам, с инерцией и на своей частоте кадров, а нам остаётся следить, на
+ * какой странице человек сейчас. Ручная анимация по касанию выглядела бы
+ * ровно так же, но считалась бы в JavaScript.
+ *
+ * Показывается один раз: закрыл — больше не мешает.
  */
 function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
   const лист = LEAF_KINDS[2];
-  const пункты = [
-    [ShieldCheck, "welcomePoint1Title", "welcomePoint1Body"],
-    [Globe2, "welcomePoint2Title", "welcomePoint2Body"],
-    [Rocket, "welcomePoint3Title", "welcomePoint3Body"],
+  const лента = useRef(null);
+  const [страница, setСтраница] = useState(0);
+
+  const страницы = [
+    { title: "welcomeTitle", body: "welcomeSub", арт: null },
+    { title: "welcomeSlide2Title", body: "welcomeSlide2Body", арт: ВступлениеКривая },
+    { title: "welcomeSlide3Title", body: "welcomeSlide3Body", арт: ВступлениеСети },
+    { title: "welcomeSlide4Title", body: "welcomeSlide4Body", арт: ВступлениеЗапуск },
   ];
+  const последняя = страница >= страницы.length - 1;
+
+  function приПрокрутке(e) {
+    const el = e.currentTarget;
+    const n = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
+    if (n !== страница) setСтраница(Math.max(0, Math.min(страницы.length - 1, n)));
+  }
+
+  function листнуть(куда) {
+    const el = лента.current;
+    if (!el) return;
+    el.scrollTo({ left: куда * el.clientWidth, behavior: "smooth" });
+  }
+
   return (
     <div
-      className="no-scrollbar"
       style={{
         position: "absolute", inset: 0, zIndex: 880, background: T.bg,
-        overflowY: "auto", paddingTop: insetTop,
+        display: "flex", flexDirection: "column", paddingTop: insetTop,
         animation: "fadeInUp 320ms cubic-bezier(0.16,1,0.3,1) both",
       }}
     >
-      <div className="flex flex-col" style={{ minHeight: "100%", padding: "28px 20px 24px", gap: 22 }}>
-        {/* Знак и имя: маленькие, чтобы не спорить с заголовком. */}
+      {/* Знак и «пропустить» — над лентой: они не листаются вместе с ней. */}
+      <div className="flex items-center justify-between" style={{ padding: "18px 20px 6px" }}>
         <div className="flex items-center" style={{ gap: 9 }}>
-          <svg width="22" height="25" viewBox="-15 -31 30 34" aria-hidden>
+          <svg width="20" height="23" viewBox="-15 -31 30 34" aria-hidden>
             <path d={лист.outline} fill={T.electric} />
             <path d={лист.stem} fill="none" stroke={T.electric} strokeWidth="1" strokeLinecap="round" />
           </svg>
-          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em" }}>Mintly</span>
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16.5, fontWeight: 600, letterSpacing: "-0.01em" }}>Mintly</span>
         </div>
+        <button onClick={onSkip} className="fx-tap" style={{ fontFamily: bodyFont, fontSize: 13.5, color: T.faint, background: "transparent" }}>
+          {t("welcomeSkip")}
+        </button>
+      </div>
 
-        <div className="flex flex-col" style={{ gap: 12, marginTop: 4 }}>
-          <h1 style={{ fontFamily: displayFont, color: T.ice, fontSize: 29, lineHeight: 1.15, fontWeight: 600, letterSpacing: "-0.03em", margin: 0 }}>
-            {t("welcomeTitle")}
-          </h1>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 15, lineHeight: 1.55, margin: 0, maxWidth: 460 }}>
-            {t("welcomeSub")}
-          </p>
-        </div>
+      {/* Сами страницы. Прилипание по горизонтали, вертикальной прокрутки
+          внутри нет — текст на каждой умещается целиком. */}
+      <div
+        ref={лента}
+        onScroll={приПрокрутке}
+        className="no-scrollbar"
+        style={{
+          flex: 1, minHeight: 0, display: "flex", overflowX: "auto", overflowY: "hidden",
+          scrollSnapType: "x mandatory", overscrollBehaviorX: "contain",
+        }}
+      >
+        {страницы.map((стр, i) => {
+          const Арт = стр.арт;
+          const активна = страница === i;
+          return (
+            <section
+              key={стр.title}
+              style={{
+                flex: "0 0 100%", width: "100%", scrollSnapAlign: "start",
+                display: "flex", flexDirection: "column", justifyContent: "center",
+                gap: 22, padding: "0 20px",
+              }}
+            >
+              {Арт ? <Арт активен={активна} /> : (
+                <div className="flex items-center justify-center" style={{ height: 132, position: "relative" }}>
+                  <div style={{
+                    position: "absolute", width: 170, height: 170, borderRadius: "50%",
+                    background: `radial-gradient(circle, ${hexA(T.electric, 0.2)} 0%, transparent 70%)`,
+                    animation: активна ? "аураДышит 4s ease-in-out infinite" : "none",
+                  }} />
+                  <svg width="76" height="86" viewBox="-15 -31 30 34" style={{ position: "relative" }} aria-hidden>
+                    <path d={лист.outline} fill={T.electric}
+                      style={активна ? { animation: "вступлениеВверх 520ms cubic-bezier(0.16,1,0.3,1) both" } : undefined} />
+                    <path d={лист.stem} fill="none" stroke={T.electric} strokeWidth="1" strokeLinecap="round" />
+                  </svg>
+                </div>
+              )}
 
-        {/* Три строки о проекте: что здесь своё, где торгуется и сколько
-            занимает запуск. Без карточек — это текст, а не витрина. */}
-        <div className="flex flex-col" style={{ gap: 18, marginTop: 2 }}>
-          {пункты.map(([Icon, заголовок, текст]) => (
-            <div key={заголовок} className="flex items-start" style={{ gap: 12 }}>
-              <div className="flex items-center justify-center flex-shrink-0" style={{
-                width: 34, height: 34, borderRadius: 11,
-                background: T.surface, border: `1px solid ${T.line}`,
-              }}>
-                <Icon size={16} color={T.electric} strokeWidth={1.8} />
+              <div className="flex flex-col" style={{ gap: 12 }}>
+                <h1 style={{
+                  fontFamily: displayFont, color: T.ice, fontSize: 27, lineHeight: 1.18,
+                  fontWeight: 600, letterSpacing: "-0.03em", margin: 0,
+                  animation: активна ? "вступлениеВверх 480ms 80ms cubic-bezier(0.16,1,0.3,1) both" : "none",
+                }}>
+                  {t(стр.title)}
+                </h1>
+                <p style={{
+                  fontFamily: bodyFont, color: T.muted, fontSize: 15, lineHeight: 1.55, margin: 0, maxWidth: 460,
+                  animation: активна ? "вступлениеВверх 480ms 180ms cubic-bezier(0.16,1,0.3,1) both" : "none",
+                }}>
+                  {t(стр.body)}
+                </p>
               </div>
-              <div className="min-w-0">
-                <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>{t(заголовок)}</div>
-                <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, lineHeight: 1.5, marginTop: 2 }}>{t(текст)}</div>
-              </div>
-            </div>
+            </section>
+          );
+        })}
+      </div>
+
+      {/* Точки и кнопки. Точка — не только указатель, но и кнопка: на
+          последнюю страницу можно прыгнуть сразу. */}
+      <div className="flex flex-col" style={{ gap: 12, padding: "8px 20px 24px" }}>
+        <div className="flex items-center justify-center" style={{ gap: 6, paddingBottom: 4 }}>
+          {страницы.map((стр, i) => (
+            <button
+              key={стр.title}
+              onClick={() => листнуть(i)}
+              className="fx-tap"
+              aria-label={`${i + 1}`}
+              style={{
+                width: страница === i ? 20 : 6, height: 6, borderRadius: 999,
+                background: страница === i ? T.electric : T.lineHi,
+                transition: `width ${EASE}, background ${EASE}`,
+                padding: 0, border: "none",
+              }}
+            />
           ))}
         </div>
 
-        {/* Кнопки прижаты к низу: между рассказом и решением остаётся
-            воздух, а на длинном экране они не уезжают за край. */}
-        <div className="flex flex-col" style={{ gap: 10, marginTop: "auto", paddingTop: 24 }}>
+        {последняя ? (
+          <div className="flex flex-col" style={{ gap: 10, animation: "вступлениеВверх 420ms both" }}>
+            <button
+              onClick={onCreate}
+              className="fx-tap w-full flex items-center justify-center gap-2"
+              style={{ padding: "14px 0", borderRadius: 14, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 600, fontSize: 15 }}
+            >
+              {t("welcomeCreate")}
+            </button>
+            <button
+              onClick={onLogin}
+              className="fx-tap w-full flex items-center justify-center gap-2"
+              style={{ padding: "13px 0", borderRadius: 14, background: "transparent", color: T.ice, border: `1px solid ${T.lineHi}`, fontFamily: displayFont, fontWeight: 600, fontSize: 14.5 }}
+            >
+              <Send size={14} /> {t("welcomeLogin")}
+            </button>
+            <p style={{ fontFamily: bodyFont, color: T.faint, fontSize: 11.5, lineHeight: 1.5, textAlign: "center", margin: "2px 0 0" }}>
+              {t("welcomeRisk")}
+            </p>
+          </div>
+        ) : (
           <button
-            onClick={onCreate}
+            onClick={() => листнуть(страница + 1)}
             className="fx-tap w-full flex items-center justify-center gap-2"
             style={{ padding: "14px 0", borderRadius: 14, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 600, fontSize: 15 }}
           >
-            {t("welcomeCreate")}
+            {t("welcomeNext")} <ChevronRight size={16} />
           </button>
-          <button
-            onClick={onLogin}
-            className="fx-tap w-full flex items-center justify-center gap-2"
-            style={{ padding: "13px 0", borderRadius: 14, background: "transparent", color: T.ice, border: `1px solid ${T.lineHi}`, fontFamily: displayFont, fontWeight: 600, fontSize: 14.5 }}
-          >
-            <Send size={14} /> {t("welcomeLogin")}
-          </button>
-          <button
-            onClick={onSkip}
-            className="fx-tap w-full"
-            style={{ padding: "8px 0", background: "transparent", color: T.muted, fontFamily: bodyFont, fontSize: 13.5 }}
-          >
-            {t("welcomeSkip")}
-          </button>
-          <p style={{ fontFamily: bodyFont, color: T.faint, fontSize: 11.5, lineHeight: 1.5, textAlign: "center", margin: "6px 0 0" }}>
-            {t("welcomeRisk")}
-          </p>
-        </div>
+        )}
       </div>
     </div>
   );
