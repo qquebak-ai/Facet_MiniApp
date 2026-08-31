@@ -4038,7 +4038,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   const layoutNow = computeLayout();
   const scaleGutter = gutterRef.current;
   return (
-    <div ref={wrapRef} style={{ width: "100%", height, position: "relative", touchAction: "none" }}
+    <div ref={wrapRef} data-chart="1" style={{ width: "100%", height, position: "relative", touchAction: "none" }}
       onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
       onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onWheel={onWheel}>
       <canvas ref={canvasRef} style={{ display: "block", width: "100%", height }} />
