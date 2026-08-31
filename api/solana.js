@@ -131,6 +131,24 @@ export async function балансы({ wallet, mint }) {
   return итог;
 }
 
+/* Крупнейшие держатели токена. Сеть отдаёт двадцать самых больших
+   счетов и общую эмиссию — этого хватает, чтобы показать, кому
+   принадлежит монета и не собрана ли она в одних руках. */
+export async function держатели({ mint }) {
+  if (!адресОк(mint)) return null;
+  const [крупные, запас] = await Promise.all([
+    rpc("getTokenLargestAccounts", [mint]),
+    rpc("getTokenSupply", [mint]).catch(() => null),
+  ]);
+  const всего = Number(запас && запас.value && запас.value.uiAmount) || 0;
+  const счета = ((крупные && крупные.value) || []).map((с) => ({
+    адрес: с.address,
+    количество: Number(с.uiAmount) || 0,
+    доля: всего > 0 ? ((Number(с.uiAmount) || 0) / всего) * 100 : 0,
+  }));
+  return { всего, счета };
+}
+
 /* Отправка подписанной сделки в сеть.
  *
  * Раньше этим занимался сам кошелёк — deeplink signAndSendTransaction
@@ -175,6 +193,15 @@ export default async function handler(req, res) {
         // ровно его, без изменений.
         quote: q,
       });
+    }
+
+    if (действие === "holders") {
+      const h = await держатели({ mint: req.query.mint });
+      if (!h) return res.status(400).json({ error: "bad_request" });
+      // Список меняется медленно: минуты кеша хватает, чтобы не ходить
+      // в сеть на каждое открытие карточки.
+      res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
+      return res.status(200).json(h);
     }
 
     if (действие === "balances") {

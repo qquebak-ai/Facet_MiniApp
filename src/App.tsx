@@ -279,6 +279,14 @@ const STR = {
     gradListedTitle: "Свободный рынок",
     gradListedBody: "Кривая отработала: теперь цена ходит вверх и вниз по резервам пула. Ликвидность заперта в контракте — вынуть её не может никто, поэтому продать можно в любой момент.",
     tabChart: "График", tabInfo: "Инфо", tabTx: "Транзакции", chartModePrice: "Цена",
+    tabHolders: "Держатели", tabFeed: "Лента", tabAbout: "О токене",
+    positionTitle: "Ваша позиция", positionValue: "Стоимость", positionAmount: "Количество",
+    positionChange24: "За 24 часа", positionEmpty: "Токенов пока нет",
+    thesisAdd: "Добавить тезис", thesisHint: "Зачем взял и когда выйдешь — заметка видна только тебе",
+    thesisSave: "Сохранить", thesisPlaceholder: "Например: держу до листинга на бирже",
+    unverifiedToken: "Токен не проверен",
+    holdersEmpty: "Держателей пока не видно", holdersTop: "Крупнейшие",
+    holdersShare: "доля",
     tokenNoAddress: "Адрес недоступен",
     txUnavailable: "Список транзакций пока недоступен для этого пула",
     txEmpty: "По этому пулу пока нет сделок",
@@ -661,6 +669,14 @@ const STR = {
     gradListedTitle: "Free market",
     gradListedBody: "The curve is done: the price now moves both ways with the pool's reserves. The liquidity is locked in the contract and nobody can pull it out, so you can always sell.",
     tabChart: "Chart", tabInfo: "Info", tabTx: "Transactions", chartModePrice: "Price",
+    tabHolders: "Holders", tabFeed: "Feed", tabAbout: "About",
+    positionTitle: "Your position", positionValue: "Value", positionAmount: "Amount",
+    positionChange24: "24h change", positionEmpty: "No tokens yet",
+    thesisAdd: "Add thesis", thesisHint: "Why you bought and when you exit — only you see this note",
+    thesisSave: "Save", thesisPlaceholder: "E.g. holding until it lists on a DEX",
+    unverifiedToken: "Unverified token",
+    holdersEmpty: "No holders visible yet", holdersTop: "Largest",
+    holdersShare: "share",
     tokenNoAddress: "Address unavailable",
     txUnavailable: "Transaction list isn't available for this pool yet",
     txEmpty: "No trades on this pool yet",
@@ -9532,8 +9548,106 @@ function TokenComments({ tokenId, currentUserId, onNeedAuth, onOpenProfile, show
   );
 }
 
-function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey, currentUserId = null, onNeedAuth, onOpenProfile, tonPriceUsd = 0 }) {
-  const [tab, setTab] = useState("chart"); // chart | info | tx
+/* Позиция человека по токену: сколько его на кошельке прямо сейчас.
+   Спрашиваем у сети, а не у локального счётчика покупок — тот не знает
+   ни о сделках с другого устройства, ни о переводах мимо приложения. */
+function useПозиция(token, walletAddress) {
+  const [количество, setКоличество] = useState(null);
+  useEffect(() => {
+    let жив = true;
+    setКоличество(null);
+    const адрес = token && (token.tokenAddress || token.address);
+
+    async function загрузить() {
+      if (!адрес) { if (жив) setКоличество(0); return; }
+      try {
+        if (token.chain === "solana") {
+          const { сохранённаяСессия } = await import("./phantom");
+          const сессия = сохранённаяСессия();
+          if (!сессия) { if (жив) setКоличество(0); return; }
+          const r = await fetch(`/api/solana?action=balances&wallet=${сессия.wallet}&mint=${адрес}`)
+            .then((x) => x.json());
+          if (жив) setКоличество(Number(r && r.token) || 0);
+          return;
+        }
+        if (!walletAddress) { if (жив) setКоличество(0); return; }
+        const b = await fetchJettonBalance(адрес, walletAddress, !!token.curveAddress && TON_TESTNET_NETWORK);
+        if (жив) setКоличество(Number(b) || 0);
+      } catch {
+        if (жив) setКоличество(0);
+      }
+    }
+    загрузить();
+    return () => { жив = false; };
+  }, [token && token.id, token && token.tokenAddress, token && token.chain, walletAddress]);
+  return количество;
+}
+
+/* Крупнейшие держатели. У каждой сети свой источник: в TON их отдаёт
+   обозреватель, в Solana — узел через наш обработчик, чтобы ключ не
+   уезжал в браузер. */
+function useТопДержателей(token, открыто) {
+  const [список, setСписок] = useState(null);
+  useEffect(() => {
+    if (!открыто) return;
+    let жив = true;
+    setСписок(null);
+    const адрес = token && (token.tokenAddress || token.address);
+    if (!адрес) { setСписок([]); return; }
+
+    async function загрузить() {
+      try {
+        if (token.chain === "solana") {
+          const r = await fetch(`/api/solana?action=holders&mint=${адрес}`).then((x) => x.json());
+          const счета = (r && r.счета) || [];
+          if (жив) setСписок(счета.map((с) => ({ адрес: с.адрес, доля: с.доля, количество: с.количество })));
+          return;
+        }
+        const хост = (!!token.curveAddress && TON_TESTNET_NETWORK) ? "https://testnet.tonapi.io" : TONAPI_MAINNET_BASE;
+        const r = await fetch(`${хост}/v2/jettons/${адрес}/holders?limit=12`).then((x) => x.json());
+        const всего = (r && r.addresses) || [];
+        const сумма = всего.reduce((acc, x) => acc + Number(x.balance || 0), 0);
+        if (жив) {
+          setСписок(всего.map((x) => ({
+            адрес: (x.owner && x.owner.address) || x.address,
+            доля: сумма > 0 ? (Number(x.balance || 0) / сумма) * 100 : 0,
+            количество: null,
+          })));
+        }
+      } catch {
+        if (жив) setСписок([]);
+      }
+    }
+    загрузить();
+    return () => { жив = false; };
+  }, [открыто, token && token.id, token && token.tokenAddress, token && token.chain]);
+  return список;
+}
+
+/* Заметка о токене («тезис»). Живёт в телефоне: это личная мысль о
+   сделке, а не публичные данные — отправлять её на сервер незачем. */
+function useТезис(tokenId) {
+  const ключ = `mintly.thesis.${tokenId || ""}`;
+  const [текст, setТекст] = useState("");
+  useEffect(() => {
+    try { setТекст((typeof window !== "undefined" && window.localStorage.getItem(ключ)) || ""); }
+    catch { setТекст(""); }
+  }, [ключ]);
+  const сохранить = useCallback((значение) => {
+    setТекст(значение);
+    try {
+      if (typeof window === "undefined") return;
+      if (значение.trim()) window.localStorage.setItem(ключ, значение);
+      else window.localStorage.removeItem(ключ);
+    } catch { /* приватный режим */ }
+  }, [ключ]);
+  return [текст, сохранить];
+}
+
+function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey, currentUserId = null, onNeedAuth, onOpenProfile, tonPriceUsd = 0, walletAddress = null }) {
+  // График вынесен из вкладок наверх, поэтому здесь остались только
+  // разделы под ним: держатели, лента, о токене.
+  const [tab, setTab] = useState("feed"); // holders | feed | about
   const [chartMode] = useState("mcap"); // always market cap — price toggle removed
   const [tf, setTf] = useState(() => {
     try {
@@ -9569,6 +9683,13 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   const [chartReload, setChartReload] = useState(0);
   const [hovered, setHovered] = useState(null);
   const up = token.change >= 0;
+  // Сколько токена лежит на кошельке прямо сейчас — по этому числу
+  // считается стоимость позиции и её движение за сутки.
+  const позиция = useПозиция(token, walletAddress);
+  const топДержателей = useТопДержателей(token, tab === "holders");
+  const [тезис, сохранитьТезис] = useТезис(token.id);
+  const [тезисОткрыт, setТезисОткрыт] = useState(false);
+  const [черновикТезиса, setЧерновикТезиса] = useState("");
   // У токена на кривой жетон живёт в той же сети, что и приложение.
   // У токена на своей кривой один из жетонных кошельков — её
   // собственный, человеком он не является.
@@ -9888,7 +10009,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
   }
 
   return (
-    <div className="fx-view flex flex-col gap-4 pb-4" style={{ position: "relative" }}>
+    <div className="fx-view flex flex-col pb-4" style={{ position: "relative", gap: 18 }}>
       <TrendFX up={up} seedKey={token.seed} />
       <TokenShareSheet
         token={shareOpen ? { ...token, logoUrl: логотип } : null}
@@ -9898,145 +10019,369 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
         onClose={() => setShareOpen(false)}
         showToast={showToast}
       />
-      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: 18 }}>
 
-      {/* Top bar: back pill + a couple of glass icon buttons on the right */}
-      <div className="flex items-center justify-between">
-        {hasTelegramBack()
-          ? <span />
-          : <button onClick={onBack} className="fx-tap flex items-center gap-1 rounded-full px-3 py-1.5" style={{ color: T.ice, fontFamily: bodyFont, fontSize: 14.5, background: T.surface, border: `1px solid ${T.line}` }}><ChevronLeft size={16} /> {tr("back")}</button>}
-        <div className="flex items-center gap-2">
-          <button onClick={handleShare} className="fx-tap rounded-full p-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}><Share2 size={15} color={T.muted} /></button>
-          <button onClick={() => setTfExpanded(v => !v)} className="fx-tap rounded-full p-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}><MoreHorizontal size={15} color={T.muted} /></button>
+      {/* Шапка — одной строкой вместо двух. Раньше кнопка «назад» жила
+          этажом выше имени токена, и первый экран начинался с двух
+          полупустых полос. */}
+      <div className="flex items-center gap-3">
+        {!hasTelegramBack() && (
+          <button onClick={onBack} className="fx-tap flex items-center justify-center flex-shrink-0"
+            style={{ width: 32, height: 32, borderRadius: 10, background: "transparent", border: `1px solid ${T.line}`, color: T.ice }}>
+            <ChevronLeft size={17} />
+          </button>
+        )}
+        <TokenAvatar size={38} tone={up ? "up" : "down"} src={логотип}>{token.emoji}</TokenAvatar>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 600 }}>{token.name}</span>
+            {token.verified && <ShieldCheck size={13} color={T.electric} style={{ flexShrink: 0 }} />}
+          </div>
+          <div className="truncate" style={{ fontFamily: monoFont, color: T.faint, fontSize: 12 }}>
+            ${token.ticker}{fmtAge(token.createdAt) ? ` · ${fmtAge(token.createdAt)}` : ""}{token.dexName ? ` · ${token.dexName}` : ""}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button onClick={handleShare} className="fx-tap flex items-center justify-center"
+            style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${T.line}` }}>
+            <Share2 size={14} color={T.muted} />
+          </button>
+          <button onClick={() => setTfExpanded(v => !v)} className="fx-tap flex items-center justify-center"
+            style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${T.line}` }}>
+            <MoreHorizontal size={14} color={T.muted} />
+          </button>
         </div>
       </div>
 
-      {/* Header: avatar, name, verified badge, age • dex — plus the
-          contract-address chip, matching a DEX-scanner style header but
-          in Mintly's own glass/gradient language. */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-3">
-          <TokenAvatar size={52} tone={up ? "up" : "down"} src={логотип}>{token.emoji}</TokenAvatar>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 19.5, fontWeight: 700 }}>{token.name}</span>
-              {token.verified && <ShieldCheck size={14} color={T.electric} />}
+      {/* Цена — главное число экрана. Раньше её место занимала
+          капитализация, а цена шла подписью снизу: смотрят же в первую
+          очередь на цену, а капитализация — контекст к ней. */}
+      <div className="flex flex-col" style={{ gap: 8 }}>
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-end gap-2 flex-wrap">
+              <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 34, lineHeight: 1.05, color: T.ice, letterSpacing: "-0.02em", wordBreak: "break-all" }}>
+                {fmtPrice(token.price)}
+              </span>
+              <div style={{ marginBottom: 3 }}><ChangeBadge value={token.change} size="md" /></div>
             </div>
-            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12.5 }}>
-              ${token.ticker} · {fmtAge(token.createdAt) ? `${fmtAge(token.createdAt)} · ` : ""}{token.dexName || catLabel(token.cat)}
-            </span>
           </div>
+          {token.tokenAddress ? (
+            <button onClick={copyContract} className="fx-tap flex items-center gap-1.5 flex-shrink-0" style={{ padding: "4px 0" }}>
+              <span style={{ fontFamily: monoFont, color: T.faint, fontSize: 12 }}>{shortAddr(token.tokenAddress)}</span>
+              <Copy size={11} color={T.faint} />
+            </button>
+          ) : null}
         </div>
-        {token.tokenAddress ? (
-          <button onClick={copyContract} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 13 }}>{shortAddr(token.tokenAddress)}</span>
-            <Copy size={12} color={T.muted} />
-          </button>
-        ) : (
-          <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>{tr("tokenNoAddress")}</span>
+
+        {/* Второстепенные числа — одной строкой мелким шрифтом: они
+            нужны для сверки, а не для чтения по слогам. */}
+        <div className="no-scrollbar flex items-center overflow-x-auto" style={{ gap: 14, whiteSpace: "nowrap" }}>
+          {[
+            [t("marketCapLabel"), fmtUSD(token.mcapNum)],
+            [tr("statVolume24h"), `$${token.vol}`],
+            [tr("statLiquidity"), `$${token.liq}`],
+            token.chain === "solana"
+              ? [tr("statTx24h"), (token.tx24h || 0).toLocaleString("ru-RU")]
+              : [tr("statHolders"), holdersCount == null ? "—" : holdersCount.toLocaleString("ru-RU")],
+          ].map(([подпись, значение]) => (
+            <div key={подпись} className="flex items-center flex-shrink-0" style={{ gap: 6 }}>
+              <span style={{ fontFamily: bodyFont, color: T.faint, fontSize: 12 }}>{подпись}</span>
+              <span style={{ fontFamily: monoFont, color: T.paper, fontSize: 12.5 }}>{значение}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Непроверенный токен — строкой, а не жёлтым щитом во весь
+            экран: предупредить нужно, напугать — нет. */}
+        {!token.verified && (
+          <div className="flex items-center" style={{ gap: 6 }}>
+            <ShieldAlert size={13} color={T.warning} />
+            <span style={{ fontFamily: bodyFont, color: T.warning, fontSize: 12.5 }}>{tr("unverifiedToken")}</span>
+          </div>
         )}
       </div>
 
-      {/* Stats: big Market Cap on the left, compact real Holders/Volume
-          column on the right. The old "Transactions" row showed the 24h
-          buy+sell count mislabeled — dropped rather than fixed, since
-          it duplicated what the Transactions tab already shows for real. */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("marketCapLabel")}</div>
-          <div className="flex items-end gap-2">
-            <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 31.5, lineHeight: 1, color: T.ice, opacity: 0.92 }}>{fmtUSD(token.mcapNum)}</span>
-            <div style={{ marginBottom: 4 }}><ChangeBadge value={token.change} size="md" /></div>
-          </div>
-          <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 13, marginTop: 2 }}>{fmtPrice(token.price)} {tr("perToken")}</div>
+      {/* Интервалы графика */}
+      <div className="flex flex-col" style={{ gap: 10 }}>
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto" ref={tfRowRef} style={{ paddingBottom: 2 }}>
+          {TIMEFRAMES.map(f => (
+            <button
+              key={f}
+              data-tf={f}
+              onClick={() => changeTf(f)}
+              className="tf-btn fx-tap rounded-[10px] px-2.5 py-1 flex-shrink-0"
+              style={{
+                fontFamily: monoFont, fontSize: 12,
+                background: tf === f ? T.surfaceHi : "transparent",
+                color: tf === f ? T.ice : T.faint,
+                border: `1px solid ${tf === f ? T.lineHi : "transparent"}`,
+              }}
+            >
+              {f}
+            </button>
+          ))}
         </div>
-        {/* Подписи не переносятся: «Объём 24ч» ломался на две строки и
-            уводил число на строку ниже своего названия. */}
-        <div className="flex flex-col items-end gap-1" style={{ fontFamily: bodyFont, fontSize: 13, paddingTop: 2, whiteSpace: "nowrap" }}>
-          <div className="flex items-center gap-2"><span style={{ color: T.muted }}>{tr("statHolders")}</span><span style={{ fontFamily: monoFont, color: T.ice }}>{holdersCount == null ? "—" : holdersCount.toLocaleString("ru-RU")}</span></div>
-          <div className="flex items-center gap-2"><span style={{ color: T.muted }}>{tr("statVolume24h")}</span><span style={{ fontFamily: monoFont, color: T.ice }}>${token.vol}</span></div>
+
+        {/* График идёт во всю ширину страницы, а не лежит в карточке:
+            рамка и скругление вокруг него мешали читать свечи у краёв, а
+            места под сам график оставалось меньше. */}
+        <div style={{ position: "relative", marginLeft: -16, marginRight: -16, background: T.bg }}>
+          {!chartReady && chartPending ? (
+            <div className="flex items-center justify-center" style={{ height: 360 }}>
+              <LeafLoader size={64} />
+            </div>
+          ) : !chartReady ? (
+            <div className="flex flex-col items-center justify-center gap-3" style={{ height: 360, padding: "0 20px" }}>
+              <span style={{ fontFamily: monoFont, fontSize: 12, color: T.muted, textAlign: "center" }}>{tr("chartNoData")}</span>
+              <button
+                onClick={() => setChartReload((v) => v + 1)}
+                className="fx-tap rounded-full px-3.5 py-1.5"
+                style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
+              >
+                {tr("chartRetry")}
+              </button>
+            </div>
+          ) : (
+            <TerminalChart key={`${token.id}-${tf}-${chartMode}`} candles={scaledCandles} height={360} themeKey={themeKey} onHover={setHovered} tf={tf} valueFmt={chartMode === "price" ? fmtPrice : fmtUSD} />
+          )}
         </div>
       </div>
 
-      {/* Tabs */}
-      {/* Полоски под вкладками нет: выбранную и так видно по оранжевой
-          черте под ней, а серая линия во всю ширину только делит экран
-          пополам. */}
-      <div className="flex items-center gap-4">
-        {[["chart", tr("tabChart")], ["info", tr("tabInfo")], ["tx", tr("tabTx")]].map(([id, label]) => (
+      {/* Позиция — сразу под графиком: посмотрел на цену и увидел, что
+          она значит именно для тебя. */}
+      <div className="flex flex-col" style={{ gap: 12, padding: 14, borderRadius: 16, background: T.surface, border: `1px solid ${T.line}` }}>
+        <div className="flex items-center justify-between">
+          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>{tr("positionTitle")}</span>
+          {позиция != null && позиция > 0 && (
+            <span style={{ fontFamily: monoFont, fontSize: 12.5, color: up ? T.up : T.down }}>
+              {up ? "+" : ""}{fmtUSD(Math.abs(позиция * token.price * (token.change || 0) / 100) * (up ? 1 : -1))} · {tr("positionChange24")}
+            </span>
+          )}
+        </div>
+        {позиция == null ? (
+          <div className="flex flex-col gap-2">
+            <div className="fx-skeleton" style={{ width: 120, height: 22, borderRadius: 6 }} />
+            <div className="fx-skeleton" style={{ width: 90, height: 12, borderRadius: 4 }} />
+          </div>
+        ) : позиция > 0 ? (
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 24, fontWeight: 600, letterSpacing: "-0.01em" }}>
+                {fmtUSD(позиция * token.price)}
+              </div>
+              <div style={{ fontFamily: monoFont, color: T.faint, fontSize: 12.5, marginTop: 2 }}>
+                {fmtCoin(позиция)} ${token.ticker}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5 }}>{tr("positionEmpty")}</span>
+        )}
+
+        {/* Кнопки сделки живут здесь же: решение принимается по позиции,
+            а не по отдельному блоку внизу страницы. */}
+        {curve && curve.graduated && !рынокОткрыт ? null : (connected || token.chain === "solana") ? (
+          <div className="flex gap-2">
+            <button onClick={onBuy} className="fx-tap flex-1 rounded-[14px] py-2.5 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 600, fontSize: 14.5, background: PRISM, color: PRISM_TEXT, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("buy")}</button>
+            <button onClick={onSell} className="fx-tap flex-1 rounded-[14px] py-2.5 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 600, fontSize: 14.5, background: "transparent", color: T.ice, border: `1px solid ${T.lineHi}`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("sell")}</button>
+          </div>
+        ) : (
+          <button onClick={onConnectWallet} className="fx-tap w-full rounded-[14px] py-2.5 flex items-center justify-center gap-2" style={{ fontFamily: displayFont, fontWeight: 600, fontSize: 14.5, background: T.ice, color: T.bg }}>
+            <Wallet size={15} /> {tr("connectWalletCta")}
+          </button>
+        )}
+      </div>
+
+      {/* Тезис — личная заметка о сделке. Строка, а не карточка: пока
+          она пустая, ей незачем занимать место. */}
+      {тезисОткрыт ? (
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          <textarea
+            value={черновикТезиса}
+            onChange={(e) => setЧерновикТезиса(e.target.value.slice(0, 280))}
+            placeholder={tr("thesisPlaceholder")}
+            rows={3}
+            style={{
+              width: "100%", resize: "none", padding: "10px 12px", borderRadius: 12,
+              background: T.surface, border: `1px solid ${T.line}`, outline: "none",
+              fontFamily: bodyFont, fontSize: 14, color: T.ice, lineHeight: 1.45,
+            }}
+          />
+          <div className="flex items-center justify-between">
+            <span style={{ fontFamily: bodyFont, color: T.faint, fontSize: 11.5 }}>{tr("thesisHint")}</span>
+            <button
+              onClick={() => { сохранитьТезис(черновикТезиса); setТезисОткрыт(false); }}
+              className="fx-tap rounded-[12px] px-3.5 py-1.5 flex-shrink-0"
+              style={{ background: T.surfaceHi, border: `1px solid ${T.lineHi}`, fontFamily: displayFont, fontSize: 13, color: T.ice }}
+            >
+              {tr("thesisSave")}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => { setЧерновикТезиса(тезис); setТезисОткрыт(true); }}
+          className="fx-tap w-full flex items-center justify-between text-left"
+          style={{ gap: 10, padding: "11px 14px", borderRadius: 14, border: `1px dashed ${T.line}` }}
+        >
+          <span className="truncate" style={{ fontFamily: bodyFont, fontSize: 13.5, color: тезис ? T.paper : T.muted }}>
+            {тезис || tr("thesisAdd")}
+          </span>
+          <PlusCircle size={15} color={T.faint} style={{ flexShrink: 0 }} />
+        </button>
+      )}
+
+      {/* Путь до биржи и её итог: у токенов на своей кривой это главное
+          число после цены, у остальных блока просто нет. */}
+      {curve && curve.graduated ? (
+        <div className="flex items-start gap-3" style={{ padding: 14, borderRadius: 16, background: T.surface, border: `1px solid ${hexA(рынокОткрыт ? T.up : T.warning, 0.35)}` }}>
+          <ShieldCheck size={17} color={рынокОткрыт ? T.up : T.warning} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 600 }}>
+              {tr(рынокОткрыт ? "gradListedTitle" : "gradClosedTitle")}
+            </div>
+            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, marginTop: 3 }}>
+              {рынокОткрыт
+                ? tr("gradListedBody")
+                : trf("gradClosedBody", { target: fmtTon(Number(curve.graduationTon) / 1e9) })}
+            </p>
+          </div>
+        </div>
+      ) : curve ? (
+        <GraduationBar
+          raisedTon={Number(curve.realTon) / 1e9}
+          targetTon={Number(curve.graduationTon) / 1e9}
+        />
+      ) : null}
+
+      {/* Вкладки: держатели, лента, о токене. График выше — он больше не
+          прячется за вкладкой, а лежит на виду. */}
+      <div className="flex items-center" style={{ gap: 20, borderBottom: `1px solid ${T.line}` }}>
+        {[["holders", tr("tabHolders")], ["feed", tr("tabFeed")], ["about", tr("tabAbout")]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="fx-tap" style={{
-            fontFamily: displayFont, fontSize: 14.5, fontWeight: 700, padding: "0 0 9px",
-            color: tab === id ? T.ice : T.muted, borderBottom: `2px solid ${tab === id ? T.turquoise : "transparent"}`,
+            fontFamily: displayFont, fontSize: 14, fontWeight: tab === id ? 600 : 500, padding: "0 0 10px",
+            color: tab === id ? T.ice : T.faint,
+            borderBottom: `2px solid ${tab === id ? T.electric : "transparent"}`,
+            marginBottom: -1,
           }}>{label}</button>
         ))}
       </div>
 
-      {tab === "chart" && (
-        <>
-          {/* Все интервалы сразу, без раскрывающего списка: ряд просто
-              прокручивается вбок. Выбранный подводится к видимой части
-              сам, так что после возврата на экран искать его не нужно. */}
-          <div className="no-scrollbar flex gap-1.5 overflow-x-auto" ref={tfRowRef} style={{ paddingBottom: 2 }}>
-            {TIMEFRAMES.map(f => (
-              <button
-                key={f}
-                data-tf={f}
-                onClick={() => changeTf(f)}
-                className="tf-btn fx-tap rounded-[16px] px-2.5 py-1 flex-shrink-0"
-                style={{ fontFamily: monoFont, fontSize: 12, background: tf === f ? T.ice : T.surface, color: tf === f ? T.bg : T.muted, border: `1px solid ${tf === f ? T.ice : T.line}` }}
-              >
-                {f}
-              </button>
-            ))}
+      {tab === "holders" && (
+        <div className="flex flex-col" style={{ gap: 14 }}>
+          <div className="flex items-baseline" style={{ gap: 8 }}>
+            <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 22, fontWeight: 600 }}>
+              {holdersCount == null ? "—" : holdersCount.toLocaleString("ru-RU")}
+            </span>
+            <span style={{ fontFamily: bodyFont, color: T.faint, fontSize: 13 }}>{tr("statHolders")}</span>
           </div>
+          {топДержателей == null ? (
+            <div className="flex flex-col" style={{ gap: 10 }}>
+              {[0, 1, 2].map((i) => <div key={i} className="fx-skeleton" style={{ width: "100%", height: 14, borderRadius: 4 }} />)}
+            </div>
+          ) : топДержателей.length === 0 ? (
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5 }}>{tr("holdersEmpty")}</span>
+          ) : (
+            <div className="flex flex-col" style={{ gap: 12 }}>
+              <span style={{ fontFamily: bodyFont, color: T.faint, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>{tr("holdersTop")}</span>
+              {топДержателей.map((h, i) => (
+                <div key={`${h.адрес}-${i}`} className="flex items-center" style={{ gap: 10 }}>
+                  <span style={{ fontFamily: monoFont, color: T.faint, fontSize: 12, width: 18, flexShrink: 0 }}>{i + 1}</span>
+                  <span className="truncate" style={{ fontFamily: monoFont, color: T.paper, fontSize: 13, flex: 1 }}>{shortAddr(h.адрес)}</span>
+                  {/* Доля — полоской и числом: так видно, собран ли токен
+                      в одних руках, без чтения процентов подряд. */}
+                  <div style={{ width: 64, height: 4, borderRadius: 2, background: T.surfaceHi, overflow: "hidden", flexShrink: 0 }}>
+                    <div style={{ width: `${Math.min(100, Math.max(2, h.доля || 0))}%`, height: "100%", background: T.electric }} />
+                  </div>
+                  <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12.5, width: 48, textAlign: "right", flexShrink: 0 }}>
+                    {(h.доля || 0).toFixed(1)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-          {/* График идёт во всю ширину страницы, а не лежит в карточке:
-              рамка и скругление вокруг него мешали читать свечи у краёв,
-              а места под сам график оставалось меньше. Отрицательные
-              поля ровно на отступ страницы — так он доходит до краёв
-              экрана. */}
-          <div style={{ position: "relative", marginLeft: -16, marginRight: -16, background: T.bg }}>
-            {/* Пока свечи не за выбранный интервал — крутим загрузку, а не
-                показываем чужие. Зато обновление уже показанного графика
-                (раз в пятнадцать секунд, при смене курса TON) идёт молча:
-                данные на месте, мигать нечем. */}
-            {!chartReady && chartPending ? (
-              <div className="flex items-center justify-center" style={{ height: 340 }}>
-                <LeafLoader size={64} />
-              </div>
-            ) : !chartReady ? (
-              <div className="flex flex-col items-center justify-center gap-3" style={{ height: 340, padding: "0 20px" }}>
-                <span style={{ fontFamily: monoFont, fontSize: 12, color: T.muted, textAlign: "center" }}>{tr("chartNoData")}</span>
-                {/* Кнопка, а не тупик: у источника общий лимит запросов, и
-                    через полминуты попытка почти всегда проходит. */}
-                <button
-                  onClick={() => setChartReload((v) => v + 1)}
-                  className="fx-tap rounded-full px-3.5 py-1.5"
-                  style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 13, color: T.ice }}
-                >
-                  {tr("chartRetry")}
-                </button>
-              </div>
-            ) : (
-              <TerminalChart key={`${token.id}-${tf}-${chartMode}`} candles={scaledCandles} height={340} themeKey={themeKey} onHover={setHovered} tf={tf} valueFmt={chartMode === "price" ? fmtPrice : fmtUSD} />
-            )}
-          </div>
-
-          {/* Honest local reaction pills — not global social counts, see useLocalCounter above */}
+      {tab === "feed" && (
+        <div className="flex flex-col" style={{ gap: 16 }}>
+          {/* Отклики на токен — компактной строкой над сделками. */}
           <div className="flex items-center gap-2">
-            <button onClick={bumpFav} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-              <Star size={14} color={favCount ? T.violet : T.muted} fill={favCount ? T.violet : "none"} />
-              <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice }}>{favCount}</span>
+            <button onClick={bumpFav} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ border: `1px solid ${T.line}` }}>
+              <Star size={13} color={favCount ? T.electric : T.faint} fill={favCount ? T.electric : "none"} />
+              <span style={{ fontFamily: monoFont, fontSize: 12.5, color: T.paper }}>{favCount}</span>
             </button>
-            <button onClick={bumpHype} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-              <Flame size={14} color={hypeCount ? T.turquoise : T.muted} fill={hypeCount ? T.turquoise : "none"} />
-              <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice }}>{hypeCount}</span>
+            <button onClick={bumpHype} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ border: `1px solid ${T.line}` }}>
+              <Flame size={13} color={hypeCount ? T.up : T.faint} fill={hypeCount ? T.up : "none"} />
+              <span style={{ fontFamily: monoFont, fontSize: 12.5, color: T.paper }}>{hypeCount}</span>
             </button>
-            <button onClick={handleRug} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-              <HeartCrack size={14} color={rugCount ? T.rose : T.muted} />
-              <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice }}>{rugCount}</span>
+            <button onClick={handleRug} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ border: `1px solid ${T.line}` }}>
+              <HeartCrack size={13} color={rugCount ? T.down : T.faint} />
+              <span style={{ fontFamily: monoFont, fontSize: 12.5, color: T.paper }}>{rugCount}</span>
             </button>
           </div>
+
+          {/* Сделки строками, без карточек: столбцы читаются глазом
+              сверху вниз, рамка вокруг каждой сделке ничего не добавляла. */}
+          {!token.poolAddress && !token.curveAddress ? (
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5 }}>{tr("txUnavailable")}</span>
+          ) : tradesLoading && !trades ? (
+            <div className="flex items-center justify-center" style={{ height: 100 }}><LeafLoader size={40} /></div>
+          ) : !trades ? (
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5 }}>{tr("txLoadFailed")}</span>
+          ) : trades.length === 0 ? (
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5 }}>{tr("txEmpty")}</span>
+          ) : (
+            <div className="flex flex-col">
+              {trades.map(tx => (
+                <div key={tx.id} className="flex items-center justify-between" style={{ padding: "9px 0" }}>
+                  <span style={{ fontFamily: displayFont, fontWeight: 600, fontSize: 13, color: tx.kind === "buy" ? T.up : T.down }}>
+                    {tx.kind === "buy" ? tr("buy") : tr("sell")}
+                  </span>
+                  <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice }}>${tx.volUsd < 1000 ? tx.volUsd.toFixed(2) : fmtCompact(tx.volUsd)}</span>
+                  <span style={{ fontFamily: monoFont, fontSize: 12, color: T.faint }}>{tx.at ? fmtCandleStamp(Math.floor(new Date(tx.at).getTime() / 1000)) : ""}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Обсуждение — там же, где сделки: лента токена целиком. */}
+          {token.id && (
+            <TokenComments
+              tokenId={token.id}
+              currentUserId={currentUserId}
+              onNeedAuth={onNeedAuth}
+              onOpenProfile={onOpenProfile}
+              showToast={showToast}
+            />
+          )}
+        </div>
+      )}
+
+      {tab === "about" && (
+        <div className="flex flex-col" style={{ gap: 16 }}>
+          {infoLoading && !info ? (
+            <div className="flex flex-col gap-2">
+              <div className="fx-skeleton" style={{ width: "100%", height: 12, borderRadius: 4 }} />
+              <div className="fx-skeleton" style={{ width: "80%", height: 12, borderRadius: 4 }} />
+            </div>
+          ) : (info?.description || info?.telegram || info?.twitter || info?.website) ? (
+            <div className="flex flex-col" style={{ gap: 10 }}>
+              {info.description && (
+                <p style={{ fontFamily: bodyFont, color: T.paper, fontSize: 14.5, lineHeight: 1.55 }}>{info.description}</p>
+              )}
+              {(info.telegram || info.twitter || info.website) && (
+                <div className="flex items-center gap-4">
+                  {info.telegram && <button onClick={() => openSocial(info.telegram)} className="fx-tap"><Send size={16} color={T.muted} /></button>}
+                  {info.twitter && <button onClick={() => openSocial(info.twitter)} className="fx-tap"><Twitter size={16} color={T.muted} /></button>}
+                  {info.website && <button onClick={() => openSocial(info.website)} className="fx-tap"><Globe size={16} color={T.muted} /></button>}
+                </div>
+              )}
+            </div>
+          ) : (
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5 }}>{tr("infoEmpty")}</span>
+          )}
 
           {/* Кто запустил токен. Есть только у токенов из приложения —
               у внешних пулов владельца нет, блок сам себя не рисует. */}
@@ -10048,134 +10393,8 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             onOpenProfile={onOpenProfile}
           />
 
-          {curve && curve.graduated ? (
-            // Контракт с этого момента отбивает и покупку, и продажу.
-            // Показывать кнопки, которые заведомо не сработают, — врать.
-            // Но и «торгуется на бирже» до появления пары — то же враньё:
-            // пару заводят отдельным действием, и до неё торговать негде.
-            <div className="rounded-[22px] p-4 flex items-start gap-3" style={{ background: T.surface, border: `1px solid ${hexA(рынокОткрыт ? T.up : T.warning, 0.4)}` }}>
-              <ShieldCheck size={18} color={рынокОткрыт ? T.up : T.warning} style={{ flexShrink: 0, marginTop: 1 }} />
-              <div>
-                <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>
-                  {tr(рынокОткрыт ? "gradListedTitle" : "gradClosedTitle")}
-                </div>
-                <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
-                  {рынокОткрыт
-                    ? tr("gradListedBody")
-                    : trf("gradClosedBody", { target: fmtTon(Number(curve.graduationTon) / 1e9) })}
-                </p>
-              </div>
-            </div>
-          ) : curve ? (
-            <GraduationBar
-              raisedTon={Number(curve.realTon) / 1e9}
-              targetTon={Number(curve.graduationTon) / 1e9}
-            />
-          ) : null}
-
           {token.curveAddress && (
             <TrustPanel token={token} testnet={TON_TESTNET_NETWORK} holders={holdersCount} />
-          )}
-
-          {/* Обсуждение — под признаками честности и над кнопками: сперва
-              человек смотрит, что за токен, потом что о нём говорят, и
-              только после этого решает покупать. */}
-          {token.id && (
-            <TokenComments
-              tokenId={token.id}
-              currentUserId={currentUserId}
-              onNeedAuth={onNeedAuth}
-              onOpenProfile={onOpenProfile}
-              showToast={showToast}
-            />
-          )}
-
-          {/* Кривая закрыта, но пул токена уже принял ликвидность —
-              торговля продолжается там же, теми же кнопками. Прячем их
-              только когда торговать действительно негде: пул ещё не
-              наполнен. */}
-          {/* Токен Solana подписывается своим кошельком, и TON-кошелёк
-              для него ни при чём: требовать подключить его — значит
-              запирать сделку за ненужным шагом. Phantom спросит себя
-              сам, при первом подтверждении. */}
-          {curve && curve.graduated && !рынокОткрыт ? null : (connected || token.chain === "solana") ? (
-            <div className="flex gap-2">
-              <button onClick={onBuy} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15, background: PRISM, color: PRISM_TEXT, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("buy")}</button>
-              <button onClick={onSell} className="fx-tap flex-1 rounded-[20px] py-3 flex items-center justify-center gap-1.5" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15, background: "transparent", color: T.rose, border: `1px solid ${T.rose}`, opacity: unlocked ? 1 : 0.55 }}>{!unlocked && <Lock size={13} />}{tr("sell")}</button>
-            </div>
-          ) : (
-            <button onClick={onConnectWallet} className="fx-tap w-full rounded-[20px] py-3.5 flex items-center justify-center gap-2" style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 15.5, background: T.ice, color: T.bg }}>
-              <Wallet size={15} /> {tr("connectWalletCta")}
-            </button>
-          )}
-        </>
-      )}
-
-      {tab === "info" && (
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-2">
-            <StatChip icon={TrendingUp} label={tr("statPrice")} value={fmtPrice(token.price)} />
-            <StatChip icon={Wallet} label={tr("statLiquidity")} value={`$${token.liq}`} />
-            {token.chain === "solana"
-              ? <StatChip icon={RefreshCw} label={tr("statTx24h")} value={(token.tx24h || 0).toLocaleString("ru-RU")} />
-              : <StatChip icon={User} label={tr("statHolders")} value={holdersCount == null ? "…" : holdersCount.toLocaleString("ru-RU")} />}
-            <StatChip icon={Flame} label={tr("statVolume24h")} value={`$${token.vol}`} />
-          </div>
-          {infoLoading && !info ? (
-            <div className="rounded-[22px] p-4 flex flex-col gap-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-              <div className="fx-skeleton" style={{ width: "35%", height: 11, borderRadius: 4 }} />
-              <div className="fx-skeleton" style={{ width: "100%", height: 10, borderRadius: 4 }} />
-              <div className="fx-skeleton" style={{ width: "80%", height: 10, borderRadius: 4 }} />
-            </div>
-          ) : (info?.description || info?.telegram || info?.twitter || info?.website) ? (
-            <div className="rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600, marginBottom: 6 }}>{tr("aboutToken")}</div>
-              {info.description && (
-                <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14.5, lineHeight: 1.5 }}>{info.description}</p>
-              )}
-              {(info.telegram || info.twitter || info.website) && (
-                <div className="flex items-center gap-4 mt-3">
-                  {info.telegram && <button onClick={() => openSocial(info.telegram)} className="fx-tap"><Send size={15} color={T.muted} /></button>}
-                  {info.twitter && <button onClick={() => openSocial(info.twitter)} className="fx-tap"><Twitter size={15} color={T.muted} /></button>}
-                  {info.website && <button onClick={() => openSocial(info.website)} className="fx-tap"><Globe size={15} color={T.muted} /></button>}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("infoEmpty")}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {tab === "tx" && (
-        <div className="flex flex-col gap-1.5">
-          {/* Пустой список и неудавшийся запрос — разные вещи, и раньше
-              оба показывали «недоступно». Теперь видно, где сделок правда
-              нет, а где просто не достучались до API. */}
-          {!token.poolAddress && !token.curveAddress ? (
-            <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("txUnavailable")}</span>
-            </div>
-          ) : tradesLoading && !trades ? (
-            <div className="flex items-center justify-center" style={{ height: 120 }}><LeafLoader size={40} /></div>
-          ) : !trades ? (
-            <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("txLoadFailed")}</span>
-            </div>
-          ) : trades.length === 0 ? (
-            <div className="rounded-[22px] p-4 flex items-center justify-center text-center" style={{ background: T.surface, border: `1px dashed ${T.line}`, minHeight: 80 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>{tr("txEmpty")}</span>
-            </div>
-          ) : (
-            trades.map(tx => (
-              <div key={tx.id} className="fx-chip flex items-center justify-between rounded-[20px] px-3 py-2" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
-                <span style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 14, color: tx.kind === "buy" ? T.up : T.down, textTransform: "uppercase" }}>{tx.kind === "buy" ? tr("buy") : tr("sell")}</span>
-                <span style={{ fontFamily: monoFont, fontSize: 13, color: T.ice }}>${tx.volUsd < 1000 ? tx.volUsd.toFixed(2) : fmtCompact(tx.volUsd)}</span>
-                <span style={{ fontFamily: monoFont, fontSize: 12, color: T.muted }}>{tx.at ? fmtCandleStamp(Math.floor(new Date(tx.at).getTime() / 1000)) : ""}</span>
-              </div>
-            ))
           )}
         </div>
       )}
@@ -16234,7 +16453,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
               insetTop={insetTop}
             />
           )}
-          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} onOpenProfile={openUserProfile} tonPriceUsd={tonPriceUsd} />}
+          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} onOpenProfile={openUserProfile} tonPriceUsd={tonPriceUsd} walletAddress={walletAddress} />}
           {view === "create" && (
             <CreateView
               showToast={showToast}
