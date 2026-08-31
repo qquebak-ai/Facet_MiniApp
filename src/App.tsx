@@ -3421,6 +3421,9 @@ const CHART_DEFAULT_VISIBLE = 60;
 // шевельнуться, как весь график дёргается вбок. Самая длинная подпись —
 // «$0.123456» из режима цены, девять знаков; в 76 точек она помещается
 // с запасом, и туда же встаёт плашка текущей цены.
+// Запасная ширина шкалы цен, пока подписи не измерены. Дальше она
+// считается по самой длинной из них: фиксированные семьдесят шесть точек
+// оставляли слева от цифр пустую полосу, а места под свечи — меньше.
 const CHART_GUTTER = 76;
 
 function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt }) {
@@ -3459,6 +3462,9 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   const yScaleRef = useRef(null);   // { startY, startMin, startMax } — right-edge scale handle
   const inertiaRaf = useRef(null);
   const hoverIdxRef = useRef(null);
+  // Ширина шкалы цен. Живёт в ref, а не в состоянии: её читают и расчёт
+  // раскладки, и отрисовка, и полоса захвата — все в одном кадре.
+  const gutterRef = useRef(CHART_GUTTER);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -3488,6 +3494,30 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       if (w > 0) widthRef.current = w;
     }
     return widthRef.current || widthPx;
+  }
+
+  /* Ширина шкалы — под самую длинную подпись, а не «на глаз».
+     Считается по крайним значениям всего ряда, а не текущего окна: при
+     прокрутке окно ползёт, длина подписи то «$32.9M», то «$980.00K», и
+     шкала прыгала бы вслед за ней — вместе с полем свечей. Округление до
+     восьми точек даёт запас, чтобы смена одного символа её не двигала. */
+  function ширинаШкалы(min, max, range) {
+    const canvas = canvasRef.current;
+    const ctx = canvas && canvas.getContext("2d");
+    if (!ctx) return gutterRef.current;
+    const fmt = valueFmt || fmtPrice;
+    const шаг = (range || Math.abs(max - min) || 1) / 6;
+    const подписи = [max, min, (max + min) / 2].map(
+      (v) => String(Math.abs(v) >= 1 ? fmtAxisUSD(v, шаг) : fmt(v)),
+    );
+    ctx.save();
+    ctx.font = "10px " + monoFont;
+    const ширина = Math.max(...подписи.map((t) => ctx.measureText(t).width));
+    ctx.restore();
+    if (!Number.isFinite(ширина) || ширина <= 0) return gutterRef.current;
+    // Восемь точек справа от цифр и восемь слева — ровно на дыхание.
+    gutterRef.current = Math.min(96, Math.max(40, Math.ceil((ширина + 16) / 8) * 8));
+    return gutterRef.current;
   }
 
   function clampView() {
@@ -3532,7 +3562,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     // поэтому график дёргался вбок на каждом кадре прокрутки.
     // Округление до восьми пикселей добавляет запас: подпись меняется
     // на символ, а шкала стоит на месте.
-    const gutter = CHART_GUTTER;
+    const gutter = ширинаШкалы(min, max, range);
     const plotW = Math.max(1, chartWidth() - gutter);
     const slot = plotW / count;
     const bodyW = Math.max(2, Math.min(14, slot * 0.7));
@@ -4006,7 +4036,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   // Полоса захвата шкалы по ширине совпадает с самой шкалой: иначе
   // тянуть приходится мимо подписей.
   const layoutNow = computeLayout();
-  const scaleGutter = CHART_GUTTER;
+  const scaleGutter = gutterRef.current;
   return (
     <div ref={wrapRef} style={{ width: "100%", height, position: "relative", touchAction: "none" }}
       onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
