@@ -4688,7 +4688,7 @@ const HoldersBadge = React.memo(function HoldersBadge({ tokenAddress, testnet = 
 // Как часто перечитывается список своих запусков. Минута — компромисс:
 // свежий токен появляется почти сразу, а база не отвечает на запрос
 // каждые несколько секунд от каждого открытого приложения.
-const СВОИ_ОБНОВЛЕНИЕ_МС = 60000;
+const СВОИ_ОБНОВЛЕНИЕ_МС = 30000;
 // Каким считать «только что запущенный». Шесть часов: за сутки на
 // Solana успевают появиться пары с десятками тысяч сделок, и в разделе
 // новых им не место. Если за это окно пусто, оно расширяется до суток —
@@ -8586,7 +8586,7 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
     грузить();
     const iv = setInterval(() => {
       if (typeof document === "undefined" || document.visibilityState === "visible") грузить();
-    }, 60000);
+    }, 20000);
     return () => { жив = false; clearInterval(iv); };
   }, [сеть]);
   // Свои запуски делятся по сетям: в разделе Solana нечего показывать

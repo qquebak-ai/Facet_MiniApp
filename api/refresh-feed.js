@@ -72,6 +72,28 @@ async function логотипыSolana(строки) {
       const url = карта.get(t.token_address);
       if (url) t.logo_url = url;
     }
+
+    /* У части токенов узел отдаёт только ссылку на описание, без готовой
+       картинки. Дочитываем её оттуда, но понемногу и с коротким сроком
+       ожидания: хранилища описаний бывают медленными, а обход не должен
+       из-за них не успеть. */
+    const описания = активы
+      .filter((a) => a && a.id && !карта.has(a.id) && a.content && a.content.json_uri)
+      .slice(0, 6);
+    for (const a of описания) {
+      try {
+        const управление = new AbortController();
+        const срок = setTimeout(() => управление.abort(), 2000);
+        const res = await fetch(a.content.json_uri, { signal: управление.signal });
+        clearTimeout(срок);
+        if (!res.ok) continue;
+        const json = await res.json();
+        const url = json && (json.image || (json.properties && json.properties.image));
+        if (!url) continue;
+        const строка = без.find((t) => t.token_address === a.id);
+        if (строка) строка.logo_url = String(url);
+      } catch { /* описание не открылось — останемся без картинки */ }
+    }
   } catch (err) {
     console.warn("[refresh-feed] логотипы ->", err && err.message);
   }
@@ -142,6 +164,24 @@ function разобрать(json, сеть) {
   }).filter((t) => t.pool_address && t.price > 0 && !подделка(t));
 }
 
+/* Картинки жетонов TON. У источника лент их нет так же, как и у
+   Solana, зато обозреватель сети отдаёт готовое превью даже там, где в
+   метаданных пусто. Берём понемногу за проход: у него свои лимиты, а
+   список всё равно доберётся за несколько минут. */
+async function логотипыTon(строки) {
+  const без = строки.filter((t) => !t.logo_url && t.token_address).slice(0, 8);
+  for (const t of без) {
+    try {
+      const res = await fetch(`https://tonapi.io/v2/jettons/${t.token_address}`);
+      if (!res.ok) continue;
+      const json = await res.json();
+      const url = (json && json.metadata && json.metadata.image) || (json && json.preview) || null;
+      if (url) t.logo_url = String(url);
+    } catch { /* обозреватель молчит — останемся без картинки */ }
+    await пауза(120);
+  }
+}
+
 async function лента(сеть, список = "trending_pools", страниц = PAGES) {
   const собрано = [];
   const видели = new Set();
@@ -189,6 +229,7 @@ export default async function handler(req, res) {
     const свежие = await лента(сеть, "new_pools", 2);
     итог[`${сеть}_new`] = свежие.length;
     if (сеть === "solana") await логотипыSolana(свежие);
+    else await логотипыTon(свежие);
     if (свежие.length) {
       const сейчас = new Date().toISOString();
       const { error: ошибка } = await admin
@@ -204,6 +245,7 @@ export default async function handler(req, res) {
     const строки = await лента(сеть);
     итог[сеть] = строки.length;
     if (сеть === "solana") await логотипыSolana(строки);
+    else await логотипыTon(строки);
     if (!строки.length) continue;
 
     const { error } = await admin.from("feed_cache").upsert(строки, { onConflict: "id" });
