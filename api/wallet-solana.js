@@ -1,68 +1,134 @@
 /* Внутренний кошелёк приложения (Solana).
  *
- * Зачем. Каждая сделка сейчас идёт через Phantom: собрали транзакцию,
- * человек ушёл в кошелёк, подтвердил, вернулся. Пока он ходит, цена на
- * кривой уезжает, а на быстром рынке сделка успевает устареть совсем.
- * Внутренний кошелёк убирает этот шаг: монеты лежат на адресе, которым
- * управляет приложение, и покупка уходит в сеть сразу после нажатия.
+ * Зачем. Каждая сделка через Phantom — это поход в кошелёк и обратно.
+ * Пока человек ходит, цена на кривой уезжает. Внутренний кошелёк убирает
+ * этот шаг: монеты лежат на адресе, которым управляет приложение, и
+ * покупка уходит в сеть сразу после нажатия.
  *
  * Чем за это платят. Ключ от адреса хранится у нас — зашифрованным, но
- * хранится. Это кастодиальное хранение со всеми его последствиями:
- * взлом сервера означает потерю средств на внутренних кошельках, и
- * человеку об этом сказано прямо в интерфейсе. Поэтому внутренний
- * кошелёк — не замена своему, а быстрый карман: пополнил на сделку,
- * вывел остаток.
+ * хранится. Это кастодиальное хранение, и вся защита ниже построена на
+ * одном допущении: считать, что и токен входа человека, и переменные
+ * окружения площадки однажды утекут. Поэтому:
  *
- * Баланс нигде не хранится и не считается нами: он читается из сети по
- * адресу. Расходиться с действительностью ему просто негде.
+ *   • Транзакции собирает только сервер. Готовые байты из браузера не
+ *     принимаются вовсе — раньше принимались, и это была прямая дорога
+ *     к «подпиши мне перевод всего остатка».
+ *   • Всё, что уходит на подпись, проходит разбор (api/_txguard.js):
+ *     плательщик — наш кошелёк, программы из списка, сумма прямых
+ *     переводов не больше заявленной.
+ *   • Вывод — только на адрес, владение которым доказано подписью, и
+ *     смена этого адреса ждёт сутки, а человек получает письмо в бота и
+ *     может отменить.
+ *   • Ключ шифрования привязан к владельцу (AAD), так что переставить
+ *     строки в базе и подписать чужим ключом не выйдет.
+ *   • Сам ключ может жить не здесь: если задан SIGNER_URL, подпись
+ *     ставит отдельная служба, а Vercel ключа не видит вовсе.
+ *   • Частота, суточный потолок вывода и повторы ограничены журналом
+ *     операций, он же — история для разбирательств.
+ *
+ * Баланс нигде не хранится: он читается из сети по адресу.
  *
  * Переменные окружения:
- *   APP_WALLET_KEY — ключ шифрования (32 байта в base64 или hex).
- *                    Без него внутренний кошелёк выключен целиком.
- *   SOLANA_RPC, SOLANA_CURVE_PROGRAM, SOLANA_FEE_ACCOUNT — как обычно.
- *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
+ *   APP_WALLET_KEY      — ключ шифрования (32 байта, base64 или hex).
+ *                         Без него внутренний кошелёк выключен целиком.
+ *   APP_WALLET_KEY_OLD  — прежний ключ на время ротации (необязательно).
+ *   APP_WALLET_LIMIT    — потолок вывода за сутки в SOL (по умолчанию 10).
+ *   APP_WALLET_CAP      — с какого остатка предупреждать (по умолчанию 2).
+ *   SIGNER_URL, SIGNER_TOKEN — внешняя служба подписи (необязательно).
+ *   SOLANA_RPC, SOLANA_CURVE_PROGRAM, SOLANA_FEE_ACCOUNT.
+ *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, TELEGRAM_BOT_TOKEN, CRON_SECRET.
  */
 
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { проверитьТранзакцию } from "./_txguard.js";
+import { собратьЗапуск, собратьСделку } from "./solana-launch.js";
+import { котировка, сделка as свопJupiter, SOL_MINT } from "./solana.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RPC = process.env.SOLANA_RPC || "https://api.mainnet-beta.solana.com";
-const LAMPORTS = 1_000_000_000;
+const КРИВАЯ_ПРОГРАММА = (process.env.SOLANA_CURVE_PROGRAM || "").trim();
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const CRON_SECRET = process.env.CRON_SECRET;
+const SIGNER_URL = (process.env.SIGNER_URL || "").trim();
+const SIGNER_TOKEN = (process.env.SIGNER_TOKEN || "").trim();
 
-/* Ключ шифрования. Тридцать два байта: принимаем и base64, и hex —
-   удобнее вставить то, что выдал генератор под рукой. */
-function ключПлощадки() {
-  const raw = (process.env.APP_WALLET_KEY || "").trim();
-  if (!raw) return null;
+const LAMPORTS = 1_000_000_000;
+const ЗАПАС_НА_КОМИССИЮ = 0.00002;
+// Сутки на смену адреса вывода: столько есть у хозяина, чтобы увидеть
+// письмо от бота и отменить чужую привязку.
+const ЗАДЕРЖКА_ПРИВЯЗКИ = 24 * 60 * 60 * 1000;
+// Одноразовая строка для доказательства владения живёт десять минут.
+const ЖИЗНЬ_ВЫЗОВА = 10 * 60 * 1000;
+const ЛИМИТ_В_СУТКИ = Number(process.env.APP_WALLET_LIMIT || 10);
+const ПОТОЛОК_ХРАНЕНИЯ = Number(process.env.APP_WALLET_CAP || 2);
+// Больше двенадцати операций в минуту человек руками не делает — дальше
+// это либо цикл в чужом скрипте, либо перебор.
+const ОПЕРАЦИЙ_В_МИНУТУ = 12;
+
+const адресОк = (s) => typeof s === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
+
+/* --- Ключи площадки --------------------------------------------------
+   Ключей может быть два: текущий и прежний. Так ключ можно сменить, не
+   теряя доступ к уже заведённым кошелькам: строка помнит, каким её
+   закрыли, а после первой же расшифровки перешифровывается текущим. */
+function разобратьКлюч(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return null;
   try {
-    const b = /^[0-9a-f]{64}$/i.test(raw) ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
+    const b = /^[0-9a-f]{64}$/i.test(s) ? Buffer.from(s, "hex") : Buffer.from(s, "base64");
     return b.length === 32 ? b : null;
   } catch {
     return null;
   }
 }
 
-/* Шифрование ключа кошелька. AES-GCM: он и прячет, и подписывает —
-   подменённую строку расшифровать не выйдет, а не просто получить мусор.
-   Соль случайная на каждую запись, поэтому одинаковые ключи не дают
-   одинаковый шифротекст. */
-function зашифровать(данные, ключ) {
+const меткаКлюча = (ключ) => crypto.createHash("sha256").update(ключ).digest("hex").slice(0, 8);
+
+function ключи() {
+  const текущий = разобратьКлюч(process.env.APP_WALLET_KEY);
+  if (!текущий) return null;
+  const прежний = разобратьКлюч(process.env.APP_WALLET_KEY_OLD);
+  const набор = new Map([[меткаКлюча(текущий), текущий]]);
+  if (прежний) набор.set(меткаКлюча(прежний), прежний);
+  return { текущий, метка: меткаКлюча(текущий), набор };
+}
+
+/* Шифрование ключа кошелька. AES-GCM прячет и подписывает разом, а
+   владелец подмешивается как связанные данные: строка, переставленная в
+   базе на другого человека, просто не расшифруется. */
+function зашифровать(данные, ключ, владелец) {
   const соль = crypto.randomBytes(12);
   const шифр = crypto.createCipheriv("aes-256-gcm", ключ, соль);
+  if (владелец) шифр.setAAD(Buffer.from(String(владелец)));
   const тело = Buffer.concat([шифр.update(данные), шифр.final()]);
   return Buffer.concat([соль, шифр.getAuthTag(), тело]).toString("base64");
 }
 
-function расшифровать(строка, ключ) {
+function расшифроватьКлючом(строка, ключ, владелец) {
   const b = Buffer.from(String(строка), "base64");
-  const соль = b.subarray(0, 12);
-  const метка = b.subarray(12, 28);
-  const тело = b.subarray(28);
-  const шифр = crypto.createDecipheriv("aes-256-gcm", ключ, соль);
-  шифр.setAuthTag(метка);
-  return Buffer.concat([шифр.update(тело), шифр.final()]);
+  const шифр = crypto.createDecipheriv("aes-256-gcm", ключ, b.subarray(0, 12));
+  шифр.setAuthTag(b.subarray(12, 28));
+  if (владелец) шифр.setAAD(Buffer.from(String(владелец)));
+  return Buffer.concat([шифр.update(b.subarray(28)), шифр.final()]);
+}
+
+/* Расшифровка с перебором: сначала нужным ключом и с владельцем, потом —
+   старым и без владельца, ради строк, заведённых до этих правил. */
+function расшифровать(строка, набор, владелец) {
+  const порядок = строка.key_id && набор.набор.has(строка.key_id)
+    ? [набор.набор.get(строка.key_id)]
+    : [...набор.набор.values()];
+  for (const ключ of порядок) {
+    for (const аад of [владелец, null]) {
+      try {
+        const байты = расшифроватьКлючом(строка.secret_enc, ключ, аад);
+        return { байты, свежий: ключ === набор.текущий && аад === владелец };
+      } catch { /* не этот ключ — пробуем следующий */ }
+    }
+  }
+  throw new Error("ключ кошелька не читается");
 }
 
 let solana = null;
@@ -93,15 +159,13 @@ async function хозяин(req, db) {
   return data.user;
 }
 
-/* Кошелёк человека: берём существующий или заводим новый. Ключ
-   рождается здесь и здесь же шифруется — в открытом виде он не покидает
-   память обработчика. */
-async function кошелёк(db, user, ключ) {
-  const { data } = await db
-    .from("app_wallets")
-    .select("address, secret_enc")
-    .eq("user_id", user.id)
-    .maybeSingle();
+const ПОЛЯ = "user_id, address, secret_enc, key_id, payout_address, payout_pending, payout_pending_at, payout_nonce, payout_nonce_at, sweep_above";
+
+/* Кошелёк человека: берём существующий или заводим новый. Ключ рождается
+   здесь и здесь же шифруется — в открытом виде он не покидает память
+   обработчика. */
+async function кошелёк(db, user, набор) {
+  const { data } = await db.from("app_wallets").select(ПОЛЯ).eq("user_id", user.id).maybeSingle();
   if (data) return data;
 
   const { Keypair } = await библиотеки();
@@ -110,25 +174,17 @@ async function кошелёк(db, user, ключ) {
     user_id: user.id,
     chain: "solana",
     address: пара.publicKey.toBase58(),
-    secret_enc: зашифровать(Buffer.from(пара.secretKey), ключ),
+    secret_enc: зашифровать(Buffer.from(пара.secretKey), набор.текущий, user.id),
+    key_id: набор.метка,
   };
   const { error } = await db.from("app_wallets").insert(строка);
   if (error) {
     // Уже завели параллельным запросом — читаем, что получилось.
-    const { data: снова } = await db
-      .from("app_wallets")
-      .select("address, secret_enc")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const { data: снова } = await db.from("app_wallets").select(ПОЛЯ).eq("user_id", user.id).maybeSingle();
     if (снова) return снова;
     throw new Error(error.message);
   }
   return строка;
-}
-
-async function пара(строка, ключ) {
-  const { Keypair } = await библиотеки();
-  return Keypair.fromSecretKey(new Uint8Array(расшифровать(строка.secret_enc, ключ)));
 }
 
 async function rpc(method, params) {
@@ -150,106 +206,465 @@ async function баланс(адрес) {
   return Number((b && b.value) || 0) / LAMPORTS;
 }
 
-/* Отправка готовой транзакции с подписью внутреннего кошелька. */
-async function отправить(tx, ключи) {
-  const { Transaction, VersionedTransaction } = await библиотеки();
-  const байты = Buffer.from(tx, "base64");
-  let сериализованная;
+async function сообщить(db, user_id, текст) {
+  if (!BOT_TOKEN) return;
   try {
-    const версионная = VersionedTransaction.deserialize(new Uint8Array(байты));
-    версионная.sign([ключи]);
-    сериализованная = Buffer.from(версионная.serialize()).toString("base64");
-  } catch {
-    const обычная = Transaction.from(байты);
-    обычная.partialSign(ключи);
-    сериализованная = обычная.serialize({ requireAllSignatures: false }).toString("base64");
+    const { data } = await db.from("profiles").select("telegram_id").eq("id", user_id).maybeSingle();
+    if (!data || !data.telegram_id) return;
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: data.telegram_id, text: текст, parse_mode: "HTML", disable_web_page_preview: true }),
+    });
+  } catch { /* бот молчит — это не повод отменять саму операцию */ }
+}
+
+/* --- Журнал операций -------------------------------------------------
+   Одна таблица закрывает три задачи разом: не дать повторить сделку по
+   двойному нажатию, не дать долбить подпись в цикле и оставить историю,
+   по которой потом видно, кто и куда отправил монеты. */
+async function начать(db, user, { дело, сумма = 0, адрес = null, ключЗапроса = null, ip = null }) {
+  const минуту = new Date(Date.now() - 60_000).toISOString();
+  const { count } = await db
+    .from("wallet_ops")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .gt("created_at", минуту);
+  if ((count || 0) >= ОПЕРАЦИЙ_В_МИНУТУ) throw Object.assign(new Error("слишком часто"), { код: 429 });
+
+  const { data, error } = await db
+    .from("wallet_ops")
+    .insert({ user_id: user.id, kind: дело, amount: сумма, address: адрес, request_key: ключЗапроса, ip })
+    .select("id")
+    .single();
+
+  if (error) {
+    // Тот же ключ запроса уже есть — значит это повтор нажатия, а не
+    // новая операция. Отдаём её исход, а второй раз ничего не делаем.
+    if (ключЗапроса) {
+      const { data: прошлая } = await db
+        .from("wallet_ops")
+        .select("id, signature")
+        .eq("user_id", user.id)
+        .eq("request_key", ключЗапроса)
+        .maybeSingle();
+      if (прошлая) return { повтор: true, id: прошлая.id, signature: прошлая.signature };
+    }
+    throw new Error(error.message);
   }
+  return { повтор: false, id: data.id };
+}
+
+async function завершить(db, id, signature) {
+  if (!id) return;
+  await db.from("wallet_ops").update({ signature: signature || null }).eq("id", id);
+}
+
+async function выведеноЗаСутки(db, user) {
+  const сутки = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await db
+    .from("wallet_ops")
+    .select("amount")
+    .eq("user_id", user.id)
+    .eq("kind", "withdraw")
+    .gt("created_at", сутки);
+  return (data || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+}
+
+/* --- Подпись ---------------------------------------------------------
+   Либо здесь, либо в отдельной службе. Служба нужна затем, что ключ
+   площадки тогда не лежит рядом с базой: утечка переменных Vercel сама
+   по себе перестаёт открывать чужие кошельки. */
+async function подписатьТут(строка, base64, набор, user_id, db) {
+  const { Keypair, Transaction, VersionedTransaction } = await библиотеки();
+  const { байты, свежий } = расшифровать(строка, набор, user_id);
+  const пара = Keypair.fromSecretKey(new Uint8Array(байты));
+  if (пара.publicKey.toBase58() !== строка.address) throw new Error("ключ не от этого адреса");
+
+  // Расшифровали прежним ключом — заодно перешифруем текущим: ротация
+  // так доводится до конца сама, без отдельного прохода по базе.
+  if (!свежий && db) {
+    await db.from("app_wallets")
+      .update({ secret_enc: зашифровать(Buffer.from(байты), набор.текущий, user_id), key_id: набор.метка })
+      .eq("user_id", user_id);
+  }
+
+  const сырые = Buffer.from(base64, "base64");
+  try {
+    const v = VersionedTransaction.deserialize(new Uint8Array(сырые));
+    v.sign([пара]);
+    return Buffer.from(v.serialize()).toString("base64");
+  } catch {
+    const t = Transaction.from(сырые);
+    t.partialSign(пара);
+    return t.serialize({ requireAllSignatures: false }).toString("base64");
+  }
+}
+
+async function подписатьСлужбой(строка, base64, максПеревода) {
+  const res = await fetch(`${SIGNER_URL.replace(/\/$/, "")}/sign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${SIGNER_TOKEN}` },
+    body: JSON.stringify({
+      secret: строка.secret_enc,
+      key_id: строка.key_id || null,
+      owner: строка.address,
+      user_id: строка.user_id,
+      transaction: base64,
+      maxTransfer: максПеревода,
+    }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json || !json.signed) {
+    throw new Error((json && (json.detail || json.error)) || `служба подписи: ${res.status}`);
+  }
+  return json.signed;
+}
+
+/* Общий путь для всех действий: проверить собранное, подписать,
+   отправить. Ни одна ветка ниже не подписывает в обход этой. */
+async function подписатьИОтправить({ db, user, строка, набор, base64, дело, максПеревода }) {
+  await проверитьТранзакцию(base64, {
+    владелец: строка.address,
+    дело,
+    максПеревода: Math.round(максПеревода),
+    кривая: КРИВАЯ_ПРОГРАММА,
+  });
+  const подписанная = SIGNER_URL
+    ? await подписатьСлужбой(строка, base64, Math.round(максПеревода))
+    : await подписатьТут(строка, base64, набор, user.id, db);
   return await rpc("sendTransaction", [
-    сериализованная,
+    подписанная,
     { encoding: "base64", skipPreflight: false, preflightCommitment: "processed", maxRetries: 3 },
   ]);
 }
 
-/* Вывод: перевод всей суммы или её части на указанный адрес. Комиссия
-   сети остаётся на кошельке, поэтому «всё» — это баланс минус небольшой
-   запас: иначе перевод не пройдёт вовсе. */
-const ЗАПАС_НА_КОМИССИЮ = 0.00002;
+/* --- Привязка адреса вывода -----------------------------------------
+   Доказательство простое: кошелёк подписывает нашу строку своим ключом,
+   мы проверяем подпись открытым ключом, который и есть адрес. Никаких
+   переводов «на копейку» и ожиданий подтверждения. */
+function проверитьПодписьАдреса(сообщение, подписьBase58, адрес, bs58) {
+  const ключ = Buffer.from(bs58.decode(адрес));
+  const подпись = Buffer.from(bs58.decode(подписьBase58));
+  if (ключ.length !== 32 || подпись.length !== 64) return false;
+  // Ed25519 в узле принимает ключ только в обёртке SPKI, а её начало
+  // для этой кривой постоянно — дописываем и проверяем.
+  const spki = Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), ключ]);
+  const открытый = crypto.createPublicKey({ key: spki, format: "der", type: "spki" });
+  return crypto.verify(null, Buffer.from(сообщение, "utf8"), открытый, подпись);
+}
 
-async function вывести({ ключи, куда, сумма }) {
+const текстВызова = (адрес, вызов) =>
+  `Mintly: разрешаю вывод на этот адрес\n${адрес}\n${вызов}`;
+
+/* Созревшая привязка становится действующей сама — отдельного
+   подтверждения не просим: сутки прошли, письмо человек видел. */
+function созреть(строка) {
+  if (!строка.payout_pending || !строка.payout_pending_at) return null;
+  if (Date.now() - new Date(строка.payout_pending_at).getTime() < ЗАДЕРЖКА_ПРИВЯЗКИ) return null;
+  return строка.payout_pending;
+}
+
+async function освежитьПривязку(db, строка) {
+  const зрелый = созреть(строка);
+  if (!зрелый) return строка;
+  await db.from("app_wallets")
+    .update({ payout_address: зрелый, payout_pending: null, payout_pending_at: null })
+    .eq("user_id", строка.user_id);
+  return { ...строка, payout_address: зрелый, payout_pending: null, payout_pending_at: null };
+}
+
+/* --- Вывод ----------------------------------------------------------- */
+async function собратьВывод({ откуда, куда, лямпорты }) {
   const { Connection, PublicKey, SystemProgram, Transaction } = await библиотеки();
   const connection = new Connection(RPC, "confirmed");
-  const получатель = new PublicKey(куда);
-  const лямпорты = Math.floor(сумма * LAMPORTS);
-  if (лямпорты <= 0) throw new Error("сумма не задана");
-
   const tx = new Transaction().add(SystemProgram.transfer({
-    fromPubkey: ключи.publicKey,
-    toPubkey: получатель,
+    fromPubkey: new PublicKey(откуда),
+    toPubkey: new PublicKey(куда),
     lamports: лямпорты,
   }));
-  tx.feePayer = ключи.publicKey;
+  tx.feePayer = new PublicKey(откуда);
   const { blockhash } = await connection.getLatestBlockhash("finalized");
   tx.recentBlockhash = blockhash;
-  tx.sign(ключи);
-  return await rpc("sendTransaction", [
-    tx.serialize().toString("base64"),
-    { encoding: "base64", skipPreflight: false, preflightCommitment: "processed", maxRetries: 3 },
-  ]);
+  return tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString("base64");
+}
+
+/* Автовывод излишка. Горячий кошелёк должен быть маленьким: всё, что
+   выше порога, само уходит на свой адрес. Ходит по расписанию, а не по
+   запросу человека, — потому и живёт отдельным действием под ключом. */
+async function свести(db, набор) {
+  const { data } = await db
+    .from("app_wallets")
+    .select(ПОЛЯ)
+    .not("sweep_above", "is", null)
+    .not("payout_address", "is", null)
+    .limit(50);
+  let сделано = 0;
+  for (const строка of data || []) {
+    try {
+      const есть = await баланс(строка.address);
+      const порог = Number(строка.sweep_above) || 0;
+      const излишек = есть - порог;
+      if (!(порог > 0) || излишек <= 0.001) continue;
+      const лямпорты = Math.floor((излишек - ЗАПАС_НА_КОМИССИЮ) * LAMPORTS);
+      if (лямпорты <= 0) continue;
+      const base64 = await собратьВывод({ откуда: строка.address, куда: строка.payout_address, лямпорты });
+      const подпись = await подписатьИОтправить({
+        db, user: { id: строка.user_id }, строка, набор,
+        base64, дело: "withdraw", максПеревода: лямпорты,
+      });
+      await db.from("wallet_ops").insert({
+        user_id: строка.user_id, kind: "sweep", amount: лямпорты / LAMPORTS,
+        address: строка.payout_address, signature: подпись,
+      });
+      await сообщить(db, строка.user_id,
+        `Автовывод: ${(лямпорты / LAMPORTS).toFixed(4)} SOL ушли на ${строка.payout_address.slice(0, 6)}…`);
+      сделано += 1;
+    } catch (e) {
+      console.warn("[wallet-sweep]", строка.address, e && e.message);
+    }
+  }
+  return сделано;
 }
 
 export default async function handler(req, res) {
   const db = admin();
-  const ключ = ключПлощадки();
+  const набор = ключи();
   const действие = String((req.query && req.query.action) || "");
 
-  // Отдельным вопросом — включён ли внутренний кошелёк вообще: без
-  // ключа площадки заводить его нечем, и приложение не должна его
-  // показывать.
+  // Отдельным вопросом — включён ли внутренний кошелёк вообще: без ключа
+  // площадки заводить его нечем, и приложение не должно его показывать.
   if (действие === "enabled") {
-    return res.status(200).json({ enabled: !!(db && ключ) });
+    return res.status(200).json({ enabled: !!(db && набор) });
   }
-  if (!db || !ключ) return res.status(503).json({ error: "not_configured" });
+  if (!db || !набор) return res.status(503).json({ error: "not_configured" });
+
+  // Расписание сводит излишки на свои адреса и приходит без токена
+  // человека — только с общим ключом расписаний.
+  if (действие === "sweep") {
+    const ключ = (req.headers.authorization || "").replace("Bearer ", "");
+    if (!CRON_SECRET || ключ !== CRON_SECRET) return res.status(401).json({ error: "unauthorized" });
+    const сделано = await свести(db, набор).catch(() => 0);
+    return res.status(200).json({ swept: сделано });
+  }
 
   try {
     const user = await хозяин(req, db);
     if (!user) return res.status(401).json({ error: "unauthorized" });
-    const строка = await кошелёк(db, user, ключ);
+    let строка = await освежитьПривязку(db, await кошелёк(db, user, набор));
+    const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || null;
 
     if (действие === "state") {
       res.setHeader("Cache-Control", "no-store");
-      return res.status(200).json({ address: строка.address, sol: await баланс(строка.address) });
+      const [есть, выведено] = await Promise.all([баланс(строка.address), выведеноЗаСутки(db, user)]);
+      return res.status(200).json({
+        address: строка.address,
+        sol: есть,
+        payout: строка.payout_address || null,
+        pending: строка.payout_pending || null,
+        pendingAt: строка.payout_pending_at || null,
+        sweepAbove: строка.sweep_above == null ? null : Number(строка.sweep_above),
+        cap: ПОТОЛОК_ХРАНЕНИЯ,
+        dailyLeft: Math.max(0, ЛИМИТ_В_СУТКИ - выведено),
+        delayHours: ЗАДЕРЖКА_ПРИВЯЗКИ / 3600000,
+      });
     }
 
     if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
     const тело = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const ключЗапроса = String(тело.requestKey || "").slice(0, 64) || null;
 
-    // Подпись и отправка транзакции, собранной другими обработчиками
-    // (кривая площадки, Jupiter). Здесь мы только ставим подпись
-    // внутреннего кошелька — собирать транзакции этот обработчик не
-    // умеет и не должен.
-    if (действие === "sign") {
-      if (!тело.transaction) return res.status(400).json({ error: "bad_request" });
-      const ключи = await пара(строка, ключ);
-      const подпись = await отправить(тело.transaction, ключи);
+    /* Шаг первый привязки: одноразовая строка, которую подпишет кошелёк.
+       Она же — защита от того, чтобы подсунуть на подпись что-то другое
+       и выдать это за разрешение на вывод. */
+    if (действие === "payout-nonce") {
+      const адрес = String(тело.address || "").trim();
+      if (!адресОк(адрес)) return res.status(400).json({ error: "bad_address" });
+      const вызов = crypto.randomBytes(12).toString("hex");
+      await db.from("app_wallets")
+        .update({ payout_nonce: вызов, payout_nonce_at: new Date().toISOString() })
+        .eq("user_id", user.id);
+      return res.status(200).json({ message: текстВызова(адрес, вызов) });
+    }
+
+    if (действие === "payout-set") {
+      const адрес = String(тело.address || "").trim();
+      const подпись = String(тело.signature || "").trim();
+      if (!адресОк(адрес) || !подпись) return res.status(400).json({ error: "bad_request" });
+      if (!строка.payout_nonce || !строка.payout_nonce_at) return res.status(400).json({ error: "no_challenge" });
+      if (Date.now() - new Date(строка.payout_nonce_at).getTime() > ЖИЗНЬ_ВЫЗОВА) {
+        return res.status(400).json({ error: "challenge_expired" });
+      }
+
+      const bs58 = (await import("bs58")).default;
+      const годится = проверитьПодписьАдреса(текстВызова(адрес, строка.payout_nonce), подпись, адрес, bs58);
+      if (!годится) return res.status(400).json({ error: "bad_signature" });
+
+      // Первую привязку на пустом кошельке держать сутки незачем —
+      // красть нечего. Во всех остальных случаях ждём.
+      const есть = await баланс(строка.address);
+      const сразу = !строка.payout_address && есть < 0.001;
+      const поле = сразу
+        ? { payout_address: адрес, payout_pending: null, payout_pending_at: null, payout_nonce: null }
+        : { payout_pending: адрес, payout_pending_at: new Date().toISOString(), payout_nonce: null };
+      await db.from("app_wallets").update(поле).eq("user_id", user.id);
+      await db.from("wallet_ops").insert({ user_id: user.id, kind: "payout_bind", amount: 0, address: адрес, ip });
+
+      if (!сразу) {
+        await сообщить(db, user.id,
+          `🔐 Запрошена смена адреса вывода на <code>${адрес}</code>.\n`
+          + `Он заработает через сутки. Если это не вы — откройте кошелёк в приложении и отмените.`);
+      }
+      return res.status(200).json({ payout: сразу ? адрес : null, pending: сразу ? null : адрес });
+    }
+
+    if (действие === "payout-cancel") {
+      await db.from("app_wallets")
+        .update({ payout_pending: null, payout_pending_at: null })
+        .eq("user_id", user.id);
+      return res.status(200).json({ ok: true });
+    }
+
+    /* Порог автовывода. Ставится только когда есть куда выводить —
+       иначе это настройка без последствий. */
+    if (действие === "sweep-set") {
+      const порог = тело.above == null ? null : Number(тело.above);
+      if (порог != null && !(порог > 0)) return res.status(400).json({ error: "bad_amount" });
+      if (порог != null && !строка.payout_address) return res.status(400).json({ error: "no_payout" });
+      await db.from("app_wallets").update({ sweep_above: порог }).eq("user_id", user.id);
+      return res.status(200).json({ sweepAbove: порог });
+    }
+
+    /* --- Действия, которые тратят монеты ---------------------------
+       Все они устроены одинаково: сервер сам собирает транзакцию под
+       адрес внутреннего кошелька, разбор проверяет её на потолок и
+       программы, подпись ставится один раз. Байты из браузера сюда не
+       приходят вовсе. */
+
+    if (действие === "launch") {
+      const имя = String(тело.name || "").trim();
+      const тикер = String(тело.ticker || "").trim().toUpperCase();
+      const взнос = Math.max(0, Number(тело.buySol) || 0);
+      if (!имя || !тикер) return res.status(400).json({ error: "bad_request" });
+
+      const оп = await начать(db, user, { дело: "launch", сумма: взнос, ключЗапроса, ip });
+      if (оп.повтор) return res.status(200).json({ signature: оп.signature, repeat: true });
+
+      const хост = req.headers["x-forwarded-host"] || req.headers.host || "";
+      const собрано = await собратьЗапуск({
+        wallet: строка.address,
+        name: имя,
+        symbol: тикер,
+        base: хост ? `https://${хост}` : "",
+        buySol: взнос,
+      });
+      // Взнос плюс аренда счетов токена и метаданных: дороже запуск не
+      // бывает, а значит и уйти больше не может.
+      const подпись = await подписатьИОтправить({
+        db, user, строка, набор,
+        base64: собрано.transaction, дело: "launch",
+        максПеревода: (взнос + 0.03) * LAMPORTS,
+      });
+      await завершить(db, оп.id, подпись);
       res.setHeader("Cache-Control", "no-store");
-      return res.status(200).json({ signature: подпись });
+      return res.status(200).json({
+        ...собрано, transaction: undefined, signature: подпись, creatorWallet: строка.address,
+      });
+    }
+
+    if (действие === "trade") {
+      const продажа = !!тело.sell;
+      const сумма = Math.max(0, Number(тело.amount) || 0);
+      if (!адресОк(String(тело.mint || "")) || !(сумма > 0)) return res.status(400).json({ error: "bad_request" });
+
+      const оп = await начать(db, user, { дело: "trade", сумма: продажа ? 0 : сумма, ключЗапроса, ip });
+      if (оп.повтор) return res.status(200).json({ signature: оп.signature, repeat: true });
+
+      const собрано = await собратьСделку({
+        wallet: строка.address,
+        mint: String(тело.mint),
+        продажа,
+        amount: сумма,
+        minOut: тело.minOut,
+      });
+      const подпись = await подписатьИОтправить({
+        db, user, строка, набор,
+        base64: собрано.transaction, дело: "trade",
+        // При продаже с кошелька уходит только аренда счёта и комиссия.
+        максПеревода: (продажа ? 0.01 : сумма + 0.01) * LAMPORTS,
+      });
+      await завершить(db, оп.id, подпись);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ signature: подпись, curve: собрано.curve });
+    }
+
+    if (действие === "swap") {
+      const вход = String(тело.input || "").trim();
+      const выход = String(тело.output || "").trim();
+      const сумма = String(тело.amount || "").trim();
+      if (!адресОк(вход) || !адресОк(выход) || !/^\d+$/.test(сумма)) {
+        return res.status(400).json({ error: "bad_request" });
+      }
+      const покупка = вход === SOL_MINT;
+      const вSol = покупка ? Number(сумма) / LAMPORTS : 0;
+
+      const оп = await начать(db, user, { дело: "swap", сумма: вSol, ключЗапроса, ip });
+      if (оп.повтор) return res.status(200).json({ signature: оп.signature, repeat: true });
+
+      const кот = await котировка({
+        input: вход, output: выход, amount: сумма,
+        slippageBps: Number(тело.slippage) || 150,
+      });
+      if (!кот) throw new Error("маршрут не найден");
+      const собранная = await свопJupiter({ quote: кот, wallet: строка.address });
+      if (!собранная) throw new Error("сделка не собралась");
+
+      const подпись = await подписатьИОтправить({
+        db, user, строка, набор,
+        base64: собранная, дело: "swap",
+        // При покупке уходит сама сумма (она же обёртывается в wSOL) и
+        // аренда счетов; при продаже — только аренда с комиссией.
+        максПеревода: (вSol + 0.02) * LAMPORTS,
+      });
+      await завершить(db, оп.id, подпись);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ signature: подпись, out: кот.outAmount });
     }
 
     if (действие === "withdraw") {
-      const куда = String(тело.to || "").trim();
-      if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(куда)) return res.status(400).json({ error: "bad_address" });
+      if (!строка.payout_address) return res.status(400).json({ error: "no_payout" });
       const есть = await баланс(строка.address);
       const сумма = тело.all ? Math.max(0, есть - ЗАПАС_НА_КОМИССИЮ) : Number(тело.amount) || 0;
-      if (сумма <= 0 || сумма > есть) return res.status(400).json({ error: "bad_amount" });
-      const ключи = await пара(строка, ключ);
-      const подпись = await вывести({ ключи, куда, сумма });
+      if (!(сумма > 0) || сумма > есть) return res.status(400).json({ error: "bad_amount" });
+
+      const выведено = await выведеноЗаСутки(db, user);
+      if (выведено + сумма > ЛИМИТ_В_СУТКИ) {
+        return res.status(400).json({ error: "daily_limit", left: Math.max(0, ЛИМИТ_В_СУТКИ - выведено) });
+      }
+
+      const оп = await начать(db, user, {
+        дело: "withdraw", сумма, адрес: строка.payout_address, ключЗапроса, ip,
+      });
+      if (оп.повтор) return res.status(200).json({ signature: оп.signature, amount: сумма, repeat: true });
+
+      const лямпорты = Math.floor(сумма * LAMPORTS);
+      const base64 = await собратьВывод({
+        откуда: строка.address, куда: строка.payout_address, лямпорты,
+      });
+      const подпись = await подписатьИОтправить({
+        db, user, строка, набор, base64, дело: "withdraw", максПеревода: лямпорты,
+      });
+      await завершить(db, оп.id, подпись);
+      await сообщить(db, user.id,
+        `💸 Вывод ${сумма.toFixed(4)} SOL на <code>${строка.payout_address}</code>.`);
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ signature: подпись, amount: сумма });
     }
 
     return res.status(400).json({ error: "unknown_action" });
   } catch (err) {
+    const код = (err && err.код) || 502;
     console.warn("[wallet-solana]", err && err.message);
-    return res.status(502).json({ error: "failed", detail: String((err && err.message) || err).slice(0, 200) });
+    return res.status(код).json({ error: "failed", detail: String((err && err.message) || err).slice(0, 200) });
   }
 }

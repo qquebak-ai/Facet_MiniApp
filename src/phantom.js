@@ -138,6 +138,41 @@ export async function подключить() {
   return сессия;
 }
 
+/* Подпись обычного текста. Нужна там, где надо доказать владение
+   адресом, ничего не переводя: кошелёк подписывает нашу строку своим
+   ключом, а сервер проверяет подпись открытым ключом — он же и есть
+   адрес. Перевод «на копейку» для той же цели стоил бы денег и времени,
+   а доказывал бы ровно то же самое. */
+export async function подписатьСообщение(текст, сессия = сохранённаяСессия()) {
+  if (!сессия) throw new Error("кошелёк не подключён");
+  const секрет = bs58.decode(сессия.secret);
+
+  const { nonce, payload } = зашифровать(секрет, {
+    session: сессия.session,
+    message: bs58.encode(new TextEncoder().encode(текст)),
+    display: "utf8",
+  });
+
+  const id = случайныйКлюч();
+  const url = `${PHANTOM}/signMessage?` + new URLSearchParams({
+    dapp_encryption_public_key: сессия.pub,
+    nonce,
+    payload,
+    redirect_link: `${APP_URL}/phantom/${id}`,
+  });
+
+  открыть(url);
+  const ответ = await дождаться(id);
+  if (!ответ) throw new Error("кошелёк не ответил");
+  if (ответ.errorCode || ответ.errorMessage) throw new Error(ответ.errorMessage || "кошелёк отказал");
+  if (!ответ.data || !ответ.nonce) throw new Error("кошелёк ответил не тем");
+
+  const данные = расшифровать(секрет, ответ.nonce, ответ.data);
+  if (!данные || !данные.signature) throw new Error("кошелёк не вернул подпись");
+  // Подпись приходит в base58 — сервер её так и ждёт.
+  return данные.signature;
+}
+
 /* Подпись готовой транзакции. Транзакцию собирает сервер
    (api/solana.js) и отдаёт в base64 — Phantom ждёт base58, поэтому
    перекодируем по дороге, а обратно получаем её же, но подписанную.

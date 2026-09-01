@@ -196,7 +196,7 @@ function вBase64(tx) {
    отдаёт право выпуска кривой и заводит саму кривую. Порядок важен:
    метаданные требуют подписи того, у кого право выпуска, поэтому оно
    уходит кривой уже после их записи. */
-async function собратьЗапуск({ wallet, name, symbol, base, buySol }) {
+export async function собратьЗапуск({ wallet, name, symbol, base, buySol }) {
   await библиотеки();
   const programId = программа();
   if (!programId) throw new Error("программа кривой не развёрнута");
@@ -281,7 +281,7 @@ async function собратьЗапуск({ wallet, name, symbol, base, buySol }
 }
 
 /* Покупка и продажа на уже заведённой кривой. */
-async function собратьСделку({ wallet, mint, продажа, amount, minOut }) {
+export async function собратьСделку({ wallet, mint, продажа, amount, minOut }) {
   await библиотеки();
   const programId = программа();
   if (!programId) throw new Error("программа кривой не развёрнута");
@@ -321,7 +321,7 @@ async function собратьСделку({ wallet, mint, продажа, amount
 
 /* Состояние кривой: по нему считаются цена, собранная сумма и полоса до
    листинга. Раскладка та же, что в программе. */
-async function состояние(mint) {
+export async function состояние(mint) {
   if (!запускВключён() || !адресОк(mint)) return null;
   await библиотеки();
   const programId = программа();

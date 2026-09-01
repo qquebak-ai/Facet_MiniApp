@@ -156,6 +156,21 @@ const STR = {
     appWalletAll: "Всё",
     appWalletSent: "Отправлено",
     appWalletFailed: "Не получилось",
+    appWalletPayout: "Адрес вывода",
+    appWalletBind: "Привязать свой адрес",
+    appWalletBindHint: "Вывод возможен только на свой адрес. Подтверди владение им подписью в Phantom — тогда увести монеты в чужой карман не сможет никто, даже с доступом к аккаунту.",
+    appWalletBinding: "Открываю кошелёк…",
+    appWalletBound: "Адрес привязан",
+    appWalletPending: "Адрес заработает через сутки",
+    appWalletPendingBody: "Смена адреса вывода на {address} вступит в силу через сутки. Это не вы?",
+    appWalletCancel: "Отменить смену адреса",
+    appWalletCancelled: "Смена адреса отменена",
+    appWalletRebind: "Сменить адрес вывода",
+    appWalletDailyLeft: "Осталось вывести за сутки",
+    appWalletLimitHit: "Суточный лимит вывода исчерпан",
+    appWalletOver: "Здесь больше {cap} — излишек лучше держать на своём кошельке.",
+    appWalletSweep: "Автовывод излишка",
+    appWalletSweepOff: "выключен",
     walletEmptyTitle: "Кошелёк не подключён",
     walletEmptyBody: "Подключи TON-кошелёк, чтобы покупать, продавать и запускать токены.",
     shopTitle: "Магазин",
@@ -577,6 +592,21 @@ const STR = {
     appWalletAll: "All",
     appWalletSent: "Sent",
     appWalletFailed: "Didn't work",
+    appWalletPayout: "Payout address",
+    appWalletBind: "Bind your address",
+    appWalletBindHint: "Withdrawals go to your own address only. Prove you own it by signing in Phantom — after that nobody can move the coins elsewhere, even with access to your account.",
+    appWalletBinding: "Opening the wallet…",
+    appWalletBound: "Address bound",
+    appWalletPending: "The address takes effect in 24 hours",
+    appWalletPendingBody: "Changing the payout address to {address} takes effect in 24 hours. Wasn't you?",
+    appWalletCancel: "Cancel the change",
+    appWalletCancelled: "Address change cancelled",
+    appWalletRebind: "Change payout address",
+    appWalletDailyLeft: "Left to withdraw today",
+    appWalletLimitHit: "Daily withdrawal limit reached",
+    appWalletOver: "More than {cap} sitting here — keep the excess in your own wallet.",
+    appWalletSweep: "Auto-withdraw excess",
+    appWalletSweepOff: "off",
     walletEmptyTitle: "No wallet connected",
     walletEmptyBody: "Connect a TON wallet to buy, sell and launch tokens.",
     shopTitle: "Shop",
@@ -9683,8 +9713,13 @@ function SolanaWalletCard({ showToast }) {
    Обычная сделка идёт через Phantom: ушёл в кошелёк, подтвердил,
    вернулся. Пока ходишь, цена на кривой уезжает. Здесь ключ хранится у
    площадки, поэтому покупка уходит в сеть сразу после нажатия — и за
-   это же приходится доверять нам хранение. Об этом сказано прямо в
-   карточке, а не мелким шрифтом: карман для сделок, а не второй кошелёк.
+   это же приходится доверять нам хранение.
+
+   Отсюда же настраивается всё, что это доверие ограничивает: адрес, на
+   который единственно возможен вывод, и порог, выше которого излишек
+   уходит на свой кошелёк сам. Оба ограничения нужны потому, что ключ у
+   нас: даже если однажды украдут вход в аккаунт, увести монеты можно
+   будет только на адрес хозяина, и только через сутки ожидания.
 
    Ничего не показываем, пока сервер не ответил адресом: без входа в
    аккаунт и без ключа площадки внутреннего кошелька просто нет. */
@@ -9692,7 +9727,6 @@ function AppWalletCard({ showToast }) {
   const [кош, setКош] = useState(null);
   const [скопировано, setСкопировано] = useState(false);
   const [панель, setПанель] = useState(null);   // null | "top" | "out"
-  const [куда, setКуда] = useState("");
   const [сумма, setСумма] = useState("");
   const [идёт, setИдёт] = useState(false);
 
@@ -9717,6 +9751,8 @@ function AppWalletCard({ showToast }) {
 
   const короткий = `${кош.address.slice(0, 4)}…${кош.address.slice(-4)}`;
   const остаток = Number(кош.sol) || 0;
+  const потолок = Number(кош.cap) || 0;
+  const многовато = потолок > 0 && остаток > потолок;
 
   function копировать() {
     navigator.clipboard?.writeText(кош.address);
@@ -9726,32 +9762,62 @@ function AppWalletCard({ showToast }) {
     showToast(t("appWalletAddressCopied"));
   }
 
-  async function вывести(всё) {
+  // Ошибки сервера приходят кодами: суточный потолок и отсутствие
+  // привязанного адреса человеку надо объяснить, остальное — как есть.
+  function сорвалось(e) {
+    const текст = String((e && e.message) || e);
+    showToast(текст.includes("daily_limit") ? t("appWalletLimitHit")
+      : текст.includes("no_payout") ? t("appWalletBindHint")
+      : `${t("appWalletFailed")}: ${текст.slice(0, 60)}`);
+  }
+
+  async function действие(дело) {
     if (идёт) return;
     setИдёт(true);
-    try {
-      const { вывестиСВнутреннего } = await import("./appWallet");
-      await вывестиСВнутреннего({ to: куда.trim(), amount: Number(сумма) || 0, all: !!всё });
-      showToast(t("appWalletSent"));
-      setПанель(null); setКуда(""); setСумма("");
-      обновить();
-    } catch (e) {
-      showToast(`${t("appWalletFailed")}: ${String((e && e.message) || e).slice(0, 60)}`);
-    } finally {
-      setИдёт(false);
-    }
+    try { await дело(); } catch (e) { сорвалось(e); } finally { setИдёт(false); }
   }
+
+  const вывести = (всё) => действие(async () => {
+    const { вывестиСВнутреннего } = await import("./appWallet");
+    await вывестиСВнутреннего({ amount: Number(сумма) || 0, all: !!всё });
+    showToast(t("appWalletSent"));
+    setПанель(null); setСумма("");
+    обновить();
+  });
+
+  const привязать = () => действие(async () => {
+    const { привязатьАдресВывода } = await import("./appWallet");
+    showToast(t("appWalletBinding"));
+    const итог = await привязатьАдресВывода();
+    showToast(итог && итог.payout ? t("appWalletBound") : t("appWalletPending"));
+    обновить();
+  });
+
+  const отменить = () => действие(async () => {
+    const { отменитьПривязку } = await import("./appWallet");
+    await отменитьПривязку();
+    showToast(t("appWalletCancelled"));
+    обновить();
+  });
+
+  const переключитьАвтовывод = () => действие(async () => {
+    const { автовывод } = await import("./appWallet");
+    await автовывод(кош.sweepAbove == null ? (потолок || 2) : null);
+    обновить();
+  });
 
   const кнопка = {
     padding: "9px 14px", borderRadius: 12, background: hexA(T.electric, 0.14),
     border: `1px solid ${hexA(T.electric, 0.4)}`, fontFamily: bodyFont,
     color: T.electric, fontSize: 13.5, fontWeight: 700,
   };
+  const тихая = { ...кнопка, background: T.bg, border: `1px solid ${T.line}`, color: T.ice };
   const поле = {
     width: "100%", padding: "10px 12px", borderRadius: 12, background: T.bg,
     border: `1px solid ${T.line}`, color: T.ice, fontFamily: monoFont, fontSize: 13,
     outline: "none",
   };
+  const подпись = { fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.45 };
 
   return (
     <div className="w-full rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
@@ -9775,15 +9841,23 @@ function AppWalletCard({ showToast }) {
         </button>
       </div>
 
-      <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 10, lineHeight: 1.45 }}>{t("appWalletHint")}</p>
+      <p style={{ ...подпись, marginTop: 10 }}>{t("appWalletHint")}</p>
+
+      {/* Горячий кошелёк должен быть маленьким. Молча смотреть, как на
+          нём копится сумма, которую не жалко потерять только на словах,
+          нечестно — говорим прямо, как только это случилось. */}
+      {многовато && (
+        <p style={{ ...подпись, color: T.ice, marginTop: 8 }}>
+          {tf("appWalletOver", { cap: `${потолок} SOL` })}
+        </p>
+      )}
 
       <div className="flex" style={{ gap: 8, marginTop: 12 }}>
         <button className="fx-tap flex-1 flex items-center justify-center gap-1.5" style={кнопка}
           onClick={() => setПанель(панель === "top" ? null : "top")}>
           <ArrowDownRight size={14} /> {t("appWalletTopUp")}
         </button>
-        <button className="fx-tap flex-1 flex items-center justify-center gap-1.5"
-          style={{ ...кнопка, background: T.bg, border: `1px solid ${T.line}`, color: T.ice }}
+        <button className="fx-tap flex-1 flex items-center justify-center gap-1.5" style={тихая}
           onClick={() => setПанель(панель === "out" ? null : "out")}>
           <ArrowUpRight size={14} /> {t("appWalletWithdraw")}
         </button>
@@ -9791,7 +9865,7 @@ function AppWalletCard({ showToast }) {
 
       {панель === "top" && (
         <div style={{ marginTop: 12 }}>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, lineHeight: 1.45 }}>{t("appWalletTopUpBody")}</p>
+          <p style={подпись}>{t("appWalletTopUpBody")}</p>
           {/* Адрес целиком, а не сокращённый: его переносят руками, и
               многоточие посередине тут ломает всё. */}
           <button onClick={копировать} className="fx-tap w-full text-left"
@@ -9803,17 +9877,72 @@ function AppWalletCard({ showToast }) {
 
       {панель === "out" && (
         <div className="flex flex-col" style={{ gap: 8, marginTop: 12 }}>
-          <input value={куда} onChange={(e) => setКуда(e.target.value)} placeholder={t("appWalletWithdrawTo")} style={поле} />
-          <div className="flex" style={{ gap: 8 }}>
-            <input value={сумма} onChange={(e) => setСумма(e.target.value.replace(",", "."))}
-              inputMode="decimal" placeholder={t("appWalletAmount")} style={{ ...поле, flex: 1 }} />
-            <button className="fx-tap" style={{ ...кнопка, background: T.bg, border: `1px solid ${T.line}`, color: T.muted }}
-              onClick={() => вывести(true)} disabled={идёт}>{t("appWalletAll")}</button>
-          </div>
-          <button className="fx-tap w-full" style={{ ...кнопка, opacity: идёт || !куда.trim() ? 0.5 : 1 }}
-            onClick={() => вывести(false)} disabled={идёт || !куда.trim()}>
-            {t("appWalletWithdraw")}
-          </button>
+          {/* Без привязанного адреса выводить некуда — и это не помеха,
+              а суть: адрес доказывается подписью кошелька, поэтому
+              укравший вход не сможет назначить свой. */}
+          {!кош.payout ? (
+            <>
+              <p style={подпись}>{t("appWalletBindHint")}</p>
+              <button className="fx-tap w-full" style={{ ...кнопка, opacity: идёт ? 0.5 : 1 }}
+                onClick={привязать} disabled={идёт}>
+                {t("appWalletBind")}
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between" style={{ gap: 8 }}>
+                <span style={подпись}>{t("appWalletPayout")}</span>
+                <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 12.5 }}>
+                  {`${кош.payout.slice(0, 4)}…${кош.payout.slice(-4)}`}
+                </span>
+              </div>
+              <div className="flex" style={{ gap: 8 }}>
+                <input value={сумма} onChange={(e) => setСумма(e.target.value.replace(",", "."))}
+                  inputMode="decimal" placeholder={t("appWalletAmount")} style={{ ...поле, flex: 1 }} />
+                <button className="fx-tap" style={{ ...тихая, color: T.muted }}
+                  onClick={() => вывести(true)} disabled={идёт}>{t("appWalletAll")}</button>
+              </div>
+              <button className="fx-tap w-full" style={{ ...кнопка, opacity: идёт || !(Number(сумма) > 0) ? 0.5 : 1 }}
+                onClick={() => вывести(false)} disabled={идёт || !(Number(сумма) > 0)}>
+                {t("appWalletWithdraw")}
+              </button>
+              <div className="flex items-center justify-between" style={{ gap: 8 }}>
+                <span style={{ ...подпись, color: T.faint }}>{t("appWalletDailyLeft")}</span>
+                <span style={{ fontFamily: monoFont, color: T.faint, fontSize: 12 }}>
+                  {(Number(кош.dailyLeft) || 0).toFixed(2)} SOL
+                </span>
+              </div>
+              {/* Порог автовывода: излишек уходит на свой адрес сам, без
+                  участия человека, — иначе он копится здесь просто
+                  потому, что вывести всё время некогда. */}
+              <button className="fx-tap w-full flex items-center justify-between"
+                style={{ ...тихая, color: T.muted, marginTop: 2 }}
+                onClick={переключитьАвтовывод} disabled={идёт}>
+                <span>{t("appWalletSweep")}</span>
+                <span style={{ fontFamily: monoFont, fontSize: 12, color: кош.sweepAbove == null ? T.faint : T.up }}>
+                  {кош.sweepAbove == null ? t("appWalletSweepOff") : `> ${кош.sweepAbove} SOL`}
+                </span>
+              </button>
+              <button className="fx-tap self-start" style={{ background: "transparent", border: "none", padding: 0, fontFamily: bodyFont, fontSize: 12.5, color: T.faint }}
+                onClick={привязать} disabled={идёт}>
+                {t("appWalletRebind")}
+              </button>
+            </>
+          )}
+
+          {/* Заказанная смена адреса видна всегда, пока идут сутки: это
+              единственный способ заметить чужую привязку вовремя. */}
+          {кош.pending && (
+            <div style={{ padding: "10px 12px", borderRadius: 12, background: T.bg, border: `1px solid ${hexA(T.rose, 0.4)}` }}>
+              <div style={{ ...подпись, color: T.ice }}>
+                {tf("appWalletPendingBody", { address: `${кош.pending.slice(0, 4)}…${кош.pending.slice(-4)}` })}
+              </div>
+              <button className="fx-tap" style={{ background: "transparent", border: "none", padding: 0, marginTop: 6, fontFamily: bodyFont, fontSize: 13, fontWeight: 700, color: T.ice, textDecoration: "underline" }}
+                onClick={отменить} disabled={идёт}>
+                {t("appWalletCancel")}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -9821,6 +9950,7 @@ function AppWalletCard({ showToast }) {
     </div>
   );
 }
+
 
 function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0, onConnect, onDisconnect, onCopy, holdings = [], holdingsReady = false, showToast = () => {} }) {
   const [copied, setCopied] = useState(false);
@@ -16572,22 +16702,26 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   async function свопSolana({ token, amountSol, продажа = false, количество = 0 }) {
     /* eslint-disable-next-line no-param-reassign */
     const { подключить, сохранённаяСессия, подписать } = await import("./phantom");
-    const { состояниеВнутреннего, подписатьВнутренним } = await import("./appWallet");
+    const { состояниеВнутреннего, свопВнутренним } = await import("./appWallet");
+
+    const SOL = "So11111111111111111111111111111111111111112";
 
     /* Сначала внутренний кошелёк: на нём хватило — сделка уходит в сеть
        сразу, без похода в Phantom. Именно этот поход и съедает время, за
-       которое цена успевает уехать. */
+       которое цена успевает уехать.
+
+       Через внутренний кошелёк наружу уходит только намерение: какие
+       токены и на сколько менять. Собирает маршрут, проверяет и
+       подписывает сервер — готовых транзакций браузер больше не
+       касается вовсе. */
     const нужно = продажа ? 0.003 : Number(amountSol || 0) + 0.003;
     const внутренний = await состояниеВнутреннего();
-    let сессия = внутренний && внутренний.address && (внутренний.sol || 0) >= нужно
-      ? { wallet: внутренний.address, внутренний: true }
-      : сохранённаяСессия();
+    const черезВнутренний = !!(внутренний && внутренний.address && (внутренний.sol || 0) >= нужно);
+    let сессия = черезВнутренний ? { wallet: внутренний.address } : сохранённаяСессия();
     if (!сессия) {
       showToast(t("solConnecting"));
       сессия = await подключить();
     }
-
-    const SOL = "So11111111111111111111111111111111111111112";
     // Точность токена у каждого своя, и ошибка здесь — это ошибка в
     // тысячу раз по сумме. Поэтому не угадываем: спрашиваем сеть вместе
     // с балансом, там она приходит вместе со счётом.
@@ -16599,20 +16733,17 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       if (b && b.decimals > 0) десятичные = b.decimals;
       if (b && b.token > 0 && количество > b.token) количество = b.token;
     }
-    const параметры = new URLSearchParams(продажа
-      ? {
-        input: token.tokenAddress,
-        output: SOL,
-        amount: String(Math.round(количество * 10 ** десятичные)),
-        slippage: "150",
-      }
-      : {
-        input: SOL,
-        output: token.tokenAddress,
-        amount: String(Math.round(amountSol * 1e9)),
-        slippage: "150",
-      });
+    const вход = продажа ? token.tokenAddress : SOL;
+    const выход = продажа ? SOL : token.tokenAddress;
+    const сумма = продажа
+      ? String(Math.round(количество * 10 ** десятичные))
+      : String(Math.round(amountSol * 1e9));
 
+    // Внутренним кошельком — одним запросом: маршрут, сборка, подпись и
+    // отправка целиком на сервере.
+    if (черезВнутренний) return await свопВнутренним({ вход, выход, сумма });
+
+    const параметры = new URLSearchParams({ input: вход, output: выход, amount: сумма, slippage: "150" });
     const кот = await fetch(`/api/solana?action=quote&${параметры}`).then((r) => r.json());
     if (!кот || кот.error || !кот.quote) throw new Error("маршрут не найден");
 
@@ -16622,10 +16753,6 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       body: JSON.stringify({ quote: кот.quote, wallet: сессия.wallet }),
     }).then((r) => r.json());
     if (!собранная || собранная.error || !собранная.transaction) throw new Error("сделка не собралась");
-
-    // Внутренний кошелёк подписывает и отправляет на сервере: ключ там
-    // же, где транзакция, и просить человека о подтверждении не нужно.
-    if (сессия.внутренний) return await подписатьВнутренним(собранная.transaction);
 
     showToast(t("solSignInWallet"));
     // Кошелёк только подписывает: отправку в сеть Phantom больше не
