@@ -1374,7 +1374,11 @@ function GlobalStyle() {
       @keyframes gridRunToward { from{ background-position: 0 0, 0 0; } to{ background-position: 0 44px, 0 0; } }
       @keyframes spotlightSweep { 0%{ transform: translateX(-120%); } 55%,100%{ transform: translateX(320%); } }
       @keyframes candleBreathe { 0%,100%{ transform: scaleY(0.72); } 50%{ transform: scaleY(1); } }
-      @keyframes tickerSwap { 0%{opacity:0; transform:translateY(6px);} 12%,88%{opacity:1; transform:translateY(0);} 100%{opacity:0; transform:translateY(-6px);} }
+      /* Смена строки в ленте — только появление. Раньше анимация ещё и
+         гасила строку в конце: если следующая сделка не приезжала (а её
+         может не быть часами), лента так и стояла пустой рамкой, в
+         которой видно одно лишь время. */
+      @keyframes tickerSwap { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
       @keyframes starDriftRight { from{ transform: translateX(-24px); } to{ transform: translateX(560px); } }
       @keyframes starDriftLeft { from{ transform: translateX(560px); } to{ transform: translateX(-24px); } }
       @keyframes glowPulse { 0%,100%{opacity:.35;} 50%{opacity:.75;} }
@@ -4510,7 +4514,10 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen, onReady }) {
       className="fx-tap w-full flex items-center gap-2 rounded-[16px] px-3 py-2 overflow-hidden"
       style={{ background: hexA(b.kind === "sell" ? T.down : T.up, 0.07), border: `1px solid ${hexA(b.kind === "sell" ? T.down : T.up, 0.22)}`, textAlign: "left" }}
     >
-      <div key={b.id} className="flex items-center gap-2 min-w-0" style={{ flex: 1, animation: "tickerSwap 2.6s ease-in-out both" }}>
+      {/* Ключ по сделке: React заменяет блок целиком, и появление
+          проигрывается заново. Время лежит здесь же — оно относится к
+          сделке, а не к рамке, и снаружи оставалось от прошлой строки. */}
+      <div key={b.id} className="flex items-center gap-2 min-w-0 w-full" style={{ animation: "tickerSwap 380ms ease-out both" }}>
         <TokenAvatar size={20} tone={b.kind === "sell" ? "down" : "up"} src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
         <span className="truncate" style={{ fontFamily: monoFont, color: T.muted, fontSize: 12.5 }}>{shortAddr(b.from) || "—"}</span>
         <span style={{ fontFamily: bodyFont, color: b.kind === "sell" ? T.down : T.up, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}>
@@ -4530,9 +4537,9 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen, onReady }) {
             return `${fmtCoin(сумма)} ${соло ? "SOL" : "TON"}`;
           })()}
         </span>
-        <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>${b.token.ticker}</span>
+        <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 700, flex: 1 }}>${b.token.ticker}</span>
+        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5, whiteSpace: "nowrap" }}>{fmtSince(b.at)}</span>
       </div>
-      <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5, whiteSpace: "nowrap" }}>{fmtSince(b.at)}</span>
     </button>
   );
 }
@@ -17446,7 +17453,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
             below reserves the nav's own height so the last row of content
             can still scroll clear of it. */}
         <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), /* Панель разделов стала ниже капсулы: и запас под неё нужен меньше. */
-          paddingBottom: 78 + insetBottom }} key={view}>
+          // Ключа по разделу здесь нет намеренно: он пересоздавал весь
+          // контейнер при каждом переходе, а вместе с ним и все вкладки
+          // внутри KeepAlive — то есть ровно то, ради чего KeepAlive и
+          // стоит. Ленты при этом перезапрашивались с нуля.
+          paddingBottom: 78 + insetBottom }}>
           <KeepAlive show={view === "home"}>
             <HomeView onGoTab={goTab} onGoCreate={openCreate} curveTokens={communityTokens} onOpenToken={openToken} onOpenProfile={openUserProfile} />
           </KeepAlive>
