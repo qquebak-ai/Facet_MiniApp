@@ -13,12 +13,19 @@
  * сообщение, но одну и ту же подсказку в чате пересылают и повторяют.
  */
 
-import { createCanvas, encodePNG, fillRect, line, px, text, textWidth } from "./_png.js";
+import { createCanvas, downscale, encodePNG, fillRect, line, px, text, textWidth } from "./_png.js";
 import { adminClient } from "./_support.js";
 import { curveState, priceFromState, looksLikeAddress, poolByAddress, курсTon } from "./_market.js";
 
+// Макет считается в этих единицах, а рисуется во столько раз крупнее и
+// уменьшается усреднением: только так у наклонной линии получается
+// гладкий край, а не лесенка из пикселей. Итоговая картинка выходит
+// вдвое больше макета — в мессенджере её показывают на ретине, и
+// восьмисот точек по ширине там мало.
 const W = 800;
 const H = 420;
+const РЕНДЕР = 6;   // во сколько раз крупнее рисуем
+const СЖАТИЕ = 2;   // во столько раз уменьшаем перед выдачей
 
 const ФОН = [7, 8, 10];
 const БЕЛЫЙ = [255, 255, 255];
@@ -181,26 +188,36 @@ function fmtБольшое(v, вTon) {
 /* Собственно рисование. Всё, что видно на картинке: тикер, цена,
    движение, сама линия и подпись площадки. */
 export function нарисовать({ ticker, name, priceText, capText, change, точки, вTon }) {
-  const c = createCanvas(W, H, ФОН);
+  // Всё ниже — в единицах макета; К переводит их в пиксели холста.
+  const К = РЕНДЕР;
+  const c = createCanvas(W * К, H * К, ФОН);
+  const готово = () => encodePNG(downscale(c, РЕНДЕР / СЖАТИЕ));
+
+  // Короткие обёртки: иначе каждая координата обрастает умножением и
+  // читать разметку становится невозможно.
+  const Т = (s, x, y, цвет, кегль, a = 1) => text(c, s, x * К, y * К, цвет, кегль * К, a);
+  const Ш = (s, кегль) => textWidth(s, кегль * К) / К;
+  const Л = (x0, y0, x1, y1, цвет, толщ = 1, a = 1) =>
+    line(c, x0 * К, y0 * К, x1 * К, y1 * К, цвет, Math.max(1, Math.round(толщ * К)), a);
 
   // Зарево сверху справа — тем же цветом, что и весь интерфейс.
-  for (let y = 0; y < 240; y++) {
-    for (let x = W - 420; x < W; x++) {
-      const dx = (x - (W - 60)) / 420;
-      const dy = (y - 10) / 240;
+  for (let y = 0; y < 240 * К; y++) {
+    for (let x = (W - 420) * К; x < W * К; x++) {
+      const dx = (x / К - (W - 60)) / 420;
+      const dy = (y / К - 10) / 240;
       const d = Math.sqrt(dx * dx + dy * dy);
       if (d < 1) px(c, x, y, АКЦЕНТ, (1 - d) * 0.16);
     }
   }
 
-  text(c, `$${ticker}`, 34, 30, БЕЛЫЙ, 5);
-  if (name) text(c, String(name).slice(0, 22), 34, 82, СЕРЫЙ, 2);
+  Т(`$${ticker}`, 34, 30, БЕЛЫЙ, 5);
+  if (name) Т(String(name).slice(0, 22), 34, 82, СЕРЫЙ, 2);
 
   const цвет = change >= 0 ? ЗЕЛЁНЫЙ : КРАСНЫЙ;
   const движение = `${change >= 0 ? "+" : "-"}${Math.abs(change).toFixed(2)}%`;
-  text(c, priceText, W - 34 - textWidth(priceText, 3), 30, БЕЛЫЙ, 3);
-  text(c, движение, W - 34 - textWidth(движение, 2), 66, цвет, 2);
-  if (capText) text(c, capText, W - 34 - textWidth(capText, 2), 92, СЕРЫЙ, 2);
+  Т(priceText, W - 34 - Ш(priceText, 3), 30, БЕЛЫЙ, 3);
+  Т(движение, W - 34 - Ш(движение, 2), 66, цвет, 2);
+  if (capText) Т(capText, W - 34 - Ш(capText, 2), 92, СЕРЫЙ, 2);
 
   const x0 = 34;
   const x1 = W - 34;
@@ -211,11 +228,11 @@ export function нарисовать({ ticker, name, priceText, capText, change,
   // линия висит в пустоте, а с ними читается как отрезок торгов.
   for (let i = 0; i <= 4; i++) {
     const y = y0 + ((y1 - y0) * i) / 4;
-    line(c, x0, y, x1, y, БЕЛЫЙ, 1, i === 0 || i === 4 ? 0.1 : 0.05);
+    Л(x0, y, x1, y, БЕЛЫЙ, 0.25, i === 0 || i === 4 ? 0.1 : 0.05);
   }
   for (let i = 1; i < 6; i++) {
     const x = x0 + ((x1 - x0) * i) / 6;
-    line(c, x, y0, x, y1, БЕЛЫЙ, 1, 0.04);
+    Л(x, y0, x, y1, БЕЛЫЙ, 0.25, 0.04);
   }
 
   if (точки.length >= 2) {
@@ -227,17 +244,18 @@ export function нарисовать({ ticker, name, priceText, capText, change,
     const кY = (v) => y1 - ((v - мин) / размах) * (y1 - y0) * 0.88 - (y1 - y0) * 0.06;
     const кX = (i) => x0 + ((x1 - x0) * i) / (точки.length - 1);
 
-    // Заливка под линией — вертикальным затуханием.
+    // Заливка под линией — вертикальным затуханием. Шаг по пикселям
+    // холста, а не по единицам макета: иначе между столбиками остаются
+    // непрокрашенные полосы.
     for (let i = 0; i < точки.length - 1; i++) {
-      const ax = кX(i);
-      const bx = кX(i + 1);
-      const ay = кY(точки[i]);
-      const by = кY(точки[i + 1]);
-      for (let x = ax; x <= bx; x++) {
+      const ax = кX(i) * К, bx = кX(i + 1) * К;
+      const ay = кY(точки[i]) * К, by = кY(точки[i + 1]) * К;
+      const низ = y1 * К;
+      for (let x = Math.round(ax); x <= Math.round(bx); x++) {
         const t = (x - ax) / Math.max(1, bx - ax);
         const верх = ay + (by - ay) * t;
-        for (let y = верх; y <= y1; y++) {
-          const доля = 1 - (y - верх) / Math.max(1, y1 - верх);
+        for (let y = Math.floor(верх); y <= низ; y++) {
+          const доля = 1 - (y - верх) / Math.max(1, низ - верх);
           px(c, x, y, АКЦЕНТ, 0.3 * доля * доля);
         }
       }
@@ -248,39 +266,38 @@ export function нарисовать({ ticker, name, priceText, capText, change,
     // разница видна ровно в мессенджере, где картинку смотрят мельком.
     for (const [толщина, альфа] of [[11, 0.05], [7, 0.09], [5, 0.16]]) {
       for (let i = 0; i < точки.length - 1; i++) {
-        line(c, кX(i), кY(точки[i]), кX(i + 1), кY(точки[i + 1]), АКЦЕНТ, толщина, альфа);
+        Л(кX(i), кY(точки[i]), кX(i + 1), кY(точки[i + 1]), АКЦЕНТ, толщина, альфа);
       }
     }
     for (let i = 0; i < точки.length - 1; i++) {
-      line(c, кX(i), кY(точки[i]), кX(i + 1), кY(точки[i + 1]), АКЦЕНТ, 3);
+      Л(кX(i), кY(точки[i]), кX(i + 1), кY(точки[i + 1]), АКЦЕНТ, 3);
     }
 
-    // Точка последней цены — к ней и приковано внимание.
-    const lx = кX(точки.length - 1);
-    const ly = кY(точки[точки.length - 1]);
-    // Точка «сейчас»: ядро белое, вокруг — ореол акцентом. Белая
-    // середина нужна, чтобы точка не сливалась со своим же свечением.
-    for (let r = 16; r >= 0; r -= 1) {
-      for (let a = 0; a < 360; a += 3) {
-        const rad = (a * Math.PI) / 180;
-        const x = lx + Math.cos(rad) * r;
-        const y = ly + Math.sin(rad) * r;
-        if (r > 6) px(c, x, y, АКЦЕНТ, 0.05);
-        else if (r > 4) px(c, x, y, АКЦЕНТ, 0.9);
-        else px(c, x, y, БЕЛЫЙ, 1);
+    // Точка «сейчас»: ядро белое, вокруг — ореол акцентом. Круг
+    // заполняется, а не обводится по углам: обвод оставлял на кромке
+    // зубцы, которые уменьшение уже не спасало.
+    const lx = кX(точки.length - 1) * К;
+    const ly = кY(точки[точки.length - 1]) * К;
+    const Rвнеш = 16 * К;
+    for (let y = Math.round(ly - Rвнеш); y <= ly + Rвнеш; y++) {
+      for (let x = Math.round(lx - Rвнеш); x <= lx + Rвнеш; x++) {
+        const d = Math.hypot(x - lx, y - ly) / К;
+        if (d <= 4.5) px(c, x, y, БЕЛЫЙ, 1);
+        else if (d <= 6.5) px(c, x, y, АКЦЕНТ, 0.9);
+        else if (d <= 16) px(c, x, y, АКЦЕНТ, 0.05);
       }
     }
-    fillRect(c, x0, y1 + 1, x1 - x0, 1, БЕЛЫЙ, 0.08);
+    fillRect(c, x0 * К, (y1 + 1) * К, (x1 - x0) * К, К, БЕЛЫЙ, 0.08);
   } else {
     const нет = "NO TRADES YET";
-    text(c, нет, (W - textWidth(нет, 2)) / 2, (y0 + y1) / 2 - 7, СЕРЫЙ, 2);
+    Т(нет, (W - Ш(нет, 2)) / 2, (y0 + y1) / 2 - 7, СЕРЫЙ, 2);
   }
 
-  text(c, вTon ? "MINTLY CURVE" : "24H", 34, H - 34, СЕРЫЙ, 2);
+  Т(вTon ? "MINTLY CURVE" : "24H", 34, H - 34, СЕРЫЙ, 2);
   const марка = "MINTLY";
-  text(c, марка, W - 34 - textWidth(марка, 2), H - 34, АКЦЕНТ, 2, 0.9);
+  Т(марка, W - 34 - Ш(марка, 2), H - 34, АКЦЕНТ, 2, 0.9);
 
-  return encodePNG(c);
+  return готово();
 }
 
 export default async function handler(req, res) {
