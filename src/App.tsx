@@ -7463,13 +7463,21 @@ function PageLoader({ minHeight = 260 }) {
  */
 function ВступлениеКривая({ активен }) {
   const линия = "M8 96 C 40 92, 62 78, 84 56 S 128 14, 156 8";
+  const ДЛИТЕЛЬНОСТЬ = "1.4s";
+  // Плавность у линии и у точки должна быть одна и та же, иначе точка
+  // отрывается от кончика: она едет по пути, а он «проявляется» рядом.
+  const ПЛАВНО = "0.22 1 0.36 1";
   return (
-    <svg width="100%" height="132" viewBox="0 0 164 110" style={{ overflow: "visible" }} aria-hidden>
+    // Ключ перезапускает рисование при возврате на слайд: без него
+    // анимация проигрывается один раз за всё время жизни экрана.
+    <svg key={активен ? "идёт" : "стоит"} width="100%" height="132" viewBox="0 0 164 110"
+      style={{ overflow: "visible" }} aria-hidden>
       <defs>
         <linearGradient id="встКривая" x1="0" y1="1" x2="1" y2="0">
           <stop offset="0%" stopColor={hexA(T.electric, 0.25)} />
           <stop offset="100%" stopColor={T.electric} />
         </linearGradient>
+        <path id="встПуть" d={линия} />
       </defs>
       {/* Сетка — чтобы линия читалась как график, а не как росчерк. */}
       {[24, 48, 72, 96].map((y) => (
@@ -7481,21 +7489,66 @@ function ВступлениеКривая({ активен }) {
         stroke="url(#встКривая)"
         strokeWidth="2.5"
         strokeLinecap="round"
+        /* Своя мера длины: без неё штрих в 240 единиц не совпадает с
+           настоящей длиной кривой, линия дорисовывается раньше времени и
+           убегает вперёд точки. */
+        pathLength="240"
         style={активен ? {
           ["--длина"]: 240,
           strokeDasharray: 240,
-          animation: "линияРисуется 1100ms cubic-bezier(0.22,1,0.36,1) both",
+          animation: `линияРисуется ${ДЛИТЕЛЬНОСТЬ} cubic-bezier(0.22,1,0.36,1) both`,
         } : { strokeDasharray: 240, strokeDashoffset: 240 }}
       />
-      {/* Точка на конце линии — «сейчас». */}
-      <circle cx="156" cy="8" r="4" fill={T.electric}
-        style={активен ? { animation: "вступлениеВверх 400ms 900ms ease-out both" } : { opacity: 0 }} />
+      {/* Точка — «сейчас». Она не появляется на конце, а едет по самой
+          линии впереди её роста: так это читается как ход рынка, а не
+          как нарисованная заранее картинка. Движение задано разметкой, а
+          не стилями: CSS-путь понимают не все телефоны, а этот способ
+          работает везде, где вообще есть SVG. */}
+      {активен ? (
+        <circle r="4" fill={T.electric}>
+          <animateMotion dur={ДЛИТЕЛЬНОСТЬ} fill="freeze"
+            calcMode="spline" keyTimes="0;1" keySplines={ПЛАВНО}>
+            <mpath href="#встПуть" />
+          </animateMotion>
+          {/* Пока точка стоит на месте старта, её не должно быть видно —
+              иначе первые кадры она висит в пустоте слева. */}
+          <animate attributeName="opacity" values="0;1" dur="0.25s" fill="freeze" />
+        </circle>
+      ) : (
+        <circle cx="156" cy="8" r="4" fill={T.electric} opacity="0" />
+      )}
+    </svg>
+  );
+}
+
+/* Знаки сетей. Рисуем сами, а не грузим картинки: первый экран должен
+   появляться сразу, а два маленьких значка стоят десятка строк. */
+function ЗнакTON({ size = 26, color }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M3.2 7.4h17.6L12 20.8 3.2 7.4Z" stroke={color} strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M12 7.4v13.4" stroke={color} strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ЗнакSOL({ size = 26, color }) {
+  // Три ленты со скошенными краями: верхняя и нижняя наклонены в одну
+  // сторону, средняя — в другую.
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+      <path d="M6.4 5.2h15.2l-4 3.6H2.4l4-3.6Z" fill={color} />
+      <path d="M2.4 10.2h15.2l4 3.6H6.4l-4-3.6Z" fill={color} />
+      <path d="M6.4 15.2h15.2l-4 3.6H2.4l4-3.6Z" fill={color} />
     </svg>
   );
 }
 
 function ВступлениеСети({ активен }) {
-  const монеты = [["TON", T.electric, -46], ["SOL", T.up, 46]];
+  const монеты = [
+    { подпись: "TON", цвет: T.electric, сдвиг: -46, Знак: ЗнакTON },
+    { подпись: "SOL", цвет: T.up, сдвиг: 46, Знак: ЗнакSOL },
+  ];
   return (
     <div className="flex items-center justify-center" style={{ height: 132, position: "relative" }}>
       <div style={{
@@ -7503,19 +7556,25 @@ function ВступлениеСети({ активен }) {
         background: `radial-gradient(circle, ${hexA(T.electric, 0.18)} 0%, transparent 70%)`,
         animation: активен ? "аураДышит 3.6s ease-in-out infinite" : "none",
       }} />
-      {монеты.map(([подпись, цвет, сдвиг], i) => (
-        <div
-          key={подпись}
-          className="flex items-center justify-center"
-          style={{
-            position: "absolute", transform: `translateX(${сдвиг}px)`,
-            width: 68, height: 68, borderRadius: "50%",
-            background: T.surface, border: `1px solid ${hexA(цвет, 0.5)}`,
-            fontFamily: displayFont, fontSize: 15, fontWeight: 600, color: цвет,
-            animation: активен ? `монетаПлывёт 3.2s ease-in-out ${i * 0.6}s infinite` : "none",
-          }}
-        >
-          {подпись}
+      {/* Сдвиг в стороны и покачивание — на разных слоях. В один
+          transform они не помещаются: покачивание задаёт его целиком и
+          затирает сдвиг, отчего обе монеты слипались в центре. */}
+      {монеты.map(({ подпись, цвет, сдвиг, Знак }, i) => (
+        <div key={подпись} style={{ position: "absolute", transform: `translateX(${сдвиг}px)` }}>
+          <div
+            className="flex flex-col items-center justify-center"
+            style={{
+              width: 72, height: 72, borderRadius: "50%", gap: 1,
+              background: T.surface, border: `1px solid ${hexA(цвет, 0.5)}`,
+              boxShadow: `0 0 26px ${hexA(цвет, 0.16)}`,
+              animation: активен ? `монетаПлывёт 3.2s ease-in-out ${i * 0.6}s infinite` : "none",
+            }}
+          >
+            <Знак color={цвет} />
+            <span style={{ fontFamily: displayFont, fontSize: 10.5, fontWeight: 600, color: цвет, letterSpacing: "0.06em" }}>
+              {подпись}
+            </span>
+          </div>
         </div>
       ))}
     </div>
