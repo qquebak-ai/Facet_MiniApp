@@ -5392,6 +5392,12 @@ const AVATAR_FRAMES = [
     id: "gold", label: { RU: "Золото", EN: "Gold" }, price: 260,
     colors: ["#7A5B15", "#FFE9A8", "#C9A227", "#FFF6D5", "#7A5B15"], spin: 13, glow: "#FFD86B",
     metal: { bevel: "#3A2A08", shine: "#FFF6D5", dur: 4.2 },
+    // Тонкий ободок снаружи — как вторая грань полированного кольца.
+    outerRing: { color: "#FFD86B", opacity: 0.35, gap: 1.6 },
+    // Пыль и искры вокруг. Полированное золото на чёрном без них
+    // выглядит нарисованным кругом: блеск читается по тому, что вокруг
+    // него что-то светится, а не по самому кольцу.
+    sparks: { color: "#FFF0C0", dust: "#FFD86B", stars: 3, count: 26, dur: 6 },
     // Расплавленное золото: волна крупная, но очень медленная — тяжёлый
     // металл течёт, а не колышется.
     warp: {
@@ -5409,12 +5415,16 @@ const AVATAR_FRAMES = [
     colors: ["rgba(255,255,255,0.12)", "#FFFFFF", "rgba(255,255,255,0.12)", "#9FD8FF", "rgba(255,255,255,0.12)"],
     spin: 16, glow: "#9FD8FF",
     frost: { count: 9, color: "#DCF2FF", dur: 3.6 },
+    // Лёд — это грани, а не гладкая окружность: кольцо набрано из
+    // неровных кусков, и по стыкам идёт свет.
+    facets: { count: 14, fill: "#7FC8FF", edge: "#EAF7FF", opacity: 0.4 },
+    sparks: { color: "#EAF7FF", dust: "#9FD8FF", stars: 2, count: 16, dur: 5 },
     // Лёд: шум с изломами вместо плавного — край получается колючим, а
     // не волнистым. И почти неподвижным: лёд не течёт.
     warp: {
       colors: ["#FFFFFF", "#9FD8FF", "#2B4A63"],
       layers: [
-        { scale: 8, dur: 60, width: 4.5, opacity: 0.8, seed: 7, freq: 0.05, type: "turbulence", octaves: 2 },
+        { scale: 5, dur: 60, width: 4.5, opacity: 0.32, seed: 7, freq: 0.05, type: "turbulence", octaves: 2 },
       ],
     },
   },
@@ -6721,6 +6731,121 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
         );
       })}
 
+      {/* Гранёное кольцо льда.
+
+          Настоящий лёд не бывает ровной трубой: он колется, и кольцо
+          из неровных кусков со светящимися стыками читается льдом с
+          первого взгляда, а гладкое — просто голубым металлом.
+
+          Радиусы вершин сдвинуты понемногу и постоянно (шум считается
+          по номеру вершины), поэтому куски разной толщины, но картинка
+          не дёргается от кадра к кадру. */}
+      {f.facets && крупно && (() => {
+        const N = f.facets.count;
+        const ц = size / 2;
+        const шум = (i, k) => (((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1) + 1) % 1;
+        const внешR = ц - ring * 0.4;
+        const внутрR = ц - ring * 1.7;
+        const точка = (a, r) => [ц + Math.cos(a) * r, ц + Math.sin(a) * r];
+        const внеш = [], внутр = [];
+        for (let i = 0; i < N; i++) {
+          const a = (Math.PI * 2 / N) * i;
+          внеш.push(точка(a, внешR * (1 - шум(i, 1) * 0.06)));
+          внутр.push(точка(a + Math.PI / N, внутрR * (1 + шум(i, 2) * 0.07)));
+        }
+        const путь = (тчк) => `M ${тчк.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ")} Z`;
+        return (
+          <svg width={size} height={size} style={{ position: "absolute", inset: 0, zIndex: 2, pointerEvents: "none" }} aria-hidden>
+            <defs>
+              <linearGradient id={`ice-${size}`} x1="0" y1="0" x2="0.6" y2="1">
+                <stop offset="0%" stopColor={f.facets.edge} stopOpacity="0.75" />
+                <stop offset="45%" stopColor={f.facets.fill} stopOpacity="0.25" />
+                <stop offset="100%" stopColor={f.facets.edge} stopOpacity="0.7" />
+              </linearGradient>
+            </defs>
+            <path
+              d={`${путь(внеш)} ${путь([...внутр].reverse())}`}
+              fillRule="evenodd" fill={`url(#ice-${size})`} opacity={f.facets.opacity}
+              stroke={f.facets.edge} strokeWidth={Math.max(0.6, ring * 0.14)} strokeLinejoin="round"
+            />
+            {/* Стыки кусков — короткие рёбра поперёк кольца, от внешней
+                вершины к ближайшей внутренней. По ним и видно, что оно
+                набрано из кусков, а не отлито. Раньше ребро тянулось к
+                вершине через одну, и кольцо затягивало паутиной. */}
+            {внеш.map(([x, y], i) => {
+              const a = (Math.PI * 2 / N) * i;
+              const [ix, iy] = точка(a, внутрR * (1 + шум(i, 2) * 0.07));
+              return <line key={i} x1={x} y1={y} x2={ix} y2={iy} stroke={f.facets.edge} strokeWidth={Math.max(0.5, ring * 0.12)} opacity="0.4" />;
+            })}
+          </svg>
+        );
+      })()}
+
+      {/* Тонкий ободок снаружи кольца. */}
+      {f.outerRing && (
+        <div style={{
+          position: "absolute", inset: -ring * f.outerRing.gap, borderRadius: "50%",
+          border: `${Math.max(1, ring * 0.16)}px solid ${hexA(f.outerRing.color, f.outerRing.opacity)}`,
+          zIndex: 0, pointerEvents: "none",
+        }} />
+      )}
+
+      {/* Пыль и искры вокруг кольца.
+
+          Блеск виден не по самому кольцу, а по тому, что вокруг него
+          что-то светится: мелкая пыль по орбите и несколько крупных
+          искр с лучами. Без них полированный металл на чёрном выглядит
+          просто нарисованным кругом. */}
+      {f.sparks && крупно && (() => {
+        const S = f.sparks;
+        const поле = size * 1.5;
+        const ц = поле / 2;
+        const R = size / 2;
+        const шум = (i, k) => (((Math.sin(i * 45.164 + k * 91.71) * 43758.5453) % 1) + 1) % 1;
+        return (
+          <svg width={поле} height={поле} viewBox={`0 0 ${поле} ${поле}`}
+            style={{ position: "absolute", left: -(поле - size) / 2, top: -(поле - size) / 2, zIndex: 0, pointerEvents: "none" }}
+            aria-hidden
+          >
+            <g style={{ transformOrigin: `${ц}px ${ц}px`, animation: `spin360 ${S.dur * 7}s linear infinite` }}>
+              {Array.from({ length: S.count }, (_, i) => {
+                const a = шум(i, 1) * Math.PI * 2;
+                const r = R * (1.02 + шум(i, 2) * 0.34);
+                const рад = Math.max(0.6, ring * (0.1 + шум(i, 3) * 0.22));
+                return (
+                  <circle
+                    key={i} cx={ц + Math.cos(a) * r} cy={ц + Math.sin(a) * r} r={рад}
+                    fill={S.dust} opacity={0.25 + шум(i, 4) * 0.5}
+                    style={{ animation: `frostTwinkle ${(S.dur + (i % 5)).toFixed(1)}s ease-in-out ${-i * 0.31}s infinite` }}
+                  />
+                );
+              })}
+              {/* Крупные искры: короткий крест с длинными лучами — так
+                  блик читается вспышкой, а не точкой побольше. */}
+              {Array.from({ length: S.stars }, (_, i) => {
+                const a = (Math.PI * 2 / S.stars) * i + шум(i, 5) * 1.2;
+                const r = R * (0.99 + шум(i, 6) * 0.06);
+                const x = ц + Math.cos(a) * r;
+                const y = ц + Math.sin(a) * r;
+                const L = ring * (0.9 + шум(i, 7) * 0.9);
+                const т = Math.max(0.6, ring * 0.11);
+                return (
+                  <g key={`s${i}`} style={{
+                    transformOrigin: `${x}px ${y}px`,
+                    animation: `frostTwinkle ${(S.dur * 0.8 + i * 1.3).toFixed(1)}s ease-in-out ${-i * 1.7}s infinite`,
+                    filter: `drop-shadow(0 0 ${ring}px ${S.color})`,
+                  }}>
+                    <line x1={x - L} y1={y} x2={x + L} y2={y} stroke={S.color} strokeWidth={т} strokeLinecap="round" />
+                    <line x1={x} y1={y - L} x2={x} y2={y + L} stroke={S.color} strokeWidth={т} strokeLinecap="round" />
+                    <circle cx={x} cy={y} r={т * 1.4} fill="#fff" />
+                  </g>
+                );
+              })}
+            </g>
+          </svg>
+        );
+      })()}
+
       {/* Иней: короткие иглы по внутреннему краю, вспыхивают вразнобой. */}
       {f.frost && (
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }} aria-hidden>
@@ -6729,7 +6854,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
             // как деления циферблата, а не как наросший иней.
             const a = ((360 / f.frost.count) * i + (i % 3) * 7 - 5) * Math.PI / 180;
             const R = size / 2 - ring * 0.75;
-            const дл = ring * (1.1 + (i % 4) * 0.45);
+            const дл = ring * (0.7 + (i % 4) * 0.28);
             const тчк = (rad, r) => [size / 2 + Math.cos(rad) * r, size / 2 + Math.sin(rad) * r];
             const [x1, y1] = тчк(a, R);
             const [x2, y2] = тчк(a, R - дл);
@@ -6737,7 +6862,7 @@ const AvatarFrame = React.memo(function AvatarFrame({ frameId, size = 120, child
             const [bx1, by1] = тчк(a + 0.3, R - дл * 0.85);
             const [bx2, by2] = тчк(a - 0.3, R - дл * 0.85);
             const [сx, сy] = тчк(a, R - дл * 0.45);
-            const толщ = Math.max(0.7, ring * 0.16);
+            const толщ = Math.max(0.5, ring * 0.1);
             return (
               <g key={i} style={{
                 animation: `frostTwinkle ${f.frost.dur + (i % 4) * 0.8}s ease-in-out ${-i * 0.37}s infinite`,
