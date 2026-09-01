@@ -71,10 +71,14 @@ export async function внутреннийДоступен() {
    вызывающий код тогда просто идёт прежним путём. */
 export async function состояниеВнутреннего() {
   if (!(await внутреннийДоступен())) return null;
+  // Кошелёк привязан к аккаунту: без входа его нет и быть не может.
+  // Раньше карточка в этом случае просто исчезала, и понять, почему её
+  // нет, было нельзя ни человеку, ни нам.
+  if (!(await токен())) return { нуженВход: true };
   try {
     return await запрос("/api/wallet-solana?action=state");
-  } catch {
-    return null;
+  } catch (e) {
+    return { ошибка: String((e && e.message) || e).slice(0, 120) };
   }
 }
 

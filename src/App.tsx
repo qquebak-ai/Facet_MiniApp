@@ -171,6 +171,7 @@ const STR = {
     appWalletOver: "Здесь больше {cap} — излишек лучше держать на своём кошельке.",
     appWalletSweep: "Автовывод излишка",
     appWalletSweepOff: "выключен",
+    appWalletNeedAuth: "Баланс приложения привязан к аккаунту — войди или создай его в профиле, и адрес появится здесь.",
     walletEmptyTitle: "Кошелёк не подключён",
     walletEmptyBody: "Подключи TON-кошелёк, чтобы покупать, продавать и запускать токены.",
     shopTitle: "Магазин",
@@ -607,6 +608,7 @@ const STR = {
     appWalletOver: "More than {cap} sitting here — keep the excess in your own wallet.",
     appWalletSweep: "Auto-withdraw excess",
     appWalletSweepOff: "off",
+    appWalletNeedAuth: "The app balance belongs to your account — sign in or create one in your profile and the address shows up here.",
     walletEmptyTitle: "No wallet connected",
     walletEmptyBody: "Connect a TON wallet to buy, sell and launch tokens.",
     shopTitle: "Shop",
@@ -9733,7 +9735,7 @@ function AppWalletCard({ showToast }) {
   const обновить = useCallback(async () => {
     const { состояниеВнутреннего } = await import("./appWallet");
     const s = await состояниеВнутреннего();
-    if (s && s.address) setКош(s);
+    if (s) setКош(s);
   }, []);
 
   // Пополнение приходит мимо приложения — заметить его можно только
@@ -9748,6 +9750,21 @@ function AppWalletCard({ showToast }) {
   }, [обновить]);
 
   if (!кош) return null;
+
+  /* Кошелька может не быть по двум понятным причинам: человек не вошёл
+     в аккаунт (кошелёк привязан к нему) или сервер ответил отказом.
+     Обе стоит назвать вслух: молча исчезнувший блок выглядит поломкой и
+     не подсказывает, что делать. */
+  if (кош.нуженВход || кош.ошибка) {
+    return (
+      <div className="w-full rounded-[22px] p-4" style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{t("appWalletTitle")}</div>
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 6, lineHeight: 1.45 }}>
+          {кош.нуженВход ? t("appWalletNeedAuth") : `${t("appWalletFailed")}: ${кош.ошибка}`}
+        </p>
+      </div>
+    );
+  }
 
   const короткий = `${кош.address.slice(0, 4)}…${кош.address.slice(-4)}`;
   const остаток = Number(кош.sol) || 0;
