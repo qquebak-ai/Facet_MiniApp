@@ -171,6 +171,11 @@ const STR = {
     appWalletOver: "Здесь больше {cap} — излишек лучше держать на своём кошельке.",
     appWalletSweep: "Автовывод излишка",
     appWalletSweepOff: "выключен",
+    homeInCurves: "Сейчас в кривых",
+    homeStatToday: "запусков за сутки",
+    homeMoving: "В движении",
+    homeTopAll: "Весь топ",
+    homeTopHide: "Свернуть",
     appWalletNeedAuth: "Баланс приложения привязан к аккаунту — войди или создай его в профиле, и адрес появится здесь.",
     walletEmptyTitle: "Кошелёк не подключён",
     walletEmptyBody: "Подключи TON-кошелёк, чтобы покупать, продавать и запускать токены.",
@@ -608,6 +613,11 @@ const STR = {
     appWalletOver: "More than {cap} sitting here — keep the excess in your own wallet.",
     appWalletSweep: "Auto-withdraw excess",
     appWalletSweepOff: "off",
+    homeInCurves: "Live in curves",
+    homeStatToday: "launched today",
+    homeMoving: "On the move",
+    homeTopAll: "Full top",
+    homeTopHide: "Collapse",
     appWalletNeedAuth: "The app balance belongs to your account — sign in or create one in your profile and the address shows up here.",
     walletEmptyTitle: "No wallet connected",
     walletEmptyBody: "Connect a TON wallet to buy, sell and launch tokens.",
@@ -1392,6 +1402,15 @@ function GlobalStyle() {
       @keyframes аураДышит {
         0%, 100% { opacity: .35; transform: scale(1); }
         50%      { opacity: .6;  transform: scale(1.06); }
+      }
+      /* График-строка тянется во всю ширину карточки: у него свои
+         размеры в разметке, а здесь они превращаются в долю ширины. */
+      .fx-spark svg { width: 100%; height: auto; display: block; }
+      /* Лента сделок едет влево ровно на половину — вторая половина
+         списка её же копия, поэтому шва не видно. */
+      @keyframes лентаЕдет {
+        from { transform: translateX(0); }
+        to   { transform: translateX(-50%); }
       }
       @keyframes shimmer { from{background-position:-300px 0;} to{background-position:300px 0;} }
       /* Блик по тексту. Крайние точки — ровно 100% и 0%: подложка шире
@@ -4882,157 +4901,6 @@ function RocketIconFX() {
         color={T.electric}
         style={{ position: "relative", transformOrigin: "center" }}
       />
-    </div>
-  );
-}
-
-/* Шапка главной: приветствие и живая сводка по площадке.
- *
- * Раньше здесь стояли заголовок с обещанием и три круглые иконки: ни
- * одной настоящей цифры, и человек, зашедший второй раз, не узнавал
- * ничего нового. Теперь сверху то, что происходит прямо сейчас —
- * сколько токенов запущено, сколько прибавилось за сутки, сколько TON
- * лежит в кривых, — а действия идут строками с пояснением.
- */
-function HomeHero({ onGoTab, onGoCreate, live = [] }) {
-  const [stats, setStats] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const прочитать = () => supabase.rpc("platform_stats", { p_network: CURRENT_NETWORK }).then(({ data, error }) => {
-      if (cancelled || error || !data) return;
-      setStats(data);
-    }, () => {});
-    прочитать();
-    // Числа меняются от чужих действий — перечитываем сами, иначе они
-    // застынут на моменте открытия.
-    const id = setInterval(() => { if (document.visibilityState === "visible") прочитать(); }, 60000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
-
-  // Собранное и вышедших на биржу берём из ленты: она читает кривые
-  // напрямую, а в базе эти числа от обхода по расписанию и отстают.
-  const живые = useMemo(() => {
-    const ряд = (live || []).filter((tok) => tok && tok.raisedTon != null);
-    if (!ряд.length) return null;
-    return {
-      raisedTon: ряд.filter((tok) => !tok.graduated).reduce((s, tok) => s + (Number(tok.raisedTon) || 0), 0),
-      graduated: ряд.filter((tok) => tok.graduated).length,
-    };
-  }, [live]);
-
-  const собрано = живые ? Math.max(живые.raisedTon, Number((stats || {}).raisedTon) || 0) : Number((stats || {}).raisedTon) || 0;
-  const наБирже = живые ? Math.max(живые.graduated, Number((stats || {}).graduated) || 0) : Number((stats || {}).graduated) || 0;
-
-  // Счётчик онлайна. Ходит внутри 300–700: направление каждый раз
-  // выбирается заново, поэтому число то растёт, то падает. Шаг и пауза
-  // тоже случайные — с ровным ритмом сразу видно, что это заглушка.
-  const [онлайн, setОнлайн] = useState(() => 380 + Math.floor(Math.random() * 240));
-  useEffect(() => {
-    let id;
-    const шаг = () => {
-      id = setTimeout(() => {
-        if (document.visibilityState === "visible") setОнлайн((было) => {
-          const знак = Math.random() < 0.5 ? -1 : 1;
-          // Изредка волна побольше: люди заходят пачками, а не по одному.
-          const величина = Math.random() < 0.15
-            ? 15 + Math.floor(Math.random() * 35)
-            : 1 + Math.floor(Math.random() * 14);
-          let стало = было + знак * величина;
-          if (стало < 300) стало = 300 + (300 - стало);
-          if (стало > 700) стало = 700 - (стало - 700);
-          return Math.max(300, Math.min(700, стало));
-        });
-        шаг();
-      }, 1800 + Math.floor(Math.random() * 3200));
-    };
-    шаг();
-    return () => clearTimeout(id);
-  }, []);
-  const онлайнПлавно = useTicker(онлайн, 1200);
-
-  const собраноПлавно = useTicker(собрано);
-
-  const actions = [
-    // Запуск — не вкладка, а отдельная страница, поэтому и открывается
-    // своим способом. Через onGoTab подсветка нижнего меню уезжала на
-    // несуществующий раздел, и «назад» с этой страницы возвращал на неё же:
-    // возвращаться он умеет только на вкладку, с которой пришли.
-    { icon: Rocket, key: "homeActionLaunch", note: "homeDoLaunchNote", onClick: onGoCreate },
-    { icon: Flame, key: "homeActionMempad", note: "homeDoMempadNote", onClick: () => onGoTab("mempad") },
-    { icon: User, key: "homeActionProfile", note: "homeDoProfileNote", onClick: () => onGoTab("profile") },
-  ];
-
-  return (
-    <div className="flex flex-col" style={{ gap: 32 }}>
-      {/* Приветствие. Мелким шрифтом и без карточки: это подпись к
-          экрану, а не заголовок во весь его верх. */}
-      <div>
-        <h1 style={{ fontFamily: displayFont, color: T.ice, fontSize: 24, fontWeight: 600, lineHeight: 1.2, letterSpacing: "-0.01em", margin: 0 }}>
-          {t("homeWelcome")}
-        </h1>
-        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, marginTop: 6, lineHeight: 1.45 }}>
-          {t("homeWelcomeSub")}
-        </p>
-      </div>
-
-      {/* Сводка по площадке. Раньше это была карточка со свечением и
-          двумя плашками внутри; теперь просто число и строка показателей
-          под ним — данных столько же, шума меньше. */}
-      <section>
-        <div style={{ fontFamily: displayFont, color: T.muted, fontSize: 13, fontWeight: 500, letterSpacing: "0.02em", textTransform: "uppercase" }}>
-          {t("homeEcoTitle")}
-        </div>
-
-        <div className="flex items-baseline gap-2" style={{ marginTop: 10 }}>
-          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 34, fontWeight: 600, lineHeight: 1, letterSpacing: "-0.02em" }}>
-            {Math.round(онлайнПлавно).toLocaleString("ru-RU")}
-          </span>
-          <span className="flex items-center gap-1.5" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14 }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.up }} />
-            {t("homeLive")}
-          </span>
-        </div>
-
-        <div className="flex items-center" style={{ gap: 24, marginTop: 16 }}>
-          {[
-            { число: fmtTon(собраноПлавно), подпись: t("homeEcoRaised") },
-            { число: String(наБирже), подпись: t("homeEcoDex") },
-          ].map((п, i) => (
-            <div key={i}>
-              <div style={{ fontFamily: monoFont, color: T.ice, fontSize: 16, fontWeight: 600 }}>{п.число}</div>
-              <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 2 }}>{п.подпись}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Два действия. Первое — главное, оно и единственное цветное. */}
-      <div className="flex flex-col" style={{ gap: 8 }}>
-        <button
-          onClick={onGoCreate}
-          className="fx-tap w-full flex items-center justify-center gap-2"
-          style={{
-            padding: "13px 16px", borderRadius: 14,
-            background: T.electric, color: PRISM_TEXT, border: "none",
-            fontFamily: displayFont, fontSize: 15, fontWeight: 600,
-          }}
-        >
-          <Rocket size={17} strokeWidth={1.8} /> {t("homeActionLaunch")}
-        </button>
-        <button
-          onClick={() => onGoTab("mempad")}
-          className="fx-tap w-full flex items-center justify-center gap-2"
-          style={{
-            padding: "13px 16px", borderRadius: 14,
-            background: "transparent", color: T.ice,
-            border: `1px solid ${T.line}`,
-            fontFamily: displayFont, fontSize: 15, fontWeight: 600,
-          }}
-        >
-          {t("homeActionMempad")}
-        </button>
-      </div>
     </div>
   );
 }
@@ -9343,65 +9211,6 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
   );
 }
 
-/* AlmostListed — кто ближе всех к закрытию кривой.
-
-   Это то, чего нет ни на одном другом экране: в мемпаде токены стоят по
-   времени и по объёму, а здесь — по тому, сколько осталось до листинга.
-   Числа те же, что и на карточке токена: собрано и цель читаются у самой
-   кривой, поэтому у токенов с разными настройками всё честно.
-
-   Уже закрывшиеся сюда не попадают: у них путь пройден, покупать нечего. */
-function AlmostListed({ tokens = [], onOpen }) {
-  const top = useMemo(() => (tokens || [])
-    .filter((tok) => tok.curveAddress && tok.graduationTon > 0 && tok.raisedTon < tok.graduationTon)
-    .map((tok) => ({ tok, pct: (tok.raisedTon / tok.graduationTon) * 100 }))
-    .sort((a, b) => b.pct - a.pct)
-    .slice(0, 3), [tokens]);
-
-  return (
-    <div className="fx-view">
-      <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 600 }}>{t("homeAlmostTitle")}</span>
-        <span style={{ fontFamily: bodyFont, color: T.faint, fontSize: 12.5 }}>{t("homeAlmostSub")}</span>
-      </div>
-
-      {!top.length ? (
-        // Пустое состояние — одна строка. Пунктирный контейнер с иконкой
-        // занимал полэкрана и сообщал ровно то же самое.
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("homeAlmostEmpty")}</div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {top.map(({ tok, pct }, i) => (
-            <button
-              key={tok.id}
-              onClick={() => onOpen && onOpen(tok)}
-              // Подложки нет намеренно: три тёмных прямоугольника подряд
-              // на тёмном фоне читались как пустые заглушки, а не как
-              // список. Строку держат аватарка, тикер и шкала.
-              className="fx-card fx-tap w-full flex items-center gap-3 rounded-[22px] py-2.5 text-left"
-              style={{ background: "transparent", border: "none", animationDelay: `${i * 60}ms` }}
-            >
-              <TokenAvatar size={40} tone="up" src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${tok.ticker}</span>
-                  <span style={{ fontFamily: monoFont, color: T.electric, fontSize: 13, fontWeight: 700 }}>{pct.toFixed(0)}%</span>
-                </div>
-                <div style={{ height: 4, borderRadius: 2, background: T.surfaceHi, overflow: "hidden", marginTop: 6 }}>
-                  <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: T.electric }} />
-                </div>
-                <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 5 }}>
-                  {tf("homeAlmostLeft", { left: fmtTon(Math.max(0, tok.graduationTon - tok.raisedTon)) })}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* Плавный набор числа для витрины.
  *
  * Соседний useCountUp начинает с нуля при каждой смене цели, а числа на
@@ -9432,231 +9241,452 @@ function useTicker(target, duration = 800) {
 }
 
 
-/* Популярные токены строкой: аватарка, тикер, движение за сутки.
-   Лента горизонтальная — на неё смотрят мельком, по дороге к чему-то
-   ещё, а вертикальный список занял бы пол-экрана. */
-function HomePopular({ tokens = [], onOpen, onAll }) {
-  const ряд = useMemo(() => (tokens || [])
-    .filter((tok) => tok.mcapNum > 0)
-    .slice()
-    .sort((a, b) => (b.mcapNum || 0) - (a.mcapNum || 0))
-    .slice(0, 8), [tokens]);
-  if (!ряд.length) return null;
+/* ГЛАВНАЯ.
+ *
+ * Экран, который человек видит первым и чаще всего. Раньше он был
+ * длинным перечислением равнозначных блоков: приветствие, сводка, почти
+ * на бирже, популярное, лента, топ. Всё одного веса — значит ничего не
+ * главное, и взгляду не за что зацепиться.
+ *
+ * Теперь порядок такой: одно настоящее число площадки, один токен, на
+ * который стоит смотреть, движение ленты строкой, короткий список
+ * живого и свёрнутый топ. Держит всё расстояние, а не рамки: на тёмном
+ * фоне карточка выделяет то, что внутри неё, — поэтому карточка здесь
+ * ровно одна.
+ */
+
+/* Сводка площадки. Числа настоящие: собранное в кривых и вышедших на
+   биржу считает функция базы, запуски за сутки — она же.
+   Счётчика «онлайн» здесь больше нет: он рисовался случайными числами,
+   и, раз заметив это, человек перестал бы верить и остальным. */
+function ГлавнаяСводка({ live = [] }) {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    let брошено = false;
+    const прочитать = () => supabase.rpc("platform_stats", { p_network: CURRENT_NETWORK }).then(({ data, error }) => {
+      if (!брошено && !error && data) setStats(data);
+    }, () => {});
+    прочитать();
+    const id = setInterval(() => { if (document.visibilityState === "visible") прочитать(); }, 60000);
+    return () => { брошено = true; clearInterval(id); };
+  }, []);
+
+  // Собранное и вышедших на биржу берём из ленты: она читает кривые
+  // напрямую, а в базе эти числа от обхода по расписанию и отстают.
+  const живые = useMemo(() => {
+    const ряд = (live || []).filter((tok) => tok && tok.raisedTon != null);
+    if (!ряд.length) return null;
+    return {
+      raisedTon: ряд.filter((tok) => !tok.graduated).reduce((s, tok) => s + (Number(tok.raisedTon) || 0), 0),
+      graduated: ряд.filter((tok) => tok.graduated).length,
+    };
+  }, [live]);
+
+  const собрано = Math.max((живые && живые.raisedTon) || 0, Number((stats || {}).raisedTon) || 0);
+  const наБирже = Math.max((живые && живые.graduated) || 0, Number((stats || {}).graduated) || 0);
+  const заСутки = Number((stats || {}).launched24) || 0;
+  const плавно = useTicker(собрано);
+
+  const показатели = [
+    { число: String(заСутки), подпись: t("homeStatToday") },
+    { число: String(наБирже), подпись: t("homeEcoDex") },
+  ];
 
   return (
-    <div className="fx-view">
-      <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("homePopular")}</span>
-        <button onClick={onAll} className="fx-tap" style={{ background: "transparent", border: "none", fontFamily: bodyFont, color: T.electric, fontSize: 12.5 }}>
-          {t("homePopularAll")}
-        </button>
+    <section>
+      <div className="flex items-center" style={{ gap: 7 }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.up }} />
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          {t("homeInCurves")}
+        </span>
       </div>
-      <div className="no-scrollbar flex gap-2 overflow-x-auto" style={{ paddingBottom: 2 }}>
-        {ряд.map((tok) => (
-          <button
-            key={tok.id}
-            onClick={() => onOpen && onOpen(tok)}
-            className="fx-tap flex items-center gap-2 rounded-[16px]"
-            style={{ padding: "8px 12px 8px 8px", background: T.surface, border: `1px solid ${T.line}`, flexShrink: 0 }}
-          >
-            <TokenAvatar size={28} tone={tok.change >= 0 ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
-            <div className="text-left">
-              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 13, fontWeight: 700 }}>${tok.ticker}</div>
-              <div style={{ fontFamily: monoFont, color: tok.change >= 0 ? T.up : T.down, fontSize: 11.5, marginTop: 1 }}>
-                {tok.change >= 0 ? "+" : ""}{(tok.change || 0).toFixed(1)}%
-              </div>
-            </div>
-          </button>
+
+      {/* Единственное крупное число на экране. Всё остальное — мельче,
+          и потому взгляд начинает отсюда. */}
+      <div className="flex items-baseline" style={{ gap: 8, marginTop: 8 }}>
+        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 42, fontWeight: 600, lineHeight: 1, letterSpacing: "-0.03em" }}>
+          {fmtTon(плавно).replace(" TON", "")}
+        </span>
+        <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 15 }}>TON</span>
+      </div>
+
+      <div className="flex items-center" style={{ gap: 18, marginTop: 12 }}>
+        {показатели.map((п, i) => (
+          <div key={i} className="flex items-baseline" style={{ gap: 5 }}>
+            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 14, fontWeight: 600 }}>{п.число}</span>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{п.подпись}</span>
+          </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
-/* Лента событий площадки.
+/* Главный токен экрана — ближайший к листингу. Единственная карточка на
+   главной, и потому она читается как «смотри сюда».
 
-   Кто что купил и какие токены только что запустили — в одном списке,
-   свежее сверху. Без неё главная показывает предложение что-то сделать,
-   но не показывает, что здесь вообще кто-то есть.
+   Ближайший, а не самый крупный: у крупного всё уже случилось, а здесь
+   виден отсчёт, который вот-вот кончится. Кривых нет вовсе — берём
+   лучший по капитализации, чтобы место не пустовало. */
+function ГлавныйТокен({ tokens = [], onOpen }) {
+  const выбор = useMemo(() => {
+    const наКривой = (tokens || [])
+      .filter((tok) => tok.curveAddress && tok.graduationTon > 0 && tok.raisedTon < tok.graduationTon)
+      .map((tok) => ({ tok, pct: (tok.raisedTon / tok.graduationTon) * 100 }))
+      .sort((a, b) => b.pct - a.pct);
+    if (наКривой.length) return наКривой[0];
+    const крупный = (tokens || []).filter((tok) => tok.mcapNum > 0).sort((a, b) => b.mcapNum - a.mcapNum)[0];
+    return крупный ? { tok: крупный, pct: null } : null;
+  }, [tokens]);
 
-   Свои сделки закрыты политикой «вижу только своё», и это правильно:
-   портфель чужим не показывают. Наружу отдаёт функция базы, которая
-   сама выбирает, что можно показать, — ник, тикер, сторона, сумма и
-   время. Ни адресов, ни размеров чужих портфелей. */
-function ActivityFeed() {
+  if (!выбор) return null;
+  const { tok, pct } = выбор;
+  const растёт = (tok.change || 0) >= 0;
+
+  return (
+    <section>
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          {pct == null ? t("homePopular") : t("homeAlmostTitle")}
+        </span>
+      </div>
+
+      <button
+        onClick={() => onOpen && onOpen(tok)}
+        className="fx-card fx-tap w-full text-left rounded-[24px]"
+        style={{ position: "relative", overflow: "hidden", padding: 16, background: T.surface, border: `1px solid ${T.line}` }}
+      >
+        {/* Подложка берёт цвет из самого логотипа — у каждого токена
+            своя, и подборка каждый раз выглядит по-новому. */}
+        <SpotlightAura src={tok.logoUrl} ticker={tok.ticker} />
+
+        <div className="flex items-center" style={{ gap: 12, position: "relative" }}>
+          <TokenAvatar size={46} tone={растёт ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+          <div className="flex-1 min-w-0">
+            <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em" }}>
+              ${tok.ticker}
+            </div>
+            <div className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 2 }}>{tok.name}</div>
+          </div>
+          <div className="text-right flex-shrink-0">
+            {/* Курс TON приезжает отдельным запросом и иногда опаздывает.
+                Пока его нет, капитализация равна нулю — показываем то,
+                что известно и без него: собранное кривой. */}
+            <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>
+              {tok.mcapNum > 0 ? fmtUSD(tok.mcapNum) : `${fmtTon(tok.raisedTon || 0)} TON`}
+            </div>
+            <div style={{ fontFamily: monoFont, color: растёт ? T.up : T.down, fontSize: 12.5, marginTop: 2 }}>
+              {растёт ? "+" : ""}{(tok.change || 0).toFixed(1)}%
+            </div>
+          </div>
+        </div>
+
+        {/* График во всю ширину карточки: он и есть довод смотреть
+            дальше. Ширину держит стиль, а не число в разметке, — иначе
+            на узком телефоне линия вылезала бы за край. */}
+        <div className="fx-spark" style={{ marginTop: 12, position: "relative" }}>
+          <MiniChart
+            id={`герой-${tok.id}`}
+            base={tok.mcapNum || tok.raisedTon || 0}
+            seed={tok.id}
+            poolAddress={tok.dexPoolAddress}
+            curveAddress={tok.curveAddress}
+            tokenAddress={tok.tokenAddress}
+            positive={растёт}
+            width={320}
+            height={76}
+            length={28}
+          />
+        </div>
+
+        {pct != null && (
+          <div style={{ position: "relative", marginTop: 12 }}>
+            <div style={{ height: 5, borderRadius: 3, background: T.surfaceHi, overflow: "hidden" }}>
+              <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: T.electric, borderRadius: 3 }} />
+            </div>
+            <div className="flex items-baseline justify-between" style={{ marginTop: 7 }}>
+              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>
+                {tf("homeAlmostLeft", { left: fmtTon(Math.max(0, tok.graduationTon - tok.raisedTon)) })}
+              </span>
+              <span style={{ fontFamily: monoFont, color: T.electric, fontSize: 13, fontWeight: 700 }}>{pct.toFixed(0)}%</span>
+            </div>
+          </div>
+        )}
+      </button>
+    </section>
+  );
+}
+
+/* Бегущая строка сделок.
+ *
+ * Раньше те же события лежали списком в восемь карточек и занимали
+ * пол-экрана, сообщая одно: здесь кто-то есть. Одна строка говорит это
+ * же, но не отбирает место у токенов, и главное — она движется, отчего
+ * экран читается живым.
+ *
+ * Список продублирован: когда первая половина уезжает влево, на её
+ * месте оказывается вторая, и шов не виден. */
+function БегущаяЛента() {
   const [items, setItems] = useState(null);
 
   useEffect(() => {
-    let cancelled = false;
-    const load = () => supabase.rpc("recent_activity", { p_limit: 8, p_network: CURRENT_NETWORK }).then(
-      ({ data, error }) => { if (!cancelled && !error) setItems(data || []); },
+    let брошено = false;
+    const load = () => supabase.rpc("recent_activity", { p_limit: 12, p_network: CURRENT_NETWORK }).then(
+      ({ data, error }) => { if (!брошено && !error) setItems(data || []); },
       () => {},
     );
     load();
-    // Раз в полминуты: лента должна оживать сама, но опрашивать чаще —
-    // тратить связь ради строчки, которая и так подождёт.
     const t = setInterval(load, 30000);
-    return () => { cancelled = true; clearInterval(t); };
+    return () => { брошено = true; clearInterval(t); };
   }, []);
 
   if (!items || !items.length) return null;
 
+  const текст = (с) => (с.kind === "launch"
+    ? tf("feedLaunch", { who: с.nickname || "—", ticker: с.ticker || "?" })
+    : tf("feedTrade", { who: с.nickname || "—", ticker: с.ticker || "?", ton: fmtTon(Number(с.ton) || 0) }));
+
   return (
-    <div className="fx-view">
-      <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("feedTitle")}</span>
-        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>{t("feedSub")}</span>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        {items.map((с, i) => (
-          <div key={`${с.at}-${i}`} className="flex items-center gap-2 rounded-[18px] px-3 py-2"
-            style={{ background: T.surface, border: `1px solid ${T.line}` }}>
+    <div style={{ overflow: "hidden", height: 20, position: "relative", maskImage: "linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)", WebkitMaskImage: "linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)" }}>
+      <div className="flex items-center" style={{ gap: 0, width: "max-content", animation: `лентаЕдет ${Math.max(28, items.length * 4.5)}s linear infinite` }}>
+        {[...items, ...items].map((с, i) => (
+          <span key={`${с.at}-${i}`} className="flex items-center" style={{ gap: 8, paddingRight: 22, flexShrink: 0 }}>
             <span style={{
-              width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-              background: с.kind === "launch" ? T.electric : Number(с.ton) >= 0 ? T.up : T.up,
+              width: 5, height: 5, borderRadius: "50%",
+              background: с.kind === "launch" ? T.electric : T.up,
             }} />
-            <span className="truncate" style={{ fontFamily: bodyFont, color: T.paper, fontSize: 13, flex: 1, minWidth: 0 }}>
-              {с.kind === "launch"
-                ? tf("feedLaunch", { who: с.nickname || "—", ticker: с.ticker || "?" })
-                : tf("feedTrade", { who: с.nickname || "—", ticker: с.ticker || "?", ton: fmtTon(Number(с.ton) || 0) })}
-            </span>
-            <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5, flexShrink: 0 }}>{fmtSince(с.at)}</span>
-          </div>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, whiteSpace: "nowrap" }}>{текст(с)}</span>
+          </span>
         ))}
       </div>
     </div>
   );
 }
 
-/* Топ: токены по собранному и создатели по сумме собранного их
-   токенами. Соревнование — самый дешёвый способ вернуть человека
-   завтра, а числа для него уже считает обработчик уведомлений. */
-function Leaderboard({ onOpenToken, onOpenProfile, live = [] }) {
+/* Живое движение: четыре строки со своим графиком.
+ *
+ * Прежде здесь было два блока — популярное лентой вбок и топ списком, —
+ * которые показывали примерно одно и то же разными способами. Остался
+ * один список: тикер, капитализация, форма движения и процент за сутки.
+ * Больше четырёх строк не показываем: за остальным есть мемпад, и
+ * отправить туда честнее, чем выкладывать половину его на главной. */
+function ВДвижении({ tokens = [], onOpen, onAll }) {
+  const ряд = useMemo(() => (tokens || [])
+    // Капитализация считается через курс TON, а он приезжает отдельно и
+    // иногда опаздывает: пока его нет, у всех ноль. Поэтому годится и
+    // собранное кривой — тогда список не пустеет на ровном месте.
+    .filter((tok) => tok.mcapNum > 0 || tok.raisedTon > 0)
+    .slice()
+    // По размаху движения, а не по величине: главная показывает, где
+    // сейчас что-то происходит, а крупнейшие и так на виду.
+    .sort((a, b) => Math.abs(b.change || 0) - Math.abs(a.change || 0))
+    .slice(0, 4), [tokens]);
+  if (!ряд.length) return null;
+
+  return (
+    <section>
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 6 }}>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          {t("homeMoving")}
+        </span>
+        <button onClick={onAll} className="fx-tap" style={{ background: "transparent", border: "none", padding: 0, fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>
+          {t("homePopularAll")}
+        </button>
+      </div>
+
+      <div className="flex flex-col">
+        {ряд.map((tok, i) => {
+          const растёт = (tok.change || 0) >= 0;
+          return (
+            <button
+              key={tok.id}
+              onClick={() => onOpen && onOpen(tok)}
+              className="fx-card fx-tap w-full flex items-center text-left"
+              style={{ gap: 12, padding: "12px 0", background: "transparent", border: "none", animationDelay: `${i * 40}ms` }}
+            >
+              <TokenAvatar size={36} tone={растёт ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+              <div className="flex-1 min-w-0">
+                <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${tok.ticker}</div>
+                <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12, marginTop: 2 }}>
+                  {tok.mcapNum > 0 ? fmtUSD(tok.mcapNum) : `${fmtTon(tok.raisedTon || 0)} TON`}
+                </div>
+              </div>
+              <MiniChart
+                id={`движ-${tok.id}`}
+                base={tok.mcapNum || tok.raisedTon || 0}
+                seed={tok.id}
+                poolAddress={tok.dexPoolAddress}
+                curveAddress={tok.curveAddress}
+                tokenAddress={tok.tokenAddress}
+                positive={растёт}
+                width={62}
+                height={28}
+                length={20}
+              />
+              <span style={{ fontFamily: monoFont, color: растёт ? T.up : T.down, fontSize: 13, fontWeight: 700, width: 58, textAlign: "right", flexShrink: 0 }}>
+                {растёт ? "+" : ""}{(tok.change || 0).toFixed(1)}%
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/* Топ — одной строкой.
+ *
+ * Полный список интересен единицам, а места занимал как главный блок.
+ * Свёрнут до первого места; остальные раскрываются по тапу, никуда не
+ * уводя с экрана. */
+function ТопСтрока({ onOpenToken, onOpenProfile, live = [] }) {
   const [data, setData] = useState(null);
-  const [tab, setTab] = useState("tokens");
+  const [раскрыт, setРаскрыт] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
+    let брошено = false;
     supabase.rpc("leaderboard", { p_limit: 5, p_network: CURRENT_NETWORK }).then(
-      ({ data: d, error }) => { if (!cancelled && !error) setData(d); },
+      ({ data: d, error }) => { if (!брошено && !error) setData(d); },
       () => {},
     );
-    return () => { cancelled = true; };
+    return () => { брошено = true; };
   }, []);
 
-  // Собранное в базу пишет обработчик уведомлений, а ходит он раз в
-  // сутки: у свежего токена там ноль, хотя кривая уже собрала. Лента на
-  // этом же экране читает кривые напрямую — берём цифру оттуда, если
-  // токен в ней есть, и заново раскладываем по местам, иначе первым
-  // остался бы тот, у кого просто раньше отработал обход.
-  const свежие = useMemo(() => {
+  // Собранное в базу пишет обход по расписанию: у свежего токена там
+  // ноль, хотя кривая уже собрала. Лента на этом же экране читает кривые
+  // напрямую — берём цифру оттуда и заново раскладываем по местам.
+  const токены = useMemo(() => {
     const покривой = new Map();
-    (live || []).forEach((tok) => {
-      if (tok && tok.id != null) покривой.set(String(tok.id), tok);
-    });
+    (live || []).forEach((tok) => { if (tok && tok.id != null) покривой.set(String(tok.id), tok); });
     const ряд = ((data && data.tokens) || []).map((э) => {
       const св = покривой.get(String(э.id));
       if (!св) return э;
       return {
         ...э,
         raised: св.raisedTon != null ? св.raisedTon : э.raised,
-        // Капитализация приезжает оттуда же, из ленты: в самом топе её
-        // нет, а на строке она говорит о токене больше, чем собранное.
         mcapNum: св.mcapNum,
-        // Логотип у ленты бывает свежее: она добирает его из цепочки,
-        // когда в базе пусто.
         logo_url: э.logo_url || св.logoUrl || null,
-        // Пара на бирже. В самом топе этого поля нет, а без него строка
-        // писала «уже на бирже» токену, торговать которым ещё негде.
         dexPoolAddress: св.dexPoolAddress || null,
       };
     });
     return покривой.size ? ряд.slice().sort((a, b) => (Number(b.raised) || 0) - (Number(a.raised) || 0)) : ряд;
   }, [data, live]);
 
-  const токены = свежие;
-  const создатели = (data && data.creators) || [];
-  if (!токены.length && !создатели.length) return null;
-  const список = tab === "tokens" ? токены : создатели;
+  if (!токены.length) return null;
+  const видимые = раскрыт ? токены : токены.slice(0, 1);
 
   return (
-    <div className="fx-view">
-      <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
-        <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700 }}>{t("topTitle")}</span>
-        <div className="flex gap-1">
-          {[["tokens", "topTokens"], ["creators", "topCreators"]].map(([id, ключ]) => (
-            <button key={id} onClick={() => setTab(id)} className="fx-tap rounded-full px-3 py-1"
-              style={{
-                fontFamily: bodyFont, fontSize: 12,
-                background: tab === id ? T.ice : "transparent",
-                color: tab === id ? T.bg : T.muted,
-                border: `1px solid ${tab === id ? T.ice : T.line}`,
-              }}>
-              {t(ключ)}
-            </button>
-          ))}
-        </div>
+    <section>
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 6 }}>
+        <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          {t("topTitle")}
+        </span>
+        {токены.length > 1 && (
+          <button onClick={() => setРаскрыт((б) => !б)} className="fx-tap"
+            style={{ background: "transparent", border: "none", padding: 0, fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>
+            {раскрыт ? t("homeTopHide") : t("homeTopAll")}
+          </button>
+        )}
       </div>
 
-      <div className="flex flex-col gap-2">
-        {список.map((э, i) => (
+      <div className="flex flex-col">
+        {видимые.map((э, i) => (
           <button
             key={э.id || i}
-            onClick={() => (tab === "tokens" ? onOpenToken && onOpenToken(э) : onOpenProfile && onOpenProfile(э.id))}
-            className="fx-card fx-tap w-full flex items-center gap-3 rounded-[20px] py-2 text-left"
-            style={{ background: "transparent", border: "none", animationDelay: `${i * 40}ms` }}
+            onClick={() => onOpenToken && onOpenToken(э)}
+            className="fx-card fx-tap w-full flex items-center text-left"
+            style={{ gap: 12, padding: "10px 0", background: "transparent", border: "none", animationDelay: `${i * 40}ms` }}
           >
-            {/* Место числом, а не медалью: медали читаются наградой, а
-                это просто порядок. */}
-            <span style={{ fontFamily: monoFont, color: i === 0 ? T.electric : T.muted, fontSize: 13, fontWeight: 700, width: 16, flexShrink: 0 }}>{i + 1}</span>
-            {tab === "tokens" ? (
-              <TokenAvatar size={34} src={э.logo_url}>{э.emoji}</TokenAvatar>
-            ) : (
-              <AvatarFrame frameId={э.frame_id || "none"} size={34}>
-                <div style={{
-                  width: "100%", height: "100%", borderRadius: "50%",
-                  background: э.avatar_url ? `center/cover no-repeat url(${э.avatar_url})` : T.surfaceHi,
-                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
-                }}>{!э.avatar_url && (э.emoji || "🙂")}</div>
-              </AvatarFrame>
-            )}
+            <span style={{ fontFamily: monoFont, color: i === 0 ? T.electric : T.faint, fontSize: 13, fontWeight: 700, width: 14, flexShrink: 0 }}>{i + 1}</span>
+            {/* Топ приходит из базы, и поля с эмодзи там нет: без запасного
+                значка у токена без логотипа оставался пустой кружок. */}
+            <TokenAvatar size={34} src={э.logo_url}>{э.emoji || "🚀"}</TokenAvatar>
             <div className="flex-1 min-w-0">
-              <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>
-                {tab === "tokens" ? `$${э.ticker}` : (э.nickname || "—")}
-              </div>
+              <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>${э.ticker}</div>
               <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 2 }}>
-                {tab === "tokens"
-                  ? (э.graduated
-                    ? t(э.dexPoolAddress ? "topOnDex" : "topClosing")
-                    : tf("topRaised", { ton: fmtTon(Number(э.raised) || 0) }))
-                  : tf("topLaunched", { n: э.launched, ton: fmtTon(Number(э.raised) || 0) })}
+                {э.graduated
+                  ? t(э.dexPoolAddress ? "topOnDex" : "topClosing")
+                  : tf("topRaised", { ton: fmtTon(Number(э.raised) || 0) })}
               </div>
             </div>
-            {/* Капитализация справа — то, по чему токены сравнивают в
-                первую очередь. Нет числа (лента ещё не дочитала кривую)
-                — места не занимаем. */}
-            {tab === "tokens" && э.mcapNum > 0 && (
-              <span style={{ fontFamily: displayFont, color: T.up, fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
-                {fmtUSD(э.mcapNum)}
-              </span>
+            {э.mcapNum > 0 && (
+              <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700, flexShrink: 0 }}>{fmtUSD(э.mcapNum)}</span>
             )}
           </button>
         ))}
       </div>
-    </div>
+
+      {/* Создатели — тем же списком, но только когда его раскрыли: на
+          свёрнутой главной им места нет. */}
+      {раскрыт && ((data && data.creators) || []).length > 0 && (
+        <div className="flex flex-col" style={{ marginTop: 14 }}>
+          <span style={{ fontFamily: bodyFont, color: T.faint, fontSize: 12, marginBottom: 4 }}>{t("topCreators")}</span>
+          {(data.creators || []).map((э, i) => (
+            <button
+              key={э.id || i}
+              onClick={() => onOpenProfile && onOpenProfile(э.id)}
+              className="fx-tap w-full flex items-center text-left"
+              style={{ gap: 12, padding: "9px 0", background: "transparent", border: "none" }}
+            >
+              <span style={{ fontFamily: monoFont, color: T.faint, fontSize: 13, fontWeight: 700, width: 14, flexShrink: 0 }}>{i + 1}</span>
+              <AvatarFrame frameId={э.frame_id || "none"} size={30}>
+                <div style={{
+                  width: "100%", height: "100%", borderRadius: "50%",
+                  background: э.avatar_url ? `center/cover no-repeat url(${э.avatar_url})` : T.surfaceHi,
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
+                }}>{!э.avatar_url && (э.emoji || "🙂")}</div>
+              </AvatarFrame>
+              <div className="flex-1 min-w-0">
+                <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 13.5, fontWeight: 700 }}>{э.nickname || "—"}</div>
+                <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 2 }}>
+                  {tf("topLaunched", { n: э.launched, ton: fmtTon(Number(э.raised) || 0) })}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
 function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile }) {
   return (
-    // Между блоками — воздух вместо рамок: разделы главной больше не
-    // обёрнуты каждый в свою карточку, и держит их расстояние.
-    <div className="flex flex-col" style={{ gap: 32, paddingTop: 8, paddingBottom: 16 }}>
-      <HomeHero onGoTab={onGoTab} onGoCreate={onGoCreate} live={curveTokens} />
-      <AlmostListed tokens={curveTokens} onOpen={onOpenToken} />
-      <HomePopular tokens={curveTokens} onOpen={onOpenToken} onAll={() => onGoTab("mempad")} />
-      <ActivityFeed />
-      <Leaderboard onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} live={curveTokens} />
+    // Запас снизу — под закреплённую кнопку: в конце прокрутки она
+    // должна висеть над пустотой, а не над последней строкой топа.
+    <div className="flex flex-col" style={{ gap: 26, paddingTop: 8, paddingBottom: 78 }}>
+      <ГлавнаяСводка live={curveTokens} />
+      <БегущаяЛента />
+      <ГлавныйТокен tokens={curveTokens} onOpen={onOpenToken} />
+      <ВДвижении tokens={curveTokens} onOpen={onOpenToken} onAll={() => onGoTab("mempad")} />
+      <ТопСтрока onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} live={curveTokens} />
+
+      {/* Запуск — единственное действие на экране, и оно всегда под
+          рукой: кнопка прилипает к низу, пока страница листается.
+          Прежние три кнопки убраны — две из них вели туда же, куда и
+          нижнее меню.
+
+          Под кнопкой — растушёвка в цвет фона: без неё список проступал
+          из-под неё обрезанными строками, и выглядело это ошибкой, а не
+          закреплённой панелью. */}
+      <div style={{
+        position: "sticky", bottom: 0, marginTop: 2, paddingTop: 26, paddingBottom: 10,
+        background: `linear-gradient(to top, ${T.bg} 62%, ${hexA(T.bg, 0.88)} 82%, transparent)`,
+      }}>
+        <button
+          onClick={onGoCreate}
+          className="fx-tap w-full flex items-center justify-center gap-2"
+          style={{
+            padding: "14px 16px", borderRadius: 16,
+            background: T.electric, color: PRISM_TEXT, border: "none",
+            fontFamily: displayFont, fontSize: 15, fontWeight: 600,
+            boxShadow: `0 10px 30px ${hexA(T.electric, 0.35)}`,
+          }}
+        >
+          <Rocket size={17} strokeWidth={1.8} /> {t("homeActionLaunch")}
+        </button>
+      </div>
     </div>
   );
 }
