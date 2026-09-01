@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="лист" x1="0" y1="1" x2="0.4" y2="0">
+      <stop offset="0%" stop-color="#6C7CFF"/>
+      <stop offset="100%" stop-color="#9AA5FF"/>
+    </linearGradient>
+    <radialGradient id="аура" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="0%" stop-color="#6C7CFF" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#6C7CFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="подложка" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0%" stop-color="#6C7CFF"/>
+      <stop offset="100%" stop-color="#4B57D8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="#08090B"/>
+  <circle cx="256" cy="256" r="256" fill="url(#аура)"/>
+  <path d="M 96 372 C 176 366, 236 330, 292 250 S 372 128, 430 96"
+        fill="none" stroke="#2ED47A" stroke-width="16" stroke-linecap="round" opacity="0.85"/>
+  <circle cx="430" cy="96" r="20" fill="#2ED47A"/>
+  <g transform="translate(256 372.7096774193548) rotate(0) scale(8.645)">
+    <path d="M 0 -0.2 Q -0.6 2.0 -1.4 4.2" fill="none" stroke="url(#лист)" stroke-width="0.25" stroke-linecap="round"/>
+    <path d="M 0.00 -0.00 Q 4.67 -1.95 5.32 -3.00 Q 8.54 -4.95 8.11 -6.00 Q 10.76 -7.95 9.61 -9.00 Q 11.63 -10.95 10.01 -12.00 Q 11.29 -13.95 9.41 -15.00 Q 9.93 -16.95 7.97 -18.00 Q 7.71 -19.95 5.84 -21.00 Q 4.83 -22.95 3.18 -24.00 Q 1.42 -25.95 0.00 -27.00 Q -1.66 -25.05 -1.90 -24.00 Q -3.71 -22.05 -3.43 -21.00 Q -5.46 -19.05 -4.73 -18.00 Q -6.86 -16.05 -5.73 -15.00 Q -7.78 -13.05 -6.32 -12.00 Q -8.06 -10.05 -6.55 -9.00 Q -8.31 -7.05 -6.79 -6.00 Q -8.13 -3.95 -5.06 -3.00 Q -4.44 -1.95 0.00 -0.00 Z" fill="url(#лист)"/>
+    <path d="M 0 -1.6 Q 0.5 -14 0 -25.4" fill="none" stroke="#08090B" stroke-width="0.93" stroke-linecap="round"/>
+  </g>
+</svg>
