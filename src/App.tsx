@@ -16078,8 +16078,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
      сервер отвечает, есть ли её адрес в настройках. Пока нет — выбора
      сети в форме не появляется, и кнопка запуска в разделе Solana не
      показывается. */
-  /* Первый экран: показывается ровно один раз тому, кто ещё не заводил
-     аккаунт. Отметка живёт в телефоне — на сервере ей делать нечего. */
+  /* Первый экран: показывается тому, кто ещё не завёл аккаунт. Отметка
+     живёт в телефоне — на сервере ей делать нечего.
+
+     Она же снимается при выходе из аккаунта: человек без аккаунта снова
+     видит то же, что и новичок. Раньше отметка ставилась навсегда, и
+     вышедший попадал сразу в ленту — без единого намёка, где вход и
+     зачем вообще заводить аккаунт. */
   const [приветствие, setПриветствие] = useState(() => {
     try { return typeof window !== "undefined" && !window.localStorage.getItem("mintly.welcome"); }
     catch { return false; }
@@ -16087,6 +16092,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
   function закрытьПриветствие() {
     setПриветствие(false);
     try { if (typeof window !== "undefined") window.localStorage.setItem("mintly.welcome", "1"); }
+    catch { /* приватный режим */ }
+  }
+  function вернутьПриветствие() {
+    setПриветствие(true);
+    try { if (typeof window !== "undefined") window.localStorage.removeItem("mintly.welcome"); }
     catch { /* приватный режим */ }
   }
 
@@ -16603,6 +16613,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     await supabase.auth.signOut();
     setAccountCreated(false);
     setProfile(EMPTY_PROFILE);
+    вернутьПриветствие();
     if (connected) tonConnectUI.disconnect();
     showToast(t("loggedOut"));
   }
@@ -16633,6 +16644,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     await supabase.auth.signOut();
     setAccountCreated(false);
     setProfile(EMPTY_PROFILE);
+    вернутьПриветствие();
     if (connected) tonConnectUI.disconnect();
     showToast(t("accountDeleted"));
   }
