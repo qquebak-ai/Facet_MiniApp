@@ -167,6 +167,32 @@ async function ценыКривой(tokenId, state, curveAddress, свежо) {
     .filter((v) => v > 0);
 }
 
+/* Ряд цен по самой кривой.
+ *
+ * Пока по токену не прошло ни одной сделки, истории нет — и график
+ * оставался пустым прямоугольником с надписью «нет сделок». Но цена на
+ * кривой не тайна: она задана формулой контракта и известна наперёд для
+ * любого объёма выкупа. Поэтому рисуем саму кривую от начала до порога
+ * листинга, а точку ставим там, где токен сейчас.
+ *
+ * Это не прогноз рынка: по этой линии цена и будет идти, сколько бы
+ * времени ни прошло. Прогноз — это «когда», а здесь только «сколько».
+ */
+function рядПоКривой({ виртМонет, виртТокенов, собрано, цель }) {
+  const конец = Math.max(цель || 0, собрано * 1.6, виртМонет * 0.35);
+  if (!(виртМонет > 0) || !(виртТокенов > 0) || !(конец > 0)) return null;
+  const N = 44;
+  const цена = (r) => {
+    const резервМонет = виртМонет + r;
+    const резервТокенов = (виртМонет * виртТокенов) / резервМонет;
+    return резервТокенов > 0 ? резервМонет / резервТокенов : 0;
+  };
+  const точки = Array.from({ length: N }, (_, i) => цена((конец * i) / (N - 1)));
+  // Где на этой линии токен стоит сейчас — по нему ставится точка.
+  const доля = Math.max(0, Math.min(1, собрано / конец));
+  return { точки, отметка: доля };
+}
+
 function fmtЦена(v, вTon) {
   if (!(v > 0)) return "-";
   const хвост = вTon ? " TON" : "";
@@ -187,7 +213,7 @@ function fmtБольшое(v, вTon) {
 
 /* Собственно рисование. Всё, что видно на картинке: тикер, цена,
    движение, сама линия и подпись площадки. */
-export function нарисовать({ ticker, name, priceText, capText, change, точки, вTon }) {
+export function нарисовать({ ticker, name, priceText, capText, change, точки, вTon, отметка = null, подпись = null }) {
   // Всё ниже — в единицах макета; К переводит их в пиксели холста.
   const К = РЕНДЕР;
   const c = createCanvas(W * К, H * К, ФОН);
@@ -213,10 +239,15 @@ export function нарисовать({ ticker, name, priceText, capText, change,
   Т(`$${ticker}`, 34, 30, БЕЛЫЙ, 5);
   if (name) Т(String(name).slice(0, 22), 34, 82, СЕРЫЙ, 2);
 
-  const цвет = change >= 0 ? ЗЕЛЁНЫЙ : КРАСНЫЙ;
-  const движение = `${change >= 0 ? "+" : "-"}${Math.abs(change).toFixed(2)}%`;
   Т(priceText, W - 34 - Ш(priceText, 3), 30, БЕЛЫЙ, 3);
-  Т(движение, W - 34 - Ш(движение, 2), 66, цвет, 2);
+  // Движения может не быть вовсе — у токена, по которому ещё не прошло
+  // ни одной сделки. «+0.00%» там означало бы «цена стояла», хотя ей
+  // просто негде было измениться.
+  if (change != null) {
+    const цвет = change >= 0 ? ЗЕЛЁНЫЙ : КРАСНЫЙ;
+    const движение = `${change >= 0 ? "+" : "-"}${Math.abs(change).toFixed(2)}%`;
+    Т(движение, W - 34 - Ш(движение, 2), 66, цвет, 2);
+  }
   if (capText) Т(capText, W - 34 - Ш(capText, 2), 92, СЕРЫЙ, 2);
 
   const x0 = 34;
@@ -244,10 +275,16 @@ export function нарисовать({ ticker, name, priceText, capText, change,
     const кY = (v) => y1 - ((v - мин) / размах) * (y1 - y0) * 0.88 - (y1 - y0) * 0.06;
     const кX = (i) => x0 + ((x1 - x0) * i) / (точки.length - 1);
 
+    // Докуда путь уже пройден. Для истории сделок это вся линия, для
+    // самой кривой — та её часть, что соответствует собранному: дальше
+    // цена пойдёт по этой же линии, но ещё не пошла.
+    const рубеж = отметка == null ? точки.length - 1 : Math.round(отметка * (точки.length - 1));
+    const тускло = (i) => отметка != null && i >= рубеж;
+
     // Заливка под линией — вертикальным затуханием. Шаг по пикселям
     // холста, а не по единицам макета: иначе между столбиками остаются
     // непрокрашенные полосы.
-    for (let i = 0; i < точки.length - 1; i++) {
+    for (let i = 0; i < Math.max(1, рубеж); i++) {
       const ax = кX(i) * К, bx = кX(i + 1) * К;
       const ay = кY(точки[i]) * К, by = кY(точки[i + 1]) * К;
       const низ = y1 * К;
@@ -266,18 +303,19 @@ export function нарисовать({ ticker, name, priceText, capText, change,
     // разница видна ровно в мессенджере, где картинку смотрят мельком.
     for (const [толщина, альфа] of [[6, 0.05], [3.6, 0.09], [2.4, 0.16]]) {
       for (let i = 0; i < точки.length - 1; i++) {
+        if (тускло(i)) continue;
         Л(кX(i), кY(точки[i]), кX(i + 1), кY(точки[i + 1]), АКЦЕНТ, толщина, альфа);
       }
     }
     for (let i = 0; i < точки.length - 1; i++) {
-      Л(кX(i), кY(точки[i]), кX(i + 1), кY(точки[i + 1]), АКЦЕНТ, 1.3);
+      Л(кX(i), кY(точки[i]), кX(i + 1), кY(точки[i + 1]), АКЦЕНТ, 1.3, тускло(i) ? 0.28 : 1);
     }
 
     // Точка «сейчас»: ядро белое, вокруг — ореол акцентом. Круг
     // заполняется, а не обводится по углам: обвод оставлял на кромке
     // зубцы, которые уменьшение уже не спасало.
-    const lx = кX(точки.length - 1) * К;
-    const ly = кY(точки[точки.length - 1]) * К;
+    const lx = кX(рубеж) * К;
+    const ly = кY(точки[рубеж]) * К;
     const Rвнеш = 16 * К;
     for (let y = Math.round(ly - Rвнеш); y <= ly + Rвнеш; y++) {
       for (let x = Math.round(lx - Rвнеш); x <= lx + Rвнеш; x++) {
@@ -293,7 +331,7 @@ export function нарисовать({ ticker, name, priceText, capText, change,
     Т(нет, (W - Ш(нет, 2)) / 2, (y0 + y1) / 2 - 7, СЕРЫЙ, 2);
   }
 
-  Т(вTon ? "MINTLY CURVE" : "24H", 34, H - 34, СЕРЫЙ, 2);
+  Т(подпись || (вTon ? "MINTLY CURVE" : "24H"), 34, H - 34, СЕРЫЙ, 2);
   const марка = "MINTLY";
   Т(марка, W - 34 - Ш(марка, 2), H - 34, АКЦЕНТ, 2, 0.9);
 
@@ -330,19 +368,58 @@ export default async function handler(req, res) {
       const admin = adminClient();
       const { data: строка } = await admin
         .from("tokens")
-        .select("id, name, ticker, curve_address")
+        .select("id, name, ticker, address, curve_address, chain, network")
         .eq("id", токен)
         .maybeSingle();
       if (!строка) return res.status(404).json({ error: "not_found" });
+
+      // Токен своей площадки в Solana: состояние читается у нашей же
+      // программы кривой, а не у TON. Раньше эта ветка молча уходила в
+      // TON и возвращала пустой график — цепочка-то другая.
+      if (строка.chain === "solana") {
+        const { состояние } = await import("./solana-launch.js");
+        const s = await состояние(строка.address).catch(() => null);
+        const кривая = s ? рядПоКривой({
+          виртМонет: s.virtualSol,
+          виртТокенов: s.virtualTokens,
+          собрано: s.realSol,
+          цель: s.graduationSol,
+        }) : null;
+        const png = нарисовать({
+          ticker: String(строка.ticker || "").toUpperCase(),
+          name: строка.name,
+          priceText: s ? fmtЦена(s.ценаSol, false).replace("$", "") + " SOL" : "-",
+          capText: s ? `${s.solСобрано.toFixed(2)} / ${s.solЦель.toFixed(0)} SOL` : "",
+          change: null,
+          точки: кривая ? кривая.точки : [],
+          отметка: кривая ? кривая.отметка : null,
+          подпись: "MINTLY CURVE · SOL",
+          вTon: false,
+        });
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", свежо ? "no-store" : "public, max-age=60, s-maxage=60");
+        return res.status(200).send(png);
+      }
+
       const [state, курс] = await Promise.all([curveState(строка.curve_address), курсTon()]);
       const точки = await ценыКривой(строка.id, state, строка.curve_address, свежо);
       const цена = priceFromState(state);
       // Последняя точка — из контракта: он свежее любой записанной
-      // истории. Сделок ещё не было — рисуем прямую по текущей цене,
-      // это правда: между сделками цена на кривой стоит.
+      // истории.
       const ряд = цена > 0
-        ? (точки.length ? [...точки, цена] : [цена, цена])
+        ? (точки.length ? [...точки, цена] : [])
         : точки;
+
+      // Сделок ещё не было — рисуем саму кривую и отмечаем, где токен
+      // стоит сейчас. Пустой прямоугольник с надписью «нет сделок»
+      // говорил ровно то же самое, только не показывал ничего.
+      const кривая = ряд.length >= 2 || !state ? null : рядПоКривой({
+        виртМонет: Number(state.virtualTon),
+        виртТокенов: Number(state.virtualTokens),
+        собрано: Number(state.realTon),
+        цель: Number(state.graduationTon),
+      });
+
       const старт = ряд.length ? ряд[0] : 0;
       const png = нарисовать({
         ticker: String(строка.ticker || "").toUpperCase(),
@@ -351,8 +428,10 @@ export default async function handler(req, res) {
         // Капитализация в долларах: в TON её приходилось пересчитывать
         // в уме. Курса нет — показываем в TON, это лучше прочерка.
         capText: цена > 0 ? (курс > 0 ? fmtБольшое(цена * 1e9 * курс, false) : fmtБольшое(цена * 1e9, true)) : "",
-        change: старт > 0 && цена > 0 ? ((цена - старт) / старт) * 100 : 0,
-        точки: ряд,
+        change: кривая ? null : (старт > 0 && цена > 0 ? ((цена - старт) / старт) * 100 : 0),
+        точки: кривая ? кривая.точки : ряд,
+        отметка: кривая ? кривая.отметка : null,
+        подпись: кривая ? "MINTLY CURVE · NO TRADES YET" : null,
         вTon: true,
       });
       res.setHeader("Content-Type", "image/png");
