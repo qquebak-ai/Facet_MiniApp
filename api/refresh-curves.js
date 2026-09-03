@@ -175,6 +175,11 @@ async function метаданные(address) {
     holders: typeof json.holders_count === "number" ? json.holders_count : null,
     supply: json.total_supply != null ? Number(json.total_supply) / 10 ** decimals : null,
     image: (json.metadata && json.metadata.image) || json.preview || null,
+    // Описание автор писал при запуске, и до сих пор оно жило только в
+    // цепочке. Токены, запущенные раньше, чем приложение стало его
+    // сохранять, добирают описание отсюда — иначе их карточки в мемпаде
+    // навсегда остались бы без единого слова.
+    description: (json.metadata && json.metadata.description) || null,
   };
 }
 
@@ -236,10 +241,14 @@ export default async function handler(req, res) {
   // и обход перестаёт обновлять витрину.
   const { error: нетКолонки } = await admin.from("tokens").select("dex_pool_address").limit(1);
   const естьЛистинг = !нетКолонки;
+  // То же и с описанием: колонка добавляется миграцией, а до неё запрос
+  // с ней отбивается целиком и витрина перестаёт обновляться вовсе.
+  const { error: нетОписания } = await admin.from("tokens").select("description").limit(1);
+  const естьОписание = !нетОписания;
 
   const { data: tokens, error } = await admin
     .from("tokens")
-    .select(`id, address, curve_address, logo_url, chain${естьЛистинг ? ", dex_pool_address, listed_at" : ""}`)
+    .select(`id, address, curve_address, logo_url, chain${естьОписание ? ", description" : ""}${естьЛистинг ? ", dex_pool_address, listed_at" : ""}`)
     .not("curve_address", "is", null)
     .in("network", СЕТИ)
     .order("created_at", { ascending: false })
@@ -259,6 +268,7 @@ export default async function handler(req, res) {
   // «токенов нет», и чинить приходится вслепую.
   let молчат = 0;
   let залистили = 0;
+  const описания = new Map();
   for (const tok of tokens) {
     // Токены Solana идут своей дорогой: их кривая живёт в другой цепочке,
     // и запрос к tonapi по её адресу возвращал пустоту — такой токен
@@ -281,6 +291,8 @@ export default async function handler(req, res) {
       сделки(tok.curve_address, params.feeBps),
       tok.address ? метаданные(tok.address) : Promise.resolve(null),
     ]);
+
+    if (meta && meta.description) описания.set(tok.id, String(meta.description).slice(0, 600));
 
     const заСутки = история.filter((p) => p.time >= сутки);
     const объём = заСутки.reduce((s, p) => s + Number(p.ton) / 1e9, 0);
@@ -350,6 +362,15 @@ export default async function handler(req, res) {
   const безЛоготипа = строки.filter((s) => s.logo_url && !tokens.find((t) => t.id === s.token_id).logo_url);
   for (const s of безЛоготипа) {
     await admin.from("tokens").update({ logo_url: s.logo_url }).eq("id", s.token_id);
+  }
+
+  // То же и с описанием: пишем только тем, у кого его нет. Перезаписывать
+  // нельзя — в базе лежит то, что автор ввёл сам, а в цепочке могла
+  // остаться версия постарше.
+  for (const [id, текст] of (естьОписание ? описания : [])) {
+    if (!tokens.find((t) => t.id === id)?.description) {
+      await admin.from("tokens").update({ description: текст }).eq("id", id);
+    }
   }
 
   return res.status(200).json({ updated: строки.length, tokens: tokens.length, silent: молчат, logos: безЛоготипа.length, listed: залистили });

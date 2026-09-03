@@ -5046,40 +5046,91 @@ function ПометкаТест({ сеть, size = 10 }) {
   );
 }
 
+/* Одна цифра в подвале карточки. Подпись мелкая и приглушённая: их
+   четыре в ряд, и если каждую набрать наравне со значением, ряд читается
+   как сплошная каша. */
+function ЧислоКарточки({ подпись, значение, цвет }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate" style={{ fontFamily: monoFont, color: цвет || T.ice, fontSize: 13, fontWeight: 600 }}>{значение}</div>
+      <div className="truncate" style={{ fontFamily: bodyFont, color: T.faint, fontSize: 10.5, marginTop: 1 }}>{подпись}</div>
+    </div>
+  );
+}
+
+/* Карточка токена в мемпаде.
+ *
+ * Прежде здесь была строка: аватар, тикер, капитализация. По ней нельзя
+ * было решить ничего — что за токен, о чём он, давно ли живёт, сколько
+ * до биржи. Человек открывал десяток подряд, чтобы понять, и закрывал.
+ *
+ * Теперь карточка отвечает на это сразу: описание (его пишут при
+ * запуске), возраст, шкала до листинга и четыре цифры, по которым
+ * мемкоины и сравнивают. Открывать имеет смысл уже осознанно. */
 const MempadRow = React.memo(function MempadRow({ t: tok, onOpen, index }) {
   const рост = (tok.change || 0) >= 0;
+  const возраст = (fmtAge(tok.createdAt) || "")
+    .replace(/M$/, " мин").replace(/H$/, " ч").replace(/D$/, " д");
+  const своя = tok.graduationTon > 0;
+  // Держателей знают не у всех: у токенов с биржи их не сосчитать, зато
+  // видно число сделок. Показываем то, что есть на самом деле.
+  const людиИлиСделки = tok.holders != null
+    ? { подпись: "держателей", значение: Number(tok.holders).toLocaleString("ru-RU") }
+    : { подпись: "сделок за сутки", значение: (tok.tx24h || 0).toLocaleString("ru-RU") };
+
   return (
     <button
       onClick={() => onOpen(tok)}
-      className="fx-tap w-full flex items-center text-left"
-      // Задержка появления копится только на первых строках: при сорока
+      className="fx-tap fx-card w-full text-left rounded-[18px]"
+      // Задержка появления копится только на первых карточках: при сорока
       // элементах прежние сорок миллисекунд на каждый растягивали список
       // на полторы секунды, и переключение вкладки выглядело медленным.
-      style={{ gap: 12, padding: "13px 0", animationDelay: `${Math.min(index, 6) * 22}ms` }}
+      style={{
+        padding: 14, background: T.surface, border: `1px solid ${T.line}`,
+        animationDelay: `${Math.min(index, 6) * 22}ms`,
+      }}
     >
-      <TokenAvatar size={38} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+      <div className="flex items-center" style={{ gap: 12 }}>
+        <TokenAvatar size={46} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
 
-      <div className="flex-1 min-w-0">
-        <div className="truncate flex items-center" style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 600, gap: 6 }}>
-          ${tok.ticker}
-          <ПометкаТест сеть={tok.network} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center" style={{ gap: 6 }}>
+            <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 600 }}>${tok.ticker}</span>
+            <ПометкаТест сеть={tok.network} />
+          </div>
+          <div className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 2 }}>
+            {tok.name || "—"}
+            {возраст ? ` · ${возраст}` : ""}
+            {tok.dexName ? ` · ${tok.dexName}` : ""}
+          </div>
         </div>
-        {/* Вторая строка — то, по чему токен сравнивают: оборот и либо
-            держатели, либо, где их не сосчитать, число сделок. */}
-        <div className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, marginTop: 2 }}>
-          ${tok.vol}
-          {tok.chain === "solana"
-            ? ` · ${(tok.tx24h || 0).toLocaleString("ru-RU")} сделок`
-            : null}
+
+        <div className="text-right flex-shrink-0">
+          <div style={{ fontFamily: monoFont, color: T.ice, fontSize: 15, fontWeight: 600 }}>{fmtUSD(tok.mcapNum)}</div>
+          <div style={{ fontFamily: monoFont, color: рост ? T.up : T.down, fontSize: 12.5, marginTop: 3 }}>
+            {рост ? "+" : ""}{(tok.change || 0).toFixed(1)}%
+          </div>
         </div>
-        <GraduationBar raisedTon={tok.raisedTon} targetTon={tok.graduationTon} compact />
       </div>
 
-      <div className="text-right flex-shrink-0">
-        <div style={{ fontFamily: monoFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>{fmtUSD(tok.mcapNum)}</div>
-        <div style={{ fontFamily: monoFont, color: рост ? T.up : T.down, fontSize: 12.5, marginTop: 3 }}>
-          {рост ? "+" : ""}{(tok.change || 0).toFixed(1)}%
-        </div>
+      {/* Описание — две строки, не больше: длинный текст на карточке
+          вытесняет цифры, ради которых её и читают. */}
+      {tok.description ? (
+        <p style={{
+          fontFamily: bodyFont, color: T.paper, fontSize: 12.5, lineHeight: 1.45, marginTop: 10,
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>
+          {tok.description}
+        </p>
+      ) : null}
+
+      {своя ? <div style={{ marginTop: 10 }}><GraduationBar raisedTon={tok.raisedTon} targetTon={tok.graduationTon} compact /></div> : null}
+
+      <div className="grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
+        <ЧислоКарточки подпись="цена" значение={fmtPrice(tok.price)} />
+        <ЧислоКарточки подпись={своя ? "в кривой" : "ликвидность"} значение={`$${tok.liq}`} />
+        <ЧислоКарточки подпись="объём 24ч" значение={`$${tok.vol}`} />
+        <ЧислоКарточки подпись={людиИлиСделки.подпись} значение={людиИлиСделки.значение} />
       </div>
     </button>
   );
@@ -5142,6 +5193,15 @@ function localTokenToFeedShape(entry) {
     // Сеть тащим дальше: по ней в списке ставится пометка «тест», и без
     // неё пробный токен неотличим от настоящего.
     network: entry.network || null,
+    // Описание и держатели — для карточки в мемпаде: по ним видно, что
+    // за токен, ещё до того, как его открыли.
+    description: entry.description || null,
+    holders: entry.holders != null ? entry.holders : null,
+    // Шкала до листинга: раньше эти числа сюда не доезжали, и полоса в
+    // списке не рисовалась ни у одного своего токена.
+    raisedTon: entry.raisedTon || 0,
+    graduationTon: entry.graduationTon || 0,
+    graduated: !!entry.graduated,
     createdAt: entry.createdAt ? new Date(entry.createdAt).toISOString() : null,
   };
 }
@@ -15582,6 +15642,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       supply: row.supply,
       buyAmount: row.buy_amount,
       logoUrl: row.logo_url,
+      // Описание пишется при запуске и больше не меняется — это обещание
+      // автора, а не подпись под картинкой. В карточке мемпада по нему
+      // видно, что за токен, ещё до того, как его открыли.
+      description: row.description || null,
       network: row.network || "mainnet",
       // Сеть токена: по ней решается, у какой цепочки спрашивать цену и
       // каким кошельком торговать.
@@ -16386,6 +16450,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       creator_wallet: result.creatorWallet || null,
       explorer_url: result.explorerUrl || null,
       category: result.category || null,
+      description: result.description || null,
       network: result.network || (TON_TESTNET ? "testnet" : "mainnet"),
       // Сеть токена: по ней приложение решает, у какой цепочки
       // спрашивать цену и каким кошельком торговать.
@@ -16401,6 +16466,13 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       console.warn("[mintly] первая попытка сохранить токен не прошла:", error.message);
       await supabase.auth.refreshSession().catch(() => {});
       ({ data: row, error } = await supabase.from("tokens").insert(строка).select().single());
+    }
+    // Колонка описания появилась позже остальных: пока миграции нет,
+    // база отбивает всю строку целиком, и токен, уже выпущенный в сети,
+    // терялся бы из-за одного текстового поля. Тогда сохраняем без него.
+    if (error && (error.code === "42703" || /description/i.test(error.message || ""))) {
+      const { description, ...безОписания } = строка;
+      ({ data: row, error } = await supabase.from("tokens").insert(безОписания).select().single());
     }
 
     if (error || !row) {
@@ -16438,6 +16510,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       supply: row.supply,
       buyAmount: row.buy_amount,
       logoUrl: row.logo_url,
+      // Описание пишется при запуске и больше не меняется — это обещание
+      // автора, а не подпись под картинкой. В карточке мемпада по нему
+      // видно, что за токен, ещё до того, как его открыли.
+      description: row.description || null,
       network: row.network || "mainnet",
       createdAt: new Date(row.created_at).getTime(),
     };
@@ -16618,6 +16694,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           buyTokens: chainResult.mintedTokens ?? tokens,
           buyPct: pct,
           category: req.category || null,
+          // Описание автора: до сих пор оно уезжало только в
+          // метаданные в цепочке, и в приложении его негде было
+          // прочитать — карточка в мемпаде стояла безымянной.
+          description: req.form.desc.trim(),
           logoUrl: persistentLogoUrl,
           curveAddress: chainResult.curveAddress,
           curveJettonWallet: chainResult.curveJettonWallet,
@@ -16701,6 +16781,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           buyTokens: куплено,
           buyPct: (куплено / 1_000_000_000) * 100,
           category: req.category || null,
+          // Описание автора: до сих пор оно уезжало только в
+          // метаданные в цепочке, и в приложении его негде было
+          // прочитать — карточка в мемпаде стояла безымянной.
+          description: req.form.desc.trim(),
           logoUrl: logo,
           chain: "solana",
           // Сеть той цепочки, в которой токен на самом деле выпущен, а не
