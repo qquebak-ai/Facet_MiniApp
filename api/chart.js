@@ -401,7 +401,7 @@ export default async function handler(req, res) {
         return res.status(200).send(png);
       }
 
-      const [state, курс] = await Promise.all([curveState(строка.curve_address), курсTon()]);
+      const [state, курс] = await Promise.all([curveState(строка.curve_address, строка.network), курсTon()]);
       const точки = await ценыКривой(строка.id, state, строка.curve_address, свежо);
       const цена = priceFromState(state);
       // Последняя точка — из контракта: он свежее любой записанной

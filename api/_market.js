@@ -51,10 +51,16 @@ const nano = (v) => Number(v) / 1e9;
 
 /* Состояние кривой прямо из контракта. Порядок полей — из структуры
    CurveData: менять его нельзя, не поправив здесь и в api/notify.js. */
-export async function curveState(address) {
+export async function curveState(address, network = null) {
   if (!address) return null;
   try {
-    const res = await fetch(`${TONAPI}/v2/blockchain/accounts/${address}/methods/data`, { method: "POST" });
+    // Сеть берётся у самого токена, когда её сказали: в базе рядом
+    // лежат и боевые, и тестовые, а состояние тестовой кривой в боевой
+    // сети просто не существует — и график выходил пустым.
+    const узел = network === "testnet" ? "https://testnet.tonapi.io"
+      : network === "mainnet" ? "https://tonapi.io"
+      : TONAPI;
+    const res = await fetch(`${узел}/v2/blockchain/accounts/${address}/methods/data`, { method: "POST" });
     if (!res.ok) return null;
     const json = await res.json();
     const stack = json && json.stack;
