@@ -54,6 +54,13 @@ const CRON_SECRET = process.env.CRON_SECRET;
 const TESTNET = process.env.TON_TESTNET === "1";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
 
+// Сеть Solana своя: программа кривой ещё в devnet, и токены оттуда
+// лежат в базе с network = "devnet". Обходить их надо наравне с
+// боевыми — иначе у них нет ни цены на витрине, ни уведомлений.
+const SOL_NETWORK = /devnet/.test(process.env.SOLANA_RPC || "") ? "devnet"
+  : /testnet/.test(process.env.SOLANA_RPC || "") ? "testnet" : "mainnet";
+const СЕТИ = [...new Set([TESTNET ? "testnet" : "mainnet", SOL_NETWORK])];
+
 // Сколько токенов проверяем за один заход. Состояние берём из
 // curve_cache — там оно уже посчитано обходом (api/refresh-curves.js),
 // и упереться в лимиты tonapi нечем. В цепочку ходим только за теми,
@@ -93,6 +100,19 @@ async function curveState(address) {
   };
 }
 
+/* Состояние кривой независимо от цепочки. Числа складываются в те же
+   поля: разница только в монете, а вехи и пороги считаются одинаково.
+   Раньше сюда попадал любой токен с адресом кривой, и токены Solana
+   спрашивались у tonapi — то есть не спрашивались вовсе, и их владельцам
+   не приходило ни одного сообщения. */
+async function состояниеКривой(tok) {
+  if ((tok.chain || "ton") !== "solana") return curveState(tok.curve_address);
+  const { состояние } = await import("./solana-launch.js");
+  const st = await состояние(tok.address);
+  if (!st) return null;
+  return { realTon: st.solСобрано, graduationTon: st.solЦель, graduated: !!st.закрыта };
+}
+
 async function tell(chatId, text) {
   if (!chatId) return false;
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -106,6 +126,24 @@ async function tell(chatId, text) {
 }
 
 const fmt = (n) => (n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2));
+
+/* Перевод порога из TON в SOL по стоимости. Курсы за заход спрашиваются
+   один раз; если биржи молчат, берём грубое соотношение — лучше порог
+   мимо на четверть, чем сотня сообщений о центовых покупках. */
+let курсы = null;
+async function вМонету(вTon) {
+  if (!курсы) {
+    try {
+      const { курсSol, курсTon } = await import("./_market.js");
+      const [sol, ton] = await Promise.all([курсSol(), курсTon()]);
+      курсы = { sol: Number(sol) || 0, ton: Number(ton) || 0 };
+    } catch {
+      курсы = { sol: 0, ton: 0 };
+    }
+  }
+  if (курсы.sol > 0 && курсы.ton > 0) return (вTon * курсы.ton) / курсы.sol;
+  return вTon / 500;
+}
 
 export default async function handler(req, res) {
   if (!BOT_TOKEN || !SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -122,12 +160,12 @@ export default async function handler(req, res) {
 
   const { data: tokens, error } = await admin
     .from("tokens")
-    .select("id, name, ticker, curve_address, owner_id")
+    .select("id, name, ticker, curve_address, owner_id, chain, address")
     .not("curve_address", "is", null)
     // Токены прежней сети сюда попадать не должны: их кривых на этом
     // узле нет, каждая проверка уходила бы в пустоту и занимала место в
     // пачке, которую и так ограничивает tonapi.
-    .eq("network", TESTNET ? "testnet" : "mainnet")
+    .in("network", СЕТИ)
     .order("created_at", { ascending: false })
     .limit(BATCH);
   if (error) return res.status(500).json({ error: "tokens_failed", detail: error.message });
@@ -188,10 +226,13 @@ export default async function handler(req, res) {
       };
     } else if (дочитано < ЧИТАТЬ_ИЗ_ЦЕПОЧКИ) {
       дочитано += 1;
-      try { curve = await curveState(tok.curve_address); } catch { /* сеть подведёт — попробуем в следующий заход */ }
+      try { curve = await состояниеКривой(tok); } catch { /* сеть подведёт — попробуем в следующий заход */ }
     }
     if (!curve) continue;
     checked += 1;
+    // Монета, в которой считается кривая. В сообщении она важнее всего
+    // остального: «купили на 0.4» без единицы читается как угодно.
+    const монета = (tok.chain || "ton") === "solana" ? "SOL" : "TON";
 
     const prev = stateOf.get(tok.id) || { last_real_ton: null, sent_half: false, sent_almost: false, sent_closed: false };
     const chat = chatOf.get(tok.owner_id);
@@ -223,9 +264,13 @@ export default async function handler(req, res) {
 
     const pref = prefOf.get(tok.owner_id) || { buys: true, progress: true, minTon: MIN_BUY_TON };
     if (chat) {
-      const порог = Math.max(0, pref.minTon);
+      // Порог человек задаёт в TON — он один на все его токены. Для
+      // кривой в Solana тот же порог берём по стоимости, а не по числу:
+      // 0.05 SOL это десяток долларов, и владелец не услышал бы почти
+      // ни одной покупки.
+      const порог = Math.max(0, монета === "SOL" ? await вМонету(pref.minTon) : pref.minTon);
       if (pref.buys && grew >= порог) {
-        if (await tell(chat, `Купили <b>${label}</b> на ${fmt(grew)} TON\nВ кривой уже ${fmt(curve.realTon)} из ${fmt(target)} TON`)) sent += 1;
+        if (await tell(chat, `Купили <b>${label}</b> на ${fmt(grew)} ${монета}\nВ кривой уже ${fmt(curve.realTon)} из ${fmt(target)} ${монета}`)) sent += 1;
       } else if (pref.buys && grew > 0) {
         // Покупка меньше порога: точку отсчёта не сдвигаем, иначе при
         // частых заходах мелкие сделки просто исчезали бы одна за другой,
@@ -239,13 +284,13 @@ export default async function handler(req, res) {
         next.sent_almost = pct >= 90 || prev.sent_almost;
         next.sent_half = pct >= 50 || prev.sent_half;
       } else if (curve.graduated && !prev.sent_closed) {
-        if (await tell(chat, `<b>${label}</b> закрыл кривую 🎉\nСобрано ${fmt(curve.realTon)} TON. Торговля в приложении закончилась, из собранного заводится пара на бирже — напишем, когда она появится.`)) sent += 1;
+        if (await tell(chat, `<b>${label}</b> закрыл кривую 🎉\nСобрано ${fmt(curve.realTon)} ${монета}. Торговля в приложении закончилась, из собранного заводится пара на бирже — напишем, когда она появится.`)) sent += 1;
         next.sent_closed = true;
       } else if (!curve.graduated && pct >= 90 && !prev.sent_almost) {
-        if (await tell(chat, `<b>${label}</b> почти на бирже: ${pct.toFixed(0)}% пути\nОсталось ${fmt(Math.max(0, target - curve.realTon))} TON`)) sent += 1;
+        if (await tell(chat, `<b>${label}</b> почти на бирже: ${pct.toFixed(0)}% пути\nОсталось ${fmt(Math.max(0, target - curve.realTon))} ${монета}`)) sent += 1;
         next.sent_almost = true;
       } else if (!curve.graduated && pct >= 50 && !prev.sent_half) {
-        if (await tell(chat, `<b>${label}</b> прошёл половину пути до биржи\nВ кривой ${fmt(curve.realTon)} из ${fmt(target)} TON`)) sent += 1;
+        if (await tell(chat, `<b>${label}</b> прошёл половину пути до биржи\nВ кривой ${fmt(curve.realTon)} из ${fmt(target)} ${монета}`)) sent += 1;
         next.sent_half = true;
       }
     } else {
@@ -275,8 +320,8 @@ export default async function handler(req, res) {
         const текст = событие === "closed"
           ? `<b>${label}</b> закрыл кривую 🎉\nТвои токены никуда не делись: из собранного заводится пара на бирже, торговля продолжится там.`
           : событие === "almost"
-            ? `<b>${label}</b> почти на бирже: ${pct.toFixed(0)}% пути\nОсталось ${fmt(Math.max(0, target - curve.realTon))} TON`
-            : `<b>${label}</b> прошёл половину пути до биржи\nВ кривой ${fmt(curve.realTon)} из ${fmt(target)} TON`;
+            ? `<b>${label}</b> почти на бирже: ${pct.toFixed(0)}% пути\nОсталось ${fmt(Math.max(0, target - curve.realTon))} ${монета}`
+            : `<b>${label}</b> прошёл половину пути до биржи\nВ кривой ${fmt(curve.realTon)} из ${fmt(target)} ${монета}`;
         if (await tell(h.telegram_id, текст)) sent += 1;
         await admin.from("holder_notify").upsert(
           { user_id: h.user_id, token_id: tok.id, event: событие },

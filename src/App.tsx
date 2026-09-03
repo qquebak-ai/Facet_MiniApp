@@ -2516,6 +2516,23 @@ const TON_TESTNET_NETWORK = String(import.meta.env.VITE_TON_TESTNET ?? "0") === 
 // Та же сеть словом: в базе она лежит строкой рядом с каждым токеном.
 const CURRENT_NETWORK = TON_TESTNET_NETWORK ? "testnet" : "mainnet";
 
+/* Сеть Solana — своя, и совпадать с TON она не обязана: кривая TON давно
+   в боевой сети, а программа Solana ещё в devnet. Раньше токены Solana
+   записывались как «mainnet» заодно с TON, и в ленте пробные монеты
+   стояли рядом с настоящими, ничем не отличаясь.
+   Берётся из того же переключателя, что и подпись в Phantom
+   (VITE_SOLANA_CLUSTER): иначе кошелёк подписывал бы в одной сети, а
+   приложение считало токен принадлежащим другой. */
+const SOL_CLUSTER = String(import.meta.env.VITE_SOLANA_CLUSTER || "mainnet-beta");
+const SOL_NETWORK = SOL_CLUSTER.startsWith("mainnet") ? "mainnet" : SOL_CLUSTER;
+// Что показываем в ленте, топе и поиске: сеть TON и сеть Solana. Когда
+// обе боевые — список из одной строки, и всё как раньше.
+const ВИДИМЫЕ_СЕТИ = [...new Set([CURRENT_NETWORK, SOL_NETWORK])];
+// Пробная сеть — та, где монеты ничего не стоят. Такой токен должен
+// нести об этом пометку: человек, купивший его всерьёз, обвинит
+// площадку, и будет прав.
+const пробнаяСеть = (сеть) => !!сеть && сеть !== "mainnet";
+
 function addressForNetwork(raw) {
   try {
     return Address.parse(raw).toString({ testOnly: TON_TESTNET_NETWORK, bounceable: false });
@@ -5015,6 +5032,20 @@ function SpotlightAura({ src, ticker }) {
   );
 }
 
+/* Пометка «тест» у токена из пробной сети. Монеты там ничего не стоят, а
+   выглядит такой токен точно так же, как настоящий, — без подписи это
+   ловушка для того, кто пришёл покупать. */
+function ПометкаТест({ сеть, size = 10 }) {
+  if (!пробнаяСеть(сеть)) return null;
+  return (
+    <span style={{
+      fontFamily: monoFont, fontSize: size, lineHeight: 1.6, letterSpacing: 0.4,
+      color: "#F2C14E", border: "1px solid #F2C14E55",
+      borderRadius: 6, padding: "0 5px", flexShrink: 0, textTransform: "uppercase",
+    }}>тест</span>
+  );
+}
+
 const MempadRow = React.memo(function MempadRow({ t: tok, onOpen, index }) {
   const рост = (tok.change || 0) >= 0;
   return (
@@ -5029,8 +5060,9 @@ const MempadRow = React.memo(function MempadRow({ t: tok, onOpen, index }) {
       <TokenAvatar size={38} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
 
       <div className="flex-1 min-w-0">
-        <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 600 }}>
+        <div className="truncate flex items-center" style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 600, gap: 6 }}>
           ${tok.ticker}
+          <ПометкаТест сеть={tok.network} />
         </div>
         {/* Вторая строка — то, по чему токен сравнивают: оборот и либо
             держатели, либо, где их не сосчитать, число сделок. */}
@@ -5078,8 +5110,11 @@ function MempadRowSkeleton({ index }) {
 function localTokenToFeedShape(entry) {
   // priceTon приходит из состояния кривой, если оно уже прочитано;
   // иначе честнее показать ноль, чем выдуманное число.
+  // Курс — монеты той цепочки, в которой считается кривая: цена токена
+  // Solana выражена в SOL, и пересчёт по TON давал число втрое мимо.
+  const курс = entry.chain === "solana" ? solUsd() : tonUsd();
   const price = entry.priceTon != null
-    ? entry.priceTon * tonUsd()
+    ? entry.priceTon * курс
     : (entry.mcapNum ? entry.mcapNum / 1_000_000_000 : 0);
   return {
     id: entry.id,
@@ -5104,6 +5139,9 @@ function localTokenToFeedShape(entry) {
     curveAddress: entry.curveAddress || null,
     curveJettonWallet: entry.curveJettonWallet || null,
     chain: entry.chain === "solana" ? "solana" : "ton",
+    // Сеть тащим дальше: по ней в списке ставится пометка «тест», и без
+    // неё пробный токен неотличим от настоящего.
+    network: entry.network || null,
     createdAt: entry.createdAt ? new Date(entry.createdAt).toISOString() : null,
   };
 }
@@ -9209,7 +9247,11 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
     //
     // В Solana источник один — её собственная лента: своих запусков там
     // нет, и подмешивать TON-токены было бы враньём.
-    const свои = localTokens.filter((tok) => (tok.chain || "ton") === (сеть === "sol" ? "solana" : "ton"));
+    // Пробные токены сюда не попадают: «в центре внимания» — витрина, а
+    // не список всего подряд, и рекламировать монету, которая ничего не
+    // стоит, площадка не должна. В самом списке ниже она остаётся, с
+    // пометкой.
+    const свои = localTokens.filter((tok) => (tok.chain || "ton") === (сеть === "sol" ? "solana" : "ton") && !пробнаяСеть(tok.network));
     const источник = сеть === "sol"
       ? (свои.length ? свои : (solTokens || []))
       : (tokens.length ? tokens : свои);
@@ -9900,15 +9942,20 @@ function ТопСтрока({ onOpenToken, onOpenProfile, live = [] }) {
 }
 
 function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile }) {
+  // Главная — витрина площадки: сводка, токен дня, движение, топ. Монетам
+  // из пробной сети там не место — их цена ничего не значит, а сводка по
+  // ним показывала бы оборот, которого не было. В мемпаде они остаются,
+  // с пометкой.
+  const боевые = React.useMemo(() => curveTokens.filter((t) => !пробнаяСеть(t && t.network)), [curveTokens]);
   return (
     // Запас снизу — под закреплённую кнопку: в конце прокрутки она
     // должна висеть над пустотой, а не над последней строкой топа.
     <div className="flex flex-col" style={{ gap: 26, paddingTop: 8, paddingBottom: 78 }}>
-      <ГлавнаяСводка live={curveTokens} />
+      <ГлавнаяСводка live={боевые} />
       <БегущаяЛента />
-      <ГлавныйТокен tokens={curveTokens} onOpen={onOpenToken} />
-      <ВДвижении tokens={curveTokens} onOpen={onOpenToken} onAll={() => onGoTab("mempad")} />
-      <ТопСтрока onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} live={curveTokens} />
+      <ГлавныйТокен tokens={боевые} onOpen={onOpenToken} />
+      <ВДвижении tokens={боевые} onOpen={onOpenToken} onAll={() => onGoTab("mempad")} />
+      <ТопСтрока onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} live={боевые} />
 
       {/* Запуск — единственное действие на экране, и оно всегда под
           рукой: кнопка прилипает к низу, пока страница листается.
@@ -11048,6 +11095,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
           <div className="flex items-center gap-1.5">
             <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 600 }}>{token.name}</span>
             {token.verified && <ShieldCheck size={13} color={T.electric} style={{ flexShrink: 0 }} />}
+            <ПометкаТест сеть={token.network} size={10.5} />
           </div>
           <div className="truncate" style={{ fontFamily: monoFont, color: T.faint, fontSize: 12 }}>
             ${token.ticker}{fmtAge(token.createdAt) ? ` · ${fmtAge(token.createdAt)}` : ""}{token.dexName ? ` · ${token.dexName}` : ""}
@@ -12762,6 +12810,7 @@ function MyTokenCard({ t, onManage }) {
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 600 }}>{t.name}</span>
           {t.verified && <ShieldCheck size={12} color={T.electric} />}
           <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11 }}>${t.ticker}</span>
+          <ПометкаТест сеть={t.network} size={9.5} />
         </div>
         <div style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 17.5, color: T.turquoise, marginTop: 2 }}>{fmtUSD(t.mcapNum)}</div>
         <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 2 }}>{tr("liqShort")} ${t.liq} · {holdersCount == null ? "—" : holdersCount.toLocaleString("ru-RU")} {tr("holdersShort")} · {tr("volShort")} {t.vol}</div>
@@ -15482,7 +15531,12 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     // таймеру, а тот держит в замыкании состояние первого кадра, где
     // курса ещё нет. Из-за этого каждое обновление затирало посчитанные
     // цифры нулями — на экране всё стоило «$0».
-    const курс = rate > 0 ? rate : tonUsd();
+    // Курс — той монеты, в которой живёт кривая токена. Числа в кеше
+    // считаются в родной монете цепочки, и токен Solana, пересчитанный
+    // по TON, показывал капитализацию втрое мимо.
+    const курс = tok.chain === "solana"
+      ? solUsd()
+      : (rate > 0 ? rate : tonUsd());
     return {
       ...tok,
       priceTon: c.price_ton,
@@ -15543,7 +15597,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // ценой и шкалой без единого обращения к цепочке.
       .select("*, curve_cache(price_ton,real_ton,graduation_ton,tokens_sold,supply,fee_bps,graduated,holders,vol24_ton,change24,tx24,logo_url,updated_at)")
       .eq("owner_id", uid)
-      .eq("network", CURRENT_NETWORK)
+      .in("network", ВИДИМЫЕ_СЕТИ)
       .order("created_at", { ascending: false });
     if (error) { console.error("[mintly] failed to load tokens from Supabase:", error); return; }
     const rows = (data || []).map((row) => {
@@ -15616,7 +15670,7 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       // и каждое чтение рынка возвращало бы нули. Отсекаем в запросе, а
       // не после: иначе двести строк тестовых токенов вытеснили бы
       // боевые из выборки.
-      .eq("network", CURRENT_NETWORK)
+      .in("network", ВИДИМЫЕ_СЕТИ)
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) { console.error("[mintly] failed to load community tokens from Supabase:", error); setCommunityLoaded(true); return; }
@@ -16649,7 +16703,10 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           category: req.category || null,
           logoUrl: logo,
           chain: "solana",
-          network: CURRENT_NETWORK,
+          // Сеть той цепочки, в которой токен на самом деле выпущен, а не
+          // сеть TON: пока программа в devnet, такой токен обязан
+          // отличаться от боевых и в базе, и в ленте.
+          network: SOL_NETWORK,
           address: итог.mint,
           curveAddress: итог.curve,
           creatorWallet: итог.creatorWallet,

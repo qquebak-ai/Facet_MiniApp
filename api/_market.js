@@ -21,6 +21,15 @@ const TESTNET = process.env.TON_TESTNET === "1";
 const TONAPI = TESTNET ? "https://testnet.tonapi.io" : "https://tonapi.io";
 export const NETWORK = TESTNET ? "testnet" : "mainnet";
 
+/* Сеть Solana — своя. Кривая TON давно в боевой сети, а программа Solana
+   ещё в devnet, и токены оттуда лежат в базе с network = "devnet".
+   Искать их надо: человек, спросивший бота про свой токен, должен его
+   найти, — а вот в витрину «самые собравшие» они не попадают: там
+   сравниваются деньги, а в пробной сети их нет. */
+export const SOL_NETWORK = /devnet/.test(process.env.SOLANA_RPC || "") ? "devnet"
+  : /testnet/.test(process.env.SOLANA_RPC || "") ? "testnet" : "mainnet";
+export const СЕТИ = [...new Set([NETWORK, SOL_NETWORK])];
+
 export const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
 
 /* Метка свежести для ссылки на картинку. Telegram кэширует превью по
@@ -345,14 +354,14 @@ export async function findTokens(query, limit = 8) {
   // dex_pool_address появился позже остальных (см. supabase_listing.sql).
   // Пока миграция не выполнена, колонки в базе нет, и запрос с ней
   // отбивается целиком — поэтому один раз проверяем и дальше помним.
-  const колонки = `id, name, ticker, logo_url, address, curve_address, chain, created_at, owner_id${await естьКолонкаПула(admin) ? ", dex_pool_address" : ""}`;
+  const колонки = `id, name, ticker, logo_url, address, curve_address, chain, network, created_at, owner_id${await естьКолонкаПула(admin) ? ", dex_pool_address" : ""}`;
 
   let ряд;
   if (looksLikeAddress(q)) {
     const { data } = await admin
       .from("tokens")
       .select(колонки)
-      .eq("network", NETWORK)
+      .in("network", СЕТИ)
       .or(`address.eq.${q},curve_address.eq.${q}`)
       .limit(limit);
     ряд = data || [];
@@ -364,7 +373,7 @@ export async function findTokens(query, limit = 8) {
     const { data } = await admin
       .from("tokens")
       .select(колонки)
-      .eq("network", NETWORK)
+      .in("network", СЕТИ)
       .or(`ticker.ilike.%${чисто}%,name.ilike.%${чисто}%`)
       .order("created_at", { ascending: false })
       .limit(limit);
@@ -530,6 +539,11 @@ async function карточкаSolana(token) {
     строки.push(s.закрыта
       ? `🎉 Кривая закрыта, собрано ${s.solСобрано.toFixed(2)} SOL`
       : `🚀 Собрано для выхода на биржу: ${(доля * 100).toFixed(0)}%\n${s.solСобрано.toFixed(2)} / ${s.solЦель.toFixed(0)} SOL`);
+  }
+  // Пробная сеть — первым делом после названия: в чате карточка живёт
+  // сама по себе, и без этой строки монету из devnet покупают всерьёз.
+  if (token.network && token.network !== "mainnet") {
+    строки.splice(2, 0, `⚠️ Пробная сеть (${escape(token.network)}) — монеты здесь ничего не стоят`);
   }
   строки.push(`\n⛓ Solana · <code>${escape(token.address || "")}</code>`);
 
