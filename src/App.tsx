@@ -9919,7 +9919,10 @@ function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenPr
           из-под неё обрезанными строками, и выглядело это ошибкой, а не
           закреплённой панелью. */}
       <div style={{
-        position: "sticky", bottom: 0, marginTop: 2, paddingTop: 26, paddingBottom: 10,
+        // Прилипает выше панели разделов: та висит поверх прокрутки
+        // отдельной капсулой, и кнопка, прижатая к самому низу, легла бы
+        // прямо на неё.
+        position: "sticky", bottom: 76, marginTop: 2, paddingTop: 26, paddingBottom: 10,
         background: `linear-gradient(to top, ${T.bg} 62%, ${hexA(T.bg, 0.88)} 82%, transparent)`,
       }}>
         <button
@@ -17457,7 +17460,9 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           // контейнер при каждом переходе, а вместе с ним и все вкладки
           // внутри KeepAlive — то есть ровно то, ради чего KeepAlive и
           // стоит. Ленты при этом перезапрашивались с нуля.
-          paddingBottom: 78 + insetBottom }}>
+          // Запас под капсулу: она висит над прокруткой, и последняя
+          // строка списка должна уходить из-под неё целиком.
+          paddingBottom: 96 + insetBottom }}>
           <KeepAlive show={view === "home"}>
             <HomeView onGoTab={goTab} onGoCreate={openCreate} curveTokens={communityTokens} onOpenToken={openToken} onOpenProfile={openUserProfile} />
           </KeepAlive>
@@ -17552,17 +17557,24 @@ const FEE_PERCENT = 0.01; // 1% комиссии
           </KeepAlive>
         </div>
 
-        {/* Панель разделов. Раньше это была плавающая капсула с рамкой и
-            тенью — отдельный предмет поверх приложения, забиравший
-            изрядно высоты. Теперь обычная нижняя панель: тонкая линия
-            сверху, плотный фон, ничего больше. */}
+        {/* Панель разделов — плавающая капсула, как и была: отдельный
+            предмет поверх приложения, а не полоса, приросшая к нижнему
+            краю. Лента прокручивается под ней, и по просвету по бокам
+            видно, что экран продолжается дальше.
+
+            Размытия подложки нет намеренно: панель висит над прокруткой,
+            и браузер пересчитывал бы его на каждом кадре списка. Плотная
+            заливка выглядит так же и ничего не стоит. */}
         <div
-          className="flex items-stretch"
+          className="flex items-center justify-around"
           style={{
-            position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 5,
-            paddingBottom: insetBottom,
-            background: hexA(T.bg, 0.94),
-            borderTop: `1px solid ${T.line}`,
+            position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: insetBottom + 6, zIndex: 5,
+            width: "92%", maxWidth: 420,
+            padding: "10px 10px",
+            borderRadius: 999,
+            background: hexA(T.bg, 0.92),
+            border: `1px solid ${T.lineHi}`,
+            boxShadow: "0 10px 34px rgba(0,0,0,0.4)",
           }}
         >
           {[
@@ -17580,16 +17592,16 @@ const FEE_PERCENT = 0.01; // 1% комиссии
                 // строится десятую долю секунды, и без него кажется, что
                 // нажатие не прошло — человек жмёт второй раз.
                 onClick={() => { haptic("light"); goTab(id); }}
-                className="fx-tap flex flex-col items-center justify-center gap-1"
-                style={{ position: "relative", flex: 1, padding: "9px 0 7px", background: "transparent", border: "none" }}
+                className="fx-tap flex flex-col items-center gap-1.5"
+                style={{ position: "relative", background: "transparent", border: "none", padding: 0 }}
               >
-                <Icon size={20} strokeWidth={1.6} color={active ? T.electric : T.faint} style={{ transition: `color ${EASE}` }} />
+                <Icon size={22} strokeWidth={1.75} color={active ? T.electric : T.muted} style={{ transition: `color ${EASE}` }} />
                 {locked && (
-                  <div style={{ position: "absolute", top: 4, right: "26%", width: 12, height: 12, borderRadius: "50%", background: T.surface, border: `1px solid ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Lock size={7} color={T.muted} />
+                  <div style={{ position: "absolute", top: -3, right: -3, width: 14, height: 14, borderRadius: "50%", background: T.surface, border: `1px solid ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Lock size={8} color={T.muted} />
                   </div>
                 )}
-                <span style={{ fontFamily: bodyFont, fontSize: 11, fontWeight: active ? 600 : 500, color: active ? T.ice : T.faint, transition: `color ${EASE}` }}>{label}</span>
+                <span style={{ fontFamily: bodyFont, fontSize: 13, color: active ? T.ice : T.muted, transition: `color ${EASE}` }}>{label}</span>
               </button>
             );
           })}
