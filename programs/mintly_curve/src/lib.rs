@@ -134,11 +134,18 @@ pub struct Curve {
     pub fee_bps: u16,
     pub real_sol: u64,
     pub tokens_sold: u64,
+    /// Запас под ликвидность: столько токенов кривая выпускает получателю
+    /// при закрытии, сверх непроданного остатка. Без этого запаса пара на
+    /// бирже заводилась бы из одних остатков, и цена в ней оказывалась бы
+    /// в десятки раз выше цены, по которой только что торговали.
+    pub liquidity_tokens: u64,
 }
 
 impl Curve {
     /// Сколько байт занимает состояние в счёте.
-    pub const РАЗМЕР: usize = 3 + 32 * 4 + 8 * 4 + 2 + 8 + 8;
+    pub const РАЗМЕР: usize = 3 + 32 * 4 + 8 * 4 + 2 + 8 + 8 + 8;
+    /// Раскладка без запаса под ликвидность — кривые, заведённые до него.
+    pub const РАЗМЕР_V1: usize = 3 + 32 * 4 + 8 * 4 + 2 + 8 + 8;
 
     fn ключ(данные: &[u8], с: usize) -> Pubkey {
         let mut b = [0u8; 32];
@@ -153,7 +160,10 @@ impl Curve {
     }
 
     pub fn из_байтов(данные: &[u8]) -> Option<Curve> {
-        if данные.len() < Self::РАЗМЕР {
+        // Кривые первой версии короче: у них нет запаса под ликвидность,
+        // и при закрытии им достаётся только непроданный остаток. Читаем
+        // и такие — они уже живут в сети, и ломать их нельзя.
+        if данные.len() < Self::РАЗМЕР_V1 {
             return None;
         }
         Some(Curve {
@@ -171,11 +181,16 @@ impl Curve {
             fee_bps: u16::from_le_bytes([данные[163], данные[164]]),
             real_sol: Self::число(данные, 165),
             tokens_sold: Self::число(данные, 173),
+            liquidity_tokens: if данные.len() >= Self::РАЗМЕР {
+                Self::число(данные, 181)
+            } else {
+                0
+            },
         })
     }
 
     pub fn в_байты(&self, куда: &mut [u8]) -> Option<()> {
-        if куда.len() < Self::РАЗМЕР {
+        if куда.len() < Self::РАЗМЕР_V1 {
             return None;
         }
         куда[0] = self.version;
@@ -192,6 +207,9 @@ impl Curve {
         куда[163..165].copy_from_slice(&self.fee_bps.to_le_bytes());
         куда[165..173].copy_from_slice(&self.real_sol.to_le_bytes());
         куда[173..181].copy_from_slice(&self.tokens_sold.to_le_bytes());
+        if куда.len() >= Self::РАЗМЕР {
+            куда[181..189].copy_from_slice(&self.liquidity_tokens.to_le_bytes());
+        }
         Some(())
     }
 
@@ -249,6 +267,10 @@ pub enum Instruction {
         graduation_sol: u64,
         fee_bps: u16,
         destination: Pubkey,
+        /// Запас под ликвидность. Поле дописано позже, поэтому его может
+        /// не быть: тогда кривая работает по-старому и при закрытии
+        /// отдаёт только непроданное.
+        liquidity_tokens: u64,
     },
     /// Купить токены на sol_in лямпортов. min_tokens_out защищает от
     /// проскальзывания: если цена ушла, сделка не состоится.
@@ -279,6 +301,11 @@ impl Instruction {
                     graduation_sol: Self::число(данные, 25),
                     fee_bps: u16::from_le_bytes([данные[33], данные[34]]),
                     destination: Pubkey::new_from_array(b),
+                    liquidity_tokens: if данные.len() >= 75 {
+                        Self::число(данные, 67)
+                    } else {
+                        0
+                    },
                 })
             }
             1 if данные.len() >= 17 => Some(Instruction::Buy {
@@ -311,6 +338,7 @@ pub fn process_instruction(
             graduation_sol,
             fee_bps,
             destination,
+            liquidity_tokens,
         } => initialize(
             program_id,
             accounts,
@@ -320,6 +348,7 @@ pub fn process_instruction(
             graduation_sol,
             fee_bps,
             destination,
+            liquidity_tokens,
         ),
         Instruction::Buy {
             sol_in,
@@ -381,6 +410,7 @@ fn initialize(
     graduation_sol: u64,
     fee_bps: u16,
     destination: Pubkey,
+    liquidity_tokens: u64,
 ) -> ProgramResult {
     let счета = &mut accounts.iter();
     let payer = next_account_info(счета)?;
@@ -455,7 +485,10 @@ fn initialize(
     )?;
 
     let состояние = Curve {
-        version: 1,
+        // Вторая версия раскладки: в ней появился запас под ликвидность.
+        // Читатели ориентируются на длину счёта, а версия говорит им,
+        // чего ждать.
+        version: 2,
         bump,
         graduated: false,
         mint: *mint_ai.key,
@@ -469,6 +502,7 @@ fn initialize(
         fee_bps,
         real_sol: 0,
         tokens_sold: 0,
+        liquidity_tokens,
     };
     записать(curve_ai, &состояние)
 }
@@ -642,12 +676,29 @@ fn sell(
     Ok(())
 }
 
+/// Токен-счёт SPL: в начале лежат mint и владелец, дальше сумма. Читаем
+/// только эти два поля — этого хватает, чтобы убедиться, что ликвидность
+/// уходит именно на счёт получателя и именно по этому токену.
+fn токен_счёт(данные: &[u8]) -> Option<(Pubkey, Pubkey)> {
+    if данные.len() < 64 {
+        return None;
+    }
+    let mut m = [0u8; 32];
+    let mut o = [0u8; 32];
+    m.copy_from_slice(&данные[0..32]);
+    o.copy_from_slice(&данные[32..64]);
+    Some((Pubkey::new_from_array(m), Pubkey::new_from_array(o)))
+}
+
 fn graduate(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let счета = &mut accounts.iter();
     let curve_ai = next_account_info(счета)?;
     let mint_ai = next_account_info(счета)?;
     let destination = next_account_info(счета)?;
     let token_program = next_account_info(счета)?;
+    // Счёт под ликвидность: сюда уходит непроданный остаток. Может не
+    // быть вовсе — тогда закрытие пройдёт как раньше, только с деньгами.
+    let destination_ata = next_account_info(счета).ok();
 
     let mut состояние = прочитать(program_id, curve_ai, mint_ai.key)?;
     if состояние.graduated {
@@ -662,11 +713,49 @@ fn graduate(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::InvalidArgument);
     }
 
-    // Право выпуска снимается навсегда: после закрытия кривой никто —
-    // включая площадку — не может допечатать токены.
     if token_program.key != &TOKEN_PROGRAM {
         return Err(ProgramError::IncorrectProgramId);
     }
+
+    // Непроданный остаток уходит под ликвидность — вместе с собранными
+    // монетами он и становится парой на бирже. Без этого шага после
+    // закрытия оставались одни деньги: токенов на складе не бывает,
+    // кривая печатает их в момент покупки, и печатать после снятия права
+    // выпуска будет уже некому.
+    // Под ликвидность идут две вещи: непроданный остаток и отложенный
+    // запас. Запас и делает пару на бирже честной — без него в пул
+    // попадали бы только остатки, и цена в нём оказывалась бы в десятки
+    // раз выше той, по которой только что торговали на кривой.
+    let остаток = состояние
+        .tokens_for_sale
+        .saturating_sub(состояние.tokens_sold)
+        .saturating_add(состояние.liquidity_tokens);
+    if остаток > 0 {
+        let счёт = destination_ata.ok_or_else(|| {
+            msg!("нужен токен-счёт получателя под ликвидность");
+            ProgramError::NotEnoughAccountKeys
+        })?;
+        let (mint_счёта, владелец) = токен_счёт(&счёт.try_borrow_data()?)
+            .ok_or(ProgramError::InvalidAccountData)?;
+        if &mint_счёта != mint_ai.key || &владелец != destination.key {
+            msg!("токен-счёт не тот: чужой владелец или чужой токен");
+            return Err(ProgramError::InvalidArgument);
+        }
+        invoke_signed(
+            &выпустить(mint_ai.key, счёт.key, curve_ai.key, остаток),
+            &[
+                mint_ai.clone(),
+                счёт.clone(),
+                curve_ai.clone(),
+                token_program.clone(),
+            ],
+            &[&[CURVE_SEED, mint_ai.key.as_ref(), &[состояние.bump]]],
+        )?;
+        состояние.tokens_sold = состояние.tokens_for_sale;
+    }
+
+    // Право выпуска снимается навсегда: после закрытия кривой никто —
+    // включая площадку — не может допечатать токены.
     invoke_signed(
         &снять_право_выпуска(mint_ai.key, curve_ai.key),
         &[mint_ai.clone(), curve_ai.clone(), token_program.clone()],
@@ -707,6 +796,9 @@ mod tests {
             fee_bps: 100,
             real_sol: 0,
             tokens_sold: 0,
+            // Двести миллионов под пару на бирже — столько же, сколько
+            // кривая не продаёт.
+            liquidity_tokens: 200_000_000_000_000,
         }
     }
 

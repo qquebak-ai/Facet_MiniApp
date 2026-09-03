@@ -42,7 +42,7 @@
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { проверитьТранзакцию } from "./_txguard.js";
-import { собратьЗапуск, собратьСделку } from "./solana-launch.js";
+import { собратьЗапуск, собратьСделку, собратьЗакрытие, состояние as состояниеКривой } from "./solana-launch.js";
 import { котировка, сделка as свопJupiter, SOL_MINT } from "./solana.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -339,6 +339,62 @@ async function подписатьИОтправить({ db, user, строка, 
   ]);
 }
 
+/* --- Закрытие кривых по расписанию -----------------------------------
+ *
+ * Кривая, набравшая порог, сама не закроется: программа ждёт вызова.
+ * Раньше звать было некому, и токен, собравший свои 85 SOL, продолжал
+ * торговаться дальше — пока не кончится запас на продажу.
+ *
+ * Зовём внутренним кошельком владельца токена. Кто платит комиссию, для
+ * программы неважно — деньги всё равно уходят получателю, записанному в
+ * кривую при создании; важно только, что порог достигнут. Владелец
+ * выбран потому, что это его токен и его выход на биржу, а комиссия
+ * здесь — тысячные доли цента.
+ */
+async function закрытьКривые(db, набор) {
+  const { data: токены } = await db
+    .from("tokens")
+    .select("id, address, owner_id, ticker, chain")
+    // Колонка chain появилась позже первых запусков, поэтому берём и
+    // пустые, а цепочку у них узнаём по самому адресу.
+    .or("chain.eq.solana,chain.is.null")
+    .not("owner_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(60);
+
+  let закрыто = 0;
+  for (const tok of токены || []) {
+    try {
+      if (!адресОк(tok.address)) continue;
+      const st = await состояниеКривой(tok.address);
+      if (!st || st.закрыта || st.solСобрано < st.solЦель) continue;
+
+      const { data: строкаКошелька } = await db
+        .from("app_wallets").select(ПОЛЯ).eq("user_id", tok.owner_id).maybeSingle();
+      if (!строкаКошелька) continue;
+      // На комиссию нужно совсем немного, но если и её нет — ждём: тот,
+      // кто следующим будет торговать этим токеном, закроет кривую сам.
+      if ((await баланс(строкаКошелька.address)) < 0.001) continue;
+
+      const собрано = await собратьЗакрытие({ payer: строкаКошелька.address, mint: tok.address });
+      const подпись = await подписатьИОтправить({
+        db, user: { id: tok.owner_id }, строка: строкаКошелька, набор,
+        base64: собрано.transaction, дело: "graduate", максПеревода: 0,
+      });
+      await db.from("wallet_ops").insert({
+        user_id: tok.owner_id, kind: "graduate", amount: st.solСобрано,
+        address: tok.address, signature: подпись,
+      });
+      await сообщить(db, tok.owner_id,
+        `$${tok.ticker || "токен"} закрыл кривую 🎉\nСобрано ${st.solСобрано.toFixed(2)} SOL. Ликвидность — монеты и отложенный запас токенов — ушла площадке под пару на бирже.`);
+      закрыто += 1;
+    } catch (e) {
+      console.warn("[wallet-graduate]", tok.address, e && e.message);
+    }
+  }
+  return закрыто;
+}
+
 /* --- Вход для бота ---------------------------------------------------
  *
  * В чате нет ни сессии Supabase, ни кошелька в кармане: там есть только
@@ -527,6 +583,15 @@ export default async function handler(req, res) {
     if (!CRON_SECRET || ключ !== CRON_SECRET) return res.status(401).json({ error: "unauthorized" });
     const сделано = await свести(db, набор).catch(() => 0);
     return res.status(200).json({ swept: сделано });
+  }
+
+  // Закрытие набравших порог кривых — тоже расписанием: ждать, пока
+  // кто-то нажмёт кнопку, значит держать токен на кривой лишние часы.
+  if (действие === "graduate") {
+    const ключ = (req.headers.authorization || "").replace("Bearer ", "");
+    if (!CRON_SECRET || ключ !== CRON_SECRET) return res.status(401).json({ error: "unauthorized" });
+    const сделано = await закрытьКривые(db, набор).catch(() => 0);
+    return res.status(200).json({ graduated: сделано });
   }
 
   try {

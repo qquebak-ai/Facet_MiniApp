@@ -75,6 +75,11 @@ export const КРИВАЯ = {
   tokensForSale: 800_000_000 * ЕДИНИЦА,
   graduationSol: 85 * LAMPORTS,
   feeBps: 100,
+  // Запас под пару на бирже. Кривая выпускает его при закрытии вместе с
+  // непроданным остатком: собранные монеты и эти токены и становятся
+  // ликвидностью. Без запаса в пару попадали бы одни остатки, и цена в
+  // ней оказалась бы в десятки раз выше той, по которой торговали.
+  liquidityTokens: 200_000_000 * ЕДИНИЦА,
 };
 
 // Адрес в Solana — base58 длиной 32–44 символа. Проверка без библиотеки:
@@ -141,6 +146,7 @@ function инструкцияИнициализации(destination) {
     u64(КРИВАЯ.graduationSol),
     u16(КРИВАЯ.feeBps),
     destination.toBuffer(),
+    u64(КРИВАЯ.liquidityTokens),
   ]);
 }
 
@@ -317,6 +323,50 @@ export async function собратьСделку({ wallet, mint, продажа,
   tx.feePayer = payer;
   tx.recentBlockhash = await свежийБлок(connection);
   return { transaction: вBase64(tx), curve: curve.toBase58() };
+}
+
+/* Закрытие кривой.
+ *
+ * Вызвать может кто угодно: важно не кто нажал, а что порог достигнут —
+ * деньги всё равно уходят получателю, записанному в кривую при
+ * создании. Плательщик комиссии нужен только чтобы транзакция вообще
+ * попала в сеть.
+ *
+ * Вместе с монетами кривая выпускает на счёт получателя непроданный
+ * остаток и отложенный запас: из них и собирается пара на бирже.
+ */
+export async function собратьЗакрытие({ payer, mint }) {
+  await библиотеки();
+  const programId = программа();
+  if (!programId) throw new Error("программа кривой не развёрнута");
+  if (!адресОк(payer) || !адресОк(mint)) throw new Error("плохой адрес");
+
+  const connection = new Connection(RPC, "confirmed");
+  const плательщик = new PublicKey(payer);
+  const mintKey = new PublicKey(mint);
+  const curve = кривуюДля(mintKey, programId);
+  const получатель = new PublicKey(LIQUIDITY || FEE_ACCOUNT);
+  const ata = getAssociatedTokenAddressSync(mintKey, получатель);
+
+  const tx = new Transaction();
+  // Счёт под ликвидность заводим здесь же: у получателя его может не
+  // быть, а кривая создавать счета не умеет — она только выпускает.
+  tx.add(createAssociatedTokenAccountIdempotentInstruction(плательщик, ata, получатель, mintKey));
+  tx.add(new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: curve, isSigner: false, isWritable: true },
+      { pubkey: mintKey, isSigner: false, isWritable: true },
+      { pubkey: получатель, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: ata, isSigner: false, isWritable: true },
+    ],
+    data: Buffer.from([3]),
+  }));
+
+  tx.feePayer = плательщик;
+  tx.recentBlockhash = await свежийБлок(connection);
+  return { transaction: вBase64(tx), curve: curve.toBase58(), liquidity: ata.toBase58() };
 }
 
 /* Состояние кривой: по нему считаются цена, собранная сумма и полоса до
