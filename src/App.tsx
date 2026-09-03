@@ -516,6 +516,7 @@ const STR = {
     deleteAccountForever: "Удалить аккаунт навсегда",
     editProfileBtn: "Редактировать профиль",
     activityTitle: "Активность",
+    homeHello: "Твоя площадка",
     achievementsTitle: "Достижения",
     achUnlockedOf: "{done} из {total}",
     achievementsIntro: "За достижения дают монеты. На них в магазине берут рамки и карточки — любые, какие нравятся.",
@@ -975,6 +976,7 @@ const STR = {
     deleteAccountForever: "Delete account forever",
     editProfileBtn: "Edit Profile",
     activityTitle: "Activity",
+    homeHello: "Your launchpad",
     achievementsTitle: "Achievements",
     achUnlockedOf: "{done} of {total}",
     achievementsIntro: "Achievements pay in coins. Spend them in the shop on any frames and cards you like.",
@@ -2269,15 +2271,33 @@ function fillCandleGaps(candles, stepSec, limit = CHART_TOTAL, nowSec = Math.flo
     prevClose = real.get(t).close;
   }
 
+  // Долгие простои не рисуем целиком. У мемкоина, по которому торговали
+  // утром и вечером, минутный график превращался в стену из сотен
+  // одинаковых плоских свечей: сделки сжимались в два пятнышка по краям,
+  // а между ними — ровная черта во весь экран. Пропуск обозначаем
+  // несколькими пустыми свечами и перескакиваем к следующей сделке;
+  // подписи времени берутся из самих свечей, поэтому разрыв виден по
+  // ним, а не выдаётся за непрерывную торговлю.
+  const ПУСТЫХ_ПОДРЯД = 4;
   const out = [];
-  for (let t = start; t <= end; t += stepSec) {
+  let t = start;
+  while (t <= end) {
     const hit = real.get(t);
     if (hit) {
       out.push(hit);
       prevClose = hit.close;
-    } else {
-      out.push({ time: t, open: prevClose, high: prevClose, low: prevClose, close: prevClose, volume: 0 });
+      t += stepSec;
+      continue;
     }
+    // Сколько пустых до следующей сделки (или до конца окна).
+    const следующая = times.find((v) => v > t);
+    const край = следующая != null && следующая <= end ? следующая : end + stepSec;
+    const пустых = Math.round((край - t) / stepSec);
+    const рисуем = Math.min(пустых, ПУСТЫХ_ПОДРЯД);
+    for (let i = 0; i < рисуем; i++) {
+      out.push({ time: t + i * stepSec, open: prevClose, high: prevClose, low: prevClose, close: prevClose, volume: 0 });
+    }
+    t = край;
   }
   return out;
 }
@@ -2486,9 +2506,14 @@ async function fetchTokenInfo(tokenAddress, network = GT_NETWORK) {
   const ключ = `${network}:${tokenAddress}`;
   if (tokenInfoCache.has(ключ)) return tokenInfoCache.get(ключ);
   try {
-    const res = await gtFetch(`${GT_BASE}/networks/${network}/tokens/${tokenAddress}/info`);
-    if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
-    const json = await res.json();
+    let json = null;
+    try {
+      json = await своё("info", { token: tokenAddress, network });
+    } catch (e) {
+      const res = await gtFetch(`${GT_BASE}/networks/${network}/tokens/${tokenAddress}/info`);
+      if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
+      json = await res.json();
+    }
     const a = json?.data?.attributes || {};
     const info = {
       description: a.description || null,
@@ -3034,9 +3059,14 @@ function cachedPoolTrades(poolAddress, network = GT_NETWORK) {
 async function fetchPoolTrades(poolAddress, limit = 300, priority = GT_PRIORITY.trades, network = GT_NETWORK) {
   if (!poolAddress) return null;
   try {
-    const res = await gtFetch(`${GT_BASE}/networks/${network}/pools/${poolAddress}/trades`, { priority });
-    if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
-    const json = await res.json();
+    let json = null;
+    try {
+      json = await своё("trades", { pool: poolAddress, network });
+    } catch (e) {
+      const res = await gtFetch(`${GT_BASE}/networks/${network}/pools/${poolAddress}/trades`, { priority });
+      if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
+      json = await res.json();
+    }
     const rows = json?.data || [];
     const trades = rows.slice(0, limit).map(row => {
       const a = row.attributes || {};
@@ -3187,15 +3217,47 @@ async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart, sig
   try { return await run; } finally { ohlcvInflight.delete(cacheKey); }
 }
 
+/* Свечи через свой сервер.
+ *
+ * Он держит ответ в сети доставки полминуты и отдаёт его всем сразу, без
+ * очереди к источнику: у того общий лимит на всё приложение, и график
+ * ждал своей очереди наравне с лентой и сделками. Отсюда и «у других
+ * грузится моментально» — у них график отдаёт их собственный сервер.
+ *
+ * Прямой путь к источнику остаётся запасным: если своя ручка почему-то
+ * не ответила, идём как раньше. */
+async function своё(что, параметры, signal) {
+  const строка = new URLSearchParams({ what: что, ...параметры }).toString();
+  const res = await fetch(`/api/gt?${строка}`, { signal });
+  if (!res.ok) throw new Error(`gt ${res.status}`);
+  return res.json();
+}
+
+async function свечиСоСвоего(poolAddress, tf, network, signal) {
+  const json = await своё("ohlcv", { pool: poolAddress, tf, network }, signal);
+  const list = (json && json.data && json.data.attributes && json.data.attributes.ohlcv_list) || [];
+  if (!list.length) throw new Error("пусто");
+  return list;
+}
+
 async function loadPoolOHLCV(poolAddress, tf, priority, signal, cacheKey, hit, network = GT_NETWORK) {
   const cfg = GT_TF[tf] || GT_TF.H1;
   const fetchLimit = Math.min(1000, 200 * (cfg.resample || 1));
   const url = `${GT_BASE}/networks/${network}/pools/${poolAddress}/ohlcv/${cfg.timeframe}?aggregate=${cfg.aggregate}&limit=${fetchLimit}&currency=usd&token=base`;
   try {
-    const res = await gtFetch(url, { priority, retries: priority >= GT_PRIORITY.chart ? 3 : 1, signal });
-    if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
-    const json = await res.json();
-    const list = json?.data?.attributes?.ohlcv_list || [];
+    let list = null;
+    try {
+      list = await свечиСоСвоего(poolAddress, tf, network, signal);
+    } catch (e) {
+      if (e && e.name === "AbortError") throw e;
+      list = null;
+    }
+    if (!list) {
+      const res = await gtFetch(url, { priority, retries: priority >= GT_PRIORITY.chart ? 3 : 1, signal });
+      if (!res.ok) throw new Error(`GeckoTerminal ${res.status}`);
+      const json = await res.json();
+      list = json?.data?.attributes?.ohlcv_list || [];
+    }
     let candles = list
       .map(([time, open, high, low, close, volume]) => ({ time, open, high, low, close, volume }))
       .filter(c => [c.time, c.open, c.high, c.low, c.close].every(v => typeof v === "number" && Number.isFinite(v)))
@@ -4662,29 +4724,45 @@ function TokenAvatar({ children, size = 52, tone = "neutral", src }) {
   // Сначала пробуем лёгкую копию, при отказе — исходную ссылку, и только
   // потом сдаёмся на эмодзи.
   const [исходная, setИсходная] = useState(false);
-  useEffect(() => { setBroken(false); setИсходная(false); }, [src]);
+  // Пока картинка едет, в кружке ничего нет. Раньше на её месте
+  // подмигивала ракета и через мгновение сменялась логотипом — список из
+  // сорока строк выглядел как мигающая гирлянда. Чернота ничего не
+  // обещает и ничем не мигает.
+  const [пришла, setПришла] = useState(false);
+  useEffect(() => { setBroken(false); setИсходная(false); setПришла(false); }, [src]);
   const ringColor = T.lineHi;
+  const естьКартинка = !!src && !broken;
   return (
     <div
       className="fx-avatar"
       style={{
         width: size, height: size, position: "relative", flexShrink: 0, borderRadius: "50%",
-        border: `1.5px solid ${ringColor}`, background: T.surfaceHi,
+        border: `1.5px solid ${ringColor}`,
+        // Подложка тёмная, пока картинка не пришла: серый круг за
+        // прозрачным логотипом читался как чужой фон.
+        background: естьКартинка && !пришла ? T.bg : T.surfaceHi,
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: size * 0.44, overflow: "hidden",
       }}
     >
-      {/* Real token logo when GeckoTerminal has one for this pool's base
-          token; falls back to the deterministic emoji if there's no image
-          or it fails to load (broken CDN link, blocked host, etc). */}
-      {src && !broken ? (
+      {естьКартинка ? (
         <img
           src={исходная ? src : превьюКартинки(src, size)}
           alt=""
-          loading="lazy"
+          // Грузим сразу, а не по мере прокрутки: строки списка коротки,
+          // и «ленивая» загрузка откладывала картинку до того момента,
+          // когда человек уже смотрит на пустой кружок.
+          loading="eager"
           decoding="async"
+          fetchpriority="high"
+          onLoad={() => setПришла(true)}
           onError={() => (исходная ? setBroken(true) : setИсходная(true))}
-          style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
+          style={{
+            width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%",
+            // Появление, а не подстановка: картинка приезжает по сети, и
+            // резкая смена чёрного круга на логотип дёргает глаз.
+            opacity: пришла ? 1 : 0, transition: "opacity 160ms ease-out",
+          }}
         />
       ) : children}
     </div>
@@ -10164,7 +10242,151 @@ function ТопСтрока({ onOpenToken, onOpenProfile, live = [] }) {
   );
 }
 
-function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile }) {
+/* Своя строка сверху: кто ты и куда идти за своим.
+ *
+ * Профиля в панели разделов больше нет — там переключаются между
+ * рынками, а не между рынком и собой. Вход в него теперь один и там же,
+ * где его ищут: аватарка в углу главной. */
+function ШапкаГлавной({ profile, accountCreated, onOpenMyProfile }) {
+  const аватар = profile && profile.avatarUrl;
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 21, fontWeight: 600, letterSpacing: "-0.02em" }}>
+          {accountCreated && profile && profile.nickname ? profile.nickname : "Mintly"}
+        </div>
+        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 1 }}>
+          {accountCreated ? t("homeHello") : t("accountNotCreated")}
+        </div>
+      </div>
+      <button
+        onClick={onOpenMyProfile}
+        className="fx-tap"
+        aria-label={t("navProfile")}
+        style={{
+          width: 40, height: 40, borderRadius: "50%", flexShrink: 0, padding: 0,
+          border: `1.5px solid ${T.lineHi}`, overflow: "hidden",
+          // Пока картинки нет — ровный тёмный кружок, а не серое пятно с
+          // чужим значком внутри.
+          background: аватар ? `center/cover no-repeat url(${аватар})` : T.bg,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+      >
+        {!аватар && <User size={18} color={T.muted} />}
+      </button>
+    </div>
+  );
+}
+
+/* Свои токены, достижения и активность — теперь здесь.
+ *
+ * В профиле они лежали за лишним переходом, и человек, запустивший
+ * токен, не видел его до тех пор, пока не вспомнит, где смотреть. */
+function МоиДела({ myTokens = [], achievements = [], userId, onGoCreate, onManageToken, onOpenAchievements }) {
+  const закрыто = achievements.filter((a) => a.done).length;
+  return (
+    <>
+      <section>
+        <SectionTitle action={
+          <button onClick={onGoCreate} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 12.5, color: T.electric }}>
+            <PlusCircle size={13} /> {t("myTokensCreate")}
+          </button>
+        }>{t("myTokensTitle")}</SectionTitle>
+        {myTokens.length === 0 ? (
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, lineHeight: 1.5 }}>{t("noTokensYet")}</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {myTokens.slice(0, 3).map((tok) => <MyTokenCard key={tok.id} t={tok} onManage={onManageToken} />)}
+          </div>
+        )}
+      </section>
+
+      <МояАктивность userId={userId} />
+
+      <section>
+        <SectionTitle action={
+          <button onClick={onOpenAchievements} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 12.5, color: T.electric }}>
+            {t("achAll")} <ChevronRight size={13} />
+          </button>
+        }>{t("achievementsTitle")}</SectionTitle>
+        <button onClick={onOpenAchievements} className="fx-tap w-full text-left" style={{ padding: "2px 0" }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+            <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("achProgress")}</span>
+            <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>
+              {tf("achUnlockedOf", { done: закрыто, total: achievements.length })}
+            </span>
+          </div>
+          <div style={{ height: 6, borderRadius: 3, background: T.surfaceHi, overflow: "hidden" }}>
+            <div style={{ width: `${achievements.length ? (закрыто / achievements.length) * 100 : 0}%`, height: "100%", background: T.electric }} />
+          </div>
+          <div className="flex items-center gap-1.5" style={{ marginTop: 10, flexWrap: "wrap" }}>
+            {achievements.filter((a) => !a.done).slice(0, 3).map((a) => (
+              <span key={a.id} className="flex items-center gap-1 rounded-full px-2 py-1" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
+                <a.icon size={11} color={T.muted} />
+                <span style={{ fontFamily: bodyFont, fontSize: 11.5, color: T.muted }}>{a.label}</span>
+              </span>
+            ))}
+          </div>
+        </button>
+      </section>
+    </>
+  );
+}
+
+/* Свои сделки. В профиле на этом месте стояла надпись «пока пусто» —
+   она стояла там всегда, потому что данные никто не читал. */
+function МояАктивность({ userId }) {
+  const [ряд, setРяд] = useState(null);
+
+  useEffect(() => {
+    if (!userId) { setРяд([]); return; }
+    let брошено = false;
+    supabase
+      .from("trades")
+      .select("id, ticker, side, ton_amount, token_amount, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(5)
+      .then(({ data, error }) => { if (!брошено) setРяд(error ? [] : (data || [])); });
+    return () => { брошено = true; };
+  }, [userId]);
+
+  if (!ряд) return null;
+  return (
+    <section>
+      <SectionTitle>{t("activityTitle")}</SectionTitle>
+      {ряд.length === 0 ? (
+        <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, lineHeight: 1.5 }}>{t("noActivityYet")}</p>
+      ) : (
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          {ряд.map((с) => {
+            const покупка = с.side !== "sell";
+            return (
+              <div key={с.id} className="flex items-center" style={{ gap: 10 }}>
+                {покупка ? <ArrowUpRight size={15} color={T.up} /> : <ArrowDownRight size={15} color={T.down} />}
+                <span className="flex-1 truncate" style={{ fontFamily: bodyFont, fontSize: 13.5, color: T.paper }}>
+                  {покупка ? t("tickerBought") : t("tickerSold")} ${String(с.ticker || "?").toUpperCase()}
+                </span>
+                <span style={{ fontFamily: monoFont, fontSize: 12.5, color: покупка ? T.up : T.down, whiteSpace: "nowrap" }}>
+                  {fmtCoin(Number(с.ton_amount) || 0)} TON
+                </span>
+                <span style={{ fontFamily: monoFont, fontSize: 11.5, color: T.faint, whiteSpace: "nowrap" }}>
+                  {fmtSince(с.created_at)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HomeView({
+  onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile,
+  profile = null, accountCreated = false, myTokens = [], achievements = [], userId = null,
+  onOpenMyProfile, onOpenAchievements, onManageToken,
+}) {
   // Главная — витрина площадки: сводка, токен дня, движение, топ. Монетам
   // из пробной сети там не место — их цена ничего не значит, а сводка по
   // ним показывала бы оборот, которого не было. В мемпаде они остаются,
@@ -10174,27 +10396,28 @@ function HomeView({ onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenPr
     // Запас снизу — под закреплённую кнопку: в конце прокрутки она
     // должна висеть над пустотой, а не над последней строкой топа.
     <div className="flex flex-col" style={{ gap: 26, paddingTop: 8, paddingBottom: 78 }}>
+      <ШапкаГлавной profile={profile} accountCreated={accountCreated} onOpenMyProfile={onOpenMyProfile} />
       <ГлавнаяСводка live={боевые} />
       <БегущаяЛента />
+      <МоиДела
+        myTokens={myTokens}
+        achievements={achievements}
+        userId={userId}
+        onGoCreate={onGoCreate}
+        onManageToken={onManageToken}
+        onOpenAchievements={onOpenAchievements}
+      />
       <ГлавныйТокен tokens={боевые} onOpen={onOpenToken} />
       <ВДвижении tokens={боевые} onOpen={onOpenToken} onAll={() => onGoTab("mempad")} />
       <ТопСтрока onOpenToken={onOpenToken} onOpenProfile={onOpenProfile} live={боевые} />
 
-      {/* Запуск — единственное действие на экране, и оно всегда под
-          рукой: кнопка прилипает к низу, пока страница листается.
-          Прежние три кнопки убраны — две из них вели туда же, куда и
-          нижнее меню.
-
-          Под кнопкой — растушёвка в цвет фона: без неё список проступал
-          из-под неё обрезанными строками, и выглядело это ошибкой, а не
-          закреплённой панелью. */}
-      <div style={{
-        // Прилипает выше панели разделов: та висит поверх прокрутки
-        // отдельной капсулой, и кнопка, прижатая к самому низу, легла бы
-        // прямо на неё.
-        position: "sticky", bottom: 76, marginTop: 2, paddingTop: 26, paddingBottom: 10,
-        background: `linear-gradient(to top, ${T.bg} 62%, ${hexA(T.bg, 0.88)} 82%, transparent)`,
-      }}>
+      {/* Запуск — главное действие экрана, и оно стоит в его конце.
+          Раньше кнопка прилипала к низу и висела поверх прокрутки: пока
+          на главной были только витринные блоки, это работало, но теперь
+          под ней идут свои токены, активность и достижения — и она
+          просвечивала прямо по ним. Читать список сквозь кнопку хуже,
+          чем пролистать до неё; то же действие есть и в мемпаде. */}
+      <div style={{ marginTop: 2, paddingTop: 6, paddingBottom: 10 }}>
         <button
           onClick={onGoCreate}
           className="fx-tap w-full flex items-center justify-center gap-2"
@@ -17807,7 +18030,21 @@ function mapTokenRow(row) {
           // строка списка должна уходить из-под неё целиком.
           paddingBottom: 96 + insetBottom }}>
           <KeepAlive show={view === "home"}>
-            <HomeView onGoTab={goTab} onGoCreate={openCreate} curveTokens={communityTokens} onOpenToken={openToken} onOpenProfile={openUserProfile} />
+            <HomeView
+              onGoTab={goTab}
+              onGoCreate={openCreate}
+              curveTokens={communityTokens}
+              onOpenToken={openToken}
+              onOpenProfile={openUserProfile}
+              profile={profile}
+              accountCreated={accountCreated}
+              myTokens={myTokens}
+              achievements={achievements}
+              userId={userId}
+              onOpenMyProfile={() => goTab("profile")}
+              onOpenAchievements={() => setView("achievements")}
+              onManageToken={(tok) => setManageToken_(tok)}
+            />
           </KeepAlive>
           <KeepAlive show={view === "mempad"}>
             <MempadView tokens={tokens} loading={tokensLoading} myTokensLoading={!communityLoaded} myTokens={communityTokens} onOpen={openToken} onLaunch={openCreate} solДоступен={solЗапуск} />
@@ -17920,12 +18157,14 @@ function mapTokenRow(row) {
             boxShadow: "0 10px 34px rgba(0,0,0,0.4)",
           }}
         >
+          {/* Профиля в панели нет: туда ходят за своими делами, а не
+              переключаются между ним и рынком. Вход — по аватарке в углу
+              главной, как это устроено везде. */}
           {[
             { id: "home", label: t("navHome"), icon: HomeIcon },
             { id: "shop", label: t("navShop"), icon: ShoppingBag },
             { id: "mempad", label: t("navMempad"), icon: Rocket },
             { id: "wallet", label: t("navWallet"), icon: Wallet },
-            { id: "profile", label: t("navProfile"), icon: User },
           ].map(({ id, label, icon: Icon, locked }) => {
             const active = tab === id;
             return (
