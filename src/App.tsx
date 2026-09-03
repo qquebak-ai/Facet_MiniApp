@@ -1401,9 +1401,6 @@ function GlobalStyle() {
          is what actually stops the screen from zooming in while typing. */
       input, textarea, select { font-size: 16px; }
       @keyframes fadeInUp { from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:translateY(0);} }
-      /* Появление экрана после нажатия. Коротко и почти без сдвига:
-         человек уже нажал и ждёт свой профиль, а не представление. */
-      @keyframes экранПоявляется { from{opacity:0; transform:translateY(6px) scale(0.992);} to{opacity:1; transform:translateY(0) scale(1);} }
       @keyframes spin360 { from{ transform: rotate(0deg); } to{ transform: rotate(360deg); } }
       @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
       @keyframes scaleIn { from{opacity:0; transform:scale(0.92);} to{opacity:1; transform:scale(1);} }
@@ -7739,30 +7736,113 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
    Скрываем показом, а не размонтированием: состояние, прокрутка и
    загруженные данные остаются на месте. Скрытая вкладка не ловит
    нажатия и не читается голосовыми программами. */
-function KeepAlive({ show, children, появление = false }) {
+/* Профиль как шторка.
+ *
+ * Он не раздел рынка, а «моё»: заходят на минуту и возвращаются туда же,
+ * откуда пришли. Поэтому он приезжает снизу поверх главной и уходит тем
+ * же движением — пальцем вниз, как в любом мессенджере. Кнопки «назад»
+ * для этого не нужно.
+ *
+ * Жест ловится только когда содержимое прокручено к самому верху: иначе
+ * потянуть список вниз стало бы нельзя — каждая попытка закрывала бы
+ * экран.
+ */
+function ШторкаПрофиля({ открыт, onClose, insetTop = 0, children }) {
+  const прокрутка = useRef(null);
+  const старт = useRef(null);
+  const [тянем, setТянем] = useState(0);
+  // Пока шторка закрыта, её содержимое остаётся собранным — просто
+  // уезжает вниз. Так возврат к профилю мгновенный, без пересборки.
+  useEffect(() => {
+    if (открыт) setТянем(0);
+  }, [открыт]);
+
+  function началось(e) {
+    const el = прокрутка.current;
+    if (!el || el.scrollTop > 0) { старт.current = null; return; }
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    старт.current = { y: t.clientY, ts: Date.now() };
+  }
+
+  function идёт(e) {
+    if (!старт.current) return;
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    const вниз = t.clientY - старт.current.y;
+    // Вверх не тянем: там обычная прокрутка списка.
+    setТянем(вниз > 0 ? вниз : 0);
+  }
+
+  function кончилось() {
+    if (!старт.current) { setТянем(0); return; }
+    const прошло = Math.max(1, Date.now() - старт.current.ts);
+    const скорость = тянем / прошло; // точек в миллисекунду
+    // Либо утащили заметно далеко, либо коротко дёрнули вниз — оба
+    // движения означают «закрой».
+    if (тянем > 110 || скорость > 0.6) {
+      setТянем(0);
+      старт.current = null;
+      onClose();
+      return;
+    }
+    старт.current = null;
+    setТянем(0);
+  }
+
+  return (
+    <div
+      aria-hidden={открыт ? undefined : true}
+      inert={открыт ? undefined : ""}
+      style={{
+        position: "absolute", left: 0, right: 0, top: 0, bottom: 0, zIndex: 40,
+        // Ниже открытой шторки видно главную — это и есть подсказка, что
+        // экран не сменился, а накрылся.
+        background: hexA("#000000", открыт ? 0.5 : 0),
+        pointerEvents: открыт ? "auto" : "none",
+        transition: тянем ? "none" : "background 220ms ease-out",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        onTouchStart={началось}
+        onTouchMove={идёт}
+        onTouchEnd={кончилось}
+        onTouchCancel={кончилось}
+        style={{
+          position: "absolute", left: 0, right: 0, bottom: 0,
+          top: Math.max(10, insetTop * 0.5) + 10,
+          background: T.bg,
+          borderTopLeftRadius: 22, borderTopRightRadius: 22,
+          border: `1px solid ${T.line}`, borderBottom: "none",
+          boxShadow: "0 -18px 50px rgba(0,0,0,0.55)",
+          display: "flex", flexDirection: "column",
+          transform: `translateY(${открыт ? тянем : 3000}px)`,
+          // Пока палец на экране — никаких переходов: шторка обязана
+          // идти ровно за ним, иначе движение кажется вязким.
+          transition: тянем ? "none" : "transform 260ms cubic-bezier(0.16,1,0.3,1)",
+          overscrollBehavior: "contain",
+        }}
+      >
+        {/* Ручка: единственное, что говорит «меня можно утащить вниз». */}
+        <div style={{ padding: "10px 0 6px", display: "flex", justifyContent: "center", flexShrink: 0 }}>
+          <div style={{ width: 40, height: 4, borderRadius: 999, background: T.lineHi }} />
+        </div>
+        <div ref={прокрутка} className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingBottom: 92 }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KeepAlive({ show, children }) {
   // Вкладки собираются сразу, все, ещё под заставкой запуска: к моменту
   // первого перехода данные уже на месте. Раньше вкладка начинала
   // грузиться в тот момент, когда на неё переходили, и первые полсекунды
   // человек смотрел на пустоту.
-  //
-  // Появление проигрывается по флажку, а не сменой ключа: ключ пересоздал
-  // бы поддерево — то есть ровно то, ради чего этот компонент и стоит.
-  const [играет, setИграет] = useState(false);
-  useEffect(() => {
-    if (!show || !появление) return undefined;
-    setИграет(true);
-    const t = setTimeout(() => setИграет(false), 260);
-    return () => clearTimeout(t);
-  }, [show, появление]);
-
   return (
-    <div
-      style={show
-        ? (играет ? { animation: "экранПоявляется 220ms cubic-bezier(0.16,1,0.3,1) both" } : undefined)
-        : { display: "none" }}
-      aria-hidden={show ? undefined : true}
-      inert={show ? undefined : ""}
-    >
+    <div style={show ? undefined : { display: "none" }} aria-hidden={show ? undefined : true} inert={show ? undefined : ""}>
       {children}
     </div>
   );
@@ -18093,7 +18173,12 @@ function mapTokenRow(row) {
               solДоступен={solЗапуск}
             />
           )}
-          <KeepAlive show={view === "profile"} появление>
+        </div>
+
+        {/* Профиль — шторка поверх главной, а не соседний раздел: за ним
+            заходят на минуту и возвращаются туда же, откуда пришли.
+            Закрывается пальцем вниз или касанием по затемнению. */}
+        <ШторкаПрофиля открыт={view === "profile"} onClose={() => goTab("home")} insetTop={insetTop}>
             <ProfileView
               connected={connected}
               onOpenConnectModal={() => setConnectModalOpen(true)}
@@ -18119,8 +18204,7 @@ function mapTokenRow(row) {
               creatorTier={creatorTier}
               onVerified={markProfileVerified}
             />
-          </KeepAlive>
-        </div>
+        </ШторкаПрофиля>
 
         {/* Панель разделов — плавающая капсула, как и была: отдельный
             предмет поверх приложения, а не полоса, приросшая к нижнему
