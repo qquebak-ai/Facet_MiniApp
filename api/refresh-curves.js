@@ -192,10 +192,11 @@ async function метаданные(address) {
  * договорённость простая — «ton» в имени читается как «родная монета
  * цепочки», а какая именно, говорит колонка chain у токена.
  *
- * Истории сделок здесь нет: в Solana её пришлось бы собирать по подписям
- * счёта, а это десятки запросов на токен. График у таких токенов рисуется
- * по самой кривой (api/chart.js), объём и движение остаются нулями, пока
- * сбор истории не сделан отдельно.
+ * История сделок собирается по подписям счёта кривой: в Solana другого
+ * способа нет, отдельного «списка транзакций» узел не отдаёт. Отсюда и
+ * осторожность — берём последние несколько десятков и не чаще, чем раз в
+ * несколько минут на токен: обход идёт по всем токенам каждую минуту, и
+ * бесплатный узел столько запросов не выдержит.
  */
 /* Цепочка токена: колонке верим, а когда её нет — узнаём по адресу.
    Токены постарше записаны без chain, и их кривые уходили в tonapi,
@@ -206,11 +207,104 @@ function цепочка(tok) {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(адрес) && !/^(EQ|UQ|kQ|0Q)/.test(адрес) ? "solana" : "ton";
 }
 
-async function ветвьSolana(tok) {
+const SOL_RPC = process.env.SOLANA_RPC || "https://api.mainnet-beta.solana.com";
+const ЛЯМПОРТ = 1_000_000_000;
+// Сколько последних сделок читаем и как часто. Полсотни хватает и на
+// объём за сутки, и на движение цены; чаще раза в пять минут ходить
+// незачем — за минуту у мемкоина в devnet не случается ничего.
+const SOL_ПОДПИСЕЙ = 50;
+const SOL_ИСТОРИЯ_МС = 5 * 60 * 1000;
+
+async function solRpc(тело) {
+  const res = await fetch(SOL_RPC, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(тело),
+  });
+  if (!res.ok) throw new Error(`solana rpc ${res.status}`);
+  return res.json();
+}
+
+/* Сделки кривой Solana.
+ *
+ * Считаем по изменению баланса самого счёта кривой: покупка добавляет
+ * лямпорты, продажа забирает. Разбирать инструкции не нужно — деньги
+ * ходят только через кривую, и её баланс это и есть история сделок.
+ *
+ * Возвращаем ряд от старых к новым: {time, дельта} в лямпортах.
+ */
+async function сделкиSolana(curveАдрес) {
+  const первый = await solRpc({
+    jsonrpc: "2.0", id: 1, method: "getSignaturesForAddress",
+    params: [curveАдрес, { limit: SOL_ПОДПИСЕЙ }],
+  });
+  const подписи = (первый && первый.result) || [];
+  const живые = подписи.filter((п) => п && п.signature && !п.err);
+  if (!живые.length) return [];
+
+  // Пачками: узел принимает массив запросов разом, и пятьдесят
+  // отдельных походов превращаются в пять.
+  const ряд = [];
+  for (let i = 0; i < живые.length; i += 10) {
+    const кусок = живые.slice(i, i + 10);
+    const ответ = await solRpc(кусок.map((п, k) => ({
+      jsonrpc: "2.0", id: i + k, method: "getTransaction",
+      params: [п.signature, { maxSupportedTransactionVersion: 0, encoding: "jsonParsed" }],
+    })));
+    for (const о of (Array.isArray(ответ) ? ответ : [])) {
+      const tx = о && о.result;
+      const мета = tx && tx.meta;
+      const счета = tx && tx.transaction && tx.transaction.message && tx.transaction.message.accountKeys;
+      if (!мета || !Array.isArray(счета)) continue;
+      const место = счета.findIndex((с) => (typeof с === "string" ? с : с && с.pubkey) === curveАдрес);
+      if (место < 0) continue;
+      const было = Number((мета.preBalances || [])[место] || 0);
+      const стало = Number((мета.postBalances || [])[место] || 0);
+      const дельта = стало - было;
+      if (!дельта) continue;
+      ряд.push({ time: Number(tx.blockTime || 0), дельта });
+    }
+  }
+  return ряд.filter((с) => с.time > 0).sort((a, b) => a.time - b.time);
+}
+
+/* Цена штуки по резерву. Произведение резервов постоянно, поэтому
+   непроданный запас выражается через собранное, и цена зависит только от
+   него — этого хватает, чтобы восстановить цену в любой момент прошлого,
+   не зная, сколько токенов было продано тогда. */
+export function ценаSolПо(realSol, st) {
+  const резерв = st.virtualSol + realSol;
+  const токенов = (st.virtualSol * st.virtualTokens) / резерв;
+  if (!(токенов > 0)) return 0;
+  return резерв / токенов;
+}
+
+async function ветвьSolana(tok, прошлое) {
   try {
     const { состояние: состояниеSol } = await import("./solana-launch.js");
     const st = await состояниеSol(tok.address);
     if (!st) return null;
+
+    // История дорогая, поэтому читаем её не каждый заход, а прошлую
+    // держим при себе: цифры за сутки от одной минуты не меняются.
+    const свежая = прошлое && прошлое.updated_at
+      && Date.now() - new Date(прошлое.updated_at).getTime() < SOL_ИСТОРИЯ_МС
+      && Array.isArray(прошлое.trades);
+    let сделки = [];
+    if (свежая) {
+      сделки = прошлое.trades.map((п) => ({ time: Number(p_время(п)), дельта: Number(п.d || 0) }));
+    } else {
+      сделки = await сделкиSolana(tok.curve_address).catch(() => []);
+    }
+
+    const сутки = Math.floor(Date.now() / 1000) - 86400;
+    const заСутки = сделки.filter((с) => с.time >= сутки);
+    const объём = заСутки.reduce((s, с) => s + Math.abs(с.дельта), 0) / ЛЯМПОРТ;
+    // Цена сутки назад: отматываем собранное на сумму всех сделок окна.
+    const сдвиг = заСутки.reduce((s, с) => s + с.дельта, 0);
+    const сейчасЦена = ценаSolПо(st.realSol, st);
+    const прежняя = ценаSolПо(Math.max(0, st.realSol - сдвиг), st);
+
     return {
       token_id: tok.id,
       curve_address: tok.curve_address,
@@ -222,16 +316,24 @@ async function ветвьSolana(tok) {
       fee_bps: st.feeBps,
       graduated: !!st.закрыта,
       holders: null,
-      vol24_ton: 0,
-      change24: 0,
-      tx24: 0,
+      vol24_ton: объём,
+      change24: прежняя > 0 && сейчасЦена > 0 ? ((сейчасЦена - прежняя) / прежняя) * 100 : 0,
+      tx24: заСутки.length,
       logo_url: tok.logo_url || null,
-      trades: [],
+      // Сделки храним в лямпортах и знаком: по ним считается и объём, и
+      // движение, а сам ряд переживает заходы, когда историю не читаем.
+      trades: сделки.slice(-200).map((с) => ({ t: с.time, d: с.дельта })),
       updated_at: new Date().toISOString(),
     };
   } catch {
     return null;
   }
+}
+
+// Время сделки в сохранённом ряду. Формат менялся, поэтому читаем оба:
+// «t» у нынешних записей и «time» у тех, что успели лечь раньше.
+function p_время(п) {
+  return (п && (п.t != null ? п.t : п.time)) || 0;
 }
 
 export default async function handler(req, res) {
@@ -270,6 +372,17 @@ export default async function handler(req, res) {
   const сутки = Math.floor(Date.now() / 1000) - 86400;
   const строки = [];
 
+  // Прошлые записи кеша: у токенов Solana в них лежит история сделок, а
+  // читать её из сети каждую минуту — это полсотни запросов на токен.
+  const прошлыеКеши = new Map();
+  {
+    const { data } = await admin
+      .from("curve_cache")
+      .select("token_id, trades, updated_at")
+      .in("token_id", tokens.map((t) => t.id));
+    for (const с of data || []) прошлыеКеши.set(с.token_id, с);
+  }
+
   // Токены обходим по очереди, а не пачкой: три параллельных запроса на
   // токен упрутся в лимит tonapi быстрее, чем принесут пользу. Обход
   // идёт в фоне, ждать его никто не будет.
@@ -283,7 +396,7 @@ export default async function handler(req, res) {
     // и запрос к tonapi по её адресу возвращал пустоту — такой токен
     // просто не попадал в витрину и молчал в уведомлениях.
     if (цепочка(tok) === "solana") {
-      const строка = await ветвьSolana(tok);
+      const строка = await ветвьSolana(tok, прошлыеКеши.get(tok.id));
       if (строка) строки.push(строка); else молчат += 1;
       continue;
     }

@@ -571,8 +571,12 @@ async function карточкаSolana(token) {
     link: `${APP_URL}?token=${token.id}`,
     chart: `${APP_URL}/api/chart?token=${token.id}&t=${свежесть()}`,
     ref: `t:${token.id}`,
-    // Сделка по такому токену идёт только в приложении: кнопки покупки
-    // в чате собираются под TON-кошелёк, а здесь другая цепочка.
+    // Признак цепочки для бота: сделка по такому токену идёт внутренним
+    // кошельком площадки, а не TonConnect'ом, и суммы в ней — в SOL.
+    sol: true,
+    mint: token.address || null,
+    ценаSol: s ? s.ценаSol : 0,
+    закрыта: !!(s && s.закрыта),
     curve: null,
     pool: null,
     jetton: token.address || null,
