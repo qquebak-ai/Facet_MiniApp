@@ -58,6 +58,21 @@ export function looksLikeAddress(s) {
 
 const nano = (v) => Number(v) / 1e9;
 
+/* Цепочка токена.
+ *
+ * Колонка chain появилась не сразу, и у токенов постарше она пустая: бот
+ * показывал мемкоин Solana как TON-овский — цену в TON, шкалу до 85 TON
+ * и оборот, которого в этой сети нет. Поэтому колонке верим, а когда её
+ * нет — смотрим на сам адрес. Спутать их нельзя: адрес TON это 48
+ * символов base64url с приставкой EQ/UQ/kQ/0Q, а mint Solana — 32-44
+ * символа base58, где нет ни нуля, ни заглавной O, ни I с l. */
+export function цепочкаТокена(token) {
+  if (token && token.chain) return token.chain === "solana" ? "solana" : "ton";
+  const адрес = String((token && token.address) || "").trim();
+  const похожНаSolana = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(адрес) && !/^(EQ|UQ|kQ|0Q)/.test(адрес);
+  return похожНаSolana ? "solana" : "ton";
+}
+
 /* Состояние кривой прямо из контракта. Порядок полей — из структуры
    CurveData: менять его нельзя, не поправив здесь и в api/notify.js. */
 export async function curveState(address, network = null) {
@@ -568,7 +583,7 @@ async function карточкаSolana(token) {
 }
 
 export async function tokenCard(token) {
-  if (token && token.chain === "solana") return await карточкаSolana(token);
+  if (цепочкаТокена(token) === "solana") return await карточкаSolana(token);
 
   const [state, история, логотип, курс] = await Promise.all([
     // Сначала кеш, и только если он пуст или протух — цепочка.

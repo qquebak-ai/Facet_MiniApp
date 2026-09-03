@@ -197,6 +197,15 @@ async function метаданные(address) {
  * по самой кривой (api/chart.js), объём и движение остаются нулями, пока
  * сбор истории не сделан отдельно.
  */
+/* Цепочка токена: колонке верим, а когда её нет — узнаём по адресу.
+   Токены постарше записаны без chain, и их кривые уходили в tonapi,
+   который про Solana ничего не знает: в витрине они стояли без цены. */
+function цепочка(tok) {
+  if (tok && tok.chain) return tok.chain === "solana" ? "solana" : "ton";
+  const адрес = String((tok && tok.address) || "").trim();
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(адрес) && !/^(EQ|UQ|kQ|0Q)/.test(адрес) ? "solana" : "ton";
+}
+
 async function ветвьSolana(tok) {
   try {
     const { состояние: состояниеSol } = await import("./solana-launch.js");
@@ -273,7 +282,7 @@ export default async function handler(req, res) {
     // Токены Solana идут своей дорогой: их кривая живёт в другой цепочке,
     // и запрос к tonapi по её адресу возвращал пустоту — такой токен
     // просто не попадал в витрину и молчал в уведомлениях.
-    if ((tok.chain || "ton") === "solana") {
+    if (цепочка(tok) === "solana") {
       const строка = await ветвьSolana(tok);
       if (строка) строки.push(строка); else молчат += 1;
       continue;

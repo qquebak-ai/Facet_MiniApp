@@ -15779,7 +15779,16 @@ const FEE_PERCENT = 0.01; // 1% комиссии
     };
   }
 
-  function mapTokenRow(row) {
+  /* Цепочка токена: сказанному в базе верим, а пустое поле разбираем по
+   адресу. Без этого мемкоин Solana, записанный до появления колонки,
+   показывался как TON-овский — с ценой в TON и шкалой до 85 TON. */
+function цепочкаПоАдресу(chain, address) {
+  if (chain) return chain === "solana" ? "solana" : "ton";
+  const адрес = String(address || "").trim();
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(адрес) && !/^(EQ|UQ|kQ|0Q)/.test(адрес) ? "solana" : "ton";
+}
+
+function mapTokenRow(row) {
     return {
       id: row.id,
       name: row.name,
@@ -15811,8 +15820,11 @@ const FEE_PERCENT = 0.01; // 1% комиссии
       description: row.description || null,
       network: row.network || "mainnet",
       // Сеть токена: по ней решается, у какой цепочки спрашивать цену и
-      // каким кошельком торговать.
-      chain: row.chain || "ton",
+      // каким кошельком торговать. Колонка появилась не сразу, и у
+      // токенов постарше она пуста — тогда узнаём по самому адресу: у
+      // TON это 48 символов base64url с приставкой EQ/UQ/kQ/0Q, у
+      // Solana — 32-44 символа base58.
+      chain: цепочкаПоАдресу(row.chain, row.address),
       ownerId: row.owner_id || null,
       createdAt: new Date(row.created_at).getTime(),
     };

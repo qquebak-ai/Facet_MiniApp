@@ -100,13 +100,22 @@ async function curveState(address) {
   };
 }
 
+/* Цепочка токена. Колонке верим, а когда она пуста (токены постарше
+   записывались без неё) — смотрим на сам адрес: у TON это 48 символов
+   base64url с приставкой EQ/UQ/kQ/0Q, у Solana — 32-44 символа base58. */
+function цепочка(tok) {
+  if (tok && tok.chain) return tok.chain === "solana" ? "solana" : "ton";
+  const адрес = String((tok && tok.address) || "").trim();
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(адрес) && !/^(EQ|UQ|kQ|0Q)/.test(адрес) ? "solana" : "ton";
+}
+
 /* Состояние кривой независимо от цепочки. Числа складываются в те же
    поля: разница только в монете, а вехи и пороги считаются одинаково.
    Раньше сюда попадал любой токен с адресом кривой, и токены Solana
    спрашивались у tonapi — то есть не спрашивались вовсе, и их владельцам
    не приходило ни одного сообщения. */
 async function состояниеКривой(tok) {
-  if ((tok.chain || "ton") !== "solana") return curveState(tok.curve_address);
+  if (цепочка(tok) !== "solana") return curveState(tok.curve_address);
   const { состояние } = await import("./solana-launch.js");
   const st = await состояние(tok.address);
   if (!st) return null;
@@ -232,7 +241,7 @@ export default async function handler(req, res) {
     checked += 1;
     // Монета, в которой считается кривая. В сообщении она важнее всего
     // остального: «купили на 0.4» без единицы читается как угодно.
-    const монета = (tok.chain || "ton") === "solana" ? "SOL" : "TON";
+    const монета = цепочка(tok) === "solana" ? "SOL" : "TON";
 
     const prev = stateOf.get(tok.id) || { last_real_ton: null, sent_half: false, sent_almost: false, sent_closed: false };
     const chat = chatOf.get(tok.owner_id);

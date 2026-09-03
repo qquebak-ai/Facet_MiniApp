@@ -15,7 +15,7 @@
 
 import { createCanvas, downscale, encodePNG, fillRect, line, px, text, textWidth } from "./_png.js";
 import { adminClient } from "./_support.js";
-import { curveState, priceFromState, looksLikeAddress, poolByAddress, курсTon, курсSol } from "./_market.js";
+import { curveState, priceFromState, looksLikeAddress, poolByAddress, курсTon, курсSol, цепочкаТокена } from "./_market.js";
 
 // Макет считается в этих единицах, а рисуется во столько раз крупнее и
 // уменьшается усреднением: только так у наклонной линии получается
@@ -376,7 +376,7 @@ export default async function handler(req, res) {
       // Токен своей площадки в Solana: состояние читается у нашей же
       // программы кривой, а не у TON. Раньше эта ветка молча уходила в
       // TON и возвращала пустой график — цепочка-то другая.
-      if (строка.chain === "solana") {
+      if (цепочкаТокена(строка) === "solana") {
         const { состояние } = await import("./solana-launch.js");
         const [s, курс] = await Promise.all([
           состояние(строка.address).catch(() => null),
