@@ -48,37 +48,21 @@ chmod 600 /etc/mintly-signer.env
 
 ## Служба systemd
 
-`/etc/systemd/system/mintly-signer.service`:
+Готовый файл лежит рядом — `signer/mintly-signer.service`:
 
 ```
-[Unit]
-Description=Mintly signer
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/opt/mintly/signer
-EnvironmentFile=/etc/mintly-signer.env
-ExecStart=/usr/bin/node server.mjs
-Restart=always
-RestartSec=3
-User=mintly
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-MemoryDenyWriteExecute=true
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```
+cp /opt/mintly/signer/mintly-signer.service /etc/systemd/system/
 useradd -r -s /usr/sbin/nologin mintly
 systemctl daemon-reload
 systemctl enable --now mintly-signer
 curl -s localhost:8899/health
 ```
+
+Прав у службы ровно ноль: ни повышения, ни доступа к домашним
+каталогам. А вот `MemoryDenyWriteExecute` в нём нет намеренно: V8
+размечает память под машинный код сам, и с этим запретом Node не
+доживает до первой строки — падает с «Fatal javascript OOM during
+deserialization», а systemd перезапускает его по кругу.
 
 ## Как её видит Vercel
 

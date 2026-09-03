@@ -1,0 +1,27 @@
+[Unit]
+Description=Mintly signer
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/mintly/signer
+EnvironmentFile=/etc/mintly-signer.env
+ExecStart=/usr/bin/node server.mjs
+Restart=always
+RestartSec=3
+User=mintly
+
+# Служба держит ключ от кошельков, поэтому прав у неё ровно ноль:
+# ни повышения, ни своего /tmp, ни доступа к домашним каталогам.
+#
+# MemoryDenyWriteExecute здесь нет намеренно: V8 размечает память под
+# машинный код сам, и с этим запретом Node не доживает до первой строки
+# — падает с «Fatal javascript OOM during deserialization», а systemd
+# перезапускает его по кругу.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
