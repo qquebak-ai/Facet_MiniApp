@@ -7,7 +7,7 @@ import {
   Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, MoreHorizontal, HeartCrack,
   Lock, Gift, LifeBuoy,
   FileText, CheckCircle2, RefreshCw, X,
-  Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown, Bell
+  Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown, Bell, Check
 } from "lucide-react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, beginCell, toNano } from "@ton/core";
@@ -182,7 +182,24 @@ const STR = {
     shopTitle: "Магазин",
     tgAuthTitle: "Вход через Telegram",
     welcomeTitle: "Мемкоины на TON и Solana — прямо в Telegram",
-    welcomeSub: "Запусти свой токен за минуту или торгуй чужими. Кривая площадки покупает и продаёт сама, поэтому рынок у монеты есть с первой секунды.",
+    welcomeSub: "Создавай свои токены за пару минут или находи интересные проекты на ранней стадии. Mintly объединяет запуск, рынок и кошелёк в одном месте.",
+    welcomeChip1: "Быстрый запуск",
+    welcomeChip2: "Рынок с первой секунды",
+    welcomeChip3: "TON + Solana",
+    welcomeMarket1: "Автоматическая цена",
+    welcomeMarket2: "Прозрачная формула",
+    welcomeMarket3: "Торговля сразу после запуска",
+    welcomeRiskShort: "Мемкоины — высокорисковый актив. Не вкладывай больше, чем готов потерять.",
+    welcomeWallet1: "TON Connect",
+    welcomeWallet1Body: "Подключение TON-кошелька",
+    welcomeWallet2: "Phantom",
+    welcomeWallet2Body: "Подключение Solana-кошелька",
+    welcomeStep1: "Создай токен",
+    welcomeStep1Body: "Имя, тикер и изображение",
+    welcomeStep2: "Настрой запуск",
+    welcomeStep2Body: "Параметры токена и первая покупка",
+    welcomeStep3: "Выход на рынок",
+    welcomeStep3Body: "Токен появляется на кривой и становится доступен для торговли",
     welcomePoint1Title: "Свои контракты",
     welcomePoint1Body: "Кривая и пул написаны нами и открыты: запас нельзя вывести мимо неё.",
     welcomePoint2Title: "Две сети",
@@ -191,15 +208,15 @@ const STR = {
     welcomePoint3Body: "Имя, тикер, картинка — и токен в сети, вместе с первой покупкой.",
     welcomeNext: "Дальше",
     welcomeSlide2Title: "Рынок с первой секунды",
-    welcomeSlide2Body: "Кривая сама выступает второй стороной сделки: цена считается по формуле, а не по чужим заявкам. Купить можно сразу после запуска, не дожидаясь, пока кто-то нальёт ликвидность.",
+    welcomeSlide2Body: "После запуска токен сразу появляется на кривой. Цена считается по формуле, а сделки идут без ожидания, пока кто-то нальёт ликвидность.",
     welcomeSlide3Title: "TON и Solana рядом",
-    welcomeSlide3Body: "Две сети в одном приложении: свои токены на TON, живой рынок мемкоинов Solana. Каждая со своим кошельком — TON Connect и Phantom.",
-    welcomeSlide4Title: "Запуск за минуту",
-    welcomeSlide4Body: "Имя, тикер, картинка и первая покупка — одной подписью. Дальше токен живёт на кривой, а когда наберёт порог, уходит на биржу.",
+    welcomeSlide3Body: "Две сети в одном приложении. Создавай токены в TON или исследуй рынок мемкоинов Solana — без переключения между сервисами.",
+    welcomeSlide4Title: "Запуск за пару минут",
+    welcomeSlide4Body: "Один понятный процесс от идеи до готового токена. Без сложных панелей и десятков настроек.",
     welcomeCreate: "Создать аккаунт",
     welcomeLogin: "У меня уже есть аккаунт",
-    welcomeSkip: "Осмотреться без входа",
-    welcomeRisk: "Мемкоины — рискованная затея: цена может уйти в ноль. Вкладывай только то, что готов потерять.",
+    welcomeSkip: "Продолжить без входа",
+    welcomeRisk: "Криптоактивы связаны с риском: цена токенов может значительно меняться, а вложения — быть потеряны.",
     tgAuthCta: "Войти через Telegram",
     tgAuthHint: "Аккаунт создастся из твоего профиля Telegram — почта и пароль не нужны.",
     tgAuthCreateCta: "Создать аккаунт",
@@ -624,7 +641,7 @@ const STR = {
     shopTitle: "Shop",
     tgAuthTitle: "Sign in with Telegram",
     welcomeTitle: "Memecoins on TON and Solana — right inside Telegram",
-    welcomeSub: "Launch your own token in a minute or trade someone else's. The platform curve buys and sells on its own, so a coin has a market from its first second.",
+    welcomeSub: "Launch your own token in a couple of minutes or find projects early. Mintly puts launching, the market and your wallet in one place.",
     welcomePoint1Title: "Our own contracts",
     welcomePoint1Body: "The curve and the pool are written by us and open: the supply can't leave past them.",
     welcomePoint2Title: "Two networks",
@@ -632,16 +649,33 @@ const STR = {
     welcomePoint3Title: "A minute to launch",
     welcomePoint3Body: "Name, ticker, image — and the token is live, together with your first buy.",
     welcomeNext: "Next",
+    welcomeChip1: "Fast launch",
+    welcomeChip2: "Market from second one",
+    welcomeChip3: "TON + Solana",
+    welcomeMarket1: "Automatic pricing",
+    welcomeMarket2: "Transparent formula",
+    welcomeMarket3: "Trading right after launch",
+    welcomeRiskShort: "Memecoins are a high-risk asset. Never put in more than you can afford to lose.",
+    welcomeWallet1: "TON Connect",
+    welcomeWallet1Body: "Connect a TON wallet",
+    welcomeWallet2: "Phantom",
+    welcomeWallet2Body: "Connect a Solana wallet",
+    welcomeStep1: "Create a token",
+    welcomeStep1Body: "Name, ticker and image",
+    welcomeStep2: "Set up the launch",
+    welcomeStep2Body: "Token settings and your first buy",
+    welcomeStep3: "Go to market",
+    welcomeStep3Body: "The token lands on the curve and becomes tradable",
     welcomeSlide2Title: "A market from second one",
-    welcomeSlide2Body: "The curve is the other side of every trade: price comes from a formula, not from someone else's orders. You can buy right after launch, without waiting for liquidity.",
+    welcomeSlide2Body: "A token lands on the curve the moment it launches. Price comes from a formula, and trades go through without waiting for anyone to add liquidity.",
     welcomeSlide3Title: "TON and Solana side by side",
-    welcomeSlide3Body: "Two networks in one app: your own tokens on TON, the live Solana memecoin market. Each with its own wallet — TON Connect and Phantom.",
-    welcomeSlide4Title: "A minute to launch",
-    welcomeSlide4Body: "Name, ticker, image and the first buy — in one signature. Then the token lives on the curve, and once it hits the threshold it moves to a DEX.",
+    welcomeSlide3Body: "Two networks in one app. Launch tokens on TON or explore the Solana memecoin market — without switching between services.",
+    welcomeSlide4Title: "A couple of minutes to launch",
+    welcomeSlide4Body: "One clear path from an idea to a live token. No dense panels, no dozens of settings.",
     welcomeCreate: "Create account",
     welcomeLogin: "I already have an account",
-    welcomeSkip: "Look around first",
-    welcomeRisk: "Memecoins are risky: a price can go to zero. Only put in what you can afford to lose.",
+    welcomeSkip: "Continue without signing in",
+    welcomeRisk: "Crypto assets carry risk: token prices can swing hard, and what you put in can be lost.",
     tgAuthCta: "Sign in with Telegram",
     tgAuthHint: "Your account is created from your Telegram profile — no email, no password.",
     tgAuthCreateCta: "Create account",
@@ -7824,26 +7858,121 @@ function ВступлениеСети({ активен }) {
   );
 }
 
+/* Путь запуска: три шага, каждый со своей подписью.
+   Прежде здесь стояли три слова без пояснений — «Свои контракты», «Две
+   сети», «Запуск за минуту». Они ничего не обещали и ничего не
+   объясняли; человек на последнем экране должен видеть, что именно
+   произойдёт после кнопки. */
 function ВступлениеЗапуск({ активен }) {
-  const шаги = ["welcomePoint1Title", "welcomePoint2Title", "welcomePoint3Title"];
+  const шаги = [
+    ["welcomeStep1", "welcomeStep1Body"],
+    ["welcomeStep2", "welcomeStep2Body"],
+    ["welcomeStep3", "welcomeStep3Body"],
+  ];
   return (
-    <div className="flex flex-col justify-center" style={{ height: 132, gap: 10 }}>
-      {шаги.map((ключ, i) => (
+    <div className="flex flex-col justify-center" style={{ gap: 10 }}>
+      {шаги.map(([имя, подпись], i) => (
         <div
-          key={ключ}
+          key={имя}
           className="flex items-center"
           style={{
-            gap: 10, padding: "9px 12px", borderRadius: 12,
+            gap: 12, padding: "11px 14px", borderRadius: 18,
             background: T.surface, border: `1px solid ${T.line}`,
             animation: активен ? `вступлениеВверх 460ms ${i * 140}ms cubic-bezier(0.16,1,0.3,1) both` : "none",
             opacity: активен ? undefined : 0,
           }}
         >
-          <div className="flex items-center justify-center" style={{
-            width: 20, height: 20, borderRadius: 999, flexShrink: 0,
-            background: hexA(T.electric, 0.16), fontFamily: monoFont, fontSize: 11, color: T.electric,
-          }}>{i + 1}</div>
-          <span style={{ fontFamily: bodyFont, fontSize: 13.5, color: T.paper }}>{t(ключ)}</span>
+          {/* Номер моноширинным и с нулём впереди: три строки выстраиваются
+              по одной вертикали, а «01» читается как шаг, а не как счётчик. */}
+          <span style={{ fontFamily: monoFont, fontSize: 12, color: T.electric, flexShrink: 0, letterSpacing: "0.02em" }}>
+            0{i + 1}
+          </span>
+          <div className="min-w-0">
+            <div style={{ fontFamily: displayFont, fontSize: 14, fontWeight: 600, color: T.ice }}>{t(имя)}</div>
+            <div style={{ fontFamily: bodyFont, fontSize: 12.5, color: T.muted, marginTop: 1, lineHeight: 1.35 }}>{t(подпись)}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Три обещания в строку под первым экраном. Заголовок говорит, что это
+   за приложение, а эти три слова — что оно умеет; вместе они читаются
+   быстрее любого абзаца. */
+function ВступлениеЧипы({ активен }) {
+  const чипы = ["welcomeChip1", "welcomeChip2", "welcomeChip3"];
+  return (
+    <div className="flex items-center" style={{ gap: 6, flexWrap: "wrap" }}>
+      {чипы.map((ключ, i) => (
+        <span
+          key={ключ}
+          style={{
+            fontFamily: bodyFont, fontSize: 12, color: T.paper,
+            padding: "6px 11px", borderRadius: 999,
+            background: T.surface, border: `1px solid ${T.line}`,
+            animation: активен ? `вступлениеВверх 420ms ${260 + i * 90}ms cubic-bezier(0.16,1,0.3,1) both` : "none",
+            opacity: активен ? undefined : 0,
+          }}
+        >
+          {t(ключ)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* Что именно значит «рынок с первой секунды» — тремя строчками, каждая с
+   галочкой. Обещание без разбивки на пункты человек пролистывает. */
+function ВступлениеРынок({ активен }) {
+  const пункты = ["welcomeMarket1", "welcomeMarket2", "welcomeMarket3"];
+  return (
+    <div className="flex flex-col" style={{ gap: 10 }}>
+      <div style={{
+        borderRadius: 18, background: T.surface, border: `1px solid ${T.line}`, padding: "12px 14px",
+        animation: активен ? "вступлениеВверх 440ms 260ms cubic-bezier(0.16,1,0.3,1) both" : "none",
+        opacity: активен ? undefined : 0,
+      }}>
+        {пункты.map((ключ, i) => (
+          <div key={ключ} className="flex items-center" style={{ gap: 9, marginTop: i ? 8 : 0 }}>
+            <Check size={13} color={T.electric} style={{ flexShrink: 0 }} />
+            <span style={{ fontFamily: bodyFont, fontSize: 13, color: T.paper }}>{t(ключ)}</span>
+          </div>
+        ))}
+      </div>
+      <p style={{ fontFamily: bodyFont, color: T.faint, fontSize: 11.5, lineHeight: 1.45, margin: 0 }}>
+        {t("welcomeRiskShort")}
+      </p>
+    </div>
+  );
+}
+
+/* Кошельки — по одному на сеть. Название и одна строка о том, зачем он:
+   человек, который слышит «Phantom» впервые, должен понять из карточки,
+   а не из поиска. */
+function ВступлениеКошельки({ активен }) {
+  const карточки = [
+    { имя: "welcomeWallet1", подпись: "welcomeWallet1Body", цвет: T.electric, Знак: ЗнакTON },
+    { имя: "welcomeWallet2", подпись: "welcomeWallet2Body", цвет: T.up, Знак: ЗнакSOL },
+  ];
+  return (
+    <div className="flex flex-col" style={{ gap: 8 }}>
+      {карточки.map(({ имя, подпись, цвет, Знак }, i) => (
+        <div
+          key={имя}
+          className="flex items-center"
+          style={{
+            gap: 11, padding: "10px 14px", borderRadius: 18,
+            background: T.surface, border: `1px solid ${T.line}`,
+            animation: активен ? `вступлениеВверх 440ms ${260 + i * 110}ms cubic-bezier(0.16,1,0.3,1) both` : "none",
+            opacity: активен ? undefined : 0,
+          }}
+        >
+          <Знак size={18} color={цвет} />
+          <div className="min-w-0">
+            <div style={{ fontFamily: displayFont, fontSize: 13.5, fontWeight: 600, color: T.ice }}>{t(имя)}</div>
+            <div style={{ fontFamily: bodyFont, fontSize: 12, color: T.muted, marginTop: 1 }}>{t(подпись)}</div>
+          </div>
         </div>
       ))}
     </div>
@@ -7868,11 +7997,14 @@ function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
   const лента = useRef(null);
   const [страница, setСтраница] = useState(0);
 
+  // У каждой страницы своя картинка сверху и свой блок под текстом:
+  // заголовок обещает, картинка показывает, блок — уточняет. Без
+  // последнего экраны читались как четыре абзаца подряд.
   const страницы = [
-    { title: "welcomeTitle", body: "welcomeSub", арт: null },
-    { title: "welcomeSlide2Title", body: "welcomeSlide2Body", арт: ВступлениеКривая },
-    { title: "welcomeSlide3Title", body: "welcomeSlide3Body", арт: ВступлениеСети },
-    { title: "welcomeSlide4Title", body: "welcomeSlide4Body", арт: ВступлениеЗапуск },
+    { title: "welcomeTitle", body: "welcomeSub", арт: null, низ: ВступлениеЧипы },
+    { title: "welcomeSlide2Title", body: "welcomeSlide2Body", арт: ВступлениеКривая, низ: ВступлениеРынок },
+    { title: "welcomeSlide3Title", body: "welcomeSlide3Body", арт: ВступлениеСети, низ: ВступлениеКошельки },
+    { title: "welcomeSlide4Title", body: "welcomeSlide4Body", арт: ВступлениеЗапуск, низ: null },
   ];
   const последняя = страница >= страницы.length - 1;
 
@@ -7923,6 +8055,7 @@ function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
       >
         {страницы.map((стр, i) => {
           const Арт = стр.арт;
+          const Низ = стр.низ;
           const активна = страница === i;
           return (
             <section
@@ -7962,6 +8095,7 @@ function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
                 }}>
                   {t(стр.body)}
                 </p>
+                {Низ ? <div style={{ marginTop: 4 }}><Низ активен={активна} /></div> : null}
               </div>
             </section>
           );
@@ -7993,14 +8127,14 @@ function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
             <button
               onClick={onCreate}
               className="fx-tap w-full flex items-center justify-center gap-2"
-              style={{ padding: "14px 0", borderRadius: 14, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 600, fontSize: 15 }}
+              style={{ padding: "16px 0", borderRadius: 22, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 600, fontSize: 15 }}
             >
               {t("welcomeCreate")}
             </button>
             <button
               onClick={onLogin}
               className="fx-tap w-full flex items-center justify-center gap-2"
-              style={{ padding: "13px 0", borderRadius: 14, background: "transparent", color: T.ice, border: `1px solid ${T.lineHi}`, fontFamily: displayFont, fontWeight: 600, fontSize: 14.5 }}
+              style={{ padding: "15px 0", borderRadius: 22, background: "transparent", color: T.ice, border: `1px solid ${T.lineHi}`, fontFamily: displayFont, fontWeight: 600, fontSize: 14.5 }}
             >
               <Send size={14} /> {t("welcomeLogin")}
             </button>
@@ -8012,7 +8146,7 @@ function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
           <button
             onClick={() => листнуть(страница + 1)}
             className="fx-tap w-full flex items-center justify-center gap-2"
-            style={{ padding: "14px 0", borderRadius: 14, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 600, fontSize: 15 }}
+            style={{ padding: "16px 0", borderRadius: 22, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 600, fontSize: 15 }}
           >
             {t("welcomeNext")} <ChevronRight size={16} />
           </button>
