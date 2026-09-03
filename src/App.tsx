@@ -3228,8 +3228,10 @@ async function fetchPoolOHLCV(poolAddress, tf, priority = GT_PRIORITY.chart, sig
  * не ответила, идём как раньше. */
 async function своё(что, параметры, signal) {
   const строка = new URLSearchParams({ what: что, ...параметры }).toString();
-  const res = await fetch(`/api/gt?${строка}`, { signal });
-  if (!res.ok) throw new Error(`gt ${res.status}`);
+  // Ручка живёт внутри обработчика графика: на бесплатном тарифе Vercel
+  // двенадцать функций, и отдельная ради трёх запросов туда не влезала.
+  const res = await fetch(`/api/chart?${строка}`, { signal });
+  if (!res.ok) throw new Error(`данные рынка ${res.status}`);
   return res.json();
 }
 
