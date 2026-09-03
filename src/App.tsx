@@ -1401,6 +1401,9 @@ function GlobalStyle() {
          is what actually stops the screen from zooming in while typing. */
       input, textarea, select { font-size: 16px; }
       @keyframes fadeInUp { from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:translateY(0);} }
+      /* Появление экрана после нажатия. Коротко и почти без сдвига:
+         человек уже нажал и ждёт свой профиль, а не представление. */
+      @keyframes экранПоявляется { from{opacity:0; transform:translateY(6px) scale(0.992);} to{opacity:1; transform:translateY(0) scale(1);} }
       @keyframes spin360 { from{ transform: rotate(0deg); } to{ transform: rotate(360deg); } }
       @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
       @keyframes scaleIn { from{opacity:0; transform:scale(0.92);} to{opacity:1; transform:scale(1);} }
@@ -7736,13 +7739,30 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
    Скрываем показом, а не размонтированием: состояние, прокрутка и
    загруженные данные остаются на месте. Скрытая вкладка не ловит
    нажатия и не читается голосовыми программами. */
-function KeepAlive({ show, children }) {
+function KeepAlive({ show, children, появление = false }) {
   // Вкладки собираются сразу, все, ещё под заставкой запуска: к моменту
   // первого перехода данные уже на месте. Раньше вкладка начинала
   // грузиться в тот момент, когда на неё переходили, и первые полсекунды
   // человек смотрел на пустоту.
+  //
+  // Появление проигрывается по флажку, а не сменой ключа: ключ пересоздал
+  // бы поддерево — то есть ровно то, ради чего этот компонент и стоит.
+  const [играет, setИграет] = useState(false);
+  useEffect(() => {
+    if (!show || !появление) return undefined;
+    setИграет(true);
+    const t = setTimeout(() => setИграет(false), 260);
+    return () => clearTimeout(t);
+  }, [show, появление]);
+
   return (
-    <div style={show ? undefined : { display: "none" }} aria-hidden={show ? undefined : true} inert={show ? undefined : ""}>
+    <div
+      style={show
+        ? (играет ? { animation: "экранПоявляется 220ms cubic-bezier(0.16,1,0.3,1) both" } : undefined)
+        : { display: "none" }}
+      aria-hidden={show ? undefined : true}
+      inert={show ? undefined : ""}
+    >
       {children}
     </div>
   );
@@ -10251,22 +10271,18 @@ function ТопСтрока({ onOpenToken, onOpenProfile, live = [] }) {
  * где его ищут: аватарка в углу главной. */
 function ШапкаГлавной({ profile, accountCreated, onOpenMyProfile }) {
   const аватар = profile && profile.avatarUrl;
+  // Аватарка и имя — одной кнопкой слева: это одна мысль «я», и целиться
+  // в кружок диаметром в сорок точек, когда рядом стоит собственное имя,
+  // незачем.
   return (
-    <div className="flex items-center justify-between">
-      <div>
-        <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 21, fontWeight: 600, letterSpacing: "-0.02em" }}>
-          {accountCreated && profile && profile.nickname ? profile.nickname : "Mintly"}
-        </div>
-        <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 1 }}>
-          {accountCreated ? t("homeHello") : t("accountNotCreated")}
-        </div>
-      </div>
-      <button
-        onClick={onOpenMyProfile}
-        className="fx-tap"
-        aria-label={t("navProfile")}
+    <button
+      onClick={onOpenMyProfile}
+      className="fx-tap flex items-center text-left"
+      style={{ gap: 11, background: "transparent", border: "none", padding: 0, alignSelf: "flex-start" }}
+    >
+      <span
         style={{
-          width: 40, height: 40, borderRadius: "50%", flexShrink: 0, padding: 0,
+          width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
           border: `1.5px solid ${T.lineHi}`, overflow: "hidden",
           // Пока картинки нет — ровный тёмный кружок, а не серое пятно с
           // чужим значком внутри.
@@ -10274,9 +10290,17 @@ function ШапкаГлавной({ profile, accountCreated, onOpenMyProfile }) 
           display: "flex", alignItems: "center", justifyContent: "center",
         }}
       >
-        {!аватар && <User size={18} color={T.muted} />}
-      </button>
-    </div>
+        {!аватар && <User size={17} color={T.muted} />}
+      </span>
+      <span>
+        <span style={{ display: "block", fontFamily: displayFont, color: T.ice, fontSize: 19, fontWeight: 600, letterSpacing: "-0.02em" }}>
+          {accountCreated && profile && profile.nickname ? profile.nickname : "Mintly"}
+        </span>
+        <span style={{ display: "block", fontFamily: bodyFont, color: T.muted, fontSize: 12.5, marginTop: 1 }}>
+          {accountCreated ? t("homeHello") : t("accountNotCreated")}
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -15041,51 +15065,10 @@ function ProfileView({
             срезала верх виджета кошелька. */}
         <div style={{ position: "relative", zIndex: 1 }}>
 
-        <div className="mt-5">
-          <SectionTitle action={
-            <div className="flex items-center gap-3">
-              <button onClick={goCreateToken} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 12.5, color: unlocked ? T.electric : T.muted }}>{unlocked ? <PlusCircle size={13} /> : <Lock size={12} />} {t("myTokensCreate")}</button>
-            </div>
-          }>{t("myTokensTitle")}</SectionTitle>
-          {myTokens.length === 0 ? (
-            <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("noTokensYet")}</p>
-          ) : (
-            <div className="flex flex-col gap-2">{myTokens.map(t => <MyTokenCard key={t.id} t={t} onManage={onManageToken} />)}</div>
-          )}
-        </div>
-
-        <div className="mt-5">
-          <SectionTitle>{t("activityTitle")}</SectionTitle>
-          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.5 }}>{t("noActivityYet")}</p>
-        </div>
-
-        <div className="mt-5">
-          <SectionTitle action={
-            <button onClick={onOpenAchievements} className="fx-tap flex items-center gap-1" style={{ fontFamily: bodyFont, fontSize: 12.5, color: T.electric }}>
-              {t("achAll")} <ChevronRight size={13} />
-            </button>
-          }>{t("achievementsTitle")}</SectionTitle>
-          <button onClick={onOpenAchievements} className="fx-tap w-full text-left" style={{ padding: "2px 0" }}>
-            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-              <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13 }}>{t("achProgress")}</span>
-              <span style={{ fontFamily: monoFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>
-                {tf("achUnlockedOf", { done: achievements.filter((a) => a.done).length, total: achievements.length })}
-              </span>
-            </div>
-            <div style={{ height: 6, borderRadius: 3, background: T.surfaceHi, overflow: "hidden" }}>
-              <div style={{ width: `${achievements.length ? (achievements.filter((a) => a.done).length / achievements.length) * 100 : 0}%`, height: "100%", background: T.electric }} />
-            </div>
-            {/* Ближайшие незакрытые — чтобы было видно, за чем идти */}
-            <div className="flex items-center gap-1.5" style={{ marginTop: 10, flexWrap: "wrap" }}>
-              {achievements.filter((a) => !a.done).slice(0, 3).map((a) => (
-                <span key={a.id} className="flex items-center gap-1 rounded-full px-2 py-1" style={{ background: T.surfaceHi, border: `1px solid ${T.line}` }}>
-                  <a.icon size={11} color={T.muted} />
-                  <span style={{ fontFamily: bodyFont, fontSize: 11.5, color: T.muted }}>{a.label}</span>
-                </span>
-              ))}
-            </div>
-          </button>
-        </div>
+        {/* Свои токены, активность и достижения переехали на главную:
+            за ними заходят каждый день, и держать их за лишним переходом
+            значило прятать самое нужное. Здесь остаётся то, за чем
+            приходят изредка, — подтверждение и настройки. */}
 
         <div className="mt-5">
           <SectionTitle>{t("verificationTitle")}</SectionTitle>
@@ -18110,7 +18093,7 @@ function mapTokenRow(row) {
               solДоступен={solЗапуск}
             />
           )}
-          <KeepAlive show={view === "profile"}>
+          <KeepAlive show={view === "profile"} появление>
             <ProfileView
               connected={connected}
               onOpenConnectModal={() => setConnectModalOpen(true)}
