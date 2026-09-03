@@ -15,7 +15,7 @@
 
 import { createCanvas, downscale, encodePNG, fillRect, line, px, text, textWidth } from "./_png.js";
 import { adminClient } from "./_support.js";
-import { curveState, priceFromState, looksLikeAddress, poolByAddress, курсTon } from "./_market.js";
+import { curveState, priceFromState, looksLikeAddress, poolByAddress, курсTon, курсSol } from "./_market.js";
 
 // Макет считается в этих единицах, а рисуется во столько раз крупнее и
 // уменьшается усреднением: только так у наклонной линии получается
@@ -378,7 +378,10 @@ export default async function handler(req, res) {
       // TON и возвращала пустой график — цепочка-то другая.
       if (строка.chain === "solana") {
         const { состояние } = await import("./solana-launch.js");
-        const s = await состояние(строка.address).catch(() => null);
+        const [s, курс] = await Promise.all([
+          состояние(строка.address).catch(() => null),
+          курсSol().catch(() => 0),
+        ]);
         const кривая = s ? рядПоКривой({
           виртМонет: s.virtualSol,
           виртТокенов: s.virtualTokens,
@@ -389,7 +392,9 @@ export default async function handler(req, res) {
           ticker: String(строка.ticker || "").toUpperCase(),
           name: строка.name,
           priceText: s ? fmtЦена(s.ценаSol, false).replace("$", "") + " SOL" : "-",
-          capText: s ? `${s.solСобрано.toFixed(2)} / ${s.solЦель.toFixed(0)} SOL` : "",
+          // Капитализация — цена за весь выпуск и сразу в долларах, как
+          // и у токенов с биржи: одна величина, одна единица.
+          capText: s && курс > 0 ? fmtБольшое(s.ценаSol * 1e9 * курс, false) : "",
           change: null,
           точки: кривая ? кривая.точки : [],
           отметка: кривая ? кривая.отметка : null,
@@ -427,9 +432,10 @@ export default async function handler(req, res) {
         ticker: String(строка.ticker || "").toUpperCase(),
         name: строка.name,
         priceText: fmtЦена(цена, true),
-        // Капитализация в долларах: в TON её приходилось пересчитывать
-        // в уме. Курса нет — показываем в TON, это лучше прочерка.
-        capText: цена > 0 ? (курс > 0 ? fmtБольшое(цена * 1e9 * курс, false) : fmtБольшое(цена * 1e9, true)) : "",
+        // Капитализация только в долларах — там же, где и в ленте, и в
+        // карточке бота. Курса нет — лучше пусто, чем другая единица,
+        // которую примут за доллары.
+        capText: цена > 0 && курс > 0 ? fmtБольшое(цена * 1e9 * курс, false) : "",
         change: кривая ? null : (старт > 0 && цена > 0 ? ((цена - старт) / старт) * 100 : 0),
         точки: кривая ? кривая.точки : ряд,
         отметка: кривая ? кривая.отметка : null,

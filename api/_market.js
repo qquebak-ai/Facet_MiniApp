@@ -140,6 +140,40 @@ export async function логотипЖетона(address) {
  * доллары всё равно неоткуда.
  */
 let курсКеш = { значение: 0, ts: 0 };
+/* Курс SOL. Нужен там же, где и курс TON: капитализация показывается в
+   долларах, а токены площадки живут в двух сетях. Источника два — если
+   первый молчит, второй обычно отвечает; протухшее значение лучше
+   прочерка, поэтому кеш возвращается даже устаревшим. */
+let курсSolКеш = { значение: 0, ts: 0 };
+
+export async function курсSol() {
+  if (курсSolКеш.значение > 0 && Date.now() - курсSolКеш.ts < 300000) return курсSolКеш.значение;
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd");
+    if (res.ok) {
+      const json = await res.json();
+      const v = Number(json && json.solana && json.solana.usd) || 0;
+      if (v > 0) {
+        курсSolКеш = { значение: v, ts: Date.now() };
+        return v;
+      }
+    }
+  } catch (err) { /* ниже запасной источник */ }
+  try {
+    const res = await fetch("https://api.geckoterminal.com/api/v2/simple/networks/solana/token_price/So11111111111111111111111111111111111111112");
+    if (res.ok) {
+      const json = await res.json();
+      const цены = json && json.data && json.data.attributes && json.data.attributes.token_prices;
+      const v = цены ? Number(Object.values(цены)[0]) || 0 : 0;
+      if (v > 0) {
+        курсSolКеш = { значение: v, ts: Date.now() };
+        return v;
+      }
+    }
+  } catch (err) { /* курса нет — вернём то, что помним */ }
+  return курсSolКеш.значение;
+}
+
 export async function курсTon() {
   if (курсКеш.значение > 0 && Date.now() - курсКеш.ts < 300000) return курсКеш.значение;
   try {
@@ -311,7 +345,7 @@ export async function findTokens(query, limit = 8) {
   // dex_pool_address появился позже остальных (см. supabase_listing.sql).
   // Пока миграция не выполнена, колонки в базе нет, и запрос с ней
   // отбивается целиком — поэтому один раз проверяем и дальше помним.
-  const колонки = `id, name, ticker, logo_url, address, curve_address, created_at, owner_id${await естьКолонкаПула(admin) ? ", dex_pool_address" : ""}`;
+  const колонки = `id, name, ticker, logo_url, address, curve_address, chain, created_at, owner_id${await естьКолонкаПула(admin) ? ", dex_pool_address" : ""}`;
 
   let ряд;
   if (looksLikeAddress(q)) {
@@ -463,7 +497,65 @@ async function состояниеИзКеша(tokenId) {
   };
 }
 
+/* Карточка своего токена в Solana.
+ *
+ * Отдельно от TON не по прихоти: там другая цепочка, своя программа
+ * кривой и своя монета. Раньше такой токен шёл общим путём, состояние
+ * искалось у TON и не находилось — в чате он выглядел мёртвым, хотя
+ * кривая живёт и торгуется.
+ *
+ * Капитализация, как и везде, в долларах: цена за весь выпуск по
+ * текущему курсу монеты.
+ */
+async function карточкаSolana(token) {
+  const { состояние } = await import("./solana-launch.js");
+  const [s, курс] = await Promise.all([
+    состояние(token.address).catch(() => null),
+    курсSol().catch(() => 0),
+  ]);
+
+  const имя = escape(token.name || token.ticker || "?");
+  const тикер = escape(String(token.ticker || "").toUpperCase());
+  const капа = s && курс > 0 ? s.ценаSol * 1e9 * курс : 0;
+  const доля = s && s.solЦель > 0 ? Math.max(0, Math.min(1, s.solСобрано / s.solЦель)) : 0;
+
+  const строки = [
+    `${token.logo_url ? "🪙" : "🚀"} <b>${имя}</b> · $${тикер}`,
+    "",
+    `💰 Цена: ${s ? `${s.ценаSol.toFixed(9).replace(/0+$/, "")} SOL` : "—"}`,
+    `📊 Капа: ${капа > 0 ? fmtUsd(капа) : "—"}`,
+  ];
+  if (s) {
+    строки.push("");
+    строки.push(s.закрыта
+      ? `🎉 Кривая закрыта, собрано ${s.solСобрано.toFixed(2)} SOL`
+      : `🚀 Собрано для выхода на биржу: ${(доля * 100).toFixed(0)}%\n${s.solСобрано.toFixed(2)} / ${s.solЦель.toFixed(0)} SOL`);
+  }
+  строки.push(`\n⛓ Solana · <code>${escape(token.address || "")}</code>`);
+
+  return {
+    text: строки.join("\n"),
+    title: `$${тикер} — ${имя}`,
+    description: s
+      ? `${капа > 0 ? fmtUsd(капа) : "—"} · ${s.solСобрано.toFixed(2)}/${s.solЦель.toFixed(0)} SOL`
+      : "Кривая ещё не отвечает — открой в приложении",
+    link: `${APP_URL}?token=${token.id}`,
+    chart: `${APP_URL}/api/chart?token=${token.id}&t=${свежесть()}`,
+    ref: `t:${token.id}`,
+    // Сделка по такому токену идёт только в приложении: кнопки покупки
+    // в чате собираются под TON-кошелёк, а здесь другая цепочка.
+    curve: null,
+    pool: null,
+    jetton: token.address || null,
+    ticker: тикер,
+    botLink: `https://t.me/${(process.env.TG_BOT || "MintlyAppbot").replace(/^@/, "")}?start=tok_${token.id}`,
+    thumb: token.logo_url || null,
+  };
+}
+
 export async function tokenCard(token) {
+  if (token && token.chain === "solana") return await карточкаSolana(token);
+
   const [state, история, логотип, курс] = await Promise.all([
     // Сначала кеш, и только если он пуст или протух — цепочка.
     состояниеИзКеша(token.id).then((к) => к || curveState(token.curve_address)),
@@ -507,7 +599,10 @@ export async function tokenCard(token) {
     `${значок} <b>${имя}</b> · $${тикер}`,
     "",
     `💰 Цена: ${fmtPrice(цена)}`,
-    `📊 Капа: ${капа > 0 ? fmtUsd(капа) : `${fmtTon(капаTon)} TON`} · ${стрелкаЭмодзи} ${знак}${движение.toFixed(2)}% за 24ч`,
+    // Капитализация всегда в долларах: в TON её приходилось
+    // пересчитывать в уме, а рядом в ленте и на бирже она в долларах.
+    // Курс не пришёл — честный прочерк, а не другая единица.
+    `📊 Капа: ${капа > 0 ? fmtUsd(капа) : "—"} · ${стрелкаЭмодзи} ${знак}${движение.toFixed(2)}% за 24ч`,
   ];
   if (цель > 0) {
     строки.push("");
@@ -525,8 +620,12 @@ export async function tokenCard(token) {
   строки.push(`🔄 Сделок: ${история.length} · ⏱ С момента листинга: ${fmtAge(token.created_at)}`);
   if (token.address) строки.push(`\n<code>${escape(token.address)}</code>`);
 
+  // В строке подсказки — то же, что и в карточке: капитализация в
+  // долларах первой, потом движение и путь до листинга. Раньше здесь
+  // стояла цена, по которой мемкоин ни с чем не сравнить: у одного она
+  // в миллионных долях, у другого в тысячных, а капа сопоставима.
   const описание = state
-    ? `${fmtPrice(цена)} · ${знак}${движение.toFixed(1)}% · ${fmtTon(собрано)}/${fmtTon(цель)} TON`
+    ? `${капа > 0 ? fmtUsd(капа) : fmtPrice(цена)} · ${знак}${движение.toFixed(1)}% · ${fmtTon(собрано)}/${fmtTon(цель)} TON`
     : "Кривая ещё не отвечает — открой в приложении";
 
   return {
