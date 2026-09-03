@@ -4377,7 +4377,7 @@ function fmtSince(iso) {
    что и вкладка транзакций у токена; показываем по одной сделке за раз и
    раз в несколько секунд переключаем — так строка остаётся узкой и не
    отвлекает от виджета под ней. */
-function RecentBuysTicker({ tokens, curveTokens, onOpen, onReady }) {
+function RecentBuysTicker({ tokens, curveTokens, onOpen, onReady, сеть = "ton" }) {
   const [buys, setBuys] = useState([]);
   // Пока не пришёл первый ответ, на месте ленты стоит скелет той же
   // высоты: пустого прыгающего места на экране быть не должно.
@@ -4495,6 +4495,20 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen, onReady }) {
   const shownRef = useRef(new Set());
   const [current, setCurrent] = useState(null);
 
+  /* Смена сети — это другой рынок целиком, и накопленные сделки к нему
+     отношения не имеют: в разделе Solana висели покупки за TON. Раньше
+     компонент для этого пересоздавали ключом; теперь он чистит себя сам,
+     а на экране не мелькает пустое место там, где только что была
+     строка. */
+  useEffect(() => {
+    collectedRef.current = [];
+    poolCursor.current = 0;
+    curveCursor.current = 0;
+    shownRef.current = new Set();
+    setBuys([]);
+    setCurrent(null);
+  }, [сеть]);
+
   useEffect(() => {
     function pickNext(list, prev) {
       const fresh = list.find((x) => !shownRef.current.has(x.id));
@@ -4532,6 +4546,11 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen, onReady }) {
   if (!b) return null;
 
   return (
+    // Коробка ровно на одну строку. Переключая сети, люди набирали на
+    // этом месте столбец из нескольких сделок вперемешку — TON под SOL —
+    // и он так и оставался на экране; выше одной строки лента теперь не
+    // вырастет, что бы ни осталось от прошлой сети.
+    <div style={{ maxHeight: 44, overflow: "hidden" }}>
     <button
       onClick={() => onOpen && onOpen(b.token)}
       className="fx-tap w-full flex items-center gap-2 rounded-[16px] px-3 py-2 overflow-hidden"
@@ -4564,6 +4583,7 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen, onReady }) {
         <span style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5, whiteSpace: "nowrap" }}>{fmtSince(b.at)}</span>
       </div>
     </button>
+    </div>
   );
 }
 
@@ -9473,7 +9493,7 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
         style={{ gap: 20, display: разделГотов ? undefined : "none" }}
       >
       <RecentBuysTicker
-        key={сеть}
+        сеть={сеть}
         tokens={сеть === "sol" ? (solTokens || []) : tokens}
         curveTokens={сеть === "sol" ? [] : myTokens}
         onOpen={onOpen}
