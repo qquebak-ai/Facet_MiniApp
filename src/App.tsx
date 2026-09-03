@@ -3707,10 +3707,16 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   function clampView() {
     const v = viewRef.current;
     v.count = Math.max(CHART_MIN_VISIBLE, Math.min(n, v.count || CHART_DEFAULT_VISIBLE));
-    // No upper bound on v.start: panning right of the last candle is
-    // allowed (empty space beyond it), same as most trading terminals.
-    // Only the left edge is clamped, so you can't scroll before candle 0.
-    v.start = Math.max(0, v.start);
+    // Пустое место есть с обеих сторон. Справа за последней свечой — как
+    // в любом терминале; слева до первой — потому что палец упирался в
+    // невидимую стену ровно там, где у молодого токена всего десяток
+    // свечей: график дёргался и вставал, и это читалось как поломка, а
+    // не как «дальше истории нет».
+    //
+    // Уводить совсем в пустоту нельзя: часть свечей обязана остаться на
+    // экране, иначе непонятно, куда возвращаться.
+    const остаток = Math.max(1, v.count * 0.15);
+    v.start = Math.max(-(v.count - остаток), v.start);
   }
 
   function computeLayout() {
