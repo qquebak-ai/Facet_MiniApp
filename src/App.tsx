@@ -1401,6 +1401,11 @@ function GlobalStyle() {
          is what actually stops the screen from zooming in while typing. */
       input, textarea, select { font-size: 16px; }
       @keyframes fadeInUp { from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:translateY(0);} }
+      /* Пока шторка идёт за пальцем, всё, что шевелится под ней, стоит:
+         бегущая лента, мерцания карточек, полосы загрузки. Они рисуются
+         в тех же кадрах, и на слабом телефоне движение из-за них идёт
+         ступеньками. */
+      body.шторка-едет .подложка *, body.шторка-едет .подложка { animation-play-state: paused !important; }
       @keyframes spin360 { from{ transform: rotate(0deg); } to{ transform: rotate(360deg); } }
       @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
       @keyframes scaleIn { from{opacity:0; transform:scale(0.92);} to{opacity:1; transform:scale(1);} }
@@ -7751,75 +7756,116 @@ function ШторкаПрофиля({ открыт, onClose, insetTop = 0, child
   const лист = useRef(null);
   const затемнение = useRef(null);
   const прокрутка = useRef(null);
-  const старт = useRef(null);
-  const путь = useRef(0);
+  const состояние = useRef({ y: 0, ts: 0, тянем: false, путь: 0 });
+  const закрыть = useRef(onClose);
+  закрыть.current = onClose;
 
   /* Шторка двигается напрямую, минуя перерисовку.
    *
    * Сначала смещение держалось в состоянии — и каждый кадр жеста React
-   * перебирал весь профиль целиком. На телефоне это те самые рывки:
-   * палец идёт ровно, а шторка догоняет его через кадр. Теперь на каждый
-   * кадр меняется одно свойство одного узла, а перерисовка не
-   * запускается вовсе. */
-  const поставить = React.useCallback((y, плавно) => {
+   * перебирал весь профиль целиком. Потом выяснилось, что и этого мало:
+   * React вешает касания через свой корень и делает их «пассивными», то
+   * есть отменить прокрутку страницы из них нельзя. Браузер на каждом
+   * кадре решал, кому отдать движение — списку или странице, — и отдавал
+   * с запозданием: пальцем ведёшь ровно, а шторка идёт ступеньками.
+   *
+   * Поэтому касания слушаются напрямую, без React, с правом отменить
+   * прокрутку. Кадр при этом делает ровно одну вещь: меняет transform у
+   * одного узла. */
+  useEffect(() => {
     const el = лист.current;
-    if (el) {
-      el.style.transition = плавно ? "transform 280ms cubic-bezier(0.22,1,0.36,1)" : "none";
+    if (!el) return undefined;
+
+    const поставить = (y, плавно) => {
+      el.style.transition = плавно ? "transform 300ms cubic-bezier(0.22,1,0.36,1)" : "none";
       el.style.transform = `translate3d(0, ${y}px, 0)`;
-    }
-    const ф = затемнение.current;
-    if (ф) {
-      const высота = (el && el.offsetHeight) || 1;
-      const доля = Math.max(0, 1 - y / высота);
-      ф.style.transition = плавно ? "opacity 280ms ease-out" : "none";
-      ф.style.opacity = String(0.5 * доля);
-    }
+      const ф = затемнение.current;
+      if (ф) {
+        const доля = Math.max(0, 1 - y / (el.offsetHeight || 1));
+        ф.style.transition = плавно ? "opacity 300ms ease-out" : "none";
+        ф.style.opacity = String(0.5 * доля);
+      }
+    };
+
+    const началось = (e) => {
+      const с = прокрутка.current;
+      const t = e.touches && e.touches[0];
+      if (!t || !с || с.scrollTop > 0) { состояние.current.тянем = false; return; }
+      состояние.current = { y: t.clientY, ts: Date.now(), тянем: true, путь: 0 };
+      // Тень на движущемся слое браузер пересчитывает каждый кадр —
+      // самая дорогая часть картинки. На время движения её нет, и
+      // заметить это невозможно: шторка в этот момент едет.
+      el.style.boxShadow = "none";
+      // Прокрутка внутри трансформируемого слоя заставляет браузер
+      // перекраивать слои на каждом кадре. Пока тянем — она не нужна.
+      с.style.overflowY = "hidden";
+      // И всё, что шевелится позади: бегущая лента, мерцания, полосы.
+      // Они рисуются в тех же кадрах и отбирают их у движения.
+      if (typeof document !== "undefined") document.body.classList.add("шторка-едет");
+    };
+
+    const идёт = (e) => {
+      if (!состояние.current.тянем) return;
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      const вниз = t.clientY - состояние.current.y;
+      if (вниз <= 0) {
+        // Палец пошёл вверх — это уже прокрутка списка, а не закрытие.
+        состояние.current.тянем = false;
+        поставить(0, true);
+        return;
+      }
+      // Отменяем прокрутку страницы: иначе браузер тянет и её тоже, и
+      // движение выходит рваным.
+      if (e.cancelable) e.preventDefault();
+      состояние.current.путь = вниз;
+      поставить(вниз, false);
+    };
+
+    const кончилось = () => {
+      el.style.boxShadow = "0 -18px 50px rgba(0,0,0,0.55)";
+      if (прокрутка.current) прокрутка.current.style.overflowY = "auto";
+      if (typeof document !== "undefined") document.body.classList.remove("шторка-едет");
+      if (!состояние.current.тянем) return;
+      const { путь, ts } = состояние.current;
+      состояние.current.тянем = false;
+      const скорость = путь / Math.max(1, Date.now() - ts); // точек в миллисекунду
+      if (путь > 110 || скорость > 0.6) {
+        // Уезжает из того места, где её отпустили, а не прыгает наверх,
+        // чтобы оттуда начать закрываться.
+        поставить(el.offsetHeight || 1000, true);
+        закрыть.current();
+        return;
+      }
+      поставить(0, true);
+    };
+
+    el.addEventListener("touchstart", началось, { passive: true });
+    el.addEventListener("touchmove", идёт, { passive: false });
+    el.addEventListener("touchend", кончилось, { passive: true });
+    el.addEventListener("touchcancel", кончилось, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", началось);
+      el.removeEventListener("touchmove", идёт);
+      el.removeEventListener("touchend", кончилось);
+      el.removeEventListener("touchcancel", кончилось);
+    };
   }, []);
 
   // Открытие и закрытие — одно и то же движение в разные стороны.
   useEffect(() => {
-    путь.current = 0;
     const el = лист.current;
-    const высота = (el && el.offsetHeight) || 1000;
-    поставить(открыт ? 0 : высота, true);
-    if (открыт && прокрутка.current) прокрутка.current.scrollTop = 0;
-  }, [открыт, поставить]);
-
-  function началось(e) {
-    const el = прокрутка.current;
-    if (!el || el.scrollTop > 0) { старт.current = null; return; }
-    const t = e.touches && e.touches[0];
-    if (!t) return;
-    старт.current = { y: t.clientY, ts: Date.now() };
-    путь.current = 0;
-  }
-
-  function идёт(e) {
-    if (!старт.current) return;
-    const t = e.touches && e.touches[0];
-    if (!t) return;
-    // Вверх не тянем: там обычная прокрутка списка.
-    const вниз = Math.max(0, t.clientY - старт.current.y);
-    путь.current = вниз;
-    поставить(вниз, false);
-  }
-
-  function кончилось() {
-    if (!старт.current) return;
-    const прошло = Math.max(1, Date.now() - старт.current.ts);
-    const скорость = путь.current / прошло; // точек в миллисекунду
-    const далеко = путь.current > 110 || скорость > 0.6;
-    старт.current = null;
-    if (далеко) {
-      // Уезжает из того места, где её отпустили, — а не прыгает наверх,
-      // чтобы оттуда начать закрываться.
-      const el = лист.current;
-      поставить((el && el.offsetHeight) || 1000, true);
-      onClose();
-      return;
+    if (!el) return;
+    const y = открыт ? 0 : (el.offsetHeight || 1000);
+    el.style.transition = "transform 300ms cubic-bezier(0.22,1,0.36,1)";
+    el.style.transform = `translate3d(0, ${y}px, 0)`;
+    const ф = затемнение.current;
+    if (ф) {
+      ф.style.transition = "opacity 300ms ease-out";
+      ф.style.opacity = открыт ? "0.5" : "0";
     }
-    поставить(0, true);
-  }
+    if (открыт && прокрутка.current) прокрутка.current.scrollTop = 0;
+  }, [открыт]);
 
   return (
     <div
@@ -7839,10 +7885,6 @@ function ШторкаПрофиля({ открыт, onClose, insetTop = 0, child
       />
       <div
         ref={лист}
-        onTouchStart={началось}
-        onTouchMove={идёт}
-        onTouchEnd={кончилось}
-        onTouchCancel={кончилось}
         style={{
           position: "absolute", left: 0, right: 0, bottom: 0,
           top: Math.max(10, insetTop * 0.5) + 10,
@@ -7854,14 +7896,16 @@ function ШторкаПрофиля({ открыт, onClose, insetTop = 0, child
           // Начальное положение — внизу: до первого открытия шторки на
           // экране быть не должно.
           transform: "translate3d(0, 2000px, 0)",
-          // Слой готовится к движению заранее: иначе первый кадр жеста
-          // уходит на то, чтобы браузер отдал его видеокарте.
+          // Слой готовится к движению заранее, а его содержимое не влияет
+          // на расчёты снаружи: без этого браузер на каждом кадре
+          // пересчитывал бы всю страницу целиком.
           willChange: "transform",
+          contain: "layout paint",
           overscrollBehavior: "contain",
         }}
       >
         {/* Ручка: единственное, что говорит «меня можно утащить вниз». */}
-        <div style={{ padding: "10px 0 6px", display: "flex", justifyContent: "center", flexShrink: 0 }}>
+        <div style={{ padding: "10px 0 6px", display: "flex", justifyContent: "center", flexShrink: 0, touchAction: "none" }}>
           <div style={{ width: 40, height: 4, borderRadius: 999, background: T.lineHi }} />
         </div>
         <div ref={прокрутка} className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingBottom: 92 }}>
@@ -18122,7 +18166,7 @@ function mapTokenRow(row) {
             behind the bar instead of just a flat tinted strip. paddingBottom
             below reserves the nav's own height so the last row of content
             can still scroll clear of it. */}
-        <div className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), /* Панель разделов стала ниже капсулы: и запас под неё нужен меньше. */
+        <div className="no-scrollbar px-4 подложка" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingTop: contentTopPad(insetTop), /* Панель разделов стала ниже капсулы: и запас под неё нужен меньше. */
           // Ключа по разделу здесь нет намеренно: он пересоздавал весь
           // контейнер при каждом переходе, а вместе с ним и все вкладки
           // внутри KeepAlive — то есть ровно то, ради чего KeepAlive и
