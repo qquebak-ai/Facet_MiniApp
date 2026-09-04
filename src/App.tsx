@@ -7748,14 +7748,42 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
  * экран.
  */
 function ШторкаПрофиля({ открыт, onClose, insetTop = 0, children }) {
+  const лист = useRef(null);
+  const затемнение = useRef(null);
   const прокрутка = useRef(null);
   const старт = useRef(null);
-  const [тянем, setТянем] = useState(0);
-  // Пока шторка закрыта, её содержимое остаётся собранным — просто
-  // уезжает вниз. Так возврат к профилю мгновенный, без пересборки.
+  const путь = useRef(0);
+
+  /* Шторка двигается напрямую, минуя перерисовку.
+   *
+   * Сначала смещение держалось в состоянии — и каждый кадр жеста React
+   * перебирал весь профиль целиком. На телефоне это те самые рывки:
+   * палец идёт ровно, а шторка догоняет его через кадр. Теперь на каждый
+   * кадр меняется одно свойство одного узла, а перерисовка не
+   * запускается вовсе. */
+  const поставить = React.useCallback((y, плавно) => {
+    const el = лист.current;
+    if (el) {
+      el.style.transition = плавно ? "transform 280ms cubic-bezier(0.22,1,0.36,1)" : "none";
+      el.style.transform = `translate3d(0, ${y}px, 0)`;
+    }
+    const ф = затемнение.current;
+    if (ф) {
+      const высота = (el && el.offsetHeight) || 1;
+      const доля = Math.max(0, 1 - y / высота);
+      ф.style.transition = плавно ? "opacity 280ms ease-out" : "none";
+      ф.style.opacity = String(0.5 * доля);
+    }
+  }, []);
+
+  // Открытие и закрытие — одно и то же движение в разные стороны.
   useEffect(() => {
-    if (открыт) setТянем(0);
-  }, [открыт]);
+    путь.current = 0;
+    const el = лист.current;
+    const высота = (el && el.offsetHeight) || 1000;
+    поставить(открыт ? 0 : высота, true);
+    if (открыт && прокрутка.current) прокрутка.current.scrollTop = 0;
+  }, [открыт, поставить]);
 
   function началось(e) {
     const el = прокрутка.current;
@@ -7763,31 +7791,34 @@ function ШторкаПрофиля({ открыт, onClose, insetTop = 0, child
     const t = e.touches && e.touches[0];
     if (!t) return;
     старт.current = { y: t.clientY, ts: Date.now() };
+    путь.current = 0;
   }
 
   function идёт(e) {
     if (!старт.current) return;
     const t = e.touches && e.touches[0];
     if (!t) return;
-    const вниз = t.clientY - старт.current.y;
     // Вверх не тянем: там обычная прокрутка списка.
-    setТянем(вниз > 0 ? вниз : 0);
+    const вниз = Math.max(0, t.clientY - старт.current.y);
+    путь.current = вниз;
+    поставить(вниз, false);
   }
 
   function кончилось() {
-    if (!старт.current) { setТянем(0); return; }
+    if (!старт.current) return;
     const прошло = Math.max(1, Date.now() - старт.current.ts);
-    const скорость = тянем / прошло; // точек в миллисекунду
-    // Либо утащили заметно далеко, либо коротко дёрнули вниз — оба
-    // движения означают «закрой».
-    if (тянем > 110 || скорость > 0.6) {
-      setТянем(0);
-      старт.current = null;
+    const скорость = путь.current / прошло; // точек в миллисекунду
+    const далеко = путь.current > 110 || скорость > 0.6;
+    старт.current = null;
+    if (далеко) {
+      // Уезжает из того места, где её отпустили, — а не прыгает наверх,
+      // чтобы оттуда начать закрываться.
+      const el = лист.current;
+      поставить((el && el.offsetHeight) || 1000, true);
       onClose();
       return;
     }
-    старт.current = null;
-    setТянем(0);
+    поставить(0, true);
   }
 
   return (
@@ -7796,15 +7827,18 @@ function ШторкаПрофиля({ открыт, onClose, insetTop = 0, child
       inert={открыт ? undefined : ""}
       style={{
         position: "absolute", left: 0, right: 0, top: 0, bottom: 0, zIndex: 40,
-        // Ниже открытой шторки видно главную — это и есть подсказка, что
-        // экран не сменился, а накрылся.
-        background: hexA("#000000", открыт ? 0.5 : 0),
         pointerEvents: открыт ? "auto" : "none",
-        transition: тянем ? "none" : "background 220ms ease-out",
       }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
+      {/* Затемнение отдельным слоем: его прозрачность меняется вместе с
+          движением, и трогать ради этого саму шторку не нужно. */}
       <div
+        ref={затемнение}
+        onClick={onClose}
+        style={{ position: "absolute", inset: 0, background: "#000", opacity: 0 }}
+      />
+      <div
+        ref={лист}
         onTouchStart={началось}
         onTouchMove={идёт}
         onTouchEnd={кончилось}
@@ -7817,10 +7851,12 @@ function ШторкаПрофиля({ открыт, onClose, insetTop = 0, child
           border: `1px solid ${T.line}`, borderBottom: "none",
           boxShadow: "0 -18px 50px rgba(0,0,0,0.55)",
           display: "flex", flexDirection: "column",
-          transform: `translateY(${открыт ? тянем : 3000}px)`,
-          // Пока палец на экране — никаких переходов: шторка обязана
-          // идти ровно за ним, иначе движение кажется вязким.
-          transition: тянем ? "none" : "transform 260ms cubic-bezier(0.16,1,0.3,1)",
+          // Начальное положение — внизу: до первого открытия шторки на
+          // экране быть не должно.
+          transform: "translate3d(0, 2000px, 0)",
+          // Слой готовится к движению заранее: иначе первый кадр жеста
+          // уходит на то, чтобы браузер отдал его видеокарте.
+          willChange: "transform",
           overscrollBehavior: "contain",
         }}
       >
