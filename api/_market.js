@@ -30,7 +30,7 @@ export const SOL_NETWORK = /devnet/.test(process.env.SOLANA_RPC || "") ? "devnet
   : /testnet/.test(process.env.SOLANA_RPC || "") ? "testnet" : "mainnet";
 export const СЕТИ = [...new Set([NETWORK, SOL_NETWORK])];
 
-export const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
+export const APP_URL = process.env.APP_URL || "https://mintly.company";
 
 /* Метка свежести для ссылки на картинку. Telegram кэширует превью по
    адресу надолго: без неё в чате неделю висел бы график недельной

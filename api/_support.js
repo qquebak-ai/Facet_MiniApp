@@ -33,7 +33,7 @@ export function normalizeChatId(raw) {
 }
 
 export const SUPPORT_CHAT_ID = normalizeChatId(process.env.SUPPORT_CHAT_ID);
-export const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
+export const APP_URL = process.env.APP_URL || "https://mintly.company";
 
 // Пределы для одного человека. Не про защиту базы, а про живого
 // сотрудника на том конце: без них один расстроенный человек за минуту

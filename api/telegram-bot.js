@@ -59,7 +59,7 @@ const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 // Адрес самого приложения. Кнопка в приветствии открывает его напрямую,
 // поэтому короткое имя мини-приложения в BotFather для приглашений уже
 // не требуется.
-const APP_URL = process.env.APP_URL || "https://mintlyapp.vercel.app";
+const APP_URL = process.env.APP_URL || "https://mintly.company";
 
 // Значок для подсказок, у которых нет своей картинки: без него Telegram
 // рисует серый квадрат с первой буквой заголовка, и подсказка выглядит
