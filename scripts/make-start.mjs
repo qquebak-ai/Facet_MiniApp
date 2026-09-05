@@ -171,7 +171,10 @@ console.log(`public/start.svg — ${Ш}×${В}`);
 try {
   const { chromium } = await import("playwright-core");
   const браузер = await chromium.launch({ executablePath: process.env.CHROMIUM || "/opt/pw-browsers/chromium" });
-  const стр = await браузер.newPage({ viewport: { width: Ш, height: В } });
+  // Рисуем вдвое плотнее: Telegram пережимает картинку по-своему, и из
+  // исходника в один пиксель на точку получается мыло на экранах с
+  // высокой плотностью.
+  const стр = await браузер.newPage({ viewport: { width: Ш, height: В }, deviceScaleFactor: 2 });
   await стр.goto(`file://${файл}`);
   await стр.waitForTimeout(400);
   await стр.screenshot({ path: path.join(корень, "public", "start.png") });
