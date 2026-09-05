@@ -144,9 +144,8 @@ const STR = {
   RU: {
     navHome: "Главная", navMempad: "Мемпад", navCreate: "Создать", navProfile: "Профиль", navShop: "Магазин", navWallet: "Кошелёк",
     walletBalanceLabel: "Баланс",
-    appWalletTitle: "Баланс приложения",
+    appWalletTitle: "Баланс в приложении",
     appWalletHint: "Пополни этот адрес, и сделки в Solana будут уходить в сеть сразу, без подтверждения в кошельке.",
-    appWalletWarn: "Ключом от этого адреса управляет площадка. Держи здесь столько, сколько готов пустить в сделки, остальное — на своём кошельке.",
     appWalletTopUp: "Пополнить",
     appWalletWithdraw: "Вывести",
     appWalletAddressCopied: "Адрес скопирован",
@@ -176,7 +175,7 @@ const STR = {
     homeMoving: "В движении",
     homeTopAll: "Весь топ",
     homeTopHide: "Свернуть",
-    appWalletNeedAuth: "Баланс приложения привязан к аккаунту — войди или создай его в профиле, и адрес появится здесь.",
+    appWalletNeedAuth: "Баланс в приложении привязан к аккаунту — войди или создай его в профиле, и адрес появится здесь.",
     walletEmptyTitle: "Кошелёк не подключён",
     walletEmptyBody: "Подключи TON-кошелёк, чтобы покупать, продавать и запускать токены.",
     shopTitle: "Магазин",
@@ -604,9 +603,8 @@ const STR = {
   EN: {
     navHome: "Home", navMempad: "Mempad", navCreate: "Create", navProfile: "Profile", navShop: "Shop", navWallet: "Wallet",
     walletBalanceLabel: "Balance",
-    appWalletTitle: "App balance",
+    appWalletTitle: "In-app balance",
     appWalletHint: "Top this address up and Solana trades go straight to the network, with no wallet confirmation.",
-    appWalletWarn: "The key to this address is held by the platform. Keep here only what you are ready to trade; the rest belongs in your own wallet.",
     appWalletTopUp: "Top up",
     appWalletWithdraw: "Withdraw",
     appWalletAddressCopied: "Address copied",
@@ -11238,7 +11236,6 @@ function AppWalletCard({ showToast }) {
         </div>
       )}
 
-      <p style={{ fontFamily: bodyFont, color: T.faint, fontSize: 11.5, marginTop: 12, lineHeight: 1.45 }}>{t("appWalletWarn")}</p>
     </div>
   );
 }
