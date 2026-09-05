@@ -5303,12 +5303,17 @@ const MempadRow = React.memo(function MempadRow({ t: tok, onOpen, index }) {
   return (
     <button
       onClick={() => onOpen(tok)}
-      className="fx-tap fx-card w-full text-left rounded-[18px]"
+      className="fx-tap fx-card w-full text-left"
       // Задержка появления копится только на первых карточках: при сорока
       // элементах прежние сорок миллисекунд на каждый растягивали список
       // на полторы секунды, и переключение вкладки выглядело медленным.
+      //
+      // Без фона и рамки: сорок плашек подряд рябят, а рамка каждой из
+      // них спорит с рамкой соседней. Строки разделяет одна тонкая линия
+      // снизу — её хватает, чтобы взгляд не путал соседние токены.
       style={{
-        padding: 14, background: T.surface, border: `1px solid ${T.line}`,
+        padding: "14px 2px", background: "transparent",
+        borderBottom: `1px solid ${T.line}`,
         animationDelay: `${Math.min(index, 6) * 22}ms`,
       }}
     >
@@ -10155,7 +10160,9 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
         })}
       </div>
 
-      <div className="flex flex-col gap-2" key={сеть}>
+      {/* Строки идут вплотную: они больше не плашки, и зазор между ними
+          лишь разрывал общую линию списка. */}
+      <div className="flex flex-col" key={сеть}>
         {/* Смена фильтра внутри готового раздела — не повод гасить весь
             экран: там достаточно скелетов на месте строк.
 
