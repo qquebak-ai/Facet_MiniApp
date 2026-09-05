@@ -49,7 +49,22 @@ const Ц = {
   тусклый: "#9AA0B4",
 };
 
-const шрифт = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+const шрифт = "Montserrat, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+
+/* Шрифт вшивается в сам SVG: без него Chromium рисует Liberation Sans, и
+   заголовок выглядит казённо. Файлы лежат в репозитории (scripts/fonts),
+   поэтому баннер собирается одинаково на любой машине и без сети. */
+function шрифтВнутрь() {
+  const набор = (имя, диапазон) => {
+    const b64 = fs.readFileSync(path.join(корень, "scripts", "fonts", имя)).toString("base64");
+    return `@font-face{font-family:Montserrat;font-style:normal;font-weight:100 900;
+      src:url(data:font/woff2;base64,${b64}) format('woff2');unicode-range:${диапазон};}`;
+  };
+  return `<style>
+    ${набор("montserrat-latin.woff2", "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215")}
+    ${набор("montserrat-cyrillic.woff2", "U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116")}
+  </style>`;
+}
 
 /* Плитки — короткие обещания, каждое проверяемо в самом приложении.
    Иконка рисуется в квадрате 24×24, путь свой у каждой. */
@@ -103,6 +118,14 @@ function нарисовать({ Ш, В, кегльНазвания, кегльП
   const плиткиY = Math.round(В * (доли.плитки || 0));
 
   const кегльЗнака = Math.round(кегльПлашки * 1.75);
+  // Знак ставится по строке, а не «откуда нарисовался»: у контура начало
+  // координат в основании пластинки, поэтому без сдвига лист висит выше
+  // текста. Черешок в такой мелочи только мешает — тонкий изогнутый
+  // хвостик тянет знак вниз, и лист выглядит косым; поэтому центрируем
+  // по одной пластинке (её середина по высоте — -15, ширина ±9.4).
+  const знакМасштаб = кегльЗнака * 0.0375;
+  const знакСдвигX = 9.4 * знакМасштаб;
+  const знакСдвигY = кегльЗнака * 0.04 + 15 * знакМасштаб;
   const плашкаВ = Math.round(кегльПлашки * 2.5);
   const словоПлашки = "МЕМПАД";
   const плашкаШ = Math.round(плашкаВ * 1.05 + словоПлашки.length * кегльПлашки * 0.86 + кегльПлашки * 0.8);
@@ -148,6 +171,7 @@ ${п.строки
     .join("\n  ");
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${Ш}" height="${В}" viewBox="0 0 ${Ш} ${В}">
+  ${шрифтВнутрь()}
   <defs>
     <linearGradient id="небо" x1="0" y1="0" x2="0.35" y2="1">
       <stop offset="0%" stop-color="${Ц.фон}"/>
@@ -231,15 +255,13 @@ ${п.строки
 
   <!-- Знак площадки -->
   <g transform="translate(${текстX}, ${знакY})">
-    <g transform="scale(${(кегльЗнака * 0.043).toFixed(3)})">
-      <path d="${лист.stem}" fill="none" stroke="${Ц.основной}" stroke-width="1.4" stroke-linecap="round"/>
+    <g transform="translate(${знакСдвигX.toFixed(1)}, ${знакСдвигY.toFixed(1)}) scale(${знакМасштаб.toFixed(3)})">
       <path d="${лист.outline}" fill="${Ц.основной}"/>
-      <g fill="none" stroke="${Ц.фон}" stroke-width="0.6" stroke-linecap="round">
+      <g fill="none" stroke="${Ц.фон}" stroke-width="0.5" stroke-linecap="round">
         ${лист.veins.map((ж) => `<path d="${ж}"/>`).join("\n        ")}
-        <path d="${лист.stem}"/>
       </g>
     </g>
-    <text x="${Math.round(кегльЗнака * 1.35)}" y="${Math.round(кегльЗнака * 0.36)}" fill="${Ц.белый}"
+    <text x="${Math.round(знакСдвигX + 9.4 * знакМасштаб + кегльЗнака * 0.42)}" y="${Math.round(кегльЗнака * 0.36)}" fill="${Ц.белый}"
       font-family="${шрифт}" font-size="${кегльЗнака}" font-weight="700" letter-spacing="0.01em">Mintly</text>
   </g>
 
