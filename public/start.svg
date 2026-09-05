@@ -20,8 +20,9 @@
   <rect width="1200" height="760" fill="#08090B"/>
   <rect width="1200" height="760" fill="url(#зарево)"/>
 
-  <!-- Знак и название — одной строкой, как подпись в шапке приложения. -->
-  <g transform="translate(280, 170) scale(1.500)">
+  <!-- Знак стоит на месте первой буквы: слово читается «Mintly», где M и
+       есть знак. -->
+  <g transform="translate(402.8, 193.28) scale(1.160)">
     <path d="M 12 92 V 20 L 50 62 L 88 20 V 92" fill="none" stroke="#6C7CFF"
       stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
     <g transform="translate(88, 24) rotate(24) scale(1.400)">
@@ -37,8 +38,8 @@
       </g>
     </g>
   </g>
-  <text x="502" y="278" fill="url(#название)" font-family="Montserrat, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
-    font-size="108" font-weight="800" letter-spacing="-0.02em">Mintly</text>
+  <text x="507.20000000000005" y="300" fill="url(#название)" font-family="Montserrat, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+    font-size="116" font-weight="800" letter-spacing="-0.02em">intly</text>
 
   <text x="600" y="430" text-anchor="middle" fill="#9AA0B4" font-family="Montserrat, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
     font-size="34" font-weight="500">Запуск мемкоинов на TON и Solana — прямо в Telegram</text>
