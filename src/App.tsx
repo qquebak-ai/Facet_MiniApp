@@ -1874,6 +1874,16 @@ function GlobalStyle() {
         .fx-reveal, .fx-swap { animation: none; }
         .fx-busy { animation: none; opacity: 0.6; }
       }
+      /* Блик по кольцу до биржи: бежит слева направо и обрезан маской по
+         собранной части, поэтому свет идёт только там, где уже есть
+         деньги. Смещение считается от длины окружности — она у каждого
+         размера своя и приходит переменной. */
+      .fx-ring-glow { animation: ringGlow 2.6s linear infinite; }
+      @keyframes ringGlow {
+        from { stroke-dashoffset: 0; }
+        to   { stroke-dashoffset: calc(var(--ring-len) * -1); }
+      }
+      @media (prefers-reduced-motion: reduce) { .fx-ring-glow { animation: none; opacity: 0.5; } }
       .fx-avatar { transition: transform ${SPRING}; }
       .fx-avatar:active { transform: scale(0.96); transition: transform ${PRESS}; }
       .cta-launch { transition: transform ${SPRING}, opacity ${EASE}; }
@@ -4800,6 +4810,59 @@ function ЗаглушкаЛоготипа({ size }) {
   );
 }
 
+/* Путь токена до биржи — кольцом вокруг его логотипа.
+ *
+ * Полоска под карточкой говорила то же самое, но читалась отдельной
+ * деталью: сначала логотип, потом где-то ниже — линия. Кольцо привязано
+ * к самому токену, и в списке видно сразу, кто близок к выходу.
+ *
+ * По заполненной дуге бежит блик — он обрезан маской ровно по ней,
+ * поэтому свет идёт только там, где собрано, и не подсказывает лишнего.
+ */
+function КольцоДоБиржи({ size, доля, готово = false, children }) {
+  const id = React.useId();
+  const толщина = Math.max(2, Math.round(size * 0.05));
+  const внешний = size + Math.round(толщина * 4);
+  const r = (внешний - толщина) / 2;
+  const длина = 2 * Math.PI * r;
+  const дуга = длина * Math.max(0, Math.min(1, доля || 0));
+  const цвет = готово ? T.up : T.electric;
+  return (
+    <div style={{ position: "relative", width: внешний, height: внешний, flexShrink: 0 }}>
+      <svg
+        width={внешний} height={внешний} aria-hidden
+        style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)", overflow: "visible" }}
+      >
+        <defs>
+          <mask id={`дуга${id}`}>
+            <circle
+              cx={внешний / 2} cy={внешний / 2} r={r} fill="none" stroke="#fff"
+              strokeWidth={толщина} strokeLinecap="round" strokeDasharray={`${дуга} ${длина}`}
+            />
+          </mask>
+        </defs>
+        <circle cx={внешний / 2} cy={внешний / 2} r={r} fill="none" stroke={T.line} strokeWidth={толщина} />
+        <circle
+          cx={внешний / 2} cy={внешний / 2} r={r} fill="none" stroke={цвет}
+          strokeWidth={толщина} strokeLinecap="round" strokeDasharray={`${дуга} ${длина}`}
+        />
+        {дуга > 1 && (
+          <g mask={`url(#дуга${id})`}>
+            <circle
+              className="fx-ring-glow"
+              cx={внешний / 2} cy={внешний / 2} r={r} fill="none" stroke={готово ? T.up : T.ice}
+              strokeWidth={толщина} strokeLinecap="round"
+              strokeDasharray={`${Math.round(длина * 0.14)} ${длина}`}
+              style={{ "--ring-len": `${длина.toFixed(1)}px`, filter: `drop-shadow(0 0 ${толщина * 1.6}px ${hexA(цвет, 0.9)})` }}
+            />
+          </g>
+        )}
+      </svg>
+      <div style={{ position: "absolute", left: толщина * 2, top: толщина * 2 }}>{children}</div>
+    </div>
+  );
+}
+
 function TokenAvatar({ children, size = 52, tone = "neutral", src }) {
   const [broken, setBroken] = useState(false);
   // Сначала пробуем лёгкую копию, при отказе — исходную ссылку, и только
@@ -5294,6 +5357,11 @@ const MempadRow = React.memo(function MempadRow({ t: tok, onOpen, index }) {
   const возраст = (fmtAge(tok.createdAt) || "")
     .replace(/M$/, " мин").replace(/H$/, " ч").replace(/D$/, " д");
   const своя = tok.graduationTon > 0;
+  // Доля собранного до выхода на биржу. Только у своих: у токенов,
+  // которые уже торгуются на DEX, идти некуда — они пришли.
+  const доляДоБиржи = своя
+    ? Math.max(0, Math.min(1, (Number(tok.raisedTon) || 0) / tok.graduationTon))
+    : 0;
   // Держателей знают не у всех: у токенов с биржи их не сосчитать, зато
   // видно число сделок. Показываем то, что есть на самом деле.
   const людиИлиСделки = tok.holders != null
@@ -5318,7 +5386,13 @@ const MempadRow = React.memo(function MempadRow({ t: tok, onOpen, index }) {
       }}
     >
       <div className="flex items-center" style={{ gap: 12 }}>
-        <TokenAvatar size={46} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+        {своя ? (
+          <КольцоДоБиржи size={46} доля={доляДоБиржи} готово={доляДоБиржи >= 1}>
+            <TokenAvatar size={46} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+          </КольцоДоБиржи>
+        ) : (
+          <TokenAvatar size={46} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+        )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center" style={{ gap: 6 }}>
@@ -5350,8 +5424,6 @@ const MempadRow = React.memo(function MempadRow({ t: tok, onOpen, index }) {
           {tok.description}
         </p>
       ) : null}
-
-      {своя ? <div style={{ marginTop: 10 }}><GraduationBar raisedTon={tok.raisedTon} targetTon={tok.graduationTon} compact /></div> : null}
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
         <ЧислоКарточки подпись="цена" значение={fmtPrice(tok.price)} />
