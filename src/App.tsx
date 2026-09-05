@@ -1401,6 +1401,19 @@ function GlobalStyle() {
          is what actually stops the screen from zooming in while typing. */
       input, textarea, select { font-size: 16px; }
       @keyframes fadeInUp { from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:translateY(0);} }
+      /* Главная кнопка знакомства отзывается на нажатие сама: без этого
+         на тёмном фоне непонятно, приняло ли касание. */
+      .вст-кнопка { transition: transform 130ms ease-out, box-shadow 220ms ease-out, filter 220ms ease-out; }
+      .вст-кнопка:active { transform: scale(0.985); filter: brightness(0.95); box-shadow: 0 6px 18px rgba(108,124,255,0.28) !important; }
+      .вст-тихо { transition: color 180ms ease-out, opacity 180ms ease-out; }
+      .вст-тихо:active { opacity: 0.6; }
+      /* Зерно поверх фона. Без него большая тёмная плоскость выглядит
+         цифровой пустотой: глаз не за что зацепить, и градиент читается
+         полосами. Шум рисуется браузером, картинку грузить не надо. */
+      .вст-зерно {
+        background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+        mix-blend-mode: overlay;
+      }
       /* Пока шторка идёт за пальцем, всё, что шевелится под ней, стоит:
          бегущая лента, мерцания карточек, полосы загрузки. Они рисуются
          в тех же кадрах, и на слабом телефоне движение из-за них идёт
@@ -7998,8 +8011,57 @@ function PageLoader({ minHeight = 260 }) {
  * Анимации идут только на прозрачности и сдвиге — их считает видеокарта,
  * и пролистывание не дёргается.
  */
+/* Поверхность карточек знакомства.
+ *
+ * Одна на все экраны: чипы, пункты рынка, кошельки, шаги запуска. Раньше
+ * каждый блок красился отдельно и они выглядели набором разных предметов;
+ * здесь у всех одна плоскость — чуть светлее фона, с волосяной рамкой и
+ * внутренним бликом сверху. Блик важнее рамки: он и создаёт ощущение
+ * поверхности, а не наклейки. */
+const СТЕКЛО = {
+  background: "linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.022) 100%)",
+  border: "1px solid rgba(255,255,255,0.075)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.07), 0 10px 26px rgba(0,0,0,0.34)",
+};
+
+/* Атмосфера за иллюстрацией.
+ *
+ * Плоский чёрный фон выдавал шаблон: экран выглядел пустым листом, на
+ * котором что-то лежит. Здесь под картинкой — мягкое сине-фиолетовое
+ * свечение и две едва различимые дуги; вместе они дают глубину, но не
+ * лезут вперёд. Каждый экран сдвигает свет чуть в сторону — так четыре
+ * страницы читаются как одно место, снятое с разных точек. */
+/* Цвета текста на этих экранах заданы прямо, а не через тему: экран
+   знакомства всегда тёмный, и в светлой теме «цвет основного текста»
+   становится почти чёрным — надписи на тёмном фоне пропадали. */
+function ВступлениеСвет({ номер = 0, активен }) {
+  const сдвиг = [0, -18, 16, -8][номер % 4];
+  const высота = [40, 34, 44, 30][номер % 4];
+  return (
+    <div aria-hidden style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+      <div style={{
+        position: "absolute", left: `calc(50% + ${сдвиг}px)`, top: `${высота}%`,
+        width: 460, height: 460, transform: "translate(-50%, -50%)",
+        background: `radial-gradient(circle, ${hexA(T.electric, 0.16)} 0%, ${hexA(T.electric, 0.05)} 38%, transparent 68%)`,
+        filter: "blur(6px)",
+        animation: активен ? "аураДышит 7s ease-in-out infinite" : "none",
+      }} />
+      {/* Дуги — намёк на форму листа, увеличенную до размера экрана. */}
+      <svg width="100%" height="100%" viewBox="0 0 390 700" preserveAspectRatio="xMidYMid slice"
+        style={{ position: "absolute", inset: 0, opacity: 0.5 }}>
+        <path d={`M-40 ${300 + сдвиг} C 90 ${200 + сдвиг}, 250 ${250 + сдвиг}, 430 ${120 + сдвиг}`}
+          fill="none" stroke={hexA(T.electric, 0.1)} strokeWidth="1.2" />
+        <path d={`M-40 ${400 + сдвиг} C 120 ${340 + сдвиг}, 240 ${420 + сдвиг}, 430 ${300 + сдвиг}`}
+          fill="none" stroke={hexA("#FFFFFF", 0.035)} strokeWidth="1" />
+      </svg>
+    </div>
+  );
+}
+
 function ВступлениеКривая({ активен }) {
   const линия = "M8 96 C 40 92, 62 78, 84 56 S 128 14, 156 8";
+  // Та же кривая, замкнутая вниз: по ней заливается площадь под линией.
+  const площадь = `${линия} L 156 110 L 8 110 Z`;
   const ДЛИТЕЛЬНОСТЬ = "1.4s";
   // Плавность у линии и у точки должна быть одна и та же, иначе точка
   // отрывается от кончика: она едет по пути, а он «проявляется» рядом.
@@ -8007,25 +8069,50 @@ function ВступлениеКривая({ активен }) {
   return (
     // Ключ перезапускает рисование при возврате на слайд: без него
     // анимация проигрывается один раз за всё время жизни экрана.
-    <svg key={активен ? "идёт" : "стоит"} width="100%" height="132" viewBox="0 0 164 110"
+    <svg key={активен ? "идёт" : "стоит"} width="100%" height="150" viewBox="0 0 164 116"
       style={{ overflow: "visible" }} aria-hidden>
       <defs>
         <linearGradient id="встКривая" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor={hexA(T.electric, 0.25)} />
-          <stop offset="100%" stopColor={T.electric} />
+          <stop offset="0%" stopColor={hexA(T.electric, 0.35)} />
+          <stop offset="100%" stopColor="#A6B0FF" />
         </linearGradient>
+        {/* Площадь под линией — то, чем биржевой график отличается от
+            росчерка: она показывает, что за линией стоит объём. */}
+        <linearGradient id="встПлощадь" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={hexA(T.electric, 0.28)} />
+          <stop offset="100%" stopColor={hexA(T.electric, 0)} />
+        </linearGradient>
+        <filter id="встСвечение" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="3.4" result="р" />
+          <feMerge><feMergeNode in="р" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
         <path id="встПуть" d={линия} />
       </defs>
-      {/* Сетка — чтобы линия читалась как график, а не как росчерк. */}
-      {[24, 48, 72, 96].map((y) => (
-        <line key={y} x1="0" y1={y} x2="164" y2={y} stroke={T.line} strokeWidth="1" />
+
+      {/* Сетка почти не видна: она задаёт масштаб, а не рисует клетку. */}
+      {[26, 52, 78, 104].map((y) => (
+        <line key={y} x1="0" y1={y} x2="164" y2={y} stroke={hexA("#FFFFFF", 0.045)} strokeWidth="0.8" />
       ))}
+      <line x1="0" y1="110" x2="164" y2="110" stroke={hexA("#FFFFFF", 0.09)} strokeWidth="0.8" />
+      {/* Деления по времени — короткие штрихи, как на настоящей оси. */}
+      {[24, 60, 96, 132].map((x) => (
+        <line key={x} x1={x} y1="110" x2={x} y2="113.5" stroke={hexA("#FFFFFF", 0.09)} strokeWidth="0.8" />
+      ))}
+
+      <path
+        d={площадь}
+        fill="url(#встПлощадь)"
+        style={активен
+          ? { animation: "вступлениеВверх 900ms 520ms cubic-bezier(0.16,1,0.3,1) both" }
+          : { opacity: 0 }}
+      />
       <path
         d={линия}
         fill="none"
         stroke="url(#встКривая)"
-        strokeWidth="2.5"
+        strokeWidth="2.4"
         strokeLinecap="round"
+        filter="url(#встСвечение)"
         /* Своя мера длины: без неё штрих в 240 единиц не совпадает с
            настоящей длиной кривой, линия дорисовывается раньше времени и
            убегает вперёд точки. */
@@ -8042,17 +8129,26 @@ function ВступлениеКривая({ активен }) {
           не стилями: CSS-путь понимают не все телефоны, а этот способ
           работает везде, где вообще есть SVG. */}
       {активен ? (
-        <circle r="4" fill={T.electric}>
-          <animateMotion dur={ДЛИТЕЛЬНОСТЬ} fill="freeze"
-            calcMode="spline" keyTimes="0;1" keySplines={ПЛАВНО}>
-            <mpath href="#встПуть" />
-          </animateMotion>
-          {/* Пока точка стоит на месте старта, её не должно быть видно —
-              иначе первые кадры она висит в пустоте слева. */}
-          <animate attributeName="opacity" values="0;1" dur="0.25s" fill="freeze" />
-        </circle>
+        <g>
+          <circle r="7" fill={hexA(T.electric, 0.22)}>
+            <animateMotion dur={ДЛИТЕЛЬНОСТЬ} fill="freeze"
+              calcMode="spline" keyTimes="0;1" keySplines={ПЛАВНО}>
+              <mpath href="#встПуть" />
+            </animateMotion>
+            <animate attributeName="opacity" values="0;1" dur="0.25s" fill="freeze" />
+          </circle>
+          <circle r="3.4" fill="#FFFFFF" stroke={T.electric} strokeWidth="1.6">
+            <animateMotion dur={ДЛИТЕЛЬНОСТЬ} fill="freeze"
+              calcMode="spline" keyTimes="0;1" keySplines={ПЛАВНО}>
+              <mpath href="#встПуть" />
+            </animateMotion>
+            {/* Пока точка стоит на месте старта, её не должно быть видно —
+                иначе первые кадры она висит в пустоте слева. */}
+            <animate attributeName="opacity" values="0;1" dur="0.25s" fill="freeze" />
+          </circle>
+        </g>
       ) : (
-        <circle cx="156" cy="8" r="4" fill={T.electric} opacity="0" />
+        <circle cx="156" cy="8" r="3.4" fill="#FFFFFF" opacity="0" />
       )}
     </svg>
   );
@@ -8083,16 +8179,19 @@ function ЗнакSOL({ size = 26, color }) {
 
 function ВступлениеСети({ активен }) {
   const монеты = [
-    { подпись: "TON", цвет: T.electric, сдвиг: -46, Знак: ЗнакTON },
-    { подпись: "SOL", цвет: T.up, сдвиг: 46, Знак: ЗнакSOL },
+    { подпись: "TON", цвет: T.electric, сдвиг: -48, Знак: ЗнакTON },
+    { подпись: "SOL", цвет: T.up, сдвиг: 48, Знак: ЗнакSOL },
   ];
   return (
-    <div className="flex items-center justify-center" style={{ height: 132, position: "relative" }}>
-      <div style={{
-        position: "absolute", width: 150, height: 150, borderRadius: "50%",
-        background: `radial-gradient(circle, ${hexA(T.electric, 0.18)} 0%, transparent 70%)`,
-        animation: активен ? "аураДышит 3.6s ease-in-out infinite" : "none",
-      }} />
+    <div className="flex items-center justify-center" style={{ height: 150, position: "relative" }}>
+      {/* Связь между сетями: тонкая дуга под кружками. Она и говорит,
+          что это одно приложение, а не два логотипа рядом. */}
+      <svg width="200" height="60" viewBox="0 0 200 60" aria-hidden
+        style={{ position: "absolute", top: "50%", transform: "translateY(-4px)", opacity: активен ? 1 : 0, transition: `opacity ${EASE}` }}>
+        <path d="M52 30 C 82 48, 118 48, 148 30" fill="none"
+          stroke={hexA("#FFFFFF", 0.14)} strokeWidth="1" strokeDasharray="3 4" />
+      </svg>
+
       {/* Сдвиг в стороны и покачивание — на разных слоях. В один
           transform они не помещаются: покачивание задаёт его целиком и
           затирает сдвиг, отчего обе монеты слипались в центре. */}
@@ -8101,14 +8200,17 @@ function ВступлениеСети({ активен }) {
           <div
             className="flex flex-col items-center justify-center"
             style={{
-              width: 72, height: 72, borderRadius: "50%", gap: 1,
-              background: T.surface, border: `1px solid ${hexA(цвет, 0.5)}`,
-              boxShadow: `0 0 26px ${hexA(цвет, 0.16)}`,
+              width: 78, height: 78, borderRadius: "50%", gap: 2, position: "relative",
+              // Стекло, а не плашка: свет падает сверху, снизу поверхность
+              // темнее, и от этого кружок читается объёмным.
+              background: `radial-gradient(120% 120% at 50% 8%, ${hexA(цвет, 0.16)} 0%, rgba(255,255,255,0.04) 42%, rgba(255,255,255,0.015) 100%)`,
+              border: `1px solid ${hexA(цвет, 0.34)}`,
+              boxShadow: `inset 0 1px 0 ${hexA("#FFFFFF", 0.12)}, 0 14px 34px ${hexA(цвет, 0.18)}`,
               animation: активен ? `монетаПлывёт 3.2s ease-in-out ${i * 0.6}s infinite` : "none",
             }}
           >
             <Знак color={цвет} />
-            <span style={{ fontFamily: displayFont, fontSize: 10.5, fontWeight: 600, color: цвет, letterSpacing: "0.06em" }}>
+            <span style={{ fontFamily: displayFont, fontSize: 10, fontWeight: 600, color: hexA(цвет, 0.92), letterSpacing: "0.1em" }}>
               {подпись}
             </span>
           </div>
@@ -8136,8 +8238,7 @@ function ВступлениеЗапуск({ активен }) {
           key={имя}
           className="flex items-center"
           style={{
-            gap: 12, padding: "11px 14px", borderRadius: 18,
-            background: T.surface, border: `1px solid ${T.line}`,
+            gap: 13, padding: "12px 15px", borderRadius: 18, ...СТЕКЛО,
             animation: активен ? `вступлениеВверх 460ms ${i * 140}ms cubic-bezier(0.16,1,0.3,1) both` : "none",
             opacity: активен ? undefined : 0,
           }}
@@ -8148,8 +8249,8 @@ function ВступлениеЗапуск({ активен }) {
             0{i + 1}
           </span>
           <div className="min-w-0">
-            <div style={{ fontFamily: displayFont, fontSize: 14, fontWeight: 600, color: T.ice }}>{t(имя)}</div>
-            <div style={{ fontFamily: bodyFont, fontSize: 12.5, color: T.muted, marginTop: 1, lineHeight: 1.35 }}>{t(подпись)}</div>
+            <div style={{ fontFamily: displayFont, fontSize: 14, fontWeight: 600, color: "#F4F6FB" }}>{t(имя)}</div>
+            <div style={{ fontFamily: bodyFont, fontSize: 12.5, color: hexA("#FFFFFF", 0.56), marginTop: 1, lineHeight: 1.35 }}>{t(подпись)}</div>
           </div>
         </div>
       ))}
@@ -8168,9 +8269,9 @@ function ВступлениеЧипы({ активен }) {
         <span
           key={ключ}
           style={{
-            fontFamily: bodyFont, fontSize: 12, color: T.paper,
-            padding: "6px 11px", borderRadius: 999,
-            background: T.surface, border: `1px solid ${T.line}`,
+            fontFamily: bodyFont, fontSize: 12, color: hexA("#FFFFFF", 0.86),
+            padding: "7px 12px", borderRadius: 999, ...СТЕКЛО,
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.07)",
             animation: активен ? `вступлениеВверх 420ms ${260 + i * 90}ms cubic-bezier(0.16,1,0.3,1) both` : "none",
             opacity: активен ? undefined : 0,
           }}
@@ -8189,14 +8290,14 @@ function ВступлениеРынок({ активен }) {
   return (
     <div className="flex flex-col" style={{ gap: 10 }}>
       <div style={{
-        borderRadius: 18, background: T.surface, border: `1px solid ${T.line}`, padding: "12px 14px",
+        borderRadius: 18, ...СТЕКЛО, padding: "13px 15px",
         animation: активен ? "вступлениеВверх 440ms 260ms cubic-bezier(0.16,1,0.3,1) both" : "none",
         opacity: активен ? undefined : 0,
       }}>
         {пункты.map((ключ, i) => (
           <div key={ключ} className="flex items-center" style={{ gap: 9, marginTop: i ? 8 : 0 }}>
             <Check size={13} color={T.electric} style={{ flexShrink: 0 }} />
-            <span style={{ fontFamily: bodyFont, fontSize: 13, color: T.paper }}>{t(ключ)}</span>
+            <span style={{ fontFamily: bodyFont, fontSize: 13, color: hexA("#FFFFFF", 0.86) }}>{t(ключ)}</span>
           </div>
         ))}
       </div>
@@ -8222,16 +8323,15 @@ function ВступлениеКошельки({ активен }) {
           key={имя}
           className="flex items-center"
           style={{
-            gap: 11, padding: "10px 14px", borderRadius: 18,
-            background: T.surface, border: `1px solid ${T.line}`,
+            gap: 12, padding: "11px 15px", borderRadius: 18, ...СТЕКЛО,
             animation: активен ? `вступлениеВверх 440ms ${260 + i * 110}ms cubic-bezier(0.16,1,0.3,1) both` : "none",
             opacity: активен ? undefined : 0,
           }}
         >
           <Знак size={18} color={цвет} />
           <div className="min-w-0">
-            <div style={{ fontFamily: displayFont, fontSize: 13.5, fontWeight: 600, color: T.ice }}>{t(имя)}</div>
-            <div style={{ fontFamily: bodyFont, fontSize: 12, color: T.muted, marginTop: 1 }}>{t(подпись)}</div>
+            <div style={{ fontFamily: displayFont, fontSize: 13.5, fontWeight: 600, color: "#F4F6FB" }}>{t(имя)}</div>
+            <div style={{ fontFamily: bodyFont, fontSize: 12, color: hexA("#FFFFFF", 0.56), marginTop: 1 }}>{t(подпись)}</div>
           </div>
         </div>
       ))}
@@ -8283,21 +8383,36 @@ function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
   return (
     <div
       style={{
-        position: "absolute", inset: 0, zIndex: 880, background: T.bg,
+        position: "absolute", inset: 0, zIndex: 880,
+        // Не чистый чёрный: у экрана есть верх и низ, и глубина берётся
+        // отсюда, а не из ярких пятен. Чёрный лист без тона всегда
+        // выглядит незаконченным макетом.
+        background: "linear-gradient(180deg, #0C0D12 0%, #08090C 46%, #050609 100%)",
         display: "flex", flexDirection: "column", paddingTop: insetTop,
         animation: "fadeInUp 320ms cubic-bezier(0.16,1,0.3,1) both",
+        overflow: "hidden",
       }}
     >
+      {/* Свет и дуги — под всем содержимым, сдвигаются вслед за страницей. */}
+      <ВступлениеСвет номер={страница} активен />
+      <div className="вст-зерно" aria-hidden style={{ position: "absolute", inset: 0, opacity: 0.05, pointerEvents: "none" }} />
+
       {/* Знак и «пропустить» — над лентой: они не листаются вместе с ней. */}
-      <div className="flex items-center justify-between" style={{ padding: "18px 20px 6px" }}>
+      <div className="flex items-center justify-between" style={{ padding: "18px 22px 4px", position: "relative", zIndex: 1 }}>
         <div className="flex items-center" style={{ gap: 9 }}>
           <svg width="20" height="23" viewBox="-15 -31 30 34" aria-hidden>
-            <path d={лист.outline} fill={T.electric} />
-            <path d={лист.stem} fill="none" stroke={T.electric} strokeWidth="1" strokeLinecap="round" />
+            <defs>
+              <linearGradient id="встЗнакЛист" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#A9B2FF" />
+                <stop offset="100%" stopColor={T.electric} />
+              </linearGradient>
+            </defs>
+            <path d={лист.outline} fill="url(#встЗнакЛист)" />
+            <path d={лист.stem} fill="none" stroke={hexA("#FFFFFF", 0.5)} strokeWidth="1" strokeLinecap="round" />
           </svg>
-          <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16.5, fontWeight: 600, letterSpacing: "-0.01em" }}>Mintly</span>
+          <span style={{ fontFamily: displayFont, color: "#F4F6FB", fontSize: 16.5, fontWeight: 600, letterSpacing: "-0.01em" }}>Mintly</span>
         </div>
-        <button onClick={onSkip} className="fx-tap" style={{ fontFamily: bodyFont, fontSize: 13.5, color: T.faint, background: "transparent" }}>
+        <button onClick={onSkip} className="fx-tap вст-тихо" style={{ fontFamily: bodyFont, fontSize: 13, color: hexA("#FFFFFF", 0.42), background: "transparent", letterSpacing: "-0.005em" }}>
           {t("welcomeSkip")}
         </button>
       </div>
@@ -8311,6 +8426,7 @@ function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
         style={{
           flex: 1, minHeight: 0, display: "flex", overflowX: "auto", overflowY: "hidden",
           scrollSnapType: "x mandatory", overscrollBehaviorX: "contain",
+          position: "relative", zIndex: 1,
         }}
       >
         {страницы.map((стр, i) => {
@@ -8323,39 +8439,66 @@ function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
               style={{
                 flex: "0 0 100%", width: "100%", scrollSnapAlign: "start",
                 display: "flex", flexDirection: "column", justifyContent: "center",
-                gap: 22, padding: "0 20px",
+                // Между картинкой и текстом воздуха больше, чем между
+                // строками текста: так экран читается сверху вниз одним
+                // движением, а не тремя равными кусками.
+                gap: 30, padding: "0 22px",
               }}
             >
               {Арт ? <Арт активен={активна} /> : (
-                <div className="flex items-center justify-center" style={{ height: 132, position: "relative" }}>
+                <div className="flex items-center justify-center" style={{ height: 150, position: "relative" }}>
                   <div style={{
-                    position: "absolute", width: 170, height: 170, borderRadius: "50%",
-                    background: `radial-gradient(circle, ${hexA(T.electric, 0.2)} 0%, transparent 70%)`,
+                    position: "absolute", width: 210, height: 210, borderRadius: "50%",
+                    background: `radial-gradient(circle, ${hexA(T.electric, 0.22)} 0%, ${hexA(T.electric, 0.06)} 45%, transparent 70%)`,
+                    filter: "blur(4px)",
                     animation: активна ? "аураДышит 4s ease-in-out infinite" : "none",
                   }} />
-                  <svg width="76" height="86" viewBox="-15 -31 30 34" style={{ position: "relative" }} aria-hidden>
-                    <path d={лист.outline} fill={T.electric}
-                      style={активна ? { animation: "вступлениеВверх 520ms cubic-bezier(0.16,1,0.3,1) both" } : undefined} />
-                    <path d={лист.stem} fill="none" stroke={T.electric} strokeWidth="1" strokeLinecap="round" />
+                  {/* Лист объёмный: свет падает слева сверху, у края —
+                      тень, жилка светлее самого листа. Плоская заливка
+                      выглядела значком из набора иконок. */}
+                  <svg width="86" height="98" viewBox="-15 -31 30 34" style={{ position: "relative" }} aria-hidden>
+                    <defs>
+                      <linearGradient id="встЛист" x1="0.1" y1="0" x2="0.9" y2="1">
+                        <stop offset="0%" stopColor="#C3C9FF" />
+                        <stop offset="45%" stopColor="#8B96FF" />
+                        <stop offset="100%" stopColor="#4A56D8" />
+                      </linearGradient>
+                      <radialGradient id="встБлик" cx="0.32" cy="0.18" r="0.6">
+                        <stop offset="0%" stopColor={hexA("#FFFFFF", 0.55)} />
+                        <stop offset="100%" stopColor={hexA("#FFFFFF", 0)} />
+                      </radialGradient>
+                      <filter id="встЛистСвет" x="-60%" y="-60%" width="220%" height="220%">
+                        <feGaussianBlur stdDeviation="1.6" result="р" />
+                        <feMerge><feMergeNode in="р" /><feMergeNode in="SourceGraphic" /></feMerge>
+                      </filter>
+                    </defs>
+                    <g style={активна ? { animation: "вступлениеВверх 520ms cubic-bezier(0.16,1,0.3,1) both" } : undefined}>
+                      <path d={лист.outline} fill="url(#встЛист)" filter="url(#встЛистСвет)" />
+                      <path d={лист.outline} fill="url(#встБлик)" />
+                      <path d={лист.stem} fill="none" stroke={hexA("#FFFFFF", 0.55)} strokeWidth="0.9" strokeLinecap="round" />
+                    </g>
                   </svg>
                 </div>
               )}
 
-              <div className="flex flex-col" style={{ gap: 12 }}>
+              <div className="flex flex-col" style={{ gap: 14 }}>
                 <h1 style={{
-                  fontFamily: displayFont, color: T.ice, fontSize: 27, lineHeight: 1.18,
-                  fontWeight: 600, letterSpacing: "-0.03em", margin: 0,
+                  fontFamily: displayFont, color: "#F4F6FB", fontSize: 26, lineHeight: 1.24,
+                  // Заголовок крупный, но не тяжёлый: плотность букв важнее
+                  // жирности, иначе две строки превращаются в пятно.
+                  fontWeight: 600, letterSpacing: "-0.028em", margin: 0, maxWidth: "19ch",
                   animation: активна ? "вступлениеВверх 480ms 80ms cubic-bezier(0.16,1,0.3,1) both" : "none",
                 }}>
                   {t(стр.title)}
                 </h1>
                 <p style={{
-                  fontFamily: bodyFont, color: T.muted, fontSize: 15, lineHeight: 1.55, margin: 0, maxWidth: 460,
+                  fontFamily: bodyFont, color: hexA("#FFFFFF", 0.56), fontSize: 14.5, lineHeight: 1.62,
+                  margin: 0, maxWidth: "36ch", letterSpacing: "-0.003em",
                   animation: активна ? "вступлениеВверх 480ms 180ms cubic-bezier(0.16,1,0.3,1) both" : "none",
                 }}>
                   {t(стр.body)}
                 </p>
-                {Низ ? <div style={{ marginTop: 4 }}><Низ активен={активна} /></div> : null}
+                {Низ ? <div style={{ marginTop: 6 }}><Низ активен={активна} /></div> : null}
               </div>
             </section>
           );
@@ -8364,49 +8507,75 @@ function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
 
       {/* Точки и кнопки. Точка — не только указатель, но и кнопка: на
           последнюю страницу можно прыгнуть сразу. */}
-      <div className="flex flex-col" style={{ gap: 12, padding: "8px 20px 24px" }}>
-        <div className="flex items-center justify-center" style={{ gap: 6, paddingBottom: 4 }}>
-          {страницы.map((стр, i) => (
-            <button
-              key={стр.title}
-              onClick={() => листнуть(i)}
-              className="fx-tap"
-              aria-label={`${i + 1}`}
-              style={{
-                width: страница === i ? 20 : 6, height: 6, borderRadius: 999,
-                background: страница === i ? T.electric : T.lineHi,
-                transition: `width ${EASE}, background ${EASE}`,
-                padding: 0, border: "none",
-              }}
-            />
-          ))}
+      <div className="flex flex-col" style={{ gap: 14, padding: "10px 22px 26px", position: "relative", zIndex: 1 }}>
+        <div className="flex items-center justify-center" style={{ gap: 7, paddingBottom: 2 }}>
+          {страницы.map((стр, i) => {
+            const тут = страница === i;
+            const пройдена = i < страница;
+            return (
+              <button
+                key={стр.title}
+                onClick={() => листнуть(i)}
+                className="fx-tap"
+                aria-label={`${i + 1}`}
+                style={{
+                  // Пройденные страницы остаются подсвеченными: полоска
+                  // читается как путь, а не как четыре одинаковые точки.
+                  width: тут ? 26 : 6, height: 6, borderRadius: 999,
+                  background: тут
+                    ? `linear-gradient(90deg, ${T.electric}, #A6B0FF)`
+                    : пройдена ? hexA(T.electric, 0.42) : hexA("#FFFFFF", 0.16),
+                  boxShadow: тут ? `0 0 12px ${hexA(T.electric, 0.5)}` : "none",
+                  transition: `width ${EASE}, background ${EASE}, box-shadow ${EASE}`,
+                  padding: 0, border: "none",
+                }}
+              />
+            );
+          })}
         </div>
 
         {последняя ? (
           <div className="flex flex-col" style={{ gap: 10, animation: "вступлениеВверх 420ms both" }}>
             <button
               onClick={onCreate}
-              className="fx-tap w-full flex items-center justify-center gap-2"
-              style={{ padding: "16px 0", borderRadius: 22, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 600, fontSize: 15 }}
+              className="fx-tap вст-кнопка w-full flex items-center justify-center gap-2"
+              style={{
+                padding: "17px 0", borderRadius: 20,
+                background: `linear-gradient(135deg, #8A93FF 0%, ${T.electric} 52%, #5A66EE 100%)`,
+                color: PRISM_TEXT, border: "none",
+                boxShadow: `inset 0 1px 0 ${hexA("#FFFFFF", 0.3)}, 0 14px 34px ${hexA(T.electric, 0.34)}`,
+                fontFamily: displayFont, fontWeight: 600, fontSize: 15.5, letterSpacing: "-0.01em",
+              }}
             >
               {t("welcomeCreate")}
             </button>
             <button
               onClick={onLogin}
-              className="fx-tap w-full flex items-center justify-center gap-2"
-              style={{ padding: "15px 0", borderRadius: 22, background: "transparent", color: T.ice, border: `1px solid ${T.lineHi}`, fontFamily: displayFont, fontWeight: 600, fontSize: 14.5 }}
+              className="fx-tap вст-кнопка w-full flex items-center justify-center gap-2"
+              style={{
+                padding: "15px 0", borderRadius: 20, ...СТЕКЛО,
+                color: "#F4F6FB", fontFamily: displayFont, fontWeight: 600, fontSize: 14.5,
+              }}
             >
               <Send size={14} /> {t("welcomeLogin")}
             </button>
-            <p style={{ fontFamily: bodyFont, color: T.faint, fontSize: 11.5, lineHeight: 1.5, textAlign: "center", margin: "2px 0 0" }}>
+            <p style={{ fontFamily: bodyFont, color: hexA("#FFFFFF", 0.34), fontSize: 11.5, lineHeight: 1.5, textAlign: "center", margin: "4px 0 0" }}>
               {t("welcomeRisk")}
             </p>
           </div>
         ) : (
           <button
             onClick={() => листнуть(страница + 1)}
-            className="fx-tap w-full flex items-center justify-center gap-2"
-            style={{ padding: "16px 0", borderRadius: 22, background: PRISM, color: PRISM_TEXT, fontFamily: displayFont, fontWeight: 600, fontSize: 15 }}
+            className="fx-tap вст-кнопка w-full flex items-center justify-center gap-2"
+            style={{
+              padding: "17px 0", borderRadius: 20,
+              // Свет внутри кнопки идёт наискось: ровная заливка на тёмном
+              // фоне выглядит наклейкой, а не поверхностью.
+              background: `linear-gradient(135deg, #8A93FF 0%, ${T.electric} 52%, #5A66EE 100%)`,
+              color: PRISM_TEXT, border: "none",
+              boxShadow: `inset 0 1px 0 ${hexA("#FFFFFF", 0.3)}, 0 14px 34px ${hexA(T.electric, 0.34)}`,
+              fontFamily: displayFont, fontWeight: 600, fontSize: 15.5, letterSpacing: "-0.01em",
+            }}
           >
             {t("welcomeNext")} <ChevronRight size={16} />
           </button>
