@@ -30,16 +30,19 @@ const Ц = {
 
 const шрифт = "Montserrat, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
 
-/* Контур листа берётся из приложения: рисовать второй такой же руками —
-   значит однажды получить два разных знака. */
-function листИзПриложения() {
-  const исходник = fs.readFileSync(path.join(корень, "src", "App.tsx"), "utf8");
-  const начало = исходник.indexOf("const LEAF_KINDS");
-  const блок = исходник.slice(начало, исходник.indexOf("\n];", начало));
-  return {
-    outline: блок.split('outline: "')[3].split('"')[0],
-    veins: блок.split("veins: [")[3].split("]")[0].split('"').filter((с) => с.trim().startsWith("M")),
-  };
+/* Знак берётся из public/logo.svg — буква M, из впадины которой растёт
+   росток. Читаем файл, а не повторяем пути здесь: иначе знак на баннере
+   однажды разойдётся со знаком везде ещё. Цвета подменяем на фирменные:
+   в файле осталась старая оранжевая палитра. */
+function знакИзФайла() {
+  const svg = fs.readFileSync(path.join(корень, "public", "logo.svg"), "utf8");
+  const внутри = svg.slice(svg.indexOf(">", svg.indexOf("<svg")) + 1, svg.lastIndexOf("</svg>"));
+  return внутри
+    .replace(/#FF6B35/g, Ц.акцент)
+    .replace(/#000000/g, Ц.фон)
+    // Зазор между ростком и буквой рассчитан на аватарку в сорок точек;
+    // здесь знак крупный, и такая обводка съедает сам росток.
+    .replace(/stroke-width="3"/g, 'stroke-width="1.2"');
 }
 
 /* Шрифт вшивается в сам SVG: без него браузер рисует Liberation Sans, и
@@ -61,13 +64,13 @@ const Ш = 1200;
 const В = 740;
 
 function нарисовать() {
-  const лист = листИзПриложения();
+  const знак = знакИзФайла();
 
   const знакВысота = 150;
-  const знакМасштаб = знакВысота / 28;           // пластинка листа: от -29 до -1
+  const знакМасштаб = знакВысота / 64;           // logo.svg нарисован в квадрате 64×64
   const названиеКегль = 108;
-  const знакX = Ш / 2 - 250;
-  const знакY = 300;
+  const знакX = Ш / 2 - 280;
+  const знакY = 180;
 
   const подпись = "Запуск мемкоинов на TON и Solana — прямо в Telegram";
   const чипы = ["Свой токен за минуту", "Комиссия 1%"];
@@ -97,22 +100,19 @@ function нарисовать() {
 
   <!-- Знак и название — одной строкой, как подпись в шапке приложения. -->
   <g transform="translate(${знакX}, ${знакY}) scale(${знакМасштаб.toFixed(3)})">
-    <path d="${лист.outline}" fill="${Ц.акцент}"/>
-    <g fill="none" stroke="${Ц.фон}" stroke-width="0.5" stroke-linecap="round">
-      ${лист.veins.map((ж) => `<path d="${ж}"/>`).join("\n      ")}
-    </g>
+    ${знак}
   </g>
-  <text x="${знакX + 110}" y="${знакY - знакВысота * 0.36}" fill="url(#название)" font-family="${шрифт}"
+  <text x="${знакX + знакВысота + 26}" y="${знакY + знакВысота * 0.72}" fill="url(#название)" font-family="${шрифт}"
     font-size="${названиеКегль}" font-weight="800" letter-spacing="-0.02em">Mintly</text>
 
-  <text x="${Ш / 2}" y="${знакY + 130}" text-anchor="middle" fill="${Ц.тусклый}" font-family="${шрифт}"
+  <text x="${Ш / 2}" y="${знакY + знакВысота + 110}" text-anchor="middle" fill="${Ц.тусклый}" font-family="${шрифт}"
     font-size="34" font-weight="500">${подпись}</text>
 
   ${чипы.map((т) => {
     const ш = ширинаЧипа(т);
     const x = чипX;
     чипX += ш + зазор;
-    return `<g transform="translate(${x}, ${знакY + 190})">
+    return `<g transform="translate(${x}, ${знакY + знакВысота + 170})">
     <rect width="${ш}" height="${чипВысота}" rx="${чипВысота / 2}" fill="${Ц.панель}" stroke="${Ц.акцент}" stroke-opacity="0.55"/>
     <text x="${ш / 2}" y="${чипВысота / 2 + чипКегль * 0.36}" text-anchor="middle" fill="${Ц.светлый}"
       font-family="${шрифт}" font-size="${чипКегль}" font-weight="600">${т}</text>
