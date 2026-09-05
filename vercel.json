@@ -58,6 +58,20 @@
       "schedule": "0 9 * * *"
     }
   ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "mintlyapp.vercel.app" }],
+      "destination": "https://mintly.company/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.mintly.company" }],
+      "destination": "https://mintly.company/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/phantom/:id",

@@ -127,7 +127,7 @@ account_conflict` и сессию не выдаёт: иначе, зарегис�
    сам, токен бота он берёт из окружения:
 
    ```
-   https://mintlyapp.vercel.app/api/telegram-bot?setup=<СЕКРЕТ>
+   https://mintly.company/api/telegram-bot?setup=<СЕКРЕТ>
    ```
 
    В ответ приходит имя бота, `"подключено": true` и текущее состояние.
@@ -138,7 +138,7 @@ account_conflict` и сессию не выдаёт: иначе, зарегис�
 
    ```
    curl "https://api.telegram.org/bot<ТОКЕН>/setWebhook" \
-     -d "url=https://mintlyapp.vercel.app/api/telegram-bot" \
+     -d "url=https://mintly.company/api/telegram-bot" \
      -d "secret_token=<СЕКРЕТ>"
    ```
 
