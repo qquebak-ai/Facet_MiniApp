@@ -2359,6 +2359,21 @@ function похожеНаПодделку(tok) {
   return ПОДДЕЛЬНЫЕ_ТИКЕРЫ.test(тикер) || ПОДДЕЛЬНЫЕ_ИМЕНА.test(имя);
 }
 
+/* Токен без метаданных. У такого в цепочке не заполнено ничего: ни имя,
+   ни символ, ни картинка, — и источник подставляет «Unknown Token» с
+   хвостом адреса, а символом делает «UKWN…». В списке это строка, по
+   которой не понять вообще ничего; чаще всего за ней брошенный пул.
+   Отсев продублирован здесь, а не только в обходе: в кеше могли остаться
+   строки, собранные до этой проверки. */
+const БЕЗЫМЯННОЕ_ИМЯ = /^unknown\s*token/i;
+const БЕЗЫМЯННЫЙ_ТИКЕР = /^ukwn/i;
+
+function безымянный(tok) {
+  const имя = String(tok.name || "").trim();
+  const тикер = String(tok.ticker || "").trim();
+  return !имя || !тикер || БЕЗЫМЯННОЕ_ИМЯ.test(имя) || БЕЗЫМЯННЫЙ_ТИКЕР.test(тикер);
+}
+
 async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT, { свежие = false } = {}) {
   try {
     let запрос = supabase
@@ -2406,7 +2421,7 @@ async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT, { с
       live: true,
       dexName: r.dex_name || null,
       createdAt: r.pool_created_at || null,
-    })).filter((t) => t.poolAddress && t.price > 0 && !похожеНаПодделку(t)
+    })).filter((t) => t.poolAddress && t.price > 0 && !похожеНаПодделку(t) && !безымянный(t)
       && (свежие || t.mcapNum < MCAP_FEED_CEILING));
   } catch (err) {
     return null;
@@ -2487,7 +2502,7 @@ function normalizePools(json, network = GT_NETWORK) {
         dexName: dex.name || (dexId ? dexId.replace(/[-_]/g, ".").replace(/\b\w/g, c => c.toUpperCase()) : null),
         createdAt: a.pool_created_at || null,
       };
-  }).filter(t => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING && !похожеНаПодделку(t));
+  }).filter(t => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING && !похожеНаПодделку(t) && !безымянный(t));
 }
 
 async function fetchPoolsPage(page, network = GT_NETWORK) {

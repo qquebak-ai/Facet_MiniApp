@@ -257,20 +257,28 @@ async function gt(path) {
 
 /* Пул GeckoTerminal к общему виду. Поля те же, что читает лента в
    приложении (см. fetchPoolsPage в src/App.tsx). */
+/* Токен без метаданных: в цепочке не заполнено ни имя, ни символ, и
+   источник подставляет «Unknown Token» с хвостом адреса, а символом —
+   «UKWN…». Показывать нечего, а за такой строкой обычно брошенный пул. */
+const БЕЗЫМЯННОЕ_ИМЯ = /^unknown\s*token/i;
+const БЕЗЫМЯННЫЙ_ТИКЕР = /^ukwn/i;
+
 function poolToToken(row, tokensById, dexById) {
   const a = row.attributes || {};
   const bt = (row.relationships && row.relationships.base_token && row.relationships.base_token.data && tokensById.get(row.relationships.base_token.data.id)) || {};
   const dex = (row.relationships && row.relationships.dex && row.relationships.dex.data && dexById.get(row.relationships.dex.data.id)) || {};
   const имя = bt.name || String(a.name || "TOKEN/TON").split("/")[0].trim();
+  const тикер = String(bt.symbol || имя || "TOKEN").toUpperCase().slice(0, 12);
   const цена = parseFloat(a.base_token_price_usd) || 0;
   if (!a.address || !(цена > 0)) return null;
+  if (БЕЗЫМЯННОЕ_ИМЯ.test(имя.trim()) || БЕЗЫМЯННЫЙ_ТИКЕР.test(тикер)) return null;
   return {
     external: true,
     id: row.id,
     pool_address: a.address,
     token_address: bt.address || null,
     name: имя,
-    ticker: String(bt.symbol || имя || "TOKEN").toUpperCase().slice(0, 12),
+    ticker: тикер,
     logo_url: bt.image_url && !String(bt.image_url).includes("missing") ? bt.image_url : null,
     emoji: "🪙",
     priceUsd: цена,
