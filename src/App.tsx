@@ -4758,15 +4758,43 @@ function превьюКартинки(url, размер) {
   return `https://cdn.helius-rpc.com/cdn-cgi/image/width=${w},height=${w},fit=cover,format=auto/${s}`;
 }
 
+/* Место логотипа, пока он едет по сети: круг посветлее подложки и
+   звезда внутри. Своей картинки у токена может и не быть вовсе — тогда
+   заглушка остаётся насовсем, поэтому она нейтральная и не намекает на
+   загрузку. */
+function ЗаглушкаЛоготипа({ size }) {
+  const внутренний = Math.round(size * 0.56);
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute", inset: 0, display: "flex",
+        alignItems: "center", justifyContent: "center", background: T.surfaceHi,
+      }}
+    >
+      <div
+        style={{
+          width: внутренний, height: внутренний, borderRadius: "50%",
+          background: hexA(T.muted, 0.3), display: "flex",
+          alignItems: "center", justifyContent: "center",
+        }}
+      >
+        <Star size={Math.round(внутренний * 0.52)} fill={T.surfaceHi} color={T.surfaceHi} strokeWidth={1.5} />
+      </div>
+    </div>
+  );
+}
+
 function TokenAvatar({ children, size = 52, tone = "neutral", src }) {
   const [broken, setBroken] = useState(false);
   // Сначала пробуем лёгкую копию, при отказе — исходную ссылку, и только
   // потом сдаёмся на эмодзи.
   const [исходная, setИсходная] = useState(false);
-  // Пока картинка едет, в кружке ничего нет. Раньше на её месте
-  // подмигивала ракета и через мгновение сменялась логотипом — список из
-  // сорока строк выглядел как мигающая гирлянда. Чернота ничего не
-  // обещает и ничем не мигает.
+  // Пока картинка едет, в кружке стоит заглушка — серый круг со
+  // звездой. Раньше там подмигивала ракета и через мгновение сменялась
+  // логотипом: список из сорока строк выглядел мигающей гирляндой, а
+  // просто чернота читалась дырой. Заглушка ничего не обещает и ничем не
+  // мигает, но место занято, и строка не прыгает.
   const [пришла, setПришла] = useState(false);
   useEffect(() => { setBroken(false); setИсходная(false); setПришла(false); }, [src]);
   const ringColor = T.lineHi;
@@ -4777,13 +4805,12 @@ function TokenAvatar({ children, size = 52, tone = "neutral", src }) {
       style={{
         width: size, height: size, position: "relative", flexShrink: 0, borderRadius: "50%",
         border: `1.5px solid ${ringColor}`,
-        // Подложка тёмная, пока картинка не пришла: серый круг за
-        // прозрачным логотипом читался как чужой фон.
-        background: естьКартинка && !пришла ? T.bg : T.surfaceHi,
+        background: T.surfaceHi,
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: size * 0.44, overflow: "hidden",
       }}
     >
+      {естьКартинка && !пришла && <ЗаглушкаЛоготипа size={size} />}
       {естьКартинка ? (
         <img
           src={исходная ? src : превьюКартинки(src, size)}
@@ -4803,7 +4830,7 @@ function TokenAvatar({ children, size = 52, tone = "neutral", src }) {
             opacity: пришла ? 1 : 0, transition: "opacity 160ms ease-out",
           }}
         />
-      ) : children}
+      ) : (children || <ЗаглушкаЛоготипа size={size} />)}
     </div>
   );
 }
