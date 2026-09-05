@@ -1407,13 +1407,6 @@ function GlobalStyle() {
       .вст-кнопка:active { transform: scale(0.985); filter: brightness(0.95); box-shadow: 0 6px 18px rgba(108,124,255,0.28) !important; }
       .вст-тихо { transition: color 180ms ease-out, opacity 180ms ease-out; }
       .вст-тихо:active { opacity: 0.6; }
-      /* Зерно поверх фона. Без него большая тёмная плоскость выглядит
-         цифровой пустотой: глаз не за что зацепить, и градиент читается
-         полосами. Шум рисуется браузером, картинку грузить не надо. */
-      .вст-зерно {
-        background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-        mix-blend-mode: overlay;
-      }
       /* Пока шторка идёт за пальцем, всё, что шевелится под ней, стоит:
          бегущая лента, мерцания карточек, полосы загрузки. Они рисуются
          в тех же кадрах, и на слабом телефоне движение из-за них идёт
@@ -8024,40 +8017,9 @@ const СТЕКЛО = {
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.07), 0 10px 26px rgba(0,0,0,0.34)",
 };
 
-/* Атмосфера за иллюстрацией.
- *
- * Плоский чёрный фон выдавал шаблон: экран выглядел пустым листом, на
- * котором что-то лежит. Здесь под картинкой — мягкое сине-фиолетовое
- * свечение и две едва различимые дуги; вместе они дают глубину, но не
- * лезут вперёд. Каждый экран сдвигает свет чуть в сторону — так четыре
- * страницы читаются как одно место, снятое с разных точек. */
 /* Цвета текста на этих экранах заданы прямо, а не через тему: экран
    знакомства всегда тёмный, и в светлой теме «цвет основного текста»
    становится почти чёрным — надписи на тёмном фоне пропадали. */
-function ВступлениеСвет({ номер = 0, активен }) {
-  const сдвиг = [0, -18, 16, -8][номер % 4];
-  const высота = [40, 34, 44, 30][номер % 4];
-  return (
-    <div aria-hidden style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
-      <div style={{
-        position: "absolute", left: `calc(50% + ${сдвиг}px)`, top: `${высота}%`,
-        width: 460, height: 460, transform: "translate(-50%, -50%)",
-        background: `radial-gradient(circle, ${hexA(T.electric, 0.16)} 0%, ${hexA(T.electric, 0.05)} 38%, transparent 68%)`,
-        filter: "blur(6px)",
-        animation: активен ? "аураДышит 7s ease-in-out infinite" : "none",
-      }} />
-      {/* Дуги — намёк на форму листа, увеличенную до размера экрана. */}
-      <svg width="100%" height="100%" viewBox="0 0 390 700" preserveAspectRatio="xMidYMid slice"
-        style={{ position: "absolute", inset: 0, opacity: 0.5 }}>
-        <path d={`M-40 ${300 + сдвиг} C 90 ${200 + сдвиг}, 250 ${250 + сдвиг}, 430 ${120 + сдвиг}`}
-          fill="none" stroke={hexA(T.electric, 0.1)} strokeWidth="1.2" />
-        <path d={`M-40 ${400 + сдвиг} C 120 ${340 + сдвиг}, 240 ${420 + сдвиг}, 430 ${300 + сдвиг}`}
-          fill="none" stroke={hexA("#FFFFFF", 0.035)} strokeWidth="1" />
-      </svg>
-    </div>
-  );
-}
-
 function ВступлениеКривая({ активен }) {
   const линия = "M8 96 C 40 92, 62 78, 84 56 S 128 14, 156 8";
   // Та же кривая, замкнутая вниз: по ней заливается площадь под линией.
@@ -8384,19 +8346,12 @@ function WelcomeScreen({ onCreate, onLogin, onSkip, insetTop = 0 }) {
     <div
       style={{
         position: "absolute", inset: 0, zIndex: 880,
-        // Не чистый чёрный: у экрана есть верх и низ, и глубина берётся
-        // отсюда, а не из ярких пятен. Чёрный лист без тона всегда
-        // выглядит незаконченным макетом.
-        background: "linear-gradient(180deg, #0C0D12 0%, #08090C 46%, #050609 100%)",
+        background: T.bg,
         display: "flex", flexDirection: "column", paddingTop: insetTop,
         animation: "fadeInUp 320ms cubic-bezier(0.16,1,0.3,1) both",
         overflow: "hidden",
       }}
     >
-      {/* Свет и дуги — под всем содержимым, сдвигаются вслед за страницей. */}
-      <ВступлениеСвет номер={страница} активен />
-      <div className="вст-зерно" aria-hidden style={{ position: "absolute", inset: 0, opacity: 0.05, pointerEvents: "none" }} />
-
       {/* Знак и «пропустить» — над лентой: они не листаются вместе с ней. */}
       <div className="flex items-center justify-between" style={{ padding: "18px 22px 4px", position: "relative", zIndex: 1 }}>
         <div className="flex items-center" style={{ gap: 9 }}>
