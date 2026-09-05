@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Ц, шрифт, цифры, деньги, цена, возраст, число, Логотип, Движение } from "./desktopUI";
+import { Ц, шрифт, цифры, ПОЛОСА, деньги, цена, возраст, число, Логотип, Движение } from "./desktopUI";
 import { состояниеВнутреннего, сделкаВнутренним } from "./appWallet";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
@@ -30,6 +30,74 @@ function График({ свечи, наведение = true }) {
   const холст = useRef(null);
   const [размер, setРазмер] = useState({ ш: 0, в: 0 });
   const [курсор, setКурсор] = useState(null);
+  /* Окно показа: сколько свечей видно и от какой считаем. Колесо меняет
+     ширину окна вокруг курсора, перетаскивание — его начало. Держим в
+     состоянии, а не в самих данных: сами свечи приходят с сервера и
+     перерисовываются по таймеру, а взгляд человека должен оставаться на
+     месте. */
+  const [окно, setОкно] = useState(null);
+  const тянем = useRef(null);
+
+  // Новый набор свечей — окно к правому краю: там свежая цена.
+  useEffect(() => {
+    if (!свечи || !свечи.length) { setОкно(null); return; }
+    setОкно((прежнее) => {
+      const видно = прежнее ? Math.min(прежнее.видно, свечи.length) : Math.min(90, свечи.length);
+      return { начало: Math.max(0, свечи.length - видно), видно };
+    });
+  }, [свечи]);
+
+  const показ = useMemo(() => {
+    if (!свечи || !свечи.length) return свечи;
+    if (!окно) return свечи.slice(-90);
+    return свечи.slice(окно.начало, окно.начало + окно.видно);
+  }, [свечи, окно]);
+
+  function колесом(e) {
+    if (!свечи || !свечи.length) return;
+    e.preventDefault();
+    setОкно((пр) => {
+      const тек = пр || { начало: Math.max(0, свечи.length - 90), видно: Math.min(90, свечи.length) };
+      const шаг = e.deltaY > 0 ? 1.18 : 1 / 1.18;
+      const видно = Math.max(12, Math.min(свечи.length, Math.round(тек.видно * шаг)));
+      // Приближаем к тому месту, где курсор: иначе график уезжает из-под
+      // пальца, и попасть в нужную свечу нельзя.
+      const r = обёртка.current ? обёртка.current.getBoundingClientRect() : null;
+      const доля = r ? Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) : 0.5;
+      const якорь = тек.начало + тек.видно * доля;
+      const начало = Math.max(0, Math.min(свечи.length - видно, Math.round(якорь - видно * доля)));
+      return { начало, видно };
+    });
+  }
+
+  function тянуть(e) {
+    if (!свечи || !свечи.length || !обёртка.current) return;
+    тянем.current = { x: e.clientX, начало: (окно && окно.начало) || 0, ширина: обёртка.current.clientWidth };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function ведём(e) {
+    const r = обёртка.current.getBoundingClientRect();
+    setКурсор({ x: e.clientX - r.left, y: e.clientY - r.top });
+    const т = тянем.current;
+    if (!т || !окно) return;
+    // Насколько сдвинули палец, на столько же свечей едет окно.
+    const наСвечу = т.ширина / окно.видно;
+    const сдвиг = Math.round((т.x - e.clientX) / наСвечу);
+    const начало = Math.max(0, Math.min(свечи.length - окно.видно, т.начало + сдвиг));
+    if (начало !== окно.начало) setОкно({ ...окно, начало });
+  }
+
+  function отпустить(e) {
+    тянем.current = null;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* указатель уже отпущен */ }
+  }
+
+  function сбросить() {
+    if (!свечи || !свечи.length) return;
+    const видно = Math.min(90, свечи.length);
+    setОкно({ начало: Math.max(0, свечи.length - видно), видно });
+  }
 
   useEffect(() => {
     const el = обёртка.current;
@@ -45,18 +113,18 @@ function График({ свечи, наведение = true }) {
   const поле = { слева: 0, справа: 78, сверху: 14, снизу: 26 };
 
   const геометрия = useMemo(() => {
-    if (!свечи || свечи.length < 2 || !размер.ш) return null;
+    if (!показ || показ.length < 2 || !размер.ш) return null;
     const ширина = размер.ш - поле.слева - поле.справа;
     const высота = размер.в - поле.сверху - поле.снизу;
-    const макс = Math.max(...свечи.map((с) => с.h));
-    const мин = Math.min(...свечи.map((с) => с.l));
+    const макс = Math.max(...показ.map((с) => с.h));
+    const мин = Math.min(...показ.map((с) => с.l));
     const размах = макс - мин || макс || 1;
     return {
       ширина, высота, макс, мин, размах,
-      шагX: ширина / свечи.length,
+      шагX: ширина / показ.length,
       y: (v) => поле.сверху + (1 - (v - мин) / размах) * высота,
     };
-  }, [свечи, размер]);
+  }, [показ, размер]);
 
   useEffect(() => {
     const c = холст.current;
@@ -71,7 +139,7 @@ function График({ свечи, наведение = true }) {
     if (!геометрия) {
       ctx.fillStyle = Ц.слабый;
       ctx.font = `13px ${шрифт}`;
-      ctx.fillText(свечи ? "За этот период сделок не было" : "Загружаем свечи…", 16, размер.в / 2);
+      ctx.fillText(показ ? "За этот период сделок не было" : "Загружаем свечи…", 16, размер.в / 2);
       return;
     }
 
@@ -92,7 +160,7 @@ function График({ свечи, наведение = true }) {
       ctx.fillText(цена(v), ширина + 10, yy + 4);
     }
     const шагПодписи = Math.max(1, Math.round(90 / шагX));
-    свечи.forEach((с, i) => {
+    показ.forEach((с, i) => {
       if (i % шагПодписи) return;
       const x = поле.слева + i * шагX + шагX / 2;
       ctx.beginPath();
@@ -108,7 +176,7 @@ function График({ свечи, наведение = true }) {
 
     // Сами свечи.
     const тело = Math.max(1, Math.min(12, шагX * 0.66));
-    свечи.forEach((с, i) => {
+    показ.forEach((с, i) => {
       const x = поле.слева + i * шагX + шагX / 2;
       const рост = с.c >= с.o;
       ctx.strokeStyle = рост ? Ц.рост : Ц.падение;
@@ -123,7 +191,7 @@ function График({ свечи, наведение = true }) {
     });
 
     // Последняя цена — пунктиром на всю ширину, как в терминалах.
-    const последняя = свечи[свечи.length - 1];
+    const последняя = показ[показ.length - 1];
     const yy = Math.round(y(последняя.c)) + 0.5;
     ctx.setLineDash([4, 4]);
     ctx.strokeStyle = последняя.c >= последняя.o ? Ц.рост : Ц.падение;
@@ -150,26 +218,36 @@ function График({ свечи, наведение = true }) {
       ctx.stroke();
       ctx.setLineDash([]);
     }
-  }, [свечи, размер, геометрия, курсор, наведение]);
+  }, [показ, размер, геометрия, курсор, наведение]);
 
   // Свеча под курсором — её значения показываются в углу графика.
   const подКурсором = useMemo(() => {
-    if (!курсор || !геометрия || !свечи) return null;
+    if (!курсор || !геометрия || !показ) return null;
     const i = Math.floor((курсор.x - поле.слева) / геометрия.шагX);
-    return свечи[Math.max(0, Math.min(свечи.length - 1, i))] || null;
-  }, [курсор, геометрия, свечи]);
+    return показ[Math.max(0, Math.min(показ.length - 1, i))] || null;
+  }, [курсор, геометрия, показ]);
 
   return (
     <div
       ref={обёртка}
-      style={{ position: "relative", width: "100%", height: "100%" }}
-      onMouseMove={(e) => {
-        const r = обёртка.current.getBoundingClientRect();
-        setКурсор({ x: e.clientX - r.left, y: e.clientY - r.top });
-      }}
+      style={{ position: "relative", width: "100%", height: "100%", cursor: тянем.current ? "grabbing" : "crosshair", touchAction: "none" }}
+      onWheel={колесом}
+      onPointerDown={тянуть}
+      onPointerMove={ведём}
+      onPointerUp={отпустить}
+      onPointerCancel={отпустить}
+      onDoubleClick={сбросить}
       onMouseLeave={() => setКурсор(null)}
     >
       <canvas ref={холст} style={{ width: "100%", height: "100%", display: "block" }} />
+      <div
+        style={{
+          position: "absolute", right: 86, top: 10, fontFamily: шрифт, fontSize: 11,
+          color: Ц.слабый, pointerEvents: "none", opacity: 0.8,
+        }}
+      >
+        колесо — масштаб · тянуть — сдвиг · двойной щелчок — сброс
+      </div>
       {подКурсором && (
         <div
           style={{
@@ -341,7 +419,8 @@ export default function DesktopToken({ токен, наНазад }) {
   const ссылка = `https://t.me/${БОТ}?start=tok_${encodeURIComponent(токен.адрес || токен.пул)}`;
 
   return (
-    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0, alignItems: "center" }}>
+      <div style={{ width: "100%", maxWidth: ПОЛОСА, display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
       {/* Шапка: всё, ради чего открывают токен, — в одну строку. */}
       <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "10px 18px", borderBottom: `1px solid ${Ц.линия}`, background: Ц.панель }}>
         <button
@@ -399,11 +478,11 @@ export default function DesktopToken({ токен, наНазад }) {
             </span>
           </div>
 
-          <div style={{ flex: 1, minHeight: 220, padding: "4px 10px 0" }}>
+          <div style={{ height: 340, minHeight: 240, padding: "4px 10px 0" }}>
             <График свечи={свечи} />
           </div>
 
-          <div style={{ height: 240, borderTop: `1px solid ${Ц.линия}`, display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 200, borderTop: `1px solid ${Ц.линия}`, display: "flex", flexDirection: "column", minHeight: 0 }}>
             <div style={{ display: "flex", gap: 4, padding: "6px 14px", borderBottom: `1px solid ${Ц.линия}` }}>
               {[["trades", "Сделки"], ["about", "О токене"]].map(([id, п]) => (
                 <button
@@ -556,6 +635,7 @@ export default function DesktopToken({ токен, наНазад }) {
             )}
           </div>
         </aside>
+      </div>
       </div>
     </div>
   );

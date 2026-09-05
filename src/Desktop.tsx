@@ -20,7 +20,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import DesktopToken from "./DesktopToken";
 import { DesktopWallet, DesktopProfile } from "./DesktopWallet";
-import { Ц, шрифт, цифры, деньги, цена, возраст, число, Логотип, Движение } from "./desktopUI";
+import { Ц, шрифт, цифры, ПОЛОСА, СТИЛИ, деньги, цена, возраст, число, Логотип, Движение } from "./desktopUI";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
 
@@ -88,6 +88,16 @@ const КОЛОНКИ = [
   { id: "возраст", подпись: "Возраст", ширина: "0.7fr", поле: "создан" },
 ];
 
+/* Давно ли обновлялись цифры. Пишем словами: «12 секунд назад» человек
+   читает быстрее, чем метку времени. */
+function свежесть(когда) {
+  const сек = Math.max(0, Math.round((Date.now() - когда) / 1000));
+  if (сек < 5) return "обновлено только что";
+  if (сек < 60) return `обновлено ${сек} с назад`;
+  const мин = Math.round(сек / 60);
+  return `обновлено ${мин} мин назад`;
+}
+
 /* Одна раскладка на шапку и на строки: если ширины разъедутся, колонки
    перестанут совпадать с заголовками. */
 const СЕТКА = КОЛОНКИ.map((к) => к.ширина).join(" ");
@@ -101,10 +111,14 @@ export default function Desktop() {
   const [сорт, setСорт] = useState({ поле: "объём", по_убыв: true });
   const [выбран, setВыбран] = useState(null);
   const [раздел, setРаздел] = useState("market");
+  // Когда список обновлялся в последний раз — по этому видно, что данные
+  // живые, а не застыли на первом кадре.
+  const [обновлено, setОбновлено] = useState(null);
+  const [тик, setТик] = useState(0);
 
   const обновить = useCallback(() => {
     загрузитьРынок(сеть)
-      .then((список) => { setСтроки(список); setОшибка(null); })
+      .then((список) => { setСтроки(список); setОшибка(null); setОбновлено(Date.now()); })
       .catch((e) => setОшибка(String((e && e.message) || e)));
   }, [сеть]);
 
@@ -119,6 +133,13 @@ export default function Desktop() {
   }, [обновить]);
 
   useEffect(() => { localStorage.setItem("mintly.pro.chain", сеть); }, [сеть]);
+
+  // Секунды с последнего обновления идут сами: без этого строка застывала
+  // на «только что» до следующего запроса.
+  useEffect(() => {
+    const iv = setInterval(() => setТик((n) => n + 1), 5000);
+    return () => clearInterval(iv);
+  }, []);
 
   const список = useMemo(() => {
     if (!строки) return null;
@@ -148,19 +169,15 @@ export default function Desktop() {
 
   return (
     <div style={{ minHeight: "100vh", background: Ц.фон, color: Ц.текст, fontFamily: шрифт, display: "flex", flexDirection: "column" }}>
+      <style>{СТИЛИ}</style>
       <header
         style={{
-          height: 56, flexShrink: 0, borderBottom: `1px solid ${Ц.линия}`, background: Ц.панель,
-          display: "flex", alignItems: "center", gap: 18, padding: "0 20px",
+          height: 58, flexShrink: 0, borderBottom: `1px solid ${Ц.линия}`, background: Ц.фон,
+          display: "flex", justifyContent: "center", padding: "0 24px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <img src="/hero-bot.png" alt="" style={{ display: "none" }} />
-          <span style={{ fontFamily: шрифт, fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em" }}>MINTLY</span>
-          <span style={{ fontFamily: шрифт, fontSize: 11, color: Ц.акцент, border: `1px solid ${Ц.акцент}`, borderRadius: 6, padding: "1px 6px" }}>
-            PRO
-          </span>
-        </div>
+      <div style={{ width: "100%", maxWidth: ПОЛОСА, display: "flex", alignItems: "center", gap: 18 }}>
+        <span style={{ fontFamily: шрифт, fontWeight: 700, fontSize: 18, letterSpacing: "-0.02em" }}>Mintly</span>
 
         <div style={{ display: "flex", gap: 4 }}>
           {РАЗДЕЛЫ.map((р) => (
@@ -235,19 +252,41 @@ export default function Desktop() {
         >
           Открыть в Telegram
         </a>
+      </div>
       </header>
 
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        {раздел === "wallet" && <DesktopWallet />}
-        {раздел === "profile" && <DesktopProfile />}
+        {раздел === "wallet" && (
+          <div style={{ flex: 1, display: "flex", justifyContent: "center", overflowY: "auto" }}><DesktopWallet /></div>
+        )}
+        {раздел === "profile" && (
+          <div style={{ flex: 1, display: "flex", justifyContent: "center", overflowY: "auto" }}><DesktopProfile /></div>
+        )}
         {раздел === "market" && выбран && (
           <DesktopToken токен={выбран} наНазад={() => setВыбран(null)} />
         )}
         {раздел === "market" && !выбран && (
-        <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div
             style={{
-              display: "grid", gridTemplateColumns: СЕТКА, gap: 14, padding: "10px 20px",
+              width: "100%", maxWidth: ПОЛОСА, display: "flex", alignItems: "center",
+              justifyContent: "space-between", padding: "14px 4px 6px",
+              fontFamily: шрифт, fontSize: 12.5, color: Ц.слабый,
+            }}
+          >
+            <span>
+              {список == null ? "Загружаем рынок…" : `${число(список.length)} ${поиск.trim() ? "найдено" : "токенов"}`}
+              {поиск.trim() && строки ? ` из ${число(строки.length)}` : ""}
+            </span>
+            <span className="проявился" key={`${обновлено || 0}:${тик}`}>
+              {обновлено ? свежесть(обновлено) : ""}
+            </span>
+          </div>
+
+          <div
+            style={{
+              width: "100%", maxWidth: ПОЛОСА, boxSizing: "border-box",
+              display: "grid", gridTemplateColumns: СЕТКА, gap: 14, padding: "12px 4px",
               borderBottom: `1px solid ${Ц.линия}`, position: "sticky", top: 0, background: Ц.фон, zIndex: 2,
             }}
           >
@@ -268,7 +307,7 @@ export default function Desktop() {
             ))}
           </div>
 
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto", width: "100%", maxWidth: ПОЛОСА }}>
             {ошибка && (
               <div style={{ padding: 20, fontFamily: шрифт, fontSize: 13.5, color: Ц.падение }}>
                 Не удалось загрузить рынок: {ошибка}
@@ -282,17 +321,21 @@ export default function Desktop() {
                 По этому фильтру пусто.
               </div>
             )}
-            {(список || []).map((t) => {
+            {(список || []).map((t, i) => {
               const активна = выбран && выбран.id === t.id;
               return (
                 <div
                   key={t.id}
+                  className="строка вплыл"
                   onClick={() => setВыбран(t)}
                   style={{
                     display: "grid", gridTemplateColumns: СЕТКА, gap: 14, alignItems: "center",
-                    padding: "9px 20px", cursor: "pointer",
+                    padding: "10px 4px", cursor: "pointer",
                     borderBottom: `1px solid ${Ц.линия}`,
-                    background: активна ? Ц.панельВыше : "transparent",
+                    background: активна ? Ц.панель : "transparent",
+                    // Задержка копится только у первых строк: при сорока
+                    // элементах список собирался бы полторы секунды.
+                    animationDelay: `${Math.min(i, 8) * 18}ms`,
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
