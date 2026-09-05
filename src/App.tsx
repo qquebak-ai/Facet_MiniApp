@@ -5494,6 +5494,7 @@ function localTokenToFeedShape(entry) {
     // Описание и держатели — для карточки в мемпаде: по ним видно, что
     // за токен, ещё до того, как его открыли.
     description: entry.description || null,
+    bannerUrl: entry.bannerUrl || null,
     holders: entry.holders != null ? entry.holders : null,
     // Шкала до листинга: раньше эти числа сюда не доезжали, и полоса в
     // списке не рисовалась ни у одного своего токена.
@@ -10139,7 +10140,30 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
             className="fx-tap w-full flex items-center text-left"
             style={{ gap: 12, padding: 14, borderRadius: 16, background: T.surface, border: `1px solid ${T.line}`, position: "relative", overflow: "hidden" }}
           >
-            <SpotlightAura src={spotlight.logoUrl} ticker={spotlight.ticker} />
+            {/* Своя обложка вытесняет ауру: автор нарисовал её сам, и
+                подкрашивать её усреднённым цветом логотипа незачем.
+                Затемнение сверху обязательно — по светлой картинке белый
+                тикер не читается. */}
+            {spotlight.bannerUrl ? (
+              <>
+                <div
+                  aria-hidden
+                  style={{
+                    position: "absolute", inset: 0,
+                    background: `center/cover no-repeat url(${spotlight.bannerUrl})`,
+                  }}
+                />
+                <div
+                  aria-hidden
+                  style={{
+                    position: "absolute", inset: 0,
+                    background: `linear-gradient(90deg, ${hexA(T.bg, 0.92)} 0%, ${hexA(T.bg, 0.72)} 45%, ${hexA(T.bg, 0.45)} 100%)`,
+                  }}
+                />
+              </>
+            ) : (
+              <SpotlightAura src={spotlight.logoUrl} ticker={spotlight.ticker} />
+            )}
             <div style={{ position: "relative", zIndex: 1 }}>
               <TokenAvatar size={44} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl} />
             </div>
@@ -13418,6 +13442,9 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
   const [logoUrl, setLogoUrl] = useState(null);
   const [logoFile, setLogoFile] = useState(null);
   const [bannerUrl, setBannerUrl] = useState(null);
+  // Файл нужен целиком: раньше баннер жил только как blob-ссылка на
+  // предпросмотр и умирал вместе со вкладкой, никуда не сохраняясь.
+  const [bannerFile, setBannerFile] = useState(null);
   const [touched, setTouched] = useState(false);
   const [logoCropFile, setLogoCropFile] = useState(null);
   const logoInputRef = useRef(null);
@@ -13453,8 +13480,10 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
   }
   function onPickBanner(e) {
     const file = e.target.files && e.target.files[0];
+    e.target.value = "";
     if (!file) return;
     setBannerUrl(URL.createObjectURL(file));
+    setBannerFile(file);
     showToast(t("bannerUploaded"));
   }
   function handleLaunch() {
@@ -13492,7 +13521,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
     // jetton on-chain via TonConnect and seeds a STON.fi pool with the
     // committed buyAmount (see tonLaunch.js / handleLaunchRequest).
     onLaunch({
-      form, category, logoUrl, logoFile,
+      form, category, logoUrl, logoFile, bannerFile,
       buyAmount: form.buyAmount.trim(),
       chain: вSolana ? "solana" : "ton",
       onFinish: finishLaunch,
@@ -13505,6 +13534,7 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
     setLogoUrl(null);
     setLogoFile(null);
     setBannerUrl(null);
+    setBannerFile(null);
     setTouched(false);
   }
 
@@ -16414,6 +16444,8 @@ function mapTokenRow(row) {
       // автора, а не подпись под картинкой. В карточке мемпада по нему
       // видно, что за токен, ещё до того, как его открыли.
       description: row.description || null,
+      // Обложка: ею подкладывается карточка «в центре внимания».
+      bannerUrl: row.banner_url || null,
       network: row.network || "mainnet",
       // Сеть токена: по ней решается, у какой цепочки спрашивать цену и
       // каким кошельком торговать. Колонка появилась не сразу, и у
@@ -17249,6 +17281,8 @@ function mapTokenRow(row) {
       explorer_url: result.explorerUrl || null,
       category: result.category || null,
       description: result.description || null,
+      // Обложка токена: необязательна, показывается в «центре внимания».
+      banner_url: result.bannerUrl || null,
       network: result.network || (TON_TESTNET ? "testnet" : "mainnet"),
       // Сеть токена: по ней приложение решает, у какой цепочки
       // спрашивать цену и каким кошельком торговать.
@@ -17265,12 +17299,13 @@ function mapTokenRow(row) {
       await supabase.auth.refreshSession().catch(() => {});
       ({ data: row, error } = await supabase.from("tokens").insert(строка).select().single());
     }
-    // Колонка описания появилась позже остальных: пока миграции нет,
-    // база отбивает всю строку целиком, и токен, уже выпущенный в сети,
-    // терялся бы из-за одного текстового поля. Тогда сохраняем без него.
-    if (error && (error.code === "42703" || /description/i.test(error.message || ""))) {
-      const { description, ...безОписания } = строка;
-      ({ data: row, error } = await supabase.from("tokens").insert(безОписания).select().single());
+    // Колонки описания и обложки появились позже остальных: пока
+    // миграции нет, база отбивает всю строку целиком, и токен, уже
+    // выпущенный в сети, терялся бы из-за одного текстового поля. Тогда
+    // сохраняем без них.
+    if (error && (error.code === "42703" || /description|banner_url/i.test(error.message || ""))) {
+      const { description, banner_url, ...безЛишнего } = строка;
+      ({ data: row, error } = await supabase.from("tokens").insert(безЛишнего).select().single());
     }
 
     if (error || !row) {
@@ -17312,6 +17347,8 @@ function mapTokenRow(row) {
       // автора, а не подпись под картинкой. В карточке мемпада по нему
       // видно, что за токен, ещё до того, как его открыли.
       description: row.description || null,
+      // Обложка: ею подкладывается карточка «в центре внимания».
+      bannerUrl: row.banner_url || null,
       network: row.network || "mainnet",
       createdAt: new Date(row.created_at).getTime(),
     };
@@ -17476,6 +17513,7 @@ function mapTokenRow(row) {
       if (!persistentLogoUrl && req.logoUrl && !String(req.logoUrl).startsWith("blob:")) {
         persistentLogoUrl = req.logoUrl;
       }
+      const баннер = await загрузитьБаннер(req.bannerFile);
       setLaunchProgress({
         stepIndex: LAUNCH_STEPS.length,
         done: true,
@@ -17497,6 +17535,7 @@ function mapTokenRow(row) {
           // прочитать — карточка в мемпаде стояла безымянной.
           description: req.form.desc.trim(),
           logoUrl: persistentLogoUrl,
+          bannerUrl: баннер,
           curveAddress: chainResult.curveAddress,
           curveJettonWallet: chainResult.curveJettonWallet,
           // Свой пул этого токена: развёрнут вместе с кривой и ждёт
@@ -17524,6 +17563,23 @@ function mapTokenRow(row) {
      миллионов продаёт кривая. Это правило площадки, а не выбор
      запускающего — иначе у каждого токена была бы своя математика, и
      сравнивать их было бы нельзя. */
+  /* Баннер токена в хранилище. Он необязателен и ни на что в цепочке не
+     влияет — это обложка, которой карточка встаёт на витрине, поэтому
+     неудача загрузки запуск не рушит: токен выйдет без обложки. */
+  async function загрузитьБаннер(файл) {
+    if (!файл || !userId) return null;
+    try {
+      const путь = `${userId}/banner-${Date.now()}.${safeImageExt(файл)}`;
+      const { error } = await supabase.storage.from("avatars").upload(путь, файл, { upsert: true });
+      if (error) { console.error("[mintly] баннер не загрузился:", error); return null; }
+      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(путь);
+      return (pub && pub.publicUrl) || null;
+    } catch (e) {
+      console.error("[mintly] баннер не загрузился:", e);
+      return null;
+    }
+  }
+
   async function runSolanaLaunch(req) {
     setLaunchProgress({ stepIndex: 0, done: false, error: null, result: null });
     const buyNum = parseFloat(String(req.buyAmount || "0").replace(",", "."));
@@ -17543,6 +17599,7 @@ function mapTokenRow(row) {
         } catch (e) { console.error("[mintly] логотип не загрузился:", e); }
       }
       if (!logo && req.logoUrl && !String(req.logoUrl).startsWith("blob:")) logo = req.logoUrl;
+      const баннер = await загрузитьБаннер(req.bannerFile);
 
       setLaunchProgress((p) => ({ ...p, stepIndex: 1 }));
       const { запуститьТокенSol } = await import("./solLaunch");
@@ -17584,6 +17641,7 @@ function mapTokenRow(row) {
           // прочитать — карточка в мемпаде стояла безымянной.
           description: req.form.desc.trim(),
           logoUrl: logo,
+          bannerUrl: баннер,
           chain: "solana",
           // Сеть той цепочки, в которой токен на самом деле выпущен, а не
           // сеть TON: пока программа в devnet, такой токен обязан
