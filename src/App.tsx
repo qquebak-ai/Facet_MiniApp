@@ -1882,6 +1882,13 @@ function GlobalStyle() {
         to   { stroke-dashoffset: calc(var(--ring-len) * -1); }
       }
       @media (prefers-reduced-motion: reduce) { .fx-ring-glow { animation: none; opacity: 0.5; } }
+      /* Крестик закрытия. Иконка в 16 пикселей — цель меньше пальца, и
+         промах по ней читается как «окно не закрывается». Поле нажатия
+         растёт наружу отрицательным полем, поэтому вёрстка не едет. */
+      .fx-close {
+        padding: 12px; margin: -12px; border-radius: 999px;
+        display: flex; align-items: center; justify-content: center;
+      }
       .fx-avatar { transition: transform ${SPRING}; }
       .fx-avatar:active { transform: scale(0.96); transition: transform ${PRESS}; }
       .cta-launch { transition: transform ${SPRING}, opacity ${EASE}; }
@@ -12724,7 +12731,7 @@ function TokenShareSheet({ token: tokenProp, curve, holders, userId, onClose, sh
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(18, { paddingBottom: 22 })}>
         <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{t("shareCardTitle")}</span>
-          <button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button>
+          <button onClick={onClose} className="fx-tap fx-close"><X size={16} color={T.muted} /></button>
         </div>
         <canvas
           ref={canvasRef}
@@ -12918,7 +12925,7 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
               <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>${token.ticker} · {fmtPrice(token.price)}</div>
             </div>
           </div>
-          <button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button>
+          <button onClick={onClose} className="fx-tap fx-close"><X size={16} color={T.muted} /></button>
         </div>
 
         <div className="flex rounded-[20px] p-1" style={{ background: T.bg, border: `1px solid ${T.line}` }}>
@@ -13835,9 +13842,9 @@ function PinSetupModal({ mode: modeProp, currentPin, onClose, onComplete, onDisa
   };
 
   return (
-    <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 70, background: "rgba(0,0,0,0.82)" }} onClick={onClose}>
+    <div className={`fx-modal-back${closing ? " fx-out" : ""}`} style={{ ...SHEET_BACK, zIndex: 70, background: "rgba(0,0,0,0.82)" }} onClick={onClose}>
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22, { paddingBottom: 30 })}>
-        <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
+        <div className="flex justify-end"><button onClick={onClose} className="fx-tap fx-close"><X size={16} color={T.muted} /></button></div>
         <div className="flex flex-col items-center text-center gap-1" style={{ marginTop: -8 }}>
           <MintlyFrame size={52} glow={`${T.electric}55`}><Lock size={20} color={T.electric} /></MintlyFrame>
           <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700, marginTop: 8 }}>{titles[stage]}</div>
@@ -13906,11 +13913,14 @@ function PinLockScreen({ pin, profile, onUnlock, onForgot }) {
 }
 
 function ConnectModal({ open, onClose, onConnect }) {
-  if (!open) return null;
+  // Окно держится на экране, пока идёт анимация ухода: раньше оно
+  // пропадало кадром, и казалось, что нажатие сломало экран.
+  const [видно, closing] = useClosing(open);
+  if (!видно) return null;
   return (
-    <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
+    <div className={`fx-modal-back${closing ? " fx-out" : ""}`} style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
-        <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
+        <div className="flex justify-end"><button onClick={onClose} className="fx-tap fx-close"><X size={16} color={T.muted} /></button></div>
         <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: -8 }}>
           <MintlyFrame size={56} glow={`${T.electric}55`}><Wallet size={22} color={T.electric} /></MintlyFrame>
           <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700, marginTop: 6 }}>{t("connectWalletModalTitle")}</div>
@@ -14559,7 +14569,7 @@ function SettingsPanel({
           <div style={{ width: 36, height: 4, borderRadius: 2, background: T.line }} />
         </div>
         <div style={{ padding: "4px 22px 0", flexShrink: 0 }}>
-          <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
+          <div className="flex justify-end"><button onClick={onClose} className="fx-tap fx-close"><X size={16} color={T.muted} /></button></div>
           <div className="flex flex-col items-center text-center gap-2" style={{ marginTop: -8 }}>
             <MintlyFrame size={52} glow={`${T.electric}44`}><Icon size={20} color={T.electric} /></MintlyFrame>
             <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700, marginTop: 6 }}>{t(item.tKey)}</div>
@@ -14589,7 +14599,7 @@ function TokenManageSheet({ token: tokenProp, onClose, showToast, onDelete }) {
   return (
     <div className={`fx-modal-back${closing ? " fx-out" : ""}`} style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
-        <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
+        <div className="flex justify-end"><button onClick={onClose} className="fx-tap fx-close"><X size={16} color={T.muted} /></button></div>
         <div className="flex items-center gap-3" style={{ marginTop: -8, marginBottom: 14 }}>
           <TokenAvatar size={44} src={token.logoUrl} />
           <div>
@@ -14931,6 +14941,9 @@ function LookPicker({ cosmetics, owned, onEquip, focus }) {
 
 function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAddress, onChangeNickname, cosmetics = { frame: "none", card: "none" }, owned, onEquip, lookFocus = null }) {
   const isEdit = mode === "edit";
+  // Окно держится на экране, пока идёт анимация ухода: без этого оно
+  // пропадало кадром, и закрытие читалось сбоем, а не действием.
+  const [видно, closing] = useClosing(open);
   const [tgBusy, setTgBusy] = useState(false);
   const [tgError, setTgError] = useState("");
   const [authTab, setAuthTab] = useState(isEdit ? "create" : mode); // "login" | "create"
@@ -14991,7 +15004,7 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
     }
   }, [open, mode]);
 
-  if (!open) return null;
+  if (!видно) return null;
 
   // Регистрация и вход больше не спрашивают почту с паролем — вместо них
   // одна кнопка «Войти через Telegram». Режим редактирования профиля
@@ -15034,11 +15047,11 @@ function AuthModal({ open, onClose, onSubmit, initial, mode = "create", walletAd
     }
 
     return (
-      <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
+      <div className={`fx-modal-back${closing ? " fx-out" : ""}`} style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
         <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
           <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
             <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700 }}>{t("tgAuthTitle")}</span>
-            <button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button>
+            <button onClick={onClose} className="fx-tap fx-close"><X size={16} color={T.muted} /></button>
           </div>
 
           <div className="flex flex-col items-center text-center gap-3" style={{ paddingBottom: 6 }}>
@@ -15216,13 +15229,13 @@ async function uploadAvatarIfNeeded(userId) {
   }
 
   return (
-    <div className="fx-modal-back" style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
+    <div className={`fx-modal-back${closing ? " fx-out" : ""}`} style={{ ...SHEET_BACK, zIndex: 60 }} onClick={onClose}>
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
         <div className="flex items-center justify-between" style={{ marginBottom: isEdit ? 4 : 14 }}>
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 17.5, fontWeight: 700 }}>
             {isEdit ? t("editProfile") : t("accountLabel")}
           </span>
-          <button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button>
+          <button onClick={onClose} className="fx-tap fx-close"><X size={16} color={T.muted} /></button>
         </div>
 
         {!isEdit && (
