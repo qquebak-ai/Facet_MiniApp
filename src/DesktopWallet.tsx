@@ -10,6 +10,7 @@ import React, { useEffect, useState } from "react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { supabase } from "./supabaseClient";
 import { Ц, шрифт, цифры, деньги, возраст, число, Логотип } from "./desktopUI";
+import { состояниеВнутреннего, вывестиСВнутреннего } from "./appWallet";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
 
@@ -26,6 +27,201 @@ function Заголовок({ children }) {
     <div style={{ fontFamily: шрифт, fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.05em", color: Ц.слабый, marginBottom: 10 }}>
       {children}
     </div>
+  );
+}
+
+
+/* Кошелёк приложения — тот, которым идут сделки в Solana.
+ *
+ * Он привязан к аккаунту, а аккаунт заводится из Telegram: в браузере
+ * без входа его нет и быть не может. Поэтому здесь два состояния —
+ * рабочее и честное объяснение, почему пусто, — а не пустая карточка.
+ */
+export function КошелёкПриложения() {
+  const [кош, setКош] = useState(undefined);
+  const [панель, setПанель] = useState(null);   // null | "top" | "out"
+  const [сумма, setСумма] = useState("");
+  const [идёт, setИдёт] = useState(false);
+  const [сообщение, setСообщение] = useState("");
+  const [скопировано, setСкопировано] = useState(false);
+
+  const обновить = () => состояниеВнутреннего().then(setКош).catch(() => setКош(null));
+  useEffect(() => { обновить(); }, []);
+
+  if (кош === undefined) return null;
+  // Внутренний кошелёк выключен на площадке — тогда и рассказывать не о чем.
+  if (кош === null) return null;
+
+  if (кош.нуженВход) {
+    return (
+      <Карточка>
+        <Заголовок>Баланс в приложении</Заголовок>
+        <p style={{ fontFamily: шрифт, fontSize: 13.5, color: Ц.тусклый, lineHeight: 1.55, margin: 0 }}>
+          Кошелёк, которым идут сделки в Solana, привязан к аккаунту, а аккаунт заводится из профиля
+          Telegram. Войдите в мини-приложении — баланс и адрес появятся здесь.
+        </p>
+        <a
+          href={`https://t.me/${БОТ}`}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            display: "inline-block", marginTop: 14, padding: "10px 18px", borderRadius: 11, textDecoration: "none",
+            background: Ц.акцент, color: "#0B0D1A", fontFamily: шрифт, fontWeight: 700, fontSize: 13.5,
+          }}
+        >
+          Войти в Telegram
+        </a>
+      </Карточка>
+    );
+  }
+
+  if (кош.ошибка) {
+    return (
+      <Карточка>
+        <Заголовок>Баланс в приложении</Заголовок>
+        <div style={{ fontFamily: шрифт, fontSize: 13.5, color: Ц.падение }}>{кош.ошибка}</div>
+      </Карточка>
+    );
+  }
+
+  const остаток = Number(кош.sol) || 0;
+
+  async function вывести(всё) {
+    if (идёт) return;
+    setИдёт(true);
+    setСообщение("");
+    try {
+      await вывестиСВнутреннего({ amount: всё ? 0 : Number(сумма), all: всё });
+      setСумма("");
+      setСообщение("Отправлено");
+      обновить();
+    } catch (e) {
+      setСообщение(String((e && e.message) || e).slice(0, 120));
+    } finally {
+      setИдёт(false);
+    }
+  }
+
+  return (
+    <Карточка>
+      <Заголовок>Баланс в приложении</Заголовок>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
+        <div>
+          <div style={{ fontFamily: цифры, fontSize: 28, fontWeight: 700 }}>{остаток.toFixed(4)} SOL</div>
+          <div style={{ fontFamily: шрифт, fontSize: 12.5, color: Ц.тусклый, marginTop: 6 }}>
+            Сделки в Solana уходят в сеть сразу, без подтверждения в кошельке.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => { setПанель(панель === "top" ? null : "top"); setСообщение(""); }}
+            style={{
+              padding: "9px 16px", borderRadius: 10, cursor: "pointer", border: `1px solid ${Ц.линия}`,
+              background: панель === "top" ? Ц.панельВыше : "transparent", color: Ц.текст,
+              fontFamily: шрифт, fontSize: 13, fontWeight: 600,
+            }}
+          >
+            Пополнить
+          </button>
+          <button
+            onClick={() => { setПанель(панель === "out" ? null : "out"); setСообщение(""); }}
+            style={{
+              padding: "9px 16px", borderRadius: 10, cursor: "pointer", border: `1px solid ${Ц.линия}`,
+              background: панель === "out" ? Ц.панельВыше : "transparent", color: Ц.текст,
+              fontFamily: шрифт, fontSize: 13, fontWeight: 600,
+            }}
+          >
+            Вывести
+          </button>
+        </div>
+      </div>
+
+      {панель === "top" && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontFamily: шрифт, fontSize: 13, color: Ц.тусклый, marginBottom: 8 }}>
+            Отправьте SOL на этот адрес — деньги появятся здесь через несколько секунд.
+          </div>
+          <button
+            onClick={() => {
+              if (navigator.clipboard) navigator.clipboard.writeText(кош.address);
+              setСкопировано(true);
+              setTimeout(() => setСкопировано(false), 1500);
+            }}
+            style={{
+              width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 10, cursor: "pointer",
+              background: Ц.панельВыше, border: `1px solid ${Ц.линия}`, color: Ц.текст,
+              fontFamily: цифры, fontSize: 12.5, wordBreak: "break-all",
+            }}
+          >
+            {кош.address} {скопировано ? "· скопировано" : "· копировать"}
+          </button>
+        </div>
+      )}
+
+      {панель === "out" && (
+        <div style={{ marginTop: 14 }}>
+          {!кош.payout ? (
+            <div style={{ fontFamily: шрифт, fontSize: 13, color: Ц.тусклый, lineHeight: 1.55 }}>
+              Вывод идёт только на адрес, подтверждённый подписью вашего кошелька. Привязать его можно
+              в мини-приложении: подпись ставится в Phantom, и в браузере её взять неоткуда.
+            </div>
+          ) : (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: шрифт, fontSize: 12.5, color: Ц.тусклый, marginBottom: 8 }}>
+                <span>Адрес вывода</span>
+                <span style={{ fontFamily: цифры, color: Ц.текст }}>
+                  {`${кош.payout.slice(0, 4)}…${кош.payout.slice(-4)}`}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={сумма}
+                  onChange={(e) => setСумма(e.target.value.replace(",", ".").replace(/[^0-9.]/g, ""))}
+                  placeholder="Сколько вывести"
+                  style={{
+                    flex: 1, height: 38, padding: "0 12px", borderRadius: 10, boxSizing: "border-box",
+                    background: Ц.панельВыше, border: `1px solid ${Ц.линия}`, color: Ц.текст,
+                    fontFamily: цифры, fontSize: 14, outline: "none",
+                  }}
+                />
+                <button
+                  onClick={() => вывести(true)}
+                  disabled={идёт}
+                  style={{
+                    padding: "0 16px", borderRadius: 10, cursor: "pointer", border: `1px solid ${Ц.линия}`,
+                    background: "transparent", color: Ц.тусклый, fontFamily: шрифт, fontSize: 13,
+                    opacity: идёт ? 0.5 : 1,
+                  }}
+                >
+                  Всё
+                </button>
+                <button
+                  onClick={() => вывести(false)}
+                  disabled={идёт || !(Number(сумма) > 0)}
+                  style={{
+                    padding: "0 18px", borderRadius: 10, cursor: "pointer", border: "none",
+                    background: Ц.акцент, color: "#0B0D1A", fontFamily: шрифт, fontWeight: 700, fontSize: 13,
+                    opacity: идёт || !(Number(сумма) > 0) ? 0.5 : 1,
+                  }}
+                >
+                  Вывести
+                </button>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: шрифт, fontSize: 12, color: Ц.слабый, marginTop: 8 }}>
+                <span>Осталось вывести за сутки</span>
+                <span style={{ fontFamily: цифры }}>{(Number(кош.dailyLeft) || 0).toFixed(2)} SOL</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {сообщение && (
+        <div style={{ marginTop: 10, fontFamily: шрифт, fontSize: 12.5, color: сообщение === "Отправлено" ? Ц.рост : Ц.падение }}>
+          {сообщение}
+        </div>
+      )}
+    </Карточка>
   );
 }
 
@@ -58,7 +254,8 @@ export function DesktopWallet({ наТокен }) {
 
   if (!адрес) {
     return (
-      <div style={{ padding: 28, maxWidth: 560 }}>
+      <div style={{ padding: 28, maxWidth: 620, display: "flex", flexDirection: "column", gap: 16 }}>
+        <КошелёкПриложения />
         <Карточка>
           <div style={{ fontFamily: шрифт, fontSize: 17, fontWeight: 700, marginBottom: 8 }}>Кошелёк не подключён</div>
           <p style={{ fontFamily: шрифт, fontSize: 13.5, color: Ц.тусклый, lineHeight: 1.55, margin: "0 0 16px" }}>
@@ -81,8 +278,9 @@ export function DesktopWallet({ наТокен }) {
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, maxWidth: 900 }}>
+      <КошелёкПриложения />
       <Карточка>
-        <Заголовок>Кошелёк</Заголовок>
+        <Заголовок>TON-кошелёк</Заголовок>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
           <div>
             <div style={{ fontFamily: цифры, fontSize: 30, fontWeight: 700 }}>

@@ -12,6 +12,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ц, шрифт, цифры, деньги, цена, возраст, число, Логотип, Движение } from "./desktopUI";
+import { состояниеВнутреннего, сделкаВнутренним } from "./appWallet";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
 
@@ -280,6 +281,36 @@ export default function DesktopToken({ токен, наНазад }) {
   const [вкладка, setВкладка] = useState("trades");
   const [сторона, setСторона] = useState("buy");
   const [сумма, setСумма] = useState("");
+  // Кошелёк приложения есть только у токенов Solana и только у вошедших:
+  // тогда сделка проходит прямо здесь, без ухода в Telegram.
+  const [кош, setКош] = useState(null);
+  const [идёт, setИдёт] = useState(false);
+  const [итог, setИтог] = useState("");
+
+  useEffect(() => {
+    if (токен.сеть !== "solana") { setКош(null); return; }
+    let жив = true;
+    состояниеВнутреннего()
+      .then((с) => { if (жив) setКош(с && !с.нуженВход && !с.ошибка ? с : null); })
+      .catch(() => { if (жив) setКош(null); });
+    return () => { жив = false; };
+  }, [токен.сеть, токен.адрес]);
+
+  async function сделать() {
+    if (идёт || !(Number(сумма) > 0) || !токен.адрес) return;
+    setИдёт(true);
+    setИтог("");
+    try {
+      await сделкаВнутренним({ mint: токен.адрес, продажа: сторона === "sell", amount: Number(сумма) });
+      setИтог(сторона === "buy" ? "Куплено" : "Продано");
+      setСумма("");
+      состояниеВнутреннего().then((с) => setКош(с && !с.нуженВход && !с.ошибка ? с : null)).catch(() => {});
+    } catch (e) {
+      setИтог(String((e && e.message) || e).slice(0, 120));
+    } finally {
+      setИдёт(false);
+    }
+  }
 
   useEffect(() => {
     let жив = true;
@@ -444,24 +475,56 @@ export default function DesktopToken({ токен, наНазад }) {
               ))}
             </div>
 
-            {/* Подпись сделки живёт в мини-приложении вместе с кошельком:
-                уводим туда с уже выбранным токеном и суммой, а не делаем
-                вид, что сделка пройдёт прямо здесь. */}
-            <a
-              href={`${ссылка}${сумма ? `_${сумма}` : ""}`}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                display: "block", textAlign: "center", marginTop: 12, padding: "12px 0", borderRadius: 11,
-                background: сторона === "buy" ? Ц.рост : Ц.падение, color: "#06070A",
-                fontFamily: шрифт, fontWeight: 700, fontSize: 14, textDecoration: "none",
-              }}
-            >
-              {сторона === "buy" ? "Купить" : "Продать"} в Telegram
-            </a>
-            <div style={{ fontFamily: шрифт, fontSize: 11.5, color: Ц.слабый, marginTop: 8, lineHeight: 1.45 }}>
-              Сделку подписывает кошелёк в приложении — сайт открывает его с выбранным токеном.
-            </div>
+            {/* В Solana подпись ставит кошелёк приложения на сервере —
+                сделка проходит прямо здесь. В TON её подписывает кошелёк
+                человека, а он живёт в мини-приложении: туда и уводим, а
+                не делаем вид, что сделка пройдёт на сайте. */}
+            {кош ? (
+              <>
+                <button
+                  onClick={сделать}
+                  disabled={идёт || !(Number(сумма) > 0)}
+                  style={{
+                    width: "100%", marginTop: 12, padding: "12px 0", borderRadius: 11, border: "none",
+                    cursor: идёт || !(Number(сумма) > 0) ? "default" : "pointer",
+                    background: сторона === "buy" ? Ц.рост : Ц.падение, color: "#06070A",
+                    fontFamily: шрифт, fontWeight: 700, fontSize: 14,
+                    opacity: идёт || !(Number(сумма) > 0) ? 0.55 : 1,
+                  }}
+                >
+                  {идёт ? "Отправляем…" : сторона === "buy" ? `Купить ${токен.тикер}` : `Продать ${токен.тикер}`}
+                </button>
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: шрифт, fontSize: 11.5, color: Ц.слабый, marginTop: 8 }}>
+                  <span>Баланс в приложении</span>
+                  <span style={{ fontFamily: цифры, color: Ц.тусклый }}>{(Number(кош.sol) || 0).toFixed(4)} SOL</span>
+                </div>
+                {итог && (
+                  <div style={{ fontFamily: шрифт, fontSize: 12, marginTop: 6, color: /Куплено|Продано/.test(итог) ? Ц.рост : Ц.падение }}>
+                    {итог}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <a
+                  href={`${ссылка}${сумма ? `_${сумма}` : ""}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: "block", textAlign: "center", marginTop: 12, padding: "12px 0", borderRadius: 11,
+                    background: сторона === "buy" ? Ц.рост : Ц.падение, color: "#06070A",
+                    fontFamily: шрифт, fontWeight: 700, fontSize: 14, textDecoration: "none",
+                  }}
+                >
+                  {сторона === "buy" ? "Купить" : "Продать"} в Telegram
+                </a>
+                <div style={{ fontFamily: шрифт, fontSize: 11.5, color: Ц.слабый, marginTop: 8, lineHeight: 1.45 }}>
+                  {токен.сеть === "solana"
+                    ? "Сделка пройдёт прямо здесь, как только вы войдёте в аккаунт — он заводится из Telegram."
+                    : "Сделку в TON подписывает ваш кошелёк, а он живёт в мини-приложении."}
+                </div>
+              </>
+            )}
           </div>
 
           <div style={{ marginTop: 16, padding: "12px 12px 20px", borderTop: `1px solid ${Ц.линия}` }}>
