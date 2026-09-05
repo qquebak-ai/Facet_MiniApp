@@ -17985,6 +17985,10 @@ function mapTokenRow(row) {
   function openLoginProfile() { setProfileModalMode("login"); setProfileModalOpen(true); }
   function requireUnlockRoot() {
     if (!accountCreated) { setProfileModalMode("create"); setProfileModalOpen(true); showToast(t("firstAccountFirst")); return false; }
+    // TonConnect нужен только токенам TON: сделка в Solana уходит
+    // кошельком приложения, и требовать здесь TON-кошелёк — тупик, из
+    // которого человек не выйдет, сколько его ни подключай.
+    if (token && token.chain === "solana") return true;
     if (!connected) { setConnectModalOpen(true); showToast(t("connectWalletTrade")); return false; }
     return true;
   }
@@ -18523,7 +18527,7 @@ function mapTokenRow(row) {
               insetTop={insetTop}
             />
           )}
-          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && connected} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} onOpenProfile={openUserProfile} tonPriceUsd={tonPriceUsd} walletAddress={walletAddress} />}
+          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && (connected || (token && token.chain === "solana"))} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} onOpenProfile={openUserProfile} tonPriceUsd={tonPriceUsd} walletAddress={walletAddress} />}
           {view === "create" && (
             <CreateView
               showToast={showToast}
