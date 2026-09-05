@@ -21,6 +21,10 @@ import { DEX, pTON } from "@ston-fi/sdk";
 
 const STON_API = "https://api.ston.fi/v1";
 
+// Обёртка TON в жетон: биржа умеет менять только жетон на жетон, и
+// «настоящий» TON участвует в сделке под этим адресом.
+const PTON = "EQCM3B12QK1e4yZSf8GtBRT0aLMNyEsBc_DhVfRRtOEffLez";
+
 // Биржа живёт только в боевой сети. В тестовой своп собирать не из
 // чего, и честнее сказать это прямо, чем отдать ссылку, которая ничего
 // не купит.
@@ -45,7 +49,7 @@ const TONCENTER_KEY = process.env.TONCENTER_API_KEY || undefined;
 export async function симуляция(jetton, tonAmount, допуск = 0.02) {
   const units = BigInt(Math.round(Number(tonAmount) * 1e9));
   const параметры = new URLSearchParams({
-    offer_address: "EQCM3B12QK1e4yZSf8GtBRT0aLMNyEsBc_DhVfRRtOEffLez", // pTON
+    offer_address: PTON,
     ask_address: jetton,
     units: units.toString(),
     slippage_tolerance: String(допуск),
@@ -151,6 +155,106 @@ export async function свопТонВЖетон({ jetton, tonAmount, userWallet
     комиссияБиржи: Number(sim.fee_units || 0) / 10 ** decimals,
     доляПлощадки: реферал ? REFERRAL_BPS / 100 : null,
     версияРоутера: `${(sim.router || {}).major_version || 1}.${(sim.router || {}).minor_version || 0}`,
+  };
+}
+
+/* Сколько знаков после запятой у жетона.
+ *
+ * Спрашиваем у цепочки, а не подставляем девятку: у мемкоинов TON
+ * встречаются и шесть, и два знака, а ошибка здесь — это ошибка в тысячу
+ * раз по сумме продажи. Ответ держим в памяти процесса: у жетона он не
+ * меняется никогда. */
+const знаки = new Map();
+async function десятичные(jetton) {
+  if (знаки.has(jetton)) return знаки.get(jetton);
+  try {
+    const r = await fetch(`https://tonapi.io/v2/jettons/${jetton}`, { headers: { accept: "application/json" } });
+    const j = r.ok ? await r.json() : null;
+    const d = Number((j && j.metadata && j.metadata.decimals) ?? 9);
+    const итог = Number.isFinite(d) && d >= 0 && d <= 18 ? d : 9;
+    знаки.set(jetton, итог);
+    return итог;
+  } catch {
+    return 9;
+  }
+}
+
+/* Продажа: жетон за TON.
+ *
+ * Обратное направление у биржи считается так же, только местами меняются
+ * offer и ask. Сумма приходит в самих токенах, а не в единицах: сколько
+ * их в одном токене, знает только цепочка. */
+export async function свопЖетонВТон({ jetton, amount, userWallet, допуск = 0.01 }) {
+  if (TESTNET) return null;
+  if (!jetton || !userWallet || !(amount > 0)) return null;
+
+  const dec = await десятичные(jetton);
+  const units = BigInt(Math.round(Number(amount) * 10 ** dec));
+  if (units <= 0n) return null;
+
+  const спросить = async (д) => {
+    const параметры = new URLSearchParams({
+      offer_address: jetton,
+      ask_address: PTON,
+      units: units.toString(),
+      slippage_tolerance: String(д),
+      dex_v2: "true",
+    });
+    try {
+      const res = await fetch(`${STON_API}/swap/simulate?${параметры}`, { method: "POST" });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json && json.router_address ? json : null;
+    } catch {
+      return null;
+    }
+  };
+
+  let sim = await спросить(допуск);
+  if (!sim) return null;
+  const нужен = Number(sim.recommended_slippage_tolerance) || 0;
+  if (нужен > допуск) sim = (await спросить(нужен)) || sim;
+
+  let адресПродавца;
+  try {
+    адресПродавца = Address.parse(userWallet).toString({ bounceable: false });
+  } catch {
+    return null;
+  }
+
+  const client = new TonClient({ endpoint: TONCENTER, apiKey: TONCENTER_KEY });
+  const { router, proxy, реферал } = роутерИProxy(sim);
+  const открытый = client.open(router);
+
+  const параметры = {
+    userWalletAddress: адресПродавца,
+    offerJettonAddress: jetton,
+    offerAmount: units,
+    proxyTon: proxy,
+    minAskAmount: BigInt(sim.min_ask_units || 1),
+    referralAddress: FEE_ADDRESS,
+  };
+  if (реферал) параметры.referralValue = REFERRAL_BPS;
+
+  let tx;
+  try {
+    tx = await открытый.getSwapJettonToTonTxParams(параметры);
+  } catch (err) {
+    console.warn("[swap] продажа не собралась:", err && err.message);
+    return null;
+  }
+
+  return {
+    to: tx.to.toString({ bounceable: true }),
+    value: tx.value.toString(),
+    body: tx.body.toBoc().toString("base64"),
+    // Выход этого направления — сам TON, поэтому девятка здесь не
+    // угадана, а задана сетью.
+    получит: Number(sim.ask_units || 0) / 1e9,
+    минимум: Number(sim.min_ask_units || 0) / 1e9,
+    влияние: Number(sim.price_impact) || 0,
+    десятичные: dec,
+    доляПлощадки: реферал ? REFERRAL_BPS / 100 : null,
   };
 }
 

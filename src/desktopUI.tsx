@@ -3,7 +3,7 @@
    токена и кошелёк не держали по своей копии — разъехавшиеся цвета и
    разный формат цены на соседних экранах видно сразу. */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 
 export const Ц = {
   фон: "#000000",
@@ -29,7 +29,7 @@ export const цифры = "Inter, 'SF Mono', Consolas, monospace";
 /* Ширина, за которую содержимое не выходит. Таблица во весь монитор
    заставляет водить глазами от края до края: тикер слева, цена в метре
    справа — строка перестаёт читаться как одно целое. */
-export const ПОЛОСА = 1180;
+export const ПОЛОСА = 1280;
 
 export const СТИЛИ = `
   @font-face {
@@ -57,10 +57,11 @@ export const СТИЛИ = `
   .строка:hover { background: ${Ц.панель}; }
   .строка:active { transform: scale(0.997); }
 
-  /* Логотип токена при наведении подрастает: в таблице он размером с
-     ноготь, и разглядеть картинку иначе нельзя. */
+  /* Логотип подрастает только в карточке открытого токена. В таблице
+     это мешало: картинка выпрыгивала под курсором на каждой строке, по
+     которой глаз просто проходил мимо. */
   .лого { transition: transform 180ms cubic-bezier(0.16,1,0.3,1), box-shadow 180ms ease; }
-  .строка:hover .лого { transform: scale(1.75); box-shadow: 0 6px 18px rgba(0,0,0,0.6); z-index: 3; }
+  .лого-крупно:hover { transform: scale(2.4); box-shadow: 0 10px 28px rgba(0,0,0,0.7); position: relative; z-index: 5; }
 
   .кнопка { transition: background 140ms ease, border-color 140ms ease, transform 120ms ease, opacity 140ms ease; }
   .кнопка:hover { border-color: ${Ц.линияЯрче}; }
@@ -74,6 +75,43 @@ export const СТИЛИ = `
     .строка, .лого, .кнопка { transition: none; }
   }
 `;
+
+/* Знаки сетей. Подпись «TON» и «Solana» в переключателе читалась как
+   слово, а сеть узнают по цвету и форме — за то же место знак говорит
+   быстрее. Рисуем сами: чужие картинки запрещены правилами безопасности
+   страницы. */
+export function ЗнакTON({ размер = 18 }) {
+  return (
+    <svg width={размер} height={размер} viewBox="0 0 56 56" aria-hidden focusable="false">
+      <circle cx="28" cy="28" r="28" fill="#0098EA" />
+      <path
+        fill="#fff"
+        d="M37.56 15.63H18.44c-3.52 0-5.74 3.79-3.98 6.86l11.8 20.45c.77 1.34 2.7 1.34 3.47 0l11.8-20.45c1.77-3.06-.45-6.86-3.97-6.86zM26.25 36.81l-2.57-4.98-6.2-11.09c-.41-.71.1-1.62.95-1.62h7.82v17.69zm12.26-16.07l-6.2 11.1-2.57 4.97V19.12h7.82c.85 0 1.36.91.95 1.62z"
+      />
+    </svg>
+  );
+}
+
+export function ЗнакSolana({ размер = 18 }) {
+  // Свой номер градиента на каждый знак: два одинаковых id на странице —
+  // и браузер закрашивает оба первым найденным.
+  const id = useId().replace(/:/g, "");
+  return (
+    <svg width={размер} height={размер} viewBox="0 0 398 312" aria-hidden focusable="false">
+      <defs>
+        <linearGradient id={id} x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stopColor="#9945FF" />
+          <stop offset="100%" stopColor="#14F195" />
+        </linearGradient>
+      </defs>
+      <g fill={`url(#${id})`}>
+        <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" />
+        <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" />
+        <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" />
+      </g>
+    </svg>
+  );
+}
 
 
 /* Фирменные цвета чужих сервисов: кнопка «войти через …» узнаётся по
@@ -159,9 +197,10 @@ export function число(v) {
   return (Number(v) || 0).toLocaleString("ru-RU");
 }
 
-export function Логотип({ src, тикер, размер = 30 }) {
+export function Логотип({ src, тикер, размер = 30, крупно = false }) {
   const [сломан, setСломан] = useState(false);
   useEffect(() => { setСломан(false); }, [src]);
+  const класс = крупно ? "лого лого-крупно" : "лого";
   const общее = {
     width: размер, height: размер, borderRadius: "50%", flexShrink: 0,
     background: Ц.панельВыше, border: `1px solid ${Ц.линия}`,
@@ -169,14 +208,110 @@ export function Логотип({ src, тикер, размер = 30 }) {
   };
   if (!src || сломан) {
     return (
-      <div className="лого" style={общее}>
+      <div className={класс} style={общее}>
         <span style={{ fontFamily: шрифт, fontSize: размер * 0.36, fontWeight: 700, color: Ц.слабый }}>
           {String(тикер || "?").slice(0, 2)}
         </span>
       </div>
     );
   }
-  return <img className="лого" src={src} alt="" onError={() => setСломан(true)} style={{ ...общее, objectFit: "cover" }} />;
+  return <img className={класс} src={src} alt="" onError={() => setСломан(true)} style={{ ...общее, objectFit: "cover" }} />;
+}
+
+/* ---------- линия цены в строке списка ---------- */
+
+/* Что было с ценой за сутки — одной линией.
+ *
+ * Проценты говорят, куда пришли, но не как: обвал с отскоком и ровный
+ * подъём дают одинаковые «+40%». Линия отвечает на это раньше, чем глаз
+ * доходит до цифр.
+ *
+ * Свечи грузятся только для строк, попавших на экран, и не больше трёх
+ * запросов разом: в списке двести токенов, и тянуть историю на все —
+ * это мегабайты ради двадцати видимых линий. Ответы держим в памяти
+ * вкладки: прокрутка туда-обратно не должна спрашивать заново. */
+const линииКеш = new Map();
+const линииОчередь = [];
+let линииИдёт = 0;
+
+function следующая() {
+  while (линииИдёт < 3 && линииОчередь.length) {
+    const дело = линииОчередь.shift();
+    линииИдёт += 1;
+    дело().finally(() => { линииИдёт -= 1; следующая(); });
+  }
+}
+
+function точкиЦены(пул, сеть) {
+  const ключ = `${сеть}:${пул}`;
+  const было = линииКеш.get(ключ);
+  if (было && Date.now() - было.ts < 5 * 60 * 1000) return Promise.resolve(было.точки);
+  return new Promise((готово) => {
+    линииОчередь.push(() =>
+      fetch(`/api/chart?what=ohlcv&pool=${encodeURIComponent(пул)}&tf=M15&n=96&network=${сеть}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          const ряд = (j && j.data && j.data.attributes && j.data.attributes.ohlcv_list) || [];
+          // Источник отдаёт от свежих к старым — разворачиваем, иначе
+          // линия читается задом наперёд.
+          const точки = ряд.map((с) => Number(с[4])).filter((v) => v > 0).reverse();
+          линииКеш.set(ключ, { ts: Date.now(), точки });
+          готово(точки);
+        })
+        .catch(() => { готово([]); }));
+    следующая();
+  });
+}
+
+export function Линия({ пул, сеть, рост, ширина = 84, высота = 30 }) {
+  const блок = useRef(null);
+  const [точки, setТочки] = useState(null);
+
+  useEffect(() => {
+    setТочки(null);
+    const el = блок.current;
+    if (!el || !пул) return;
+    let жив = true;
+    const наблюдатель = new IntersectionObserver((записи) => {
+      if (!записи.some((з) => з.isIntersecting)) return;
+      наблюдатель.disconnect();
+      точкиЦены(пул, сеть).then((т) => { if (жив) setТочки(т); });
+    }, { rootMargin: "160px" });
+    наблюдатель.observe(el);
+    return () => { жив = false; наблюдатель.disconnect(); };
+  }, [пул, сеть]);
+
+  const путь = useMemo(() => {
+    if (!точки || точки.length < 2) return null;
+    const макс = Math.max(...точки);
+    const мин = Math.min(...точки);
+    const размах = макс - мин || макс || 1;
+    const шаг = ширина / (точки.length - 1);
+    // Полтора пикселя сверху и снизу — под толщину самой линии, иначе
+    // пики срезает краем.
+    const y = (v) => 1.5 + (1 - (v - мин) / размах) * (высота - 3);
+    return точки.map((v, i) => `${i ? "L" : "M"}${(i * шаг).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+  }, [точки, ширина, высота]);
+
+  const цвет = рост >= 0 ? Ц.рост : Ц.падение;
+  const id = useId().replace(/:/g, "");
+
+  return (
+    <div ref={блок} style={{ width: ширина, height: высота, flexShrink: 0 }}>
+      {путь && (
+        <svg width={ширина} height={высота} viewBox={`0 0 ${ширина} ${высота}`} style={{ display: "block", overflow: "visible" }}>
+          <defs>
+            <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={цвет} stopOpacity="0.28" />
+              <stop offset="100%" stopColor={цвет} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={`${путь} L${ширина} ${высота} L0 ${высота} Z`} fill={`url(#${id})`} />
+          <path d={путь} fill="none" stroke={цвет} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+      )}
+    </div>
+  );
 }
 
 export function Движение({ v }) {

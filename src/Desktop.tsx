@@ -20,7 +20,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import DesktopToken from "./DesktopToken";
 import { DesktopWallet, DesktopProfile } from "./DesktopWallet";
-import { Ц, шрифт, цифры, ПОЛОСА, СТИЛИ, ЦВЕТА_СЕРВИСОВ, ЗнакTelegram, деньги, цена, возраст, число, Логотип, Движение } from "./desktopUI";
+import { Ц, шрифт, цифры, ПОЛОСА, СТИЛИ, ЦВЕТА_СЕРВИСОВ, ЗнакTelegram, ЗнакTON, ЗнакSolana, деньги, цена, возраст, число, Логотип, Линия, Движение } from "./desktopUI";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
 
@@ -32,8 +32,8 @@ const hexA = (hex, a) => {
 };
 
 const СЕТИ = [
-  { id: "ton", подпись: "TON", сеть: "ton" },
-  { id: "sol", подпись: "Solana", сеть: "solana" },
+  { id: "ton", подпись: "TON", сеть: "ton", Знак: ЗнакTON },
+  { id: "sol", подпись: "Solana", сеть: "solana", Знак: ЗнакSolana },
 ];
 
 const РАЗДЕЛЫ = [
@@ -93,6 +93,7 @@ const КОЛОНКИ = [
   { id: "объём", подпись: "Объём 24ч", ширина: "1fr", поле: "объём" },
   { id: "сделки", подпись: "Сделок", ширина: "0.8fr", поле: "сделки" },
   { id: "возраст", подпись: "Возраст", ширина: "0.7fr", поле: "создан" },
+  { id: "линия", подпись: "Сутки", ширина: "92px", поле: null },
 ];
 
 /* Давно ли обновлялись цифры. Пишем словами: «12 секунд назад» человек
@@ -225,13 +226,20 @@ export default function Desktop() {
             <button
               key={с.id}
               onClick={() => { setСеть(с.сеть); setВыбран(null); }}
+              title={с.подпись}
+              aria-label={с.подпись}
               style={{
-                fontFamily: шрифт, fontSize: 12.5, fontWeight: 700, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
-                background: сеть === с.сеть ? Ц.акцент : "transparent",
-                border: "none", color: сеть === с.сеть ? "#05060A" : Ц.тусклый,
+                display: "flex", alignItems: "center", padding: "6px 14px", borderRadius: 8, cursor: "pointer",
+                // Выбранная сеть — светлой подложкой, а не заливкой цветом
+                // приложения: знаки у сетей свои, и акцент под ними спорил
+                // с их собственными цветами.
+                background: сеть === с.сеть ? Ц.линияЯрче : "transparent",
+                border: "none",
+                opacity: сеть === с.сеть ? 1 : 0.45,
+                transition: "opacity 140ms ease, background 140ms ease",
               }}
             >
-              {с.подпись}
+              <с.Знак размер={18} />
             </button>
           ))}
         </div>
@@ -367,6 +375,9 @@ export default function Desktop() {
                   <div style={{ textAlign: "right", fontFamily: цифры, fontSize: 13, color: Ц.тусклый }}>{деньги(t.объём)}</div>
                   <div style={{ textAlign: "right", fontFamily: цифры, fontSize: 13, color: Ц.тусклый }}>{число(t.сделки)}</div>
                   <div style={{ textAlign: "right", fontFamily: цифры, fontSize: 12.5, color: Ц.слабый }}>{возраст(t.создан)}</div>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <Линия пул={t.пул} сеть={t.сеть} рост={t.движение} />
+                  </div>
                 </div>
               );
             })}

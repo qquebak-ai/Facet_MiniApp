@@ -11,10 +11,10 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Ц, шрифт, цифры, ПОЛОСА, деньги, цена, возраст, число, Логотип, Движение, ЗнакTelegram } from "./desktopUI";
+import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
+import { Ц, шрифт, цифры, ПОЛОСА, деньги, цена, возраст, число, Логотип, Движение, ЗнакPhantom, ЦВЕТА_СЕРВИСОВ } from "./desktopUI";
 import { состояниеВнутреннего, сделкаВнутренним } from "./appWallet";
-
-const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
+import { сделкаTon, сделкаSolana, подключитьPhantom, расширениеPhantom } from "./desktopTrade";
 
 const ТАЙМФРЕЙМЫ = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
 const БЫСТРЫЕ_TON = [0.5, 1, 5, 10];
@@ -36,6 +36,11 @@ function График({ свечи, наведение = true }) {
      перерисовываются по таймеру, а взгляд человека должен оставаться на
      месте. */
   const [окно, setОкно] = useState(null);
+  /* Цена по вертикали двигается так же свободно, как время по
+     горизонтали: сдвиг и масштаб считаем долями от размаха самих свечей,
+     а не в долларах, — иначе после обновления данных вид уезжал бы сам
+     собой. Единица масштаба — «ровно по свечам». */
+  const [верт, setВерт] = useState({ сдвиг: 0, масштаб: 1 });
   const тянем = useRef(null);
 
   // Новый набор свечей — окно к правому краю: там свежая цена.
@@ -56,6 +61,13 @@ function График({ свечи, наведение = true }) {
   function колесом(e) {
     if (!свечи || !свечи.length) return;
     e.preventDefault();
+    // Shift (или Ctrl) под колесом растягивает цену, обычное колесо —
+    // время. Так одним движением можно и растянуть тесный коридор, и
+    // отойти по истории, не переключая режимов.
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      setВерт((в) => ({ ...в, масштаб: Math.max(0.15, Math.min(8, в.масштаб * (e.deltaY > 0 ? 1.15 : 1 / 1.15))) }));
+      return;
+    }
     setОкно((пр) => {
       const тек = пр || { начало: Math.max(0, свечи.length - 90), видно: Math.min(90, свечи.length) };
       const шаг = e.deltaY > 0 ? 1.18 : 1 / 1.18;
@@ -72,7 +84,14 @@ function График({ свечи, наведение = true }) {
 
   function тянуть(e) {
     if (!свечи || !свечи.length || !обёртка.current) return;
-    тянем.current = { x: e.clientX, начало: (окно && окно.начало) || 0, ширина: обёртка.current.clientWidth };
+    тянем.current = {
+      x: e.clientX,
+      y: e.clientY,
+      начало: (окно && окно.начало) || 0,
+      сдвиг: верт.сдвиг,
+      ширина: обёртка.current.clientWidth,
+      высота: обёртка.current.clientHeight,
+    };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
@@ -86,6 +105,13 @@ function График({ свечи, наведение = true }) {
     const сдвиг = Math.round((т.x - e.clientX) / наСвечу);
     const начало = Math.max(0, Math.min(свечи.length - окно.видно, т.начало + сдвиг));
     if (начало !== окно.начало) setОкно({ ...окно, начало });
+    // Вертикаль тянется без ограничителей: график можно увести хоть
+    // целиком за край. Это и значит «свободно» — вернуть вид на место
+    // всегда можно двойным щелчком.
+    if (т.высота > 0) {
+      const доля = ((e.clientY - т.y) / т.высота) * верт.масштаб;
+      setВерт((в) => (в.сдвиг === т.сдвиг - доля ? в : { ...в, сдвиг: т.сдвиг - доля }));
+    }
   }
 
   function отпустить(e) {
@@ -94,6 +120,7 @@ function График({ свечи, наведение = true }) {
   }
 
   function сбросить() {
+    setВерт({ сдвиг: 0, масштаб: 1 });
     if (!свечи || !свечи.length) return;
     const видно = Math.min(90, свечи.length);
     setОкно({ начало: Math.max(0, свечи.length - видно), видно });
@@ -116,15 +143,22 @@ function График({ свечи, наведение = true }) {
     if (!показ || показ.length < 2 || !размер.ш) return null;
     const ширина = размер.ш - поле.слева - поле.справа;
     const высота = размер.в - поле.сверху - поле.снизу;
-    const макс = Math.max(...показ.map((с) => с.h));
-    const мин = Math.min(...показ.map((с) => с.l));
-    const размах = макс - мин || макс || 1;
+    const верхСвечей = Math.max(...показ.map((с) => с.h));
+    const низСвечей = Math.min(...показ.map((с) => с.l));
+    const базРазмах = верхСвечей - низСвечей || верхСвечей || 1;
+    // Свободный вид: центр уезжает вслед за перетаскиванием, размах
+    // растягивается колесом с Shift. Без правок обоих чисел график был
+    // прибит к своим максимуму и минимуму и вверх-вниз не двигался.
+    const центр = (верхСвечей + низСвечей) / 2 - верт.сдвиг * базРазмах;
+    const размах = базРазмах * верт.масштаб;
+    const мин = центр - размах / 2;
+    const макс = центр + размах / 2;
     return {
       ширина, высота, макс, мин, размах,
       шагX: ширина / показ.length,
       y: (v) => поле.сверху + (1 - (v - мин) / размах) * высота,
     };
-  }, [показ, размер]);
+  }, [показ, размер, верт]);
 
   useEffect(() => {
     const c = холст.current;
@@ -145,19 +179,23 @@ function График({ свечи, наведение = true }) {
 
     const { ширина, высота, мин, размах, шагX, y } = геометрия;
 
+    // Свечи и сетку рисуем внутри поля графика: вид двигается свободно,
+    // и без этого уведённые за край свечи налезали бы на шкалу цены и на
+    // подписи времени.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, поле.сверху, ширина, высота);
+    ctx.clip();
+
     // Сетка: по цене — пять уровней, по времени — примерно каждые 90 px.
     ctx.strokeStyle = Ц.линия;
     ctx.lineWidth = 1;
-    ctx.font = `11px ${цифры}`;
-    ctx.fillStyle = Ц.слабый;
     for (let i = 0; i <= 5; i++) {
-      const v = мин + (размах * i) / 5;
-      const yy = Math.round(y(v)) + 0.5;
+      const yy = Math.round(y(мин + (размах * i) / 5)) + 0.5;
       ctx.beginPath();
       ctx.moveTo(0, yy);
       ctx.lineTo(ширина, yy);
       ctx.stroke();
-      ctx.fillText(цена(v), ширина + 10, yy + 4);
     }
     const шагПодписи = Math.max(1, Math.round(90 / шагX));
     показ.forEach((с, i) => {
@@ -168,10 +206,6 @@ function График({ свечи, наведение = true }) {
       ctx.lineTo(Math.round(x) + 0.5, поле.сверху + высота);
       ctx.strokeStyle = Ц.линия;
       ctx.stroke();
-      const время = new Date(с.t * 1000);
-      const метка = `${String(время.getHours()).padStart(2, "0")}:${String(время.getMinutes()).padStart(2, "0")}`;
-      ctx.fillStyle = Ц.слабый;
-      ctx.fillText(метка, x - 14, размер.в - 8);
     });
 
     // Сами свечи.
@@ -200,11 +234,6 @@ function График({ свечи, наведение = true }) {
     ctx.lineTo(ширина, yy);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = последняя.c >= последняя.o ? Ц.рост : Ц.падение;
-    ctx.fillRect(ширина + 4, yy - 9, поле.справа - 6, 18);
-    ctx.fillStyle = "#06070A";
-    ctx.font = `600 11px ${цифры}`;
-    ctx.fillText(цена(последняя.c), ширина + 8, yy + 4);
 
     // Перекрестие под курсором.
     if (курсор && наведение) {
@@ -218,6 +247,32 @@ function График({ свечи, наведение = true }) {
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    ctx.restore();
+
+    // Подписи шкал — поверх, уже без отсечения.
+    ctx.font = `11px ${цифры}`;
+    ctx.fillStyle = Ц.слабый;
+    for (let i = 0; i <= 5; i++) {
+      const v = мин + (размах * i) / 5;
+      ctx.fillText(цена(v), ширина + 10, Math.round(y(v)) + 4.5);
+    }
+    показ.forEach((с, i) => {
+      if (i % шагПодписи) return;
+      const x = поле.слева + i * шагX + шагX / 2;
+      const время = new Date(с.t * 1000);
+      const метка = `${String(время.getHours()).padStart(2, "0")}:${String(время.getMinutes()).padStart(2, "0")}`;
+      ctx.fillStyle = Ц.слабый;
+      ctx.fillText(метка, x - 14, размер.в - 8);
+    });
+
+    // Ярлык последней цены на шкале держим у края, даже когда сама линия
+    // уехала за границу: цена нужна всегда.
+    const яЦены = Math.max(поле.сверху + 9, Math.min(поле.сверху + высота - 9, y(последняя.c)));
+    ctx.fillStyle = последняя.c >= последняя.o ? Ц.рост : Ц.падение;
+    ctx.fillRect(ширина + 4, яЦены - 9, поле.справа - 6, 18);
+    ctx.fillStyle = "#06070A";
+    ctx.font = `600 11px ${цифры}`;
+    ctx.fillText(цена(последняя.c), ширина + 8, яЦены + 4);
   }, [показ, размер, геометрия, курсор, наведение]);
 
   // Свеча под курсором — её значения показываются в углу графика.
@@ -240,14 +295,6 @@ function График({ свечи, наведение = true }) {
       onMouseLeave={() => setКурсор(null)}
     >
       <canvas ref={холст} style={{ width: "100%", height: "100%", display: "block" }} />
-      <div
-        style={{
-          position: "absolute", right: 86, top: 10, fontFamily: шрифт, fontSize: 11,
-          color: Ц.слабый, pointerEvents: "none", opacity: 0.8,
-        }}
-      >
-        колесо — масштаб · тянуть — сдвиг · двойной щелчок — сброс
-      </div>
       {подКурсором && (
         <div
           style={{
@@ -360,10 +407,16 @@ export default function DesktopToken({ токен, наНазад }) {
   const [сторона, setСторона] = useState("buy");
   const [сумма, setСумма] = useState("");
   // Кошелёк приложения есть только у токенов Solana и только у вошедших:
-  // тогда сделка проходит прямо здесь, без ухода в Telegram.
+  // тогда сделка проходит вообще без подтверждения в кошельке.
   const [кош, setКош] = useState(null);
   const [идёт, setИдёт] = useState(false);
   const [итог, setИтог] = useState("");
+  // Кошельки, которыми сделку подписывает сам человек: TON — через
+  // TonConnect, Solana — расширением Phantom в браузере.
+  const адресTon = useTonAddress();
+  const [tonConnectUI] = useTonConnectUI();
+  const [адресSol, setАдресSol] = useState(null);
+  const естьPhantom = !!расширениеPhantom();
 
   useEffect(() => {
     if (токен.сеть !== "solana") { setКош(null); return; }
@@ -374,19 +427,51 @@ export default function DesktopToken({ токен, наНазад }) {
     return () => { жив = false; };
   }, [токен.сеть, токен.адрес]);
 
+  // Уже разрешённое расширение подхватываем молча: заставлять нажимать
+  // «подключить» на каждой перезагрузке незачем.
+  useEffect(() => {
+    if (токен.сеть !== "solana") return;
+    const p = расширениеPhantom();
+    if (!p || !p.isConnected || !p.publicKey) return;
+    setАдресSol(p.publicKey.toString());
+  }, [токен.сеть]);
+
+  // Чем именно платим: у Solana это кошелёк приложения либо расширение,
+  // у TON — подключённый TonConnect.
+  const чем = токен.сеть === "solana"
+    ? (кош ? "внутренний" : адресSol ? "phantom" : null)
+    : (адресTon ? "ton" : null);
+
   async function сделать() {
-    if (идёт || !(Number(сумма) > 0) || !токен.адрес) return;
+    if (идёт || !(Number(сумма) > 0) || !токен.адрес || !чем) return;
     setИдёт(true);
     setИтог("");
+    const продажа = сторона === "sell";
     try {
-      await сделкаВнутренним({ mint: токен.адрес, продажа: сторона === "sell", amount: Number(сумма) });
-      setИтог(сторона === "buy" ? "Куплено" : "Продано");
+      if (чем === "внутренний") {
+        await сделкаВнутренним({ mint: токен.адрес, продажа, amount: Number(сумма) });
+        состояниеВнутреннего().then((с) => setКош(с && !с.нуженВход && !с.ошибка ? с : null)).catch(() => {});
+      } else if (чем === "phantom") {
+        await сделкаSolana({ mint: токен.адрес, кошелёк: адресSol, сумма: Number(сумма), продажа });
+      } else {
+        await сделкаTon({ tonConnectUI, жетон: токен.адрес, кошелёк: адресTon, сумма: Number(сумма), продажа });
+      }
+      setИтог(продажа ? "Продано" : "Куплено");
       setСумма("");
-      состояниеВнутреннего().then((с) => setКош(с && !с.нуженВход && !с.ошибка ? с : null)).catch(() => {});
     } catch (e) {
-      setИтог(String((e && e.message) || e).slice(0, 120));
+      setИтог(String((e && e.message) || e).slice(0, 140));
     } finally {
       setИдёт(false);
+    }
+  }
+
+  async function подключить() {
+    setИтог("");
+    try {
+      if (токен.сеть === "solana") setАдресSol(await подключитьPhantom());
+      else await tonConnectUI.openModal();
+    } catch (e) {
+      setИтог(String((e && e.message) || e).slice(0, 140));
     }
   }
 
@@ -416,7 +501,6 @@ export default function DesktopToken({ токен, наНазад }) {
 
   const монета = токен.сеть === "solana" ? "SOL" : "TON";
   const быстрые = токен.сеть === "solana" ? БЫСТРЫЕ_SOL : БЫСТРЫЕ_TON;
-  const ссылка = `https://t.me/${БОТ}?start=tok_${encodeURIComponent(токен.адрес || токен.пул)}`;
 
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0, alignItems: "center" }}>
@@ -429,7 +513,7 @@ export default function DesktopToken({ токен, наНазад }) {
         >
           ← Рынок
         </button>
-        <Логотип src={токен.лого} тикер={токен.тикер} размер={34} />
+        <Логотип src={токен.лого} тикер={токен.тикер} размер={38} крупно />
         <div>
           <div style={{ fontFamily: шрифт, fontWeight: 700, fontSize: 15 }}>${токен.тикер}</div>
           <div style={{ fontFamily: шрифт, fontSize: 11.5, color: Ц.тусклый }}>{токен.имя}{токен.биржа ? ` · ${токен.биржа}` : ""}</div>
@@ -478,11 +562,13 @@ export default function DesktopToken({ токен, наНазад }) {
             </span>
           </div>
 
-          <div style={{ height: 340, minHeight: 240, padding: "4px 10px 0" }}>
+          {/* Графику отдана большая часть экрана: ради него терминал и
+              открывают, а лента сделок читается и в четверти высоты. */}
+          <div style={{ flex: 3, minHeight: 420, padding: "4px 10px 0" }}>
             <График свечи={свечи} />
           </div>
 
-          <div style={{ flex: 1, minHeight: 200, borderTop: `1px solid ${Ц.линия}`, display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 170, borderTop: `1px solid ${Ц.линия}`, display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", gap: 4, padding: "6px 14px", borderBottom: `1px solid ${Ц.линия}` }}>
               {[["trades", "Сделки"], ["about", "О токене"]].map(([id, п]) => (
                 <button
@@ -554,11 +640,10 @@ export default function DesktopToken({ токен, наНазад }) {
               ))}
             </div>
 
-            {/* В Solana подпись ставит кошелёк приложения на сервере —
-                сделка проходит прямо здесь. В TON её подписывает кошелёк
-                человека, а он живёт в мини-приложении: туда и уводим, а
-                не делаем вид, что сделка пройдёт на сайте. */}
-            {кош ? (
+            {/* Сделка заканчивается здесь. Кошелёк приложения подписывает
+                на сервере, TonConnect и Phantom — у человека в кошельке;
+                во всех трёх случаях никуда уходить не нужно. */}
+            {чем ? (
               <>
                 <button
                   onClick={сделать}
@@ -571,11 +656,24 @@ export default function DesktopToken({ токен, наНазад }) {
                     opacity: идёт || !(Number(сумма) > 0) ? 0.55 : 1,
                   }}
                 >
-                  {идёт ? "Отправляем…" : сторона === "buy" ? `Купить ${токен.тикер}` : `Продать ${токен.тикер}`}
+                  {идёт
+                    ? (чем === "внутренний" ? "Отправляем…" : "Подтвердите в кошельке…")
+                    : сторона === "buy" ? `Купить ${токен.тикер}` : `Продать ${токен.тикер}`}
                 </button>
                 <div style={{ display: "flex", justifyContent: "space-between", fontFamily: шрифт, fontSize: 11.5, color: Ц.слабый, marginTop: 8 }}>
-                  <span>Баланс в приложении</span>
-                  <span style={{ fontFamily: цифры, color: Ц.тусклый }}>{(Number(кош.sol) || 0).toFixed(4)} SOL</span>
+                  {чем === "внутренний" ? (
+                    <>
+                      <span>Баланс в приложении</span>
+                      <span style={{ fontFamily: цифры, color: Ц.тусклый }}>{(Number(кош.sol) || 0).toFixed(4)} SOL</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Кошелёк</span>
+                      <span style={{ fontFamily: цифры, color: Ц.тусклый }}>
+                        {(() => { const a = чем === "ton" ? адресTon : адресSol; return `${a.slice(0, 4)}…${a.slice(-4)}`; })()}
+                      </span>
+                    </>
+                  )}
                 </div>
                 {итог && (
                   <div style={{ fontFamily: шрифт, fontSize: 12, marginTop: 6, color: /Куплено|Продано/.test(итог) ? Ц.рост : Ц.падение }}>
@@ -585,25 +683,32 @@ export default function DesktopToken({ токен, наНазад }) {
               </>
             ) : (
               <>
-                <a
-                  href={`${ссылка}${сумма ? `_${сумма}` : ""}`}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  onClick={подключить}
+                  disabled={токен.сеть === "solana" && !естьPhantom}
                   style={{
-                    display: "block", textAlign: "center", marginTop: 12, padding: "12px 0", borderRadius: 11,
-                    background: сторона === "buy" ? Ц.рост : Ц.падение, color: "#06070A",
-                    fontFamily: шрифт, fontWeight: 700, fontSize: 14, textDecoration: "none",
+                    width: "100%", marginTop: 12, padding: "12px 0", borderRadius: 11, border: "none",
+                    cursor: токен.сеть === "solana" && !естьPhantom ? "default" : "pointer",
+                    background: токен.сеть === "solana" ? ЦВЕТА_СЕРВИСОВ.phantom : Ц.акцент,
+                    color: "#0B0D1A", fontFamily: шрифт, fontWeight: 700, fontSize: 14,
+                    opacity: токен.сеть === "solana" && !естьPhantom ? 0.5 : 1,
                   }}
                 >
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                    <ЗнакTelegram размер={16} /> {сторона === "buy" ? "Купить" : "Продать"} в Telegram
+                    {токен.сеть === "solana" ? <ЗнакPhantom размер={16} /> : null}
+                    {токен.сеть === "solana" ? "Подключить Phantom" : "Подключить кошелёк"}
                   </span>
-                </a>
+                </button>
                 <div style={{ fontFamily: шрифт, fontSize: 11.5, color: Ц.слабый, marginTop: 8, lineHeight: 1.45 }}>
                   {токен.сеть === "solana"
-                    ? "Сделка пройдёт прямо здесь, как только вы войдёте в аккаунт — он заводится из Telegram."
-                    : "Сделку в TON подписывает ваш кошелёк, а он живёт в мини-приложении."}
+                    ? (естьPhantom
+                      ? "Сделка пройдёт здесь: маршрут соберёт сайт, подпись поставит Phantom."
+                      : "Поставьте расширение Phantom — или войдите в аккаунт, и сделки пойдут кошельком приложения.")
+                    : "Сделка пройдёт здесь: маршрут на бирже соберёт сайт, подпись поставит ваш кошелёк."}
                 </div>
+                {итог && (
+                  <div style={{ fontFamily: шрифт, fontSize: 12, marginTop: 6, color: Ц.падение }}>{итог}</div>
+                )}
               </>
             )}
           </div>

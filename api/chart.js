@@ -16,6 +16,7 @@
 import { createCanvas, downscale, encodePNG, fillRect, line, px, text, textWidth } from "./_png.js";
 import { adminClient } from "./_support.js";
 import { curveState, priceFromState, looksLikeAddress, poolByAddress, курсTon, курсSol, цепочкаТокена } from "./_market.js";
+import { свопТонВЖетон, свопЖетонВТон } from "./_swap.js";
 
 // Макет считается в этих единицах, а рисуется во столько раз крупнее и
 // уменьшается усреднением: только так у наклонной линии получается
@@ -400,6 +401,32 @@ async function рынокДанные(req, res) {
   const сеть = String((req.query && req.query.network) || "ton").trim();
   if (!сетьОк(сеть)) return res.status(400).json({ error: "bad_request" });
 
+  /* Сделка на сайте.
+   *
+   * Сайт для того и сделан, чтобы торговать на нём, а не отправлять
+   * человека в Telegram. Подписывает по-прежнему его кошелёк: отсюда
+   * уходит только собранное тело сообщения — куда, сколько и что
+   * сказать бирже. Ключей здесь нет и быть не может. */
+  if (что === "swap") {
+    const жетон = String((req.query && req.query.jetton) || "").trim();
+    const кошелёк = String((req.query && req.query.wallet) || "").trim();
+    const сумма = Number((req.query && req.query.amount) || 0);
+    const продажа = String((req.query && req.query.side) || "buy") === "sell";
+    if (сеть !== "ton" || !адресОк(жетон) || !адресОк(кошелёк) || !(сумма > 0)) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const сделка = продажа
+        ? await свопЖетонВТон({ jetton: жетон, amount: сумма, userWallet: кошелёк })
+        : await свопТонВЖетон({ jetton: жетон, tonAmount: сумма, userWallet: кошелёк });
+      if (!сделка) return res.status(404).json({ error: "no_route" });
+      return res.status(200).json(сделка);
+    } catch (err) {
+      return res.status(502).json({ error: "upstream", detail: String((err && err.message) || err).slice(0, 200) });
+    }
+  }
+
   let url = null;
   let ключ = null;
 
@@ -408,9 +435,13 @@ async function рынокДанные(req, res) {
     const тф = String((req.query && req.query.tf) || "H1").toUpperCase();
     const cfg = ИНТЕРВАЛЫ[тф];
     if (!адресОк(пул) || !cfg) return res.status(400).json({ error: "bad_request" });
-    ключ = `o:${сеть}:${пул}:${тф}`;
+    // Сколько свечей просить. Терминалу нужна вся история, ленте — сутки
+    // на ноготь шириной в сто точек: тянуть ради неё тысячу свечей на
+    // каждую строку значит выкачивать мегабайты ради двадцати линий.
+    const сколько = Math.max(1, Math.min(1000, Number(req.query && req.query.n) || 1000));
+    ключ = `o:${сеть}:${пул}:${тф}:${сколько}`;
     url = `${GT}/networks/${сеть}/pools/${пул}/ohlcv/${cfg.timeframe}`
-      + `?aggregate=${cfg.aggregate}&limit=1000&currency=usd&token=base`;
+      + `?aggregate=${cfg.aggregate}&limit=${сколько}&currency=usd&token=base`;
   } else if (что === "trades") {
     const пул = String((req.query && req.query.pool) || "").trim();
     if (!адресОк(пул)) return res.status(400).json({ error: "bad_request" });
