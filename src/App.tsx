@@ -2407,6 +2407,21 @@ function похожеНаПодделку(tok) {
 const БЕЗЫМЯННОЕ_ИМЯ = /^unknown\s*token/i;
 const БЕЗЫМЯННЫЙ_ТИКЕР = /^ukwn/i;
 
+/* Ловушка: купить можно, продать нельзя.
+ *
+ * Механику продавец прячет в контракте, снаружи её не прочитать — зато
+ * виден след: за сутки десятки покупок и ни одной продажи. У живого
+ * токена продажи есть всегда, даже на росте: кто-то фиксирует прибыль,
+ * кто-то выходит в ноль. Ноль продаж при потоке покупок — не рынок, а
+ * воронка. Малые числа не в счёт: у пула с тремя покупками отсутствие
+ * продаж не значит ничего.
+ *
+ * Проверка продублирована здесь, а не только в обходе: в кеше могли
+ * остаться строки, собранные до её появления. */
+function западня({ покупки24 = 0, продажи24 = 0, покупки6 = 0, продажи6 = 0 }) {
+  return (покупки24 >= 12 && продажи24 === 0) || (покупки6 >= 8 && продажи6 === 0);
+}
+
 function безымянный(tok) {
   const имя = String(tok.name || "").trim();
   const тикер = String(tok.ticker || "").trim();
@@ -2454,6 +2469,8 @@ async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT, { с
       tx1h: Number(r.tx1h) || 0,
       tx6h: Number(r.tx6h) || 0,
       tx24h: Number(r.tx24) || 0,
+      // Сколько из них продажи — по этому числу видно ловушку.
+      продажи24: r.sells24 == null ? null : Number(r.sells24) || 0,
       cat: "Мемы",
       seed: hashSeed(r.id),
       verified: (Number(r.liq) || 0) > 50_000,
@@ -2461,6 +2478,11 @@ async function fetchFeedFromCache(network = GT_NETWORK, limit = FEED_LIMIT, { с
       dexName: r.dex_name || null,
       createdAt: r.pool_created_at || null,
     })).filter((t) => t.poolAddress && t.price > 0 && !похожеНаПодделку(t) && !безымянный(t)
+      // sells24 в кеше появилась позже: у старых строк её нет, и тогда
+      // судить о ловушке не по чему — пропускаем, обход отсеет сам.
+      && !(t.продажи24 != null && западня({
+        покупки24: Math.max(0, (t.tx24h || 0) - t.продажи24), продажи24: t.продажи24,
+      }))
       && (свежие || t.mcapNum < MCAP_FEED_CEILING));
   } catch (err) {
     return null;
@@ -2514,7 +2536,12 @@ function normalizePools(json, network = GT_NETWORK) {
         const w = txns[win] || {};
         return (Number(w.buys) || 0) + (Number(w.sells) || 0);
       };
+      const сторона = (win, что) => Number((txns[win] || {})[что]) || 0;
       return {
+        западня: западня({
+          покупки24: сторона("h24", "buys"), продажи24: сторона("h24", "sells"),
+          покупки6: сторона("h6", "buys"), продажи6: сторона("h6", "sells"),
+        }),
         id: row.id,
         // Сеть токена. От неё зависит и график, и то, каким кошельком
         // человек будет платить: TON-токены подписывает TonConnect,
@@ -2541,7 +2568,8 @@ function normalizePools(json, network = GT_NETWORK) {
         dexName: dex.name || (dexId ? dexId.replace(/[-_]/g, ".").replace(/\b\w/g, c => c.toUpperCase()) : null),
         createdAt: a.pool_created_at || null,
       };
-  }).filter(t => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING && !похожеНаПодделку(t) && !безымянный(t));
+  }).filter(t => t.poolAddress && t.price > 0 && t.mcapNum < MCAP_FEED_CEILING
+    && !похожеНаПодделку(t) && !безымянный(t) && !t.западня);
 }
 
 async function fetchPoolsPage(page, network = GT_NETWORK) {

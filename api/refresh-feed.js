@@ -113,6 +113,20 @@ async function логотипыSolana(строки) {
   }
 }
 
+/* Запись в кеш с оглядкой на схему.
+ *
+ * Колонка sells24 появилась позже остальных: пока миграции нет, база
+ * отбивает всю пачку целиком, и витрина осталась бы со вчерашними
+ * ценами из-за одного нового поля. Тогда пишем без него. */
+async function записать(admin, строки) {
+  const { error } = await admin.from("feed_cache").upsert(строки, { onConflict: "id" });
+  if (!error) return null;
+  if (error.code !== "42703" && !/sells24/i.test(error.message || "")) return error;
+  const без = строки.map(({ sells24, ...остальное }) => остальное);
+  const { error: второй } = await admin.from("feed_cache").upsert(без, { onConflict: "id" });
+  return второй || null;
+}
+
 async function страница(сеть, page, список = "trending_pools") {
   try {
     const res = await fetch(`${GT}/networks/${сеть}/${список}?page=${page}&include=base_token,dex`);
@@ -150,6 +164,29 @@ const безымянный = (t) => {
   return !имя || !тикер || БЕЗЫМЯННОЕ_ИМЯ.test(имя) || БЕЗЫМЯННЫЙ_ТИКЕР.test(тикер);
 };
 
+/* Ловушка: купить можно, продать нельзя.
+ *
+ * Механику продавец прячет в контракте, и снаружи её не прочитать — зато
+ * видно след: за сутки десятки покупок и ни одной продажи. У живого
+ * токена продажи есть всегда, даже на росте: кто-то фиксирует прибыль,
+ * кто-то выходит в ноль. Ноль продаж при потоке покупок — это не рынок,
+ * это воронка.
+ *
+ * Считаем по двум окнам: за сутки — чтобы поймать устоявшуюся ловушку,
+ * за шесть часов — чтобы не ждать сутки на свежей. Малые числа не
+ * трогаем: у пула с тремя покупками отсутствие продаж ничего не значит.
+ */
+function ловушка(a) {
+  const окно = (имя) => {
+    const w = (a.transactions || {})[имя] || {};
+    return { покупки: Number(w.buys) || 0, продажи: Number(w.sells) || 0 };
+  };
+  const сутки = окно("h24");
+  const шесть = окно("h6");
+  return (сутки.покупки >= 12 && сутки.продажи === 0)
+    || (шесть.покупки >= 8 && шесть.продажи === 0);
+}
+
 /* Разбор ответа в те же поля, что раньше собирало приложение. Держать их
    одинаковыми обязательно: витрина рисует карточки по этим именам. */
 function разобрать(json, сеть) {
@@ -169,8 +206,14 @@ function разобрать(json, сеть) {
       const w = (a.transactions || {})[окно] || {};
       return (Number(w.buys) || 0) + (Number(w.sells) || 0);
     };
+    const продаж = (окно) => Number(((a.transactions || {})[окно] || {}).sells) || 0;
     return {
       id: row.id,
+      // Ловушку помечаем прямо здесь: в приложении та же проверка
+      // повторяется по этим числам, а строки в кеше могли попасть туда
+      // ещё до её появления.
+      западня: ловушка(a),
+      sells24: продаж("h24"),
       chain: сеть === "solana" ? "solana" : "ton",
       pool_address: a.address,
       token_address: bt.address || null,
@@ -189,7 +232,9 @@ function разобрать(json, сеть) {
       pool_created_at: a.pool_created_at || null,
       updated_at: new Date().toISOString(),
     };
-  }).filter((t) => t.pool_address && t.price > 0 && !подделка(t) && !безымянный(t));
+  }).filter((t) => t.pool_address && t.price > 0 && !подделка(t) && !безымянный(t) && !t.западня)
+    // Метка нужна была только для отсева: в кеш уходят те же поля, что и раньше.
+    .map(({ западня, ...строка }) => строка);
 }
 
 /* Картинки жетонов TON. У источника лент их нет так же, как и у
@@ -264,14 +309,11 @@ export default async function handler(req, res) {
     await сохранитьЛоготипы(admin, свежие);
     if (свежие.length) {
       const сейчас = new Date().toISOString();
-      const { error: ошибка } = await admin.from("feed_cache").upsert(
-        свежие.map((t) => {
-          const строка = { ...t, new_at: сейчас };
-          if (!строка.logo_url) delete строка.logo_url;
-          return строка;
-        }),
-        { onConflict: "id" },
-      );
+      const ошибка = await записать(admin, свежие.map((t) => {
+        const строка = { ...t, new_at: сейчас };
+        if (!строка.logo_url) delete строка.logo_url;
+        return строка;
+      }));
       if (ошибка) {
         console.warn("[refresh-feed] новые", сеть, "->", ошибка.message);
         итог[`${сеть}_new`] = 0;
@@ -286,9 +328,7 @@ export default async function handler(req, res) {
     await сохранитьЛоготипы(admin, строки);
     if (!строки.length) continue;
 
-    const { error } = await admin
-      .from("feed_cache")
-      .upsert(строки.map((t) => (t.logo_url ? t : (({ logo_url, ...без }) => без)(t))), { onConflict: "id" });
+    const error = await записать(admin, строки.map((t) => (t.logo_url ? t : (({ logo_url, ...без }) => без)(t))));
     if (error) {
       console.warn("[refresh-feed] запись", сеть, "->", error.message);
       итог[сеть] = 0;
