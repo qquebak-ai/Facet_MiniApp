@@ -4,7 +4,7 @@ import {
   Search, Flame, TrendingUp, Clock, Sparkles, ArrowUpRight, ArrowDownRight,
   Wallet, Home as HomeIcon, PlusCircle, User, ChevronLeft, Share2, Star,
   ShieldCheck, ShieldAlert, Globe, Globe2, Send, Twitter, Image as ImageIcon, Upload,
-  Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, MoreHorizontal, HeartCrack,
+  Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, HeartCrack,
   Lock, Gift, LifeBuoy,
   FileText, CheckCircle2, RefreshCw, X,
   Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown, Bell, Check
@@ -1848,6 +1848,32 @@ function GlobalStyle() {
       }
       .fx-look-in { animation: lookIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both; }
       @media (prefers-reduced-motion: reduce) { .fx-look-in { animation: none; } }
+      /* Раскрытие по нажатию: панель кошелька, заметка, длинный список.
+         Появляется сверху вниз, из-под кнопки, которая её открыла, —
+         иначе блок просто возникает и глазу приходится заново искать,
+         что изменилось. */
+      .fx-reveal { animation: revealDown 240ms cubic-bezier(0.16,1,0.3,1) backwards; }
+      @keyframes revealDown {
+        from { opacity: 0; transform: translateY(-6px) scale(0.99); }
+        to   { opacity: 1; transform: none; }
+      }
+      /* Смена содержимого на месте: вкладки внутри карточки. Сдвиг
+         маленький — это не переход на другой экран, а подмена. */
+      .fx-swap { animation: swapIn 200ms cubic-bezier(0.16,1,0.3,1) backwards; }
+      @keyframes swapIn {
+        from { opacity: 0; transform: translateY(5px); }
+        to   { opacity: 1; transform: none; }
+      }
+      /* Кнопка в ожидании ответа. Одной приглушённой прозрачности мало:
+         так выглядит и запрещённая кнопка, и та, что уже работает, —
+         человек жмёт второй раз, думая, что не попал. Пульсация говорит,
+         что дело идёт. */
+      .fx-busy { animation: busyPulse 1.1s ease-in-out infinite; }
+      @keyframes busyPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.85; } }
+      @media (prefers-reduced-motion: reduce) {
+        .fx-reveal, .fx-swap { animation: none; }
+        .fx-busy { animation: none; opacity: 0.6; }
+      }
       .fx-avatar { transition: transform ${SPRING}; }
       .fx-avatar:active { transform: scale(0.96); transition: transform ${PRESS}; }
       .cta-launch { transition: transform ${SPRING}, opacity ${EASE}; }
@@ -10517,7 +10543,7 @@ function ТопСтрока({ onOpenToken, onOpenProfile, live = [] }) {
       {/* Создатели — тем же списком, но только когда его раскрыли: на
           свёрнутой главной им места нет. */}
       {раскрыт && ((data && data.creators) || []).length > 0 && (
-        <div className="flex flex-col" style={{ marginTop: 14 }}>
+        <div className="fx-reveal flex flex-col" style={{ marginTop: 14 }}>
           <span style={{ fontFamily: bodyFont, color: T.faint, fontSize: 12, marginBottom: 4 }}>{t("topCreators")}</span>
           {(data.creators || []).map((э, i) => (
             <button
@@ -10827,7 +10853,7 @@ function SolanaWalletCard({ showToast }) {
           <button
             onClick={подключиться}
             disabled={идёт}
-            className="fx-tap flex items-center gap-1.5 rounded-full flex-shrink-0"
+            className={`fx-tap flex items-center gap-1.5 rounded-full flex-shrink-0${идёт ? " fx-busy" : ""}`}
             style={{
               padding: "8px 14px", background: hexA(T.electric, 0.14),
               border: `1px solid ${hexA(T.electric, 0.4)}`,
@@ -11024,7 +11050,7 @@ function AppWalletCard({ showToast }) {
       </div>
 
       {панель === "top" && (
-        <div style={{ marginTop: 12 }}>
+        <div className="fx-reveal" style={{ marginTop: 12 }}>
           <p style={подпись}>{t("appWalletTopUpBody")}</p>
           {/* Адрес целиком, а не сокращённый: его переносят руками, и
               многоточие посередине тут ломает всё. */}
@@ -11036,14 +11062,14 @@ function AppWalletCard({ showToast }) {
       )}
 
       {панель === "out" && (
-        <div className="flex flex-col" style={{ gap: 8, marginTop: 12 }}>
+        <div className="fx-reveal flex flex-col" style={{ gap: 8, marginTop: 12 }}>
           {/* Без привязанного адреса выводить некуда — и это не помеха,
               а суть: адрес доказывается подписью кошелька, поэтому
               укравший вход не сможет назначить свой. */}
           {!кош.payout ? (
             <>
               <p style={подпись}>{t("appWalletBindHint")}</p>
-              <button className="fx-tap w-full" style={{ ...кнопка, opacity: идёт ? 0.5 : 1 }}
+              <button className={`fx-tap w-full${идёт ? " fx-busy" : ""}`} style={{ ...кнопка, opacity: идёт ? 0.5 : 1 }}
                 onClick={привязать} disabled={идёт}>
                 {t("appWalletBind")}
               </button>
@@ -11062,7 +11088,7 @@ function AppWalletCard({ showToast }) {
                 <button className="fx-tap" style={{ ...тихая, color: T.muted }}
                   onClick={() => вывести(true)} disabled={идёт}>{t("appWalletAll")}</button>
               </div>
-              <button className="fx-tap w-full" style={{ ...кнопка, opacity: идёт || !(Number(сумма) > 0) ? 0.5 : 1 }}
+              <button className={`fx-tap w-full${идёт ? " fx-busy" : ""}`} style={{ ...кнопка, opacity: идёт || !(Number(сумма) > 0) ? 0.5 : 1 }}
                 onClick={() => вывести(false)} disabled={идёт || !(Number(сумма) > 0)}>
                 {t("appWalletWithdraw")}
               </button>
@@ -11294,7 +11320,7 @@ function TokenComments({ tokenId, currentUserId, onNeedAuth, onOpenProfile, show
           <button
             onClick={send}
             disabled={!draft.trim() || sending}
-            className="fx-tap flex items-center justify-center"
+            className={`fx-tap flex items-center justify-center${sending ? " fx-busy" : ""}`}
             style={{
               width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
               background: draft.trim() && !sending ? PRISM : T.surfaceHi,
@@ -11862,10 +11888,6 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${T.line}` }}>
             <Share2 size={14} color={T.muted} />
           </button>
-          <button onClick={() => setTfExpanded(v => !v)} className="fx-tap flex items-center justify-center"
-            style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${T.line}` }}>
-            <MoreHorizontal size={14} color={T.muted} />
-          </button>
         </div>
       </div>
 
@@ -12012,7 +12034,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       {/* Тезис — личная заметка о сделке. Строка, а не карточка: пока
           она пустая, ей незачем занимать место. */}
       {тезисОткрыт ? (
-        <div className="flex flex-col" style={{ gap: 8 }}>
+        <div className="fx-reveal flex flex-col" style={{ gap: 8 }}>
           <textarea
             value={черновикТезиса}
             onChange={(e) => setЧерновикТезиса(e.target.value.slice(0, 280))}
@@ -12085,7 +12107,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       </div>
 
       {tab === "holders" && (
-        <div className="flex flex-col" style={{ gap: 14 }}>
+        <div className="fx-swap flex flex-col" style={{ gap: 14 }}>
           <div className="flex items-baseline" style={{ gap: 8 }}>
             <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 22, fontWeight: 600 }}>
               {holdersCount == null ? "—" : holdersCount.toLocaleString("ru-RU")}
@@ -12121,7 +12143,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       )}
 
       {tab === "feed" && (
-        <div className="flex flex-col" style={{ gap: 16 }}>
+        <div className="fx-swap flex flex-col" style={{ gap: 16 }}>
           {/* Отклики на токен — компактной строкой над сделками. */}
           <div className="flex items-center gap-2">
             <button onClick={bumpFav} className="fx-tap flex items-center gap-1.5 rounded-full px-3 py-1.5" style={{ border: `1px solid ${T.line}` }}>
@@ -12176,7 +12198,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
       )}
 
       {tab === "about" && (
-        <div className="flex flex-col" style={{ gap: 16 }}>
+        <div className="fx-swap flex flex-col" style={{ gap: 16 }}>
           {infoLoading && !info ? (
             <div className="flex flex-col gap-2">
               <div className="fx-skeleton" style={{ width: "100%", height: 12, borderRadius: 4 }} />
@@ -14029,7 +14051,7 @@ function SupportChat({ accountCreated, showToast, onRead }) {
 
   if (mode === "faq") {
     return (
-      <>
+      <div className="fx-swap flex flex-col">
         <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13, lineHeight: 1.5, textAlign: "center" }}>
           {t("supportFaqLead")}
         </p>
@@ -14052,12 +14074,12 @@ function SupportChat({ accountCreated, showToast, onRead }) {
         >
           <Send size={14} /> {t("supportOther")}
         </button>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
+    <div className="fx-swap flex flex-col">
       <button
         onClick={() => setMode("faq")}
         className="fx-tap flex items-center gap-1"
@@ -14130,7 +14152,7 @@ function SupportChat({ accountCreated, showToast, onRead }) {
           <button
             onClick={send}
             disabled={!draft.trim() || sending}
-            className="fx-tap flex items-center justify-center"
+            className={`fx-tap flex items-center justify-center${sending ? " fx-busy" : ""}`}
             style={{
               width: 46, height: 46, borderRadius: "50%", flexShrink: 0,
               background: draft.trim() && !sending ? PRISM : T.surfaceHi,
@@ -14141,7 +14163,7 @@ function SupportChat({ accountCreated, showToast, onRead }) {
           </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -14197,7 +14219,7 @@ function ReferralShare({ showToast }) {
       <button
         onClick={claim}
         disabled={busy}
-        className="fx-tap w-full flex items-center justify-center gap-1.5 rounded-[16px] py-2.5 mt-2"
+        className={`fx-tap w-full flex items-center justify-center gap-1.5 rounded-[16px] py-2.5 mt-2${busy ? " fx-busy" : ""}`}
         style={{ background: T.surface, border: `1px solid ${hexA(T.electric, 0.4)}`, fontFamily: displayFont, fontWeight: 700, fontSize: 13.5, color: T.electric }}
       >
         <CoinIcon size={14} /> {t("refPayoutCta")}
