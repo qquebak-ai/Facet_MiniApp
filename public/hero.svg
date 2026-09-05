@@ -133,7 +133,7 @@
 
   <text x="81" y="610" fill="#FFFFFF" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="34" font-weight="700" letter-spacing="0.02em">ЗАПУСК МЕМКОИНОВ</text>
   <text x="81" y="653" fill="#FFFFFF" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="34" font-weight="700" letter-spacing="0.02em">НА TON И SOLANA</text>
-  <text x="81" y="695" fill="#6C7CFF" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="34" font-weight="700" letter-spacing="0.02em">ЗА МИНУТУ</text>
+  <text x="81" y="695" fill="#6C7CFF" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="34" font-weight="700" letter-spacing="0.02em">ЗА ПАРУ СЕКУНД</text>
 
   <g transform="translate(81, 761)">
     <rect width="244" height="109" rx="17" fill="#FFFFFF" fill-opacity="0.045" stroke="#FFFFFF" stroke-opacity="0.1"/>
