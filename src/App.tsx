@@ -7,7 +7,7 @@ import {
   Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, HeartCrack,
   Lock, Gift, LifeBuoy,
   FileText, CheckCircle2, RefreshCw, X,
-  Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown, Bell, Check
+  Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown, Bell, Check, Cpu
 } from "lucide-react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, beginCell, toNano } from "@ton/core";
@@ -181,7 +181,7 @@ const STR = {
     shopTitle: "Магазин",
     tgAuthTitle: "Вход через Telegram",
     welcomeTitle: "Мемкоины на TON и Solana — прямо в Telegram",
-    welcomeSub: "Создавай свои токены за пару минут или находи интересные проекты на ранней стадии. Mintly объединяет запуск, рынок и кошелёк в одном месте.",
+    welcomeSub: "Запуск токена, рынок и кошелёк в одном месте. Кривая торгует с первой секунды, комиссия одна и та же для всех, а условия выпуска зашиты в контракт — не в интерфейс.",
     welcomeChip1: "Быстрый запуск",
     welcomeChip2: "Рынок с первой секунды",
     welcomeChip3: "TON + Solana",
@@ -200,18 +200,18 @@ const STR = {
     welcomeStep3: "Выход на рынок",
     welcomeStep3Body: "Токен появляется на кривой и становится доступен для торговли",
     welcomePoint1Title: "Свои контракты",
-    welcomePoint1Body: "Кривая и пул написаны нами и открыты: запас нельзя вывести мимо неё.",
+    welcomePoint1Body: "Кривая и пул написаны нами и открыты: весь выпуск уходит на кривую, мимо неё его не достать.",
     welcomePoint2Title: "Две сети",
     welcomePoint2Body: "TON и Solana в одном приложении, каждая со своим кошельком.",
     welcomePoint3Title: "Запуск за минуту",
-    welcomePoint3Body: "Имя, тикер, картинка — и токен в сети, вместе с первой покупкой.",
+    welcomePoint3Body: "Имя, тикер, картинка — и токен в сети вместе с первой покупкой, одной подписью в кошельке.",
     welcomeNext: "Дальше",
     welcomeSlide2Title: "Рынок с первой секунды",
-    welcomeSlide2Body: "После запуска токен сразу появляется на кривой. Цена считается по формуле, а сделки идут без ожидания, пока кто-то нальёт ликвидность.",
+    welcomeSlide2Body: "Рынок токена — контракт, а не стакан заявок: он сам вторая сторона сделки. Цена идёт по формуле от выкупленного объёма, поэтому торговля начинается сразу, без чужой ликвидности.",
     welcomeSlide3Title: "TON и Solana рядом",
-    welcomeSlide3Body: "Две сети в одном приложении. Создавай токены в TON или исследуй рынок мемкоинов Solana — без переключения между сервисами.",
+    welcomeSlide3Body: "TON и Solana с одинаковой математикой кривой: контракт на Tact и программа на Rust. Переключение сетей — движением, а не переустановкой приложения.",
     welcomeSlide4Title: "Запуск за пару минут",
-    welcomeSlide4Body: "Один понятный процесс от идеи до готового токена. Без сложных панелей и десятков настроек.",
+    welcomeSlide4Body: "Имя, тикер, картинка и первая покупка — остальное берёт на себя контракт: эмиссия, цена, комиссия и выход на биржу по достижении порога.",
     welcomeCreate: "Создать аккаунт",
     welcomeLogin: "У меня уже есть аккаунт",
     welcomeSkip: "Продолжить без входа",
@@ -478,7 +478,19 @@ const STR = {
     supportBackToFaq: "Частые вопросы",
     supportYou: "Ты",
     copyLink: "Скопировать ссылку",
-    privacyText: "Мы собираем только данные, необходимые для работы приложения: никнейм, адрес кошелька и историю сделок внутри Mintly. Данные не передаются третьим лицам в рекламных целях. Ты можешь удалить аккаунт в любой момент — все локальные данные профиля будут стёрты немедленно.",
+    privacyText: "Собираем ровно то, без чего приложение не работает: никнейм, адрес кошелька и историю сделок внутри Mintly. Сделки в цепочке публичны и без нас — мы храним только их привязку к аккаунту, чтобы посчитать портфель и прибыль. Рекламным сетям данные не передаются. Аккаунт удаляется в любой момент: локальный профиль стирается сразу, серверные записи — вместе с ним.",
+    archTitle: "Как устроено",
+    archLead: "Коротко о том, что стоит за кнопками: где живут деньги, кто считает цену и что происходит с токеном после запуска.",
+    archCurveTitle: "Бондинг-кривая",
+    archCurveBody: "Рынок токена — контракт, а не стакан заявок: он сам вторая сторона сделки. Цена считается по формуле от того, сколько уже выкуплено, поэтому торговать можно с первой секунды и не ждать, пока кто-то нальёт ликвидность. В TON это контракт на Tact, в Solana — программа на Rust; математика одна и та же.",
+    archSupplyTitle: "Эмиссия и листинг",
+    archSupplyBody: "Выпуск фиксированный — миллиард токенов, чеканится целиком и целиком уходит на кривую. В TON она продаёт 900 миллионов и держит остаток до листинга, порог — 1500 TON. В Solana продаётся 800 миллионов, 200 остаются под пару, порог — 85 SOL. Когда порог взят, кривая закрывается, а собранная монета вместе с остатком выпуска уходит в пул на бирже.",
+    archFeeTitle: "Комиссия",
+    archFeeBody: "1% с покупки и продажи удерживает сам контракт и сразу отправляет площадке — приложение между вами и деньгами не стоит. Ставка зашита в кривую при создании и задним числом не меняется. Запуск бесплатный: платите только за первую покупку и комиссию сети, она идёт валидаторам.",
+    archKeysTitle: "Ключи и подпись",
+    archKeysBody: "Ключ кошелька в приложении хранится зашифрованным (AES-256-GCM с привязкой к владельцу), а подписывает отдельная служба вне основного сервера — веб-приложение ключа не видит. Каждая транзакция перед подписью разбирается по инструкциям: чужие программы и переводы мимо кривой отклоняются. Вывод — только на адрес, подтверждённый подписью вашего кошелька; смена адреса вступает в силу через сутки, на вывод есть суточный лимит.",
+    archDataTitle: "Данные рынка",
+    archDataBody: "Цены, свечи и сделки собирает наш обход раз в минуту и складывает в кеш — приложение читает готовое, а не опрашивает биржевой источник с каждого телефона. Подделки под известные монеты и токены без имени и символа отсеиваются до показа.",
     accountLabel: "Аккаунт",
     loginTab: "Войти", createTab: "Создать аккаунт",
     changeAvatarHint: "Нажми, чтобы заменить",
@@ -640,7 +652,7 @@ const STR = {
     shopTitle: "Shop",
     tgAuthTitle: "Sign in with Telegram",
     welcomeTitle: "Memecoins on TON and Solana — right inside Telegram",
-    welcomeSub: "Launch your own token in a couple of minutes or find projects early. Mintly puts launching, the market and your wallet in one place.",
+    welcomeSub: "Launching, the market and your wallet in one place. The curve trades from the first second, the fee is the same for everyone, and the terms of a launch live in the contract — not in the interface.",
     welcomePoint1Title: "Our own contracts",
     welcomePoint1Body: "The curve and the pool are written by us and open: the supply can't leave past them.",
     welcomePoint2Title: "Two networks",
@@ -666,11 +678,11 @@ const STR = {
     welcomeStep3: "Go to market",
     welcomeStep3Body: "The token lands on the curve and becomes tradable",
     welcomeSlide2Title: "A market from second one",
-    welcomeSlide2Body: "A token lands on the curve the moment it launches. Price comes from a formula, and trades go through without waiting for anyone to add liquidity.",
+    welcomeSlide2Body: "A token\u2019s market is a contract, not an order book — it is the counterparty itself. Price follows a formula over the amount bought, so trading starts at once, with nobody else\u2019s liquidity.",
     welcomeSlide3Title: "TON and Solana side by side",
-    welcomeSlide3Body: "Two networks in one app. Launch tokens on TON or explore the Solana memecoin market — without switching between services.",
+    welcomeSlide3Body: "TON and Solana with identical curve math: a Tact contract and a Rust program. Switching networks is a swipe, not a second app.",
     welcomeSlide4Title: "A couple of minutes to launch",
-    welcomeSlide4Body: "One clear path from an idea to a live token. No dense panels, no dozens of settings.",
+    welcomeSlide4Body: "Name, ticker, image and your first buy — the contract handles the rest: supply, price, fee and the move to a DEX once the threshold is met.",
     welcomeCreate: "Create account",
     welcomeLogin: "I already have an account",
     welcomeSkip: "Continue without signing in",
@@ -937,7 +949,19 @@ const STR = {
     supportBackToFaq: "Common questions",
     supportYou: "You",
     copyLink: "Copy link",
-    privacyText: "We only collect data needed to run the app: nickname, wallet address, and your trade history within Mintly. Data is never shared with third parties for advertising. You can delete your account at any time — all local profile data is erased immediately.",
+    privacyText: "We collect exactly what the app cannot run without: nickname, wallet address and your trade history inside Mintly. On-chain trades are public with or without us — we only keep their link to your account so the portfolio and P&L can be computed. Nothing goes to ad networks. Delete the account whenever you like: the local profile is wiped at once, the server records go with it.",
+    archTitle: "How it works",
+    archLead: "What sits behind the buttons: where the money lives, who computes the price, and what happens to a token after launch.",
+    archCurveTitle: "Bonding curve",
+    archCurveBody: "A token's market is a contract, not an order book — the contract itself is the counterparty. Price comes from a formula over how much has been bought, so trading works from the first second without waiting for anyone to seed liquidity. On TON it is a Tact contract, on Solana a Rust program; the math is the same.",
+    archSupplyTitle: "Supply and listing",
+    archSupplyBody: "Supply is fixed at one billion, minted in full and handed to the curve in full. On TON it sells 900 million and holds the rest until listing, with a 1500 TON threshold. On Solana 800 million are sold, 200 million wait for the pair, threshold 85 SOL. Once the threshold is met the curve closes, and the collected coin plus the remaining supply move into a pool on a DEX.",
+    archFeeTitle: "Fees",
+    archFeeBody: "The 1% on every buy and sell is withheld by the contract itself and sent straight to the platform — the app never stands between you and the money. The rate is baked into the curve at creation and never changes retroactively. Launching is free: you pay only for your first buy and the network fee, which goes to validators.",
+    archKeysTitle: "Keys and signing",
+    archKeysBody: "The in-app wallet key is stored encrypted (AES-256-GCM, bound to its owner) and signed by a separate service outside the main server — the web app never sees it. Every transaction is parsed instruction by instruction before signing: foreign programs and transfers around the curve are rejected. Withdrawals go only to an address you proved by signing with your own wallet; changing that address takes effect after 24 hours, and daily withdrawals are capped.",
+    archDataTitle: "Market data",
+    archDataBody: "Prices, candles and trades are collected by our own crawler once a minute and cached — the app reads what is ready instead of polling the market source from every phone. Impostors of well-known coins and tokens with no name or symbol are filtered out before they reach the list.",
     accountLabel: "Account",
     loginTab: "Log in", createTab: "Create account",
     changeAvatarHint: "Tap to replace",
@@ -5126,6 +5150,7 @@ const SETTINGS_ITEMS = [
   { key: "language", icon: Globe2, tKey: "langTitle" },
   { key: "referral", icon: Gift, tKey: "referral" },
   { key: "support", icon: LifeBuoy, tKey: "support" },
+  { key: "architecture", icon: Cpu, tKey: "archTitle" },
   { key: "privacy", icon: FileText, tKey: "privacy" },
 ];
 
@@ -14544,6 +14569,32 @@ function SettingsPanel({
       break;
     case "support":
       body = <SupportChat accountCreated={accountCreated} showToast={showToast} onRead={onSupportRead} />;
+      break;
+    case "architecture":
+      /* Разделами, а не сплошным текстом: человек читает то, что его
+         сейчас волнует, — комиссию или то, у кого ключ, — и не ищет это
+         в абзаце на страницу. */
+      body = (
+        <div className="flex flex-col" style={{ gap: 10, marginTop: 4 }}>
+          <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.6 }}>{t("archLead")}</p>
+          {[
+            ["archCurveTitle", "archCurveBody"],
+            ["archSupplyTitle", "archSupplyBody"],
+            ["archFeeTitle", "archFeeBody"],
+            ["archKeysTitle", "archKeysBody"],
+            ["archDataTitle", "archDataBody"],
+          ].map(([заголовок, текст], i) => (
+            <div
+              key={заголовок}
+              className="fx-card rounded-[18px]"
+              style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, padding: "13px 15px", animationDelay: `${i * 45}ms` }}
+            >
+              <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>{t(заголовок)}</div>
+              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, lineHeight: 1.6, marginTop: 6 }}>{t(текст)}</p>
+            </div>
+          ))}
+        </div>
+      );
       break;
     case "privacy":
       body = <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, lineHeight: 1.6, marginTop: 4 }}>{t("privacyText")}</p>;
