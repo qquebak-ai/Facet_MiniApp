@@ -4720,7 +4720,7 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen, onReady, сеть = "to
           проигрывается заново. Время лежит здесь же — оно относится к
           сделке, а не к рамке, и снаружи оставалось от прошлой строки. */}
       <div key={b.id} className="flex items-center gap-2 min-w-0 w-full" style={{ animation: "tickerSwap 380ms ease-out both" }}>
-        <TokenAvatar size={20} tone={b.kind === "sell" ? "down" : "up"} src={b.token.logoUrl}>{b.token.emoji}</TokenAvatar>
+        <TokenAvatar size={20} tone={b.kind === "sell" ? "down" : "up"} src={b.token.logoUrl} />
         <span className="truncate" style={{ fontFamily: monoFont, color: T.muted, fontSize: 12.5 }}>{shortAddr(b.from) || "—"}</span>
         <span style={{ fontFamily: bodyFont, color: b.kind === "sell" ? T.down : T.up, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}>
           {/* Сумма в монете той сети, где прошла сделка: в разделе
@@ -4863,7 +4863,7 @@ function КольцоДоБиржи({ size, доля, готово = false, chil
   );
 }
 
-function TokenAvatar({ children, size = 52, tone = "neutral", src }) {
+function TokenAvatar({ size = 52, tone = "neutral", src }) {
   const [broken, setBroken] = useState(false);
   // Сначала пробуем лёгкую копию, при отказе — исходную ссылку, и только
   // потом сдаёмся на эмодзи.
@@ -4908,7 +4908,7 @@ function TokenAvatar({ children, size = 52, tone = "neutral", src }) {
             opacity: пришла ? 1 : 0, transition: "opacity 160ms ease-out",
           }}
         />
-      ) : (children || <ЗаглушкаЛоготипа size={size} />)}
+      ) : <ЗаглушкаЛоготипа size={size} />}
     </div>
   );
 }
@@ -5376,22 +5376,21 @@ const MempadRow = React.memo(function MempadRow({ t: tok, onOpen, index }) {
       // элементах прежние сорок миллисекунд на каждый растягивали список
       // на полторы секунды, и переключение вкладки выглядело медленным.
       //
-      // Без фона и рамки: сорок плашек подряд рябят, а рамка каждой из
-      // них спорит с рамкой соседней. Строки разделяет одна тонкая линия
-      // снизу — её хватает, чтобы взгляд не путал соседние токены.
+      // Без фона, рамки и разделителя: сорок плашек подряд рябят, а
+      // линия под каждой строкой режет список на куски. Строки разводит
+      // зазор — этого хватает, чтобы не путать соседние токены.
       style={{
-        padding: "14px 2px", background: "transparent",
-        borderBottom: `1px solid ${T.line}`,
+        padding: "10px 2px", background: "transparent",
         animationDelay: `${Math.min(index, 6) * 22}ms`,
       }}
     >
       <div className="flex items-center" style={{ gap: 12 }}>
         {своя ? (
           <КольцоДоБиржи size={46} доля={доляДоБиржи} готово={доляДоБиржи >= 1}>
-            <TokenAvatar size={46} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+            <TokenAvatar size={46} tone={рост ? "up" : "down"} src={tok.logoUrl} />
           </КольцоДоБиржи>
         ) : (
-          <TokenAvatar size={46} tone={рост ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+          <TokenAvatar size={46} tone={рост ? "up" : "down"} src={tok.logoUrl} />
         )}
 
         <div className="flex-1 min-w-0">
@@ -5570,7 +5569,7 @@ function TokenCreatorCard({ ownerId, currentUserId, onNeedAuth, showToast, onOpe
         className="fx-tap flex items-center gap-3 flex-1 min-w-0"
         style={{ background: "transparent", border: "none", padding: 0, textAlign: "left" }}
       >
-        <TokenAvatar size={44} src={creator.avatar_url}>{creator.emoji || "🚀"}</TokenAvatar>
+        <TokenAvatar size={44} src={creator.avatar_url} />
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
           <span style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{tr("creatorLabel")}</span>
           <div className="flex items-center gap-1 min-w-0">
@@ -5691,7 +5690,7 @@ function PublicProfileView({ userId: ownerId, currentUserId, onBack, onOpenToken
                 className="fx-card flex items-center gap-3 rounded-[22px] w-full"
                 style={{ background: T.surface, border: `1px solid ${T.line}`, padding: "12px 14px" }}
               >
-                <TokenAvatar size={40} src={row.logo_url}>🚀</TokenAvatar>
+                <TokenAvatar size={40} src={row.logo_url} />
                 <div className="flex-1 min-w-0 flex flex-col items-start">
                   <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${row.ticker}</span>
                   <span className="truncate" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{row.name}</span>
@@ -10179,7 +10178,7 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
           >
             <SpotlightAura src={spotlight.logoUrl} ticker={spotlight.ticker} />
             <div style={{ position: "relative", zIndex: 1 }}>
-              <TokenAvatar size={44} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl}>{spotlight.emoji}</TokenAvatar>
+              <TokenAvatar size={44} tone={spotlight.change >= 0 ? "up" : "down"} src={spotlight.logoUrl} />
             </div>
             <div className="flex-1 min-w-0" style={{ position: "relative", zIndex: 1 }}>
               <div className="flex items-center" style={{ gap: 8 }}>
@@ -10232,9 +10231,8 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
         })}
       </div>
 
-      {/* Строки идут вплотную: они больше не плашки, и зазор между ними
-          лишь разрывал общую линию списка. */}
-      <div className="flex flex-col" key={сеть}>
+      {/* Ни фона, ни рамки, ни разделителя — строки разводит зазор. */}
+      <div className="flex flex-col gap-3" key={сеть}>
         {/* Смена фильтра внутри готового раздела — не повод гасить весь
             экран: там достаточно скелетов на месте строк.
 
@@ -10406,7 +10404,7 @@ function ГлавныйТокен({ tokens = [], onOpen }) {
         <SpotlightAura src={tok.logoUrl} ticker={tok.ticker} />
 
         <div className="flex items-center" style={{ gap: 12, position: "relative" }}>
-          <TokenAvatar size={46} tone={растёт ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+          <TokenAvatar size={46} tone={растёт ? "up" : "down"} src={tok.logoUrl} />
           <div className="flex-1 min-w-0">
             <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em" }}>
               ${tok.ticker}
@@ -10549,7 +10547,7 @@ function ВДвижении({ tokens = [], onOpen, onAll }) {
               className="fx-card fx-tap w-full flex items-center text-left"
               style={{ gap: 12, padding: "12px 0", background: "transparent", border: "none", animationDelay: `${i * 40}ms` }}
             >
-              <TokenAvatar size={36} tone={растёт ? "up" : "down"} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+              <TokenAvatar size={36} tone={растёт ? "up" : "down"} src={tok.logoUrl} />
               <div className="flex-1 min-w-0">
                 <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 700 }}>${tok.ticker}</div>
                 <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12, marginTop: 2 }}>
@@ -10645,7 +10643,7 @@ function ТопСтрока({ onOpenToken, onOpenProfile, live = [] }) {
             <span style={{ fontFamily: monoFont, color: i === 0 ? T.electric : T.faint, fontSize: 13, fontWeight: 700, width: 14, flexShrink: 0 }}>{i + 1}</span>
             {/* Топ приходит из базы, и поля с эмодзи там нет: без запасного
                 значка у токена без логотипа оставался пустой кружок. */}
-            <TokenAvatar size={34} src={э.logo_url}>{э.emoji || "🚀"}</TokenAvatar>
+            <TokenAvatar size={34} src={э.logo_url} />
             <div className="flex-1 min-w-0">
               <div className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14, fontWeight: 700 }}>${э.ticker}</div>
               <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 2 }}>
@@ -11336,7 +11334,7 @@ function WalletView({ connected, walletAddress, tonBalance = 0, tonPriceUsd = 0,
                 className="w-full flex items-center"
                 style={{ gap: 12, padding: "13px 0" }}
               >
-                <TokenAvatar size={36} src={tok.logoUrl}>{tok.emoji}</TokenAvatar>
+                <TokenAvatar size={36} src={tok.logoUrl} />
                 <div className="flex-1 min-w-0 text-left">
                   <span className="truncate block" style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>${tok.ticker}</span>
                 </div>
@@ -11993,7 +11991,7 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             <ChevronLeft size={17} />
           </button>
         )}
-        <TokenAvatar size={38} tone={up ? "up" : "down"} src={логотип}>{token.emoji}</TokenAvatar>
+        <TokenAvatar size={38} tone={up ? "up" : "down"} src={логотип} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="truncate" style={{ fontFamily: displayFont, color: T.ice, fontSize: 17, fontWeight: 600 }}>{token.name}</span>
@@ -12930,7 +12928,7 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(20)}>
         <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
           <div className="flex items-center gap-2">
-            <TokenAvatar size={34} src={token.logoUrl}>{token.emoji}</TokenAvatar>
+            <TokenAvatar size={34} src={token.logoUrl} />
             <div>
               <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 700 }}>{token.name}</div>
               <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 11.5 }}>${token.ticker} · {fmtPrice(token.price)}</div>
@@ -13703,7 +13701,7 @@ function MyTokenCard({ t, onManage }) {
   const holdersCount = useJettonHolders(t.address, TON_TESTNET_NETWORK, t.curveAddress ? 1 : 0);
   return (
     <GlassCard style={{ padding: "12px 14px" }} className="flex items-center gap-3">
-      <TokenAvatar tone={t.verified ? "neutral" : "neutral"} src={t.logoUrl}>{t.emoji}</TokenAvatar>
+      <TokenAvatar tone={t.verified ? "neutral" : "neutral"} src={t.logoUrl} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span style={{ fontFamily: displayFont, color: T.ice, fontSize: 15, fontWeight: 600 }}>{t.name}</span>
@@ -14603,7 +14601,7 @@ function TokenManageSheet({ token: tokenProp, onClose, showToast, onDelete }) {
       <div className="fx-modal-card" onClick={(e) => e.stopPropagation()} style={sheetCard(22)}>
         <div className="flex justify-end"><button onClick={onClose} className="fx-tap"><X size={16} color={T.muted} /></button></div>
         <div className="flex items-center gap-3" style={{ marginTop: -8, marginBottom: 14 }}>
-          <TokenAvatar size={44} src={token.logoUrl}>{token.emoji}</TokenAvatar>
+          <TokenAvatar size={44} src={token.logoUrl} />
           <div>
             <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 16, fontWeight: 700 }}>{token.name}</div>
             <div style={{ fontFamily: monoFont, color: T.muted, fontSize: 12 }}>${token.ticker}</div>
