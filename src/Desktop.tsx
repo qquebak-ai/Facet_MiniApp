@@ -16,33 +16,23 @@
  * токеном.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
+import DesktopToken from "./DesktopToken";
+import { DesktopWallet, DesktopProfile } from "./DesktopWallet";
+import { Ц, шрифт, цифры, деньги, цена, возраст, число, Логотип, Движение } from "./desktopUI";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
-
-/* Цвета держим здесь же: тема мини-приложения завязана на его настройки
-   и на Telegram, а у сайта своего переключателя нет. */
-const Ц = {
-  фон: "#08090B",
-  панель: "#0E1014",
-  панельВыше: "#14161C",
-  линия: "#1E212A",
-  линияЯрче: "#2A2E3A",
-  текст: "#EDEFF5",
-  тусклый: "#8A90A2",
-  слабый: "#5C6274",
-  акцент: "#6C7CFF",
-  рост: "#2ED47A",
-  падение: "#FF5C6C",
-};
-
-const шрифт = "Montserrat, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
-const цифры = "'JetBrains Mono', 'SF Mono', Consolas, monospace";
 
 const СЕТИ = [
   { id: "ton", подпись: "TON", сеть: "ton" },
   { id: "sol", подпись: "Solana", сеть: "solana" },
+];
+
+const РАЗДЕЛЫ = [
+  { id: "market", подпись: "Рынок" },
+  { id: "wallet", подпись: "Кошелёк" },
+  { id: "profile", подпись: "Профиль" },
 ];
 
 const ВКЛАДКИ = [
@@ -50,43 +40,6 @@ const ВКЛАДКИ = [
   { id: "new", подпись: "Новые" },
   { id: "gainers", подпись: "В росте" },
 ];
-
-const ТАЙМФРЕЙМЫ = ["M5", "M15", "H1", "H4", "D1"];
-
-/* ---------- числа ---------- */
-
-function деньги(v) {
-  const n = Number(v) || 0;
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
-  return `$${n.toFixed(n < 10 ? 2 : 0)}`;
-}
-
-function цена(v) {
-  const n = Number(v) || 0;
-  if (!n) return "$0";
-  if (n >= 1) return `$${n.toFixed(3)}`;
-  // У мемкоинов цена — это нули после запятой: обычная запись съедает
-  // все значащие цифры, поэтому считаем, сколько нулей пропустить.
-  const нулей = Math.max(0, -Math.floor(Math.log10(n)) - 1);
-  return `$${n.toFixed(Math.min(12, нулей + 4))}`;
-}
-
-function возраст(iso) {
-  if (!iso) return "—";
-  const мс = Date.now() - new Date(iso).getTime();
-  if (!(мс > 0)) return "—";
-  const мин = Math.floor(мс / 60000);
-  if (мин < 60) return `${мин} мин`;
-  const ч = Math.floor(мин / 60);
-  if (ч < 24) return `${ч} ч`;
-  return `${Math.floor(ч / 24)} д`;
-}
-
-function число(v) {
-  return (Number(v) || 0).toLocaleString("ru-RU");
-}
 
 /* ---------- данные ---------- */
 
@@ -124,238 +77,6 @@ async function загрузитьРынок(сеть) {
   return (data || []).map(изКеша).filter((t) => t.пул && t.цена > 0);
 }
 
-/* ---------- разметка ---------- */
-
-function Логотип({ src, тикер, размер = 30 }) {
-  const [сломан, setСломан] = useState(false);
-  useEffect(() => { setСломан(false); }, [src]);
-  const общее = {
-    width: размер, height: размер, borderRadius: "50%", flexShrink: 0,
-    background: Ц.панельВыше, border: `1px solid ${Ц.линия}`,
-    display: "flex", alignItems: "center", justifyContent: "center",
-  };
-  if (!src || сломан) {
-    return (
-      <div style={общее}>
-        <span style={{ fontFamily: шрифт, fontSize: размер * 0.36, fontWeight: 700, color: Ц.слабый }}>
-          {String(тикер || "?").slice(0, 2)}
-        </span>
-      </div>
-    );
-  }
-  return <img src={src} alt="" onError={() => setСломан(true)} style={{ ...общее, objectFit: "cover" }} />;
-}
-
-function Движение({ v }) {
-  const n = Number(v) || 0;
-  const цвет = n >= 0 ? Ц.рост : Ц.падение;
-  return (
-    <span style={{ fontFamily: цифры, fontSize: 13, color: цвет }}>
-      {n >= 0 ? "+" : ""}{n.toFixed(1)}%
-    </span>
-  );
-}
-
-/* Свечи рисуются на канве вручную: библиотека графиков ради одного
-   экрана тянет больше кода, чем весь этот файл. */
-function Свечи({ данные, высота = 320 }) {
-  const холст = useRef(null);
-
-  useEffect(() => {
-    const c = холст.current;
-    if (!c) return;
-    const ш = c.clientWidth;
-    const в = высота;
-    const плотность = window.devicePixelRatio || 1;
-    c.width = ш * плотность;
-    c.height = в * плотность;
-    const ctx = c.getContext("2d");
-    ctx.setTransform(плотность, 0, 0, плотность, 0, 0);
-    ctx.clearRect(0, 0, ш, в);
-    if (!данные || данные.length < 2) {
-      ctx.fillStyle = Ц.слабый;
-      ctx.font = `13px ${шрифт}`;
-      ctx.fillText("Нет свечей за этот период", 14, в / 2);
-      return;
-    }
-
-    const поле = { слева: 8, справа: 66, сверху: 12, снизу: 22 };
-    const ширинаПоля = ш - поле.слева - поле.справа;
-    const высотаПоля = в - поле.сверху - поле.снизу;
-    const макс = Math.max(...данные.map((с) => с.h));
-    const мин = Math.min(...данные.map((с) => с.l));
-    const размах = макс - мин || макс || 1;
-    const y = (v) => поле.сверху + (1 - (v - мин) / размах) * высотаПоля;
-    const шагX = ширинаПоля / данные.length;
-
-    // Сетка и подписи цен по правому краю — как в биржевых терминалах.
-    ctx.strokeStyle = Ц.линия;
-    ctx.fillStyle = Ц.слабый;
-    ctx.font = `11px ${цифры}`;
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i++) {
-      const v = мин + (размах * i) / 4;
-      const yy = Math.round(y(v)) + 0.5;
-      ctx.beginPath();
-      ctx.moveTo(поле.слева, yy);
-      ctx.lineTo(поле.слева + ширинаПоля, yy);
-      ctx.stroke();
-      ctx.fillText(цена(v), поле.слева + ширинаПоля + 8, yy + 4);
-    }
-
-    const тело = Math.max(1, Math.min(9, шагX * 0.62));
-    данные.forEach((с, i) => {
-      const x = поле.слева + i * шагX + шагX / 2;
-      const рост = с.c >= с.o;
-      ctx.strokeStyle = рост ? Ц.рост : Ц.падение;
-      ctx.fillStyle = рост ? Ц.рост : Ц.падение;
-      ctx.beginPath();
-      ctx.moveTo(Math.round(x) + 0.5, y(с.h));
-      ctx.lineTo(Math.round(x) + 0.5, y(с.l));
-      ctx.stroke();
-      const верх = y(Math.max(с.o, с.c));
-      const низ = y(Math.min(с.o, с.c));
-      ctx.fillRect(x - тело / 2, верх, тело, Math.max(1, низ - верх));
-    });
-  }, [данные, высота]);
-
-  return <canvas ref={холст} style={{ width: "100%", height: высота, display: "block" }} />;
-}
-
-function Панель({ токен, наЗакрытие }) {
-  const [тф, setТф] = useState("H1");
-  const [свечи, setСвечи] = useState(null);
-  const [грузится, setГрузится] = useState(true);
-
-  useEffect(() => {
-    let жив = true;
-    setГрузится(true);
-    setСвечи(null);
-    const адрес = `/api/chart?what=ohlcv&pool=${encodeURIComponent(токен.пул)}&tf=${тф}&network=${токен.сеть}`;
-    fetch(адрес)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!жив) return;
-        const список = (j && j.data && j.data.attributes && j.data.attributes.ohlcv_list) || [];
-        // Источник отдаёт от новых к старым; рисуем слева направо.
-        const свечиСписком = список
-          .map((s) => ({ t: s[0], o: Number(s[1]), h: Number(s[2]), l: Number(s[3]), c: Number(s[4]) }))
-          .filter((s) => s.o > 0 && s.h > 0)
-          .reverse()
-          .slice(-160);
-        setСвечи(свечиСписком);
-        setГрузится(false);
-      })
-      .catch(() => { if (жив) { setСвечи([]); setГрузится(false); } });
-    return () => { жив = false; };
-  }, [токен.пул, токен.сеть, тф]);
-
-  const ссылкаВПриложение = `https://t.me/${БОТ}?start=tok_${encodeURIComponent(токен.адрес || токен.пул)}`;
-
-  return (
-    <aside
-      style={{
-        width: 420, flexShrink: 0, background: Ц.панель, borderLeft: `1px solid ${Ц.линия}`,
-        display: "flex", flexDirection: "column", overflowY: "auto",
-      }}
-    >
-      <div style={{ padding: "16px 18px", borderBottom: `1px solid ${Ц.линия}`, display: "flex", alignItems: "center", gap: 12 }}>
-        <Логотип src={токен.лого} тикер={токен.тикер} размер={40} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: шрифт, fontWeight: 700, fontSize: 16, color: Ц.текст }}>${токен.тикер}</div>
-          <div style={{ fontFamily: шрифт, fontSize: 12.5, color: Ц.тусклый, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {токен.имя}{токен.биржа ? ` · ${токен.биржа}` : ""}
-          </div>
-        </div>
-        <button
-          onClick={наЗакрытие}
-          style={{ background: "transparent", border: "none", color: Ц.тусклый, fontSize: 18, cursor: "pointer", padding: 6 }}
-          aria-label="Закрыть"
-        >
-          ×
-        </button>
-      </div>
-
-      <div style={{ padding: "14px 18px", display: "flex", alignItems: "baseline", gap: 10 }}>
-        <span style={{ fontFamily: цифры, fontSize: 26, fontWeight: 700, color: Ц.текст }}>{цена(токен.цена)}</span>
-        <Движение v={токен.движение} />
-      </div>
-
-      <div style={{ display: "flex", gap: 6, padding: "0 18px 10px" }}>
-        {ТАЙМФРЕЙМЫ.map((f) => (
-          <button
-            key={f}
-            onClick={() => setТф(f)}
-            style={{
-              fontFamily: цифры, fontSize: 12, padding: "5px 10px", borderRadius: 8, cursor: "pointer",
-              background: тф === f ? Ц.панельВыше : "transparent",
-              border: `1px solid ${тф === f ? Ц.линияЯрче : "transparent"}`,
-              color: тф === f ? Ц.текст : Ц.слабый,
-            }}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ padding: "0 12px" }}>
-        {грузится ? (
-          <div style={{ height: 320, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: шрифт, fontSize: 13, color: Ц.слабый }}>
-            Загружаем свечи…
-          </div>
-        ) : (
-          <Свечи данные={свечи} />
-        )}
-      </div>
-
-      <div style={{ padding: 18, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {[
-          ["Капитализация", деньги(токен.капитализация)],
-          ["Ликвидность", деньги(токен.ликвидность)],
-          ["Объём 24ч", деньги(токен.объём)],
-          ["Сделок 24ч", число(токен.сделки)],
-          ["Возраст", возраст(токен.создан)],
-          ["Сеть", токен.сеть === "solana" ? "Solana" : "TON"],
-        ].map(([п, з]) => (
-          <div key={п} style={{ background: Ц.панельВыше, border: `1px solid ${Ц.линия}`, borderRadius: 12, padding: "10px 12px" }}>
-            <div style={{ fontFamily: шрифт, fontSize: 11.5, color: Ц.слабый }}>{п}</div>
-            <div style={{ fontFamily: цифры, fontSize: 15, color: Ц.текст, marginTop: 3 }}>{з}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ padding: "0 18px 20px", display: "flex", flexDirection: "column", gap: 8 }}>
-        {/* Подпись сделки живёт в мини-приложении вместе с кошельком,
-            поэтому покупка уводит туда с уже выбранным токеном. */}
-        <a
-          href={ссылкаВПриложение}
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            display: "block", textAlign: "center", padding: "12px 0", borderRadius: 12,
-            background: Ц.акцент, color: "#0B0D1A", fontFamily: шрифт, fontWeight: 700, fontSize: 14.5,
-            textDecoration: "none",
-          }}
-        >
-          Купить в Telegram
-        </a>
-        {токен.адрес && (
-          <button
-            onClick={() => navigator.clipboard && navigator.clipboard.writeText(токен.адрес)}
-            style={{
-              padding: "10px 0", borderRadius: 12, cursor: "pointer",
-              background: "transparent", border: `1px solid ${Ц.линия}`, color: Ц.тусклый,
-              fontFamily: цифры, fontSize: 12.5,
-            }}
-          >
-            {`${токен.адрес.slice(0, 8)}…${токен.адрес.slice(-6)}`} · копировать
-          </button>
-        )}
-      </div>
-    </aside>
-  );
-}
-
 const КОЛОНКИ = [
   { id: "токен", подпись: "Токен", ширина: "minmax(220px, 2fr)", поле: null },
   { id: "цена", подпись: "Цена", ширина: "1fr", поле: "цена" },
@@ -379,6 +100,7 @@ export default function Desktop() {
   const [поиск, setПоиск] = useState("");
   const [сорт, setСорт] = useState({ поле: "объём", по_убыв: true });
   const [выбран, setВыбран] = useState(null);
+  const [раздел, setРаздел] = useState("market");
 
   const обновить = useCallback(() => {
     загрузитьРынок(сеть)
@@ -441,6 +163,24 @@ export default function Desktop() {
         </div>
 
         <div style={{ display: "flex", gap: 4 }}>
+          {РАЗДЕЛЫ.map((р) => (
+            <button
+              key={р.id}
+              onClick={() => { setРаздел(р.id); setВыбран(null); }}
+              style={{
+                fontFamily: шрифт, fontSize: 13.5, fontWeight: 600, padding: "7px 12px", borderRadius: 9, cursor: "pointer",
+                background: раздел === р.id ? Ц.панельВыше : "transparent",
+                border: "none", color: раздел === р.id ? Ц.текст : Ц.тусклый,
+              }}
+            >
+              {р.подпись}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ width: 1, height: 22, background: Ц.линия }} />
+
+        <div style={{ display: раздел === "market" && !выбран ? "flex" : "none", gap: 4 }}>
           {ВКЛАДКИ.map((в) => (
             <button
               key={в.id}
@@ -456,7 +196,7 @@ export default function Desktop() {
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 2, background: Ц.панельВыше, borderRadius: 10, padding: 3 }}>
+        <div style={{ display: раздел === "market" ? "flex" : "none", gap: 2, background: Ц.панельВыше, borderRadius: 10, padding: 3 }}>
           {СЕТИ.map((с) => (
             <button
               key={с.id}
@@ -477,6 +217,7 @@ export default function Desktop() {
           onChange={(e) => setПоиск(e.target.value)}
           placeholder="Тикер, название или адрес"
           style={{
+            display: раздел === "market" && !выбран ? "block" : "none",
             flex: 1, maxWidth: 360, height: 34, padding: "0 12px", borderRadius: 10,
             background: Ц.панельВыше, border: `1px solid ${Ц.линия}`, color: Ц.текст,
             fontFamily: шрифт, fontSize: 13, outline: "none",
@@ -497,6 +238,12 @@ export default function Desktop() {
       </header>
 
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+        {раздел === "wallet" && <DesktopWallet />}
+        {раздел === "profile" && <DesktopProfile />}
+        {раздел === "market" && выбран && (
+          <DesktopToken токен={выбран} наНазад={() => setВыбран(null)} />
+        )}
+        {раздел === "market" && !выбран && (
         <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           <div
             style={{
@@ -571,8 +318,7 @@ export default function Desktop() {
             })}
           </div>
         </main>
-
-        {выбран && <Панель токен={выбран} наЗакрытие={() => setВыбран(null)} />}
+        )}
       </div>
     </div>
   );
