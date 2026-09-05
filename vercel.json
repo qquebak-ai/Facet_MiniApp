@@ -62,6 +62,14 @@
     {
       "source": "/phantom/:id",
       "destination": "/api/phantom?action=callback&id=:id"
+    },
+    {
+      "source": "/pro",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/app",
+      "destination": "/index.html"
     }
   ]
 }

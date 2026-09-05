@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
 import TonLaunchApp from "./App";
+import Desktop from "./Desktop";
 import "./index.css";
 
 // Показываем текст ошибки прямо на экране, если что-то сломается —
@@ -73,6 +74,21 @@ if (typeof document !== "undefined") {
 
 const manifestUrl = `${window.location.origin}/tonconnect-manifest.json`;
 
+/* Мини-приложение рассчитано на телефон в Telegram, витрина — на монитор.
+   Внутри Telegram всегда показываем мини-приложение, даже на широком
+   экране десктопного клиента: там свои жесты, отступы и кнопка «назад».
+   Снаружи — витрина, если экран действительно большой; «/pro» и «/app»
+   позволяют выбрать вручную. */
+function десктопнаяВитрина() {
+  const путь = window.location.pathname.replace(/\/+$/, "");
+  if (путь === "/app") return false;
+  if (путь === "/pro") return true;
+  if (tg && tg.initData) return false;
+  return window.innerWidth >= 1100 && !("ontouchstart" in window && window.innerWidth < 1400);
+}
+
+const Корень = десктопнаяВитрина() ? Desktop : TonLaunchApp;
+
 try {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
@@ -87,7 +103,7 @@ try {
           skipRedirectToWallet: "never",
         }}
       >
-        <TonLaunchApp />
+        <Корень />
       </TonConnectUIProvider>
     </React.StrictMode>
   );
