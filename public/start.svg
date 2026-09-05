@@ -22,17 +22,26 @@
 
   <!-- Знак и название — одной строкой, как подпись в шапке приложения. -->
   <g transform="translate(320, 180) scale(2.344)">
-    
-  <!-- Mintly: буква M, из впадины которой растёт мятный росток.
-       Один цвет плюс чёрный контур-зазор, чтобы лист не слипался с
-       буквой на мелких размерах. Контур того же цвета, что фон
-       приложения, — на светлой подложке используйте logo-badge.svg. -->
-  <path d="M11 56 V26 L32 45 L53 26 V56" fill="none" stroke="#6C7CFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-  <g fill="#6C7CFF" stroke="#08090B" stroke-width="1.2" stroke-linejoin="round">
-    <path d="M32 46 C 22 40, 19 28, 23 16 C 31 23, 33.5 35, 32 46 Z"/>
-    <path d="M32 46 C 42 40, 45 28, 41 16 C 33 23, 30.5 35, 32 46 Z"/>
-  </g>
-
+    <g transform="translate(14, 58) rotate(0.0) scale(0.682, 1.100)">
+      <path d="M 0 0 C -10 -6, -13 -18, -9 -30 C -1 -23, 1.5 -11, 0 0 Z" fill="#6C7CFF"/>
+      <path d="M 0 0 C 10 -6, 13 -18, 9 -30 C 1 -23, -1.5 -11, 0 0 Z" fill="#6C7CFF"/>
+      <path d="M 0 0 L 0 -29" fill="none" stroke="#08090B" stroke-width="1.61" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(50, 58) rotate(0.0) scale(0.682, 1.100)">
+      <path d="M 0 0 C -10 -6, -13 -18, -9 -30 C -1 -23, 1.5 -11, 0 0 Z" fill="#6C7CFF"/>
+      <path d="M 0 0 C 10 -6, 13 -18, 9 -30 C 1 -23, -1.5 -11, 0 0 Z" fill="#6C7CFF"/>
+      <path d="M 0 0 L 0 -29" fill="none" stroke="#08090B" stroke-width="1.61" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(17, 29) rotate(143.1) scale(0.417, 0.833)">
+      <path d="M 0 0 C -10 -6, -13 -18, -9 -30 C -1 -23, 1.5 -11, 0 0 Z" fill="#6C7CFF"/>
+      <path d="M 0 0 C 10 -6, 13 -18, 9 -30 C 1 -23, -1.5 -11, 0 0 Z" fill="#6C7CFF"/>
+      <path d="M 0 0 L 0 -29" fill="none" stroke="#08090B" stroke-width="2.64" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(47, 29) rotate(-143.1) scale(0.417, 0.833)">
+      <path d="M 0 0 C -10 -6, -13 -18, -9 -30 C -1 -23, 1.5 -11, 0 0 Z" fill="#6C7CFF"/>
+      <path d="M 0 0 C 10 -6, 13 -18, 9 -30 C 1 -23, -1.5 -11, 0 0 Z" fill="#6C7CFF"/>
+      <path d="M 0 0 L 0 -29" fill="none" stroke="#08090B" stroke-width="2.64" stroke-linecap="round"/>
+    </g>
   </g>
   <text x="496" y="288" fill="url(#название)" font-family="Montserrat, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
     font-size="108" font-weight="800" letter-spacing="-0.02em">Mintly</text>
