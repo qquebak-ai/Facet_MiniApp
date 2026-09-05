@@ -20,9 +20,16 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import DesktopToken from "./DesktopToken";
 import { DesktopWallet, DesktopProfile } from "./DesktopWallet";
-import { Ц, шрифт, цифры, ПОЛОСА, СТИЛИ, деньги, цена, возраст, число, Логотип, Движение } from "./desktopUI";
+import { Ц, шрифт, цифры, ПОЛОСА, СТИЛИ, ЦВЕТА_СЕРВИСОВ, ЗнакTelegram, деньги, цена, возраст, число, Логотип, Движение } from "./desktopUI";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
+
+/* Цвет с прозрачностью: подсветка кнопки должна быть тем же цветом, что
+   и её текст, иначе на чёрном они расходятся в оттенках. */
+const hexA = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+};
 
 const СЕТИ = [
   { id: "ton", подпись: "TON", сеть: "ton" },
@@ -186,8 +193,8 @@ export default function Desktop() {
               onClick={() => { setРаздел(р.id); setВыбран(null); }}
               style={{
                 fontFamily: шрифт, fontSize: 13.5, fontWeight: 600, padding: "7px 12px", borderRadius: 9, cursor: "pointer",
-                background: раздел === р.id ? Ц.панельВыше : "transparent",
-                border: "none", color: раздел === р.id ? Ц.текст : Ц.тусклый,
+                background: раздел === р.id ? hexA(Ц.акцент, 0.16) : "transparent",
+                border: "none", color: раздел === р.id ? Ц.акцент : Ц.тусклый,
               }}
             >
               {р.подпись}
@@ -204,8 +211,8 @@ export default function Desktop() {
               onClick={() => setВкладка(в.id)}
               style={{
                 fontFamily: шрифт, fontSize: 13.5, fontWeight: 600, padding: "7px 12px", borderRadius: 9, cursor: "pointer",
-                background: вкладка === в.id ? Ц.панельВыше : "transparent",
-                border: "none", color: вкладка === в.id ? Ц.текст : Ц.тусклый,
+                background: вкладка === в.id ? hexA(Ц.акцент, 0.16) : "transparent",
+                border: "none", color: вкладка === в.id ? Ц.акцент : Ц.тусклый,
               }}
             >
               {в.подпись}
@@ -221,7 +228,7 @@ export default function Desktop() {
               style={{
                 fontFamily: шрифт, fontSize: 12.5, fontWeight: 700, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
                 background: сеть === с.сеть ? Ц.акцент : "transparent",
-                border: "none", color: сеть === с.сеть ? "#0B0D1A" : Ц.тусклый,
+                border: "none", color: сеть === с.сеть ? "#05060A" : Ц.тусклый,
               }}
             >
               {с.подпись}
@@ -242,15 +249,19 @@ export default function Desktop() {
         />
 
         <a
+          className="кнопка"
           href={`https://t.me/${БОТ}`}
           target="_blank"
           rel="noreferrer"
           style={{
-            marginLeft: "auto", fontFamily: шрифт, fontSize: 13, fontWeight: 600, color: Ц.текст,
-            textDecoration: "none", padding: "8px 14px", borderRadius: 10, border: `1px solid ${Ц.линияЯрче}`,
+            marginLeft: "auto", display: "flex", alignItems: "center", gap: 8,
+            fontFamily: шрифт, fontSize: 13, fontWeight: 600, color: ЦВЕТА_СЕРВИСОВ.telegram,
+            textDecoration: "none", padding: "8px 14px", borderRadius: 10,
+            border: `1px solid ${hexA(ЦВЕТА_СЕРВИСОВ.telegram, 0.45)}`,
+            background: hexA(ЦВЕТА_СЕРВИСОВ.telegram, 0.12),
           }}
         >
-          Открыть в Telegram
+          <ЗнакTelegram размер={16} /> Открыть в Telegram
         </a>
       </div>
       </header>

@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Ц, шрифт, цифры, ПОЛОСА, деньги, цена, возраст, число, Логотип, Движение } from "./desktopUI";
+import { Ц, шрифт, цифры, ПОЛОСА, деньги, цена, возраст, число, Логотип, Движение, ЗнакTelegram } from "./desktopUI";
 import { состояниеВнутреннего, сделкаВнутренним } from "./appWallet";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
@@ -595,7 +595,9 @@ export default function DesktopToken({ токен, наНазад }) {
                     fontFamily: шрифт, fontWeight: 700, fontSize: 14, textDecoration: "none",
                   }}
                 >
-                  {сторона === "buy" ? "Купить" : "Продать"} в Telegram
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <ЗнакTelegram размер={16} /> {сторона === "buy" ? "Купить" : "Продать"} в Telegram
+                  </span>
                 </a>
                 <div style={{ fontFamily: шрифт, fontSize: 11.5, color: Ц.слабый, marginTop: 8, lineHeight: 1.45 }}>
                   {токен.сеть === "solana"

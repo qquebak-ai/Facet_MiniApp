@@ -17,7 +17,7 @@
 
 import React, { useState } from "react";
 import { supabase } from "./supabaseClient";
-import { Ц, шрифт, цифры } from "./desktopUI";
+import { Ц, шрифт, цифры, ЗнакGoogle, ЗнакPhantom, ЗнакTelegram, ЦВЕТА_СЕРВИСОВ } from "./desktopUI";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
 
@@ -89,13 +89,16 @@ function Кнопка({ children, onClick, disabled, главная }) {
     <button
       onClick={onClick}
       disabled={disabled}
+      className="кнопка"
       style={{
         width: "100%", padding: "11px 0", borderRadius: 11, cursor: disabled ? "default" : "pointer",
         border: главная ? "none" : `1px solid ${Ц.линия}`,
         background: главная ? Ц.акцент : Ц.панельВыше,
-        color: главная ? "#0B0D1A" : Ц.текст,
+        color: главная ? "#05060A" : Ц.текст,
         fontFamily: шрифт, fontWeight: 700, fontSize: 14,
         opacity: disabled ? 0.55 : 1,
+        // Знак сервиса и подпись идут одной строкой по центру.
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
       }}
     >
       {children}
@@ -206,8 +209,8 @@ export default function DesktopAuth({ наВход }) {
       <div style={{ fontFamily: шрифт, fontSize: 17, fontWeight: 700, marginBottom: 14 }}>Вход в Mintly</div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <Кнопка onClick={google} disabled={идёт}>Продолжить с Google</Кнопка>
-        <Кнопка onClick={фантом} disabled={идёт}>Войти кошельком Phantom</Кнопка>
+        <Кнопка onClick={google} disabled={идёт}><ЗнакGoogle размер={16} /> Продолжить с Google</Кнопка>
+        <Кнопка onClick={фантом} disabled={идёт}><ЗнакPhantom размер={16} /> Войти кошельком Phantom</Кнопка>
         <Кнопка onClick={() => { setСпособ(способ === "mail" ? null : "mail"); setОшибка(""); }} disabled={идёт}>
           Почта и пароль
         </Кнопка>
@@ -248,8 +251,13 @@ export default function DesktopAuth({ наВход }) {
       <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${Ц.линия}`, fontFamily: шрифт, fontSize: 12.5, color: Ц.слабый, lineHeight: 1.5 }}>
         Если аккаунт уже заведён в мини-приложении, войдите тем же способом, каким входили там:
         аккаунты из Telegram и с сайта — разные, и объединить их пока нельзя.{" "}
-        <a href={`https://t.me/${БОТ}`} target="_blank" rel="noreferrer" style={{ color: Ц.акцент, textDecoration: "none" }}>
-          Открыть в Telegram
+        <a
+          href={`https://t.me/${БОТ}`}
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: ЦВЕТА_СЕРВИСОВ.telegram, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5, verticalAlign: "-3px" }}
+        >
+          <ЗнакTelegram размер={14} /> Открыть в Telegram
         </a>
       </div>
     </Обёртка>

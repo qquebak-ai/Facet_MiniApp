@@ -9,7 +9,7 @@
 import React, { useEffect, useState } from "react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { supabase } from "./supabaseClient";
-import { Ц, шрифт, цифры, деньги, возраст, число, Логотип } from "./desktopUI";
+import { Ц, шрифт, цифры, деньги, возраст, число, Логотип, ЗнакTelegram, ЦВЕТА_СЕРВИСОВ } from "./desktopUI";
 import { состояниеВнутреннего, вывестиСВнутреннего } from "./appWallet";
 import DesktopAuth from "./DesktopAuth";
 
