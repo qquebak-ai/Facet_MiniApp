@@ -18,6 +18,8 @@
 
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import nacl from "tweetnacl";
+import bs58 from "bs58";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -239,6 +241,15 @@ async function resolveInviter(admin, startParam, telegramId, userId) {
 }
 
 export default async function handler(req, res) {
+  // Вход не только через Telegram: здесь же живут Phantom и заведение
+  // профиля после Google или почты. Отдельным файлом их не сделать —
+  // на бесплатном тарифе Vercel двенадцать обработчиков, и тринадцатый
+  // молча не разворачивается.
+  const действие = String((req.query && req.query.action) || "").trim();
+  if (действие === "nonce") return выдатьNonce(req, res);
+  if (действие === "phantom") return входФантомом(req, res);
+  if (действие === "profile") return завестиПрофиль(req, res);
+
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "method_not_allowed" });
@@ -432,4 +443,157 @@ export default async function handler(req, res) {
   } catch (err) {
     return fail(res, 500, "unexpected", err && err.message);
   }
+}
+
+
+/* ------------------------------------------------------------------
+   ВХОД БЕЗ TELEGRAM
+
+   На сайте Telegram нет, а войти надо. Способов три:
+
+   • Google и почта — обычный Supabase Auth, он делает всё сам; серверу
+     остаётся завести профиль с ником, потому что таблица profiles
+     закрыта политиками и писать в неё может только service_role.
+
+   • Phantom — вход подписью кошелька. Сервер выдаёт одноразовую строку,
+     кошелёк её подписывает, сервер проверяет подпись и открывает сессию.
+     Пароля здесь нет вовсе: ключ от аккаунта — сам кошелёк.
+------------------------------------------------------------------- */
+
+// Строка для подписи живёт минуту: этого хватает дойти до кошелька и
+// вернуться, а перехваченная позже уже ничего не открывает.
+const NONCE_TTL_SEC = 60;
+
+/* Одноразовая строка не хранится в базе: она подписана самим сервером.
+   Проверить её можно тем же ключом, а подделать — нет. */
+function подписатьNonce(nonce, exp) {
+  return crypto.createHmac("sha256", SERVICE_ROLE_KEY).update(`${nonce}.${exp}`).digest("hex").slice(0, 32);
+}
+
+function выдатьNonce(req, res) {
+  if (!SERVICE_ROLE_KEY) return res.status(500).json({ error: "server_not_configured" });
+  const nonce = crypto.randomBytes(18).toString("base64url");
+  const exp = Math.floor(Date.now() / 1000) + NONCE_TTL_SEC;
+  res.setHeader("Cache-Control", "no-store");
+  return res.status(200).json({
+    nonce, exp, sig: подписатьNonce(nonce, exp),
+    // Текст видит человек в окне кошелька — по нему он и решает, стоит
+    // ли подписывать. «Случайные байты» подписывают не глядя, а это
+    // ровно то, чем пользуются мошенники.
+    message: `Mintly: вход в аккаунт\nОдноразовый код: ${nonce}\nДействителен минуту.`,
+  });
+}
+
+async function входФантомом(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return res.status(500).json({ error: "server_not_configured" });
+  if (rateLimited(clientKey(req))) return res.status(429).json({ error: "too_many_requests" });
+
+  let body;
+  try {
+    body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+  } catch (err) {
+    return fail(res, 400, "bad_body", err && err.message);
+  }
+
+  const адрес = String(body.address || "").trim();
+  const nonce = String(body.nonce || "").trim();
+  const exp = Number(body.exp) || 0;
+  const sig = String(body.sig || "").trim();
+  const подпись = String(body.signature || "").trim();
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(адрес)) return fail(res, 400, "bad_address");
+  if (!nonce || !подпись) return fail(res, 400, "bad_request");
+  if (exp < Math.floor(Date.now() / 1000)) return fail(res, 400, "nonce_expired");
+  if (подписатьNonce(nonce, exp) !== sig) return fail(res, 400, "bad_nonce");
+
+  // Подпись проверяется по тому же тексту, что человек видел в кошельке.
+  const текст = `Mintly: вход в аккаунт\nОдноразовый код: ${nonce}\nДействителен минуту.`;
+  let сходится = false;
+  try {
+    сходится = nacl.sign.detached.verify(
+      new TextEncoder().encode(текст),
+      bs58.decode(подпись),
+      bs58.decode(адрес),
+    );
+  } catch (err) {
+    return fail(res, 400, "bad_signature", err && err.message);
+  }
+  if (!сходится) return fail(res, 401, "bad_signature");
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const email = `sol${адрес.toLowerCase()}@phantom.local`;
+
+  const { error: createErr } = await admin.auth.admin.createUser({
+    email,
+    email_confirm: true,
+    user_metadata: { wallet_address: адрес, nickname: "", bio: "", emoji: "🚀" },
+  });
+  if (createErr && !/already|exists|registered/i.test(createErr.message || "")) {
+    return fail(res, 500, "create_user_failed", createErr.message);
+  }
+
+  const { data: link, error: linkErr } = await admin.auth.admin.generateLink({ type: "magiclink", email });
+  if (linkErr || !link?.properties?.hashed_token) {
+    return fail(res, 500, "link_failed", linkErr && linkErr.message);
+  }
+
+  // Адрес вида sol<ключ>@phantom.local предсказуем, поэтому пускаем
+  // только если у найденного пользователя действительно стоит этот
+  // кошелёк: иначе на такой адрес можно было бы зарегистрироваться
+  // заранее обычной почтой и ждать владельца.
+  const привязан = link.user && link.user.user_metadata && link.user.user_metadata.wallet_address;
+  if (привязан && String(привязан) !== адрес) return fail(res, 409, "account_conflict");
+
+  return res.status(200).json({ token_hash: link.properties.hashed_token, address: адрес });
+}
+
+/* Профиль после входа через Google, почту или Phantom. Клиент под своей
+   сессией сказать «заведи мне профиль» не может: таблица закрыта
+   политиками, и пишет в неё только service_role. Поэтому — сюда, с
+   токеном сессии в заголовке. */
+async function завестиПрофиль(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return res.status(500).json({ error: "server_not_configured" });
+  if (rateLimited(clientKey(req))) return res.status(429).json({ error: "too_many_requests" });
+
+  const заголовок = String(req.headers.authorization || "");
+  const токен = заголовок.startsWith("Bearer ") ? заголовок.slice(7).trim() : "";
+  if (!токен) return res.status(401).json({ error: "no_session" });
+
+  let body;
+  try {
+    body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+  } catch (err) {
+    return fail(res, 400, "bad_body", err && err.message);
+  }
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { data: кто, error: ктоErr } = await admin.auth.getUser(токен);
+  if (ктоErr || !кто || !кто.user) return res.status(401).json({ error: "bad_session" });
+  const userId = кто.user.id;
+
+  const { data: есть } = await admin.from("profiles").select("id, nickname").eq("id", userId).maybeSingle();
+  if (есть) return res.status(200).json({ created: false, nickname: есть.nickname });
+
+  const nickname = wantedNickname(body);
+  if (!nickname) return res.status(400).json({ error: "nickname_required" });
+  if (await nicknameTaken(admin, nickname)) return res.status(409).json({ error: "nickname_taken" });
+
+  const мета = кто.user.user_metadata || {};
+  const { error: insertErr } = await admin.from("profiles").upsert({
+    id: userId,
+    nickname,
+    email: кто.user.email || null,
+    bio: "",
+    avatar_url: мета.avatar_url || мета.picture || null,
+    emoji: мета.avatar_url || мета.picture ? null : "🚀",
+    wallet_address: мета.wallet_address || null,
+  }, { onConflict: "id" });
+  if (insertErr) {
+    if (/duplicate|unique|nickname/i.test(insertErr.message || "")) {
+      return res.status(409).json({ error: "nickname_taken" });
+    }
+    return fail(res, 500, "profile_failed", insertErr.message);
+  }
+  return res.status(200).json({ created: true, nickname });
 }

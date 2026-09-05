@@ -11,6 +11,7 @@ import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { supabase } from "./supabaseClient";
 import { Ц, шрифт, цифры, деньги, возраст, число, Логотип } from "./desktopUI";
 import { состояниеВнутреннего, вывестиСВнутреннего } from "./appWallet";
+import DesktopAuth from "./DesktopAuth";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
 
@@ -56,21 +57,10 @@ export function КошелёкПриложения() {
     return (
       <Карточка>
         <Заголовок>Баланс в приложении</Заголовок>
-        <p style={{ fontFamily: шрифт, fontSize: 13.5, color: Ц.тусклый, lineHeight: 1.55, margin: 0 }}>
-          Кошелёк, которым идут сделки в Solana, привязан к аккаунту, а аккаунт заводится из профиля
-          Telegram. Войдите в мини-приложении — баланс и адрес появятся здесь.
+        <p style={{ fontFamily: шрифт, fontSize: 13.5, color: Ц.тусклый, lineHeight: 1.55, margin: "0 0 14px" }}>
+          Кошелёк, которым идут сделки в Solana, привязан к аккаунту. Войдите — баланс и адрес появятся здесь.
         </p>
-        <a
-          href={`https://t.me/${БОТ}`}
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            display: "inline-block", marginTop: 14, padding: "10px 18px", borderRadius: 11, textDecoration: "none",
-            background: Ц.акцент, color: "#0B0D1A", fontFamily: шрифт, fontWeight: 700, fontSize: 13.5,
-          }}
-        >
-          Войти в Telegram
-        </a>
+        <DesktopAuth наВход={обновить} />
       </Карточка>
     );
   }
@@ -375,25 +365,8 @@ export function DesktopProfile() {
 
   if (!профиль) {
     return (
-      <div style={{ padding: 28, maxWidth: 560 }}>
-        <Карточка>
-          <div style={{ fontFamily: шрифт, fontSize: 17, fontWeight: 700, marginBottom: 8 }}>Вход только через Telegram</div>
-          <p style={{ fontFamily: шрифт, fontSize: 13.5, color: Ц.тусклый, lineHeight: 1.55, margin: "0 0 16px" }}>
-            Аккаунт Mintly заводится из профиля Telegram — ни почты, ни пароля нет, и подтвердить личность
-            в обычном браузере нечем. Откройте мини-приложение, войдите там, и профиль появится здесь же.
-          </p>
-          <a
-            href={`https://t.me/${БОТ}`}
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              display: "inline-block", padding: "11px 20px", borderRadius: 11, textDecoration: "none",
-              background: Ц.акцент, color: "#0B0D1A", fontFamily: шрифт, fontWeight: 700, fontSize: 14,
-            }}
-          >
-            Открыть в Telegram
-          </a>
-        </Карточка>
+      <div style={{ padding: 28 }}>
+        <DesktopAuth наВход={() => window.location.reload()} />
       </div>
     );
   }
