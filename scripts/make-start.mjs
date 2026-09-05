@@ -9,7 +9,8 @@
  * контур листа, что рисуется в интерфейсе.
  *
  * Запуск:  node scripts/make-start.mjs
- * Выход:   public/start.svg + .png — 1200×760
+ * Выход:   public/start.svg + .png      — 1200×760, картинка бота
+ *          public/start-og.svg + .png   — 1200×630, превью ссылки
  */
 
 import fs from "node:fs";
@@ -82,10 +83,17 @@ function шрифтВнутрь() {
   </style>`;
 }
 
-const Ш = 1200;
-const В = 760;
+/* Два размера: картинка для чата и превью ссылки.
+ *
+ * Превью соцсети и Telegram режут под 1.91:1 — из высокой картинки они
+ * вырезали бы полосу по центру, и подписи ушли бы за край. Поэтому у
+ * превью своя высота, а не обрезка. */
+const РАЗМЕРЫ = [
+  { имя: "start", Ш: 1200, В: 760, строкаY: 300 },
+  { имя: "start-og", Ш: 1200, В: 630, строкаY: 250 },
+];
 
-function нарисовать() {
+function нарисовать({ Ш, В, строкаY }) {
   const знак = знакИзЛистьев();
 
   const названиеКегль = 116;
@@ -100,7 +108,6 @@ function нарисовать() {
   // Точной метрики шрифта здесь нет, а доля 0.5 от кегля совпадает с
   // шириной этих букв в Montserrat 800 — знак и хвост встают по центру.
   const ширинаХвоста = хвост.length * названиеКегль * 0.5 + названиеКегль * 0.3;
-  const строкаY = 300;                            // базовая линия названия
   const знакX = (Ш - (ширинаЗнака + ширинаХвоста)) / 2;
   const знакY = строкаY - 92 * знакМасштаб;
 
@@ -115,6 +122,10 @@ function нарисовать() {
   // Тогда ставим друг под другом — читается так же, а поля остаются.
   const встрокуЛи = общаяШирина <= Ш - 140;
   let чипX = (Ш - общаяШирина) / 2;
+  // Адрес внизу рисуется, только если после плашек осталось место: в
+  // невысоком превью он наезжал прямо на них.
+  const рядов = встрокуЛи ? 1 : чипы.length;
+  const низПлашек = строкаY + 190 + (рядов - 1) * (чипВысота + 16) + чипВысота;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${Ш}" height="${В}" viewBox="0 0 ${Ш} ${В}">
   ${шрифтВнутрь()}
@@ -156,30 +167,37 @@ function нарисовать() {
   </g>`;
   }).join("\n  ")}
 
-  <text x="${Ш / 2}" y="${В - 70}" text-anchor="middle" fill="${Ц.тусклый}" font-family="${шрифт}"
-    font-size="24" font-weight="500" opacity="0.75">mintly.company</text>
+  ${низПлашек + 60 <= В - 40 ? `<text x="${Ш / 2}" y="${В - 46}" text-anchor="middle" fill="${Ц.тусклый}" font-family="${шрифт}"
+    font-size="24" font-weight="500" opacity="0.75">mintly.company</text>` : ""}
 </svg>
 `;
 }
 
-const файл = path.join(корень, "public", "start.svg");
-fs.writeFileSync(файл, нарисовать());
-console.log(`public/start.svg — ${Ш}×${В}`);
+const сделанные = [];
+for (const р of РАЗМЕРЫ) {
+  const файл = path.join(корень, "public", `${р.имя}.svg`);
+  fs.writeFileSync(файл, нарисовать(р));
+  сделанные.push({ ...р, файл });
+  console.log(`public/${р.имя}.svg — ${р.Ш}×${р.В}`);
+}
 
 /* Растр рисует тот же браузер, что показывает страницы: значит и
    выглядеть будет так же, а не «примерно так». */
 try {
   const { chromium } = await import("playwright-core");
   const браузер = await chromium.launch({ executablePath: process.env.CHROMIUM || "/opt/pw-browsers/chromium" });
-  // Рисуем вдвое плотнее: Telegram пережимает картинку по-своему, и из
-  // исходника в один пиксель на точку получается мыло на экранах с
-  // высокой плотностью.
-  const стр = await браузер.newPage({ viewport: { width: Ш, height: В }, deviceScaleFactor: 2 });
-  await стр.goto(`file://${файл}`);
-  await стр.waitForTimeout(400);
-  await стр.screenshot({ path: path.join(корень, "public", "start.png") });
+  for (const с of сделанные) {
+    // Рисуем вдвое плотнее: Telegram пережимает картинку по-своему, и из
+    // исходника в один пиксель на точку получается мыло на экранах с
+    // высокой плотностью.
+    const стр = await браузер.newPage({ viewport: { width: с.Ш, height: с.В }, deviceScaleFactor: 2 });
+    await стр.goto(`file://${с.файл}`);
+    await стр.waitForTimeout(400);
+    await стр.screenshot({ path: path.join(корень, "public", `${с.имя}.png`) });
+    await стр.close();
+    console.log(`public/${с.имя}.png`);
+  }
   await браузер.close();
-  console.log("public/start.png");
 } catch (e) {
   console.log(`PNG пропущен (${(e && e.message) || e}) — SVG на месте`);
 }
