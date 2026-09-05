@@ -30,9 +30,12 @@ function листИзПриложения() {
   const блок = исходник.slice(начало, исходник.indexOf("\n];", начало));
   const контуры = блок.split('outline: "');
   const черешки = блок.split('stem: "');
+  // Жилки — часть знака, а не украшение: без них лист читается каплей.
+  const жилкиБлок = блок.split("veins: [")[3].split("]")[0];
   return {
     outline: контуры[3].split('"')[0],
     stem: черешки[3].split('"')[0],
+    veins: жилкиБлок.split('"').filter((с) => с.trim().startsWith("M")),
   };
 }
 
@@ -77,19 +80,13 @@ function нарисовать({ Ш, В, кегльНазвания, кегльП
       <stop offset="42%" stop-color="${Ц.основной}" stop-opacity="0.09"/>
       <stop offset="100%" stop-color="${Ц.фон}" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="плоскость" x1="0.15" y1="0" x2="0.9" y2="1">
-      <stop offset="0%" stop-color="${Ц.светлый}"/>
-      <stop offset="38%" stop-color="${Ц.основной}"/>
-      <stop offset="100%" stop-color="${Ц.тёмный}"/>
+    <!-- Заливка матовая: перепад еле заметен и идёт сверху вниз, как
+         свет на плоском предмете. Сильный градиент делал из листа
+         стеклянную каплю. -->
+    <linearGradient id="плоскость" x1="0" y1="0" x2="0.25" y2="1">
+      <stop offset="0%" stop-color="${Ц.основной}"/>
+      <stop offset="100%" stop-color="#8E9AFF"/>
     </linearGradient>
-    <linearGradient id="грань" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#2A3196"/>
-      <stop offset="100%" stop-color="#0E1240"/>
-    </linearGradient>
-    <radialGradient id="блик" cx="0.34" cy="0.16" r="0.55">
-      <stop offset="0%" stop-color="${Ц.белый}" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="${Ц.белый}" stop-opacity="0"/>
-    </radialGradient>
     <linearGradient id="полоса" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="${Ц.основной}" stop-opacity="0"/>
       <stop offset="30%" stop-color="${Ц.светлый}" stop-opacity="0.75"/>
@@ -129,22 +126,23 @@ function нарисовать({ Ш, В, кегльНазвания, кегльП
     fill="url(#полоса)"/>
 
   <!-- Отражение: тот же лист вверх ногами, обрезанный градиентом. -->
-  <g mask="url(#отражениеГаснет)" opacity="0.42">
+  <g mask="url(#отражениеГаснет)" opacity="0.38">
     <g transform="translate(${центрX.toFixed(1)}, ${(полY + (полY - низЛиста) * 0.02).toFixed(1)}) scale(${масштаб.toFixed(3)}, ${(-масштаб * 0.92).toFixed(3)})">
-      <path d="${лист.outline}" fill="url(#плоскость)"/>
+      ${лист.stem ? `<path d="${лист.stem}" fill="none" stroke="${Ц.основной}" stroke-width="1.5" stroke-linecap="round"/>` : ""}
+      <path d="${лист.outline}" fill="${Ц.основной}"/>
     </g>
   </g>
 
-  <!-- Сам лист. Грань смещена вправо-вниз: свет падает слева сверху.
-       Сдвиг задан в единицах контура — группа уже отмасштабирована. -->
+  <!-- Сам лист: плоская заливка и прорезанные фоном жилки — тот же знак,
+       что в приложении. Блики и боковая грань его только портили:
+       глянцевый пузырь вместо листа. -->
   <g transform="translate(${центрX.toFixed(1)}, ${низЛиста.toFixed(1)}) scale(${масштаб.toFixed(3)})">
-    <g transform="translate(0.85, 0.55)">
-      <path d="${лист.outline}" fill="url(#грань)"/>
-    </g>
+    <path d="${лист.stem}" fill="none" stroke="url(#плоскость)" stroke-width="1.5" stroke-linecap="round"/>
     <path d="${лист.outline}" fill="url(#плоскость)"/>
-    <path d="${лист.outline}" fill="url(#блик)"/>
-    <path d="${лист.outline}" fill="none" stroke="${Ц.светлый}" stroke-opacity="0.55" stroke-width="0.28"/>
-    <path d="${лист.stem}" fill="none" stroke="${Ц.светлый}" stroke-opacity="0.8" stroke-width="0.5" stroke-linecap="round"/>
+    <g fill="none" stroke="${Ц.фон}" stroke-width="0.42" stroke-linecap="round">
+      ${лист.veins.map((ж) => `<path d="${ж}"/>`).join("\n      ")}
+      <path d="${лист.stem}"/>
+    </g>
   </g>
 
   <!-- Искра на верхней кромке: одна точка света, как от прожектора. -->
@@ -156,8 +154,12 @@ function нарисовать({ Ш, В, кегльНазвания, кегльП
   <!-- Знак площадки -->
   <g transform="translate(${текстX}, ${знакY})">
     <g transform="scale(${(кегльПлашки * 0.075).toFixed(3)})">
+      <path d="${лист.stem}" fill="none" stroke="${Ц.основной}" stroke-width="1.2" stroke-linecap="round"/>
       <path d="${лист.outline}" fill="${Ц.основной}"/>
-      <path d="${лист.stem}" fill="none" stroke="${Ц.основной}" stroke-width="0.8" stroke-linecap="round"/>
+      <g fill="none" stroke="${Ц.фон}" stroke-width="0.5" stroke-linecap="round">
+        ${лист.veins.map((ж) => `<path d="${ж}"/>`).join("\n        ")}
+        <path d="${лист.stem}"/>
+      </g>
     </g>
     <text x="${Math.round(кегльПлашки * 1.7)}" y="${Math.round(кегльПлашки * 0.36)}" fill="${Ц.белый}"
       font-family="${шрифт}" font-size="${Math.round(кегльПлашки * 1.75)}" font-weight="700" letter-spacing="0.02em">Mintly</text>
