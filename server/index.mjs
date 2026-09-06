@@ -193,6 +193,38 @@ if (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.FEED_LOOP !== "0") {
   console.log(`[обход] цикл раз в ${ШАГ_ОБХОДА_МС} мс, сети по очереди`);
 }
 
+/* Уведомления о покупках — тем же способом.
+ *
+ * Их тоже звал чужой планировщик, и там же ломался: секрет в настройках
+ * репозитория и секрет на площадке разъезжались, а видно это было только
+ * в списке запусков красными крестиками. Здесь звать некому — обработчик
+ * вызывается изнутри, и секрет заведомо тот же самый. */
+const ШАГ_ВЕСТЕЙ_МС = Number(process.env.NOTIFY_INTERVAL_MS) || 10 * 60 * 1000;
+
+if (process.env.TELEGRAM_BOT_TOKEN && process.env.NOTIFY_LOOP !== "0") {
+  const весть = async () => {
+    try {
+      const ф = await обработчик("/api/notify");
+      const ответ = дополнить({
+        statusCode: 200,
+        headersSent: false,
+        setHeader() {},
+        end() { this.headersSent = true; },
+      });
+      await ф(
+        { method: "POST", url: "/api/notify", query: {}, body: {}, headers: { authorization: `Bearer ${process.env.CRON_SECRET || ""}` } },
+        ответ
+      );
+    } catch (err) {
+      console.warn("[вести]", err && err.message);
+    } finally {
+      setTimeout(весть, ШАГ_ВЕСТЕЙ_МС);
+    }
+  };
+  setTimeout(весть, 30000);
+  console.log(`[вести] цикл раз в ${Math.round(ШАГ_ВЕСТЕЙ_МС / 60000)} мин`);
+}
+
 for (const сигнал of ["SIGINT", "SIGTERM"]) {
   process.on(сигнал, () => {
     console.log(`[сервер] ${сигнал}, закрываемся`);
