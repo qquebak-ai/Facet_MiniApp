@@ -10903,36 +10903,37 @@ function БаннерыГлавной({ onGoTab }) {
     <div
       className="no-scrollbar"
       style={{
-        display: "flex", gap: 10, justifyContent: "center", overflowX: один ? "visible" : "auto",
+        display: "flex", gap: 10, overflowX: один ? "visible" : "auto",
         scrollSnapType: "x mandatory", overscrollBehaviorX: "contain",
-        // Лента идёт от края до края, а карточки внутри отступают: так
-        // соседний баннер выглядывает из-за края и видно, что их больше.
-        margin: "0 -16px", padding: "0 16px",
+        // Во всю ширину экрана: отрицательные поля гасят отступ ленты, в
+        // которой лежит вся главная.
+        margin: "0 -16px",
       }}
     >
       {БАННЕРЫ.map((б) => (
-        <button
+        <div
           key={б.id}
           onClick={() => { haptic("light"); onGoTab && onGoTab(б.куда); }}
           className="fx-tap"
-          style={{
-            // Баннер уже колонки: он декоративный, и в полную ширину
-            // спорил с кнопкой запуска над ним.
-            flex: "0 0 74%", scrollSnapAlign: "center", alignSelf: "center",
-            display: "block", padding: 0, borderRadius: 16, overflow: "hidden",
-            border: `1px solid ${T.line}`, background: T.surface, lineHeight: 0,
-          }}
+          style={{ position: "relative", flex: один ? "0 0 100%" : "0 0 92%", scrollSnapAlign: "center", lineHeight: 0 }}
+          role="button"
           aria-label={б.подпись}
         >
-          <img
-            src={б.файл}
-            alt=""
-            // Пропорции заданы заранее — место под баннер занимается до
-            // загрузки, и лента не прыгает, когда картинка приезжает.
-            // Картинка целиком: обрезка по высоте съедала нарисованную кнопку.
-            style={{ width: "100%", height: "auto", display: "block" }}
+          <img src={б.файл} alt="" style={{ width: "100%", height: "auto", display: "block" }} />
+          {/* Нарисованная на картинке кнопка — своя область нажатия:
+              по ней и целятся, а подсветка показывает, что она живая.
+              Доли взяты с самой картинки, поэтому область держится за
+              кнопкой при любой ширине экрана. */}
+          <button
+            onClick={(e) => { e.stopPropagation(); haptic("light"); onGoTab && onGoTab(б.куда); }}
+            className="fx-tap"
+            style={{
+              position: "absolute", left: "8.4%", top: "62.5%", width: "25.4%", height: "14.5%",
+              background: "transparent", border: "none", padding: 0, borderRadius: 999, cursor: "pointer",
+            }}
+            aria-label={б.подпись}
           />
-        </button>
+        </div>
       ))}
     </div>
   );
