@@ -1444,6 +1444,15 @@ function GlobalStyle() {
       @keyframes spin360 { from{ transform: rotate(0deg); } to{ transform: rotate(360deg); } }
       @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
       @keyframes scaleIn { from{opacity:0; transform:scale(0.92);} to{opacity:1; transform:scale(1);} }
+      /* Дыхание фоновых пятен: смещение и лёгкий масштаб. Медленно и с
+         разными периодами — картинка не повторяется на глазах. */
+      @keyframes blobDrift {
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+        33%      { transform: translate3d(9%, 6%, 0) scale(1.12); }
+        66%      { transform: translate3d(-7%, 10%, 0) scale(0.94); }
+      }
+      @keyframes фонСетка { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(44px, 44px, 0); } }
+      @media (prefers-reduced-motion: reduce) { .fx-blob { animation: none !important; } }
       @keyframes gridDrift { from{background-position:0 0,0 0;} to{background-position:140px 140px,140px 140px;} }
       @keyframes starTwinkle { 0%,100%{opacity:.2;} 50%{opacity:1;} }
       @keyframes starPulse { 0%,100%{opacity:0;} 50%{opacity:var(--o);} }
@@ -10886,6 +10895,54 @@ function МояАктивность({ userId }) {
   );
 }
 
+/* Живой фон под всем интерфейсом.
+ *
+ * Плоская заливка делает приложение похожим на документ: глазу не за что
+ * зацепиться, и любое движение внутри выглядит случайным. Здесь под
+ * содержимым медленно дышат три пятна фирменного цвета и почти незаметно
+ * плывёт сетка — глубина появляется, а читаемость текста не страдает,
+ * потому что всё это сильно размыто и приглушено.
+ *
+ * Слой ничего не ловит (pointerEvents: none) и не перерисовывается: вся
+ * анимация идёт трансформациями, то есть на стороне композитора, а не в
+ * потоке разметки. */
+function ЖивойФон() {
+  const пятна = [
+    { левое: "-18%", верх: "-10%", размер: 320, цвет: T.electric, прозр: 0.20, длит: 26, задержка: 0 },
+    { левое: "58%", верх: "18%", размер: 300, цвет: T.violet, прозр: 0.16, длит: 34, задержка: -8 },
+    { левое: "6%", верх: "62%", размер: 340, цвет: T.turquoise, прозр: 0.13, длит: 30, задержка: -16 },
+  ];
+  return (
+    <div aria-hidden style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
+      {пятна.map((п, i) => (
+        <div
+          key={i}
+          className="fx-blob"
+          style={{
+            position: "absolute", left: п.левое, top: п.верх, width: п.размер, height: п.размер,
+            borderRadius: "50%", filter: "blur(70px)",
+            background: `radial-gradient(circle, ${hexA(п.цвет, п.прозр)} 0%, ${hexA(п.цвет, 0)} 70%)`,
+            animation: `blobDrift ${п.длит}s ease-in-out ${п.задержка}s infinite`,
+            willChange: "transform",
+          }}
+        />
+      ))}
+      {/* Сетка держит эти пятна вместе: без неё они читаются как грязь на
+          экране, с ней — как подсвеченная плоскость. */}
+      <div
+        style={{
+          position: "absolute", inset: -40,
+          backgroundImage: `linear-gradient(${hexA(T.ice, 0.045)} 1px, transparent 1px), linear-gradient(90deg, ${hexA(T.ice, 0.045)} 1px, transparent 1px)`,
+          backgroundSize: "44px 44px",
+          animation: "фонСетка 48s linear infinite",
+          WebkitMaskImage: "radial-gradient(ellipse at 50% 20%, #000 20%, transparent 78%)",
+          maskImage: "radial-gradient(ellipse at 50% 20%, #000 20%, transparent 78%)",
+        }}
+      />
+    </div>
+  );
+}
+
 function HomeView({
   onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile,
   profile = null, accountCreated = false, myTokens = [], achievements = [], userId = null,
@@ -18585,6 +18642,8 @@ function mapTokenRow(row) {
         onRetry={retryLaunch}
         onViewToken={viewLaunchedToken}
       />
+
+      <ЖивойФон />
 
       <div style={{ position: "relative", zIndex: 1, height: "100%", display: "flex", flexDirection: "column" }}>
         {/* header with logo/wallet removed — content now starts right at the top.
