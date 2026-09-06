@@ -16,7 +16,7 @@
  * токеном.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabaseClient";
 import DesktopToken from "./DesktopToken";
 import { DesktopWallet, DesktopProfile } from "./DesktopWallet";
@@ -144,6 +144,19 @@ export default function Desktop() {
     return () => { жив = false; подписка.subscription.unsubscribe(); };
   }, []);
 
+  /* Лента устарела — просим обход пройтись.
+   *
+   * Сервер сам решит, нужно ли: если строки свежие, он ответит отказом и
+   * ничего не сделает. Зато витрина перестаёт зависеть от того, жив ли
+   * планировщик, — а он однажды молчал сутки, и никто этого не заметил. */
+  const подтолкнуть = useRef(0);
+  const оживить = useCallback((возраст) => {
+    if (!(возраст > 3 * 60 * 1000)) return;
+    if (Date.now() - подтолкнуть.current < 60000) return;
+    подтолкнуть.current = Date.now();
+    fetch("/api/refresh-feed").catch(() => {});
+  }, []);
+
   const обновить = useCallback(() => {
     загрузитьРынок(сеть)
       .then((список) => {
@@ -154,9 +167,10 @@ export default function Desktop() {
         // бодро рапортовать «только что» на вчерашних ценах.
         const свежесть = Math.max(0, ...список.map((t) => new Date(t.обновлён || 0).getTime() || 0));
         setОбновлено(свежесть || Date.now());
+        оживить(Date.now() - (свежесть || Date.now()));
       })
       .catch((e) => setОшибка(String((e && e.message) || e)));
-  }, [сеть]);
+  }, [сеть, оживить]);
 
   useEffect(() => {
     setСтроки(null);

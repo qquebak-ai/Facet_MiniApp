@@ -20,6 +20,11 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CRON_SECRET = process.env.CRON_SECRET;
 
+// Насколько устаревшую ленту разрешено обновлять по просьбе без секрета.
+// Полторы минуты: обход и так ходит раз в минуту, а более частые вызовы
+// только выбирали бы лимит источника.
+const ПРОСРОЧКА_МС = 90 * 1000;
+
 const GT = "https://api.geckoterminal.com/api/v2";
 // Столько же страниц, сколько раньше читало приложение: на «Горячие» и
 // «DEX» одной страницы мало.
@@ -280,12 +285,31 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "not_configured" });
   }
 
-  const auth = req.headers.authorization || "";
-  if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
-
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+  /* Обход зовёт планировщик — по секрету. Но он однажды уже замолчал
+     (стучался на старый адрес после переезда), и сутки никто этого не
+     видел: лента в базе просто застыла, а приложение показывало
+     вчерашние цены.
+     Поэтому есть и второй путь: позвать обход без секрета может кто
+     угодно, но пройдёт он, только если данные действительно протухли.
+     Ограничитель встроен в само условие — после удачного обхода строки
+     свежие, и следующий вызов сразу уйдёт ни с чем. Так первый же
+     открывший приложение чинит ленту, даже если планировщик мёртв. */
+  const auth = req.headers.authorization || "";
+  const поСекрету = CRON_SECRET && auth === `Bearer ${CRON_SECRET}`;
+  if (!поСекрету) {
+    const { data } = await admin
+      .from("feed_cache")
+      .select("updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    const свежесть = data && data[0] ? new Date(data[0].updated_at).getTime() : 0;
+    const возраст = Date.now() - свежесть;
+    if (возраст < ПРОСРОЧКА_МС) {
+      return res.status(200).json({ ok: true, пропущено: true, возрастСек: Math.round(возраст / 1000) });
+    }
+  }
 
   // Сеть можно спросить по одной: обход обеих подряд — это десять
   // страниц с паузами, и в отведённое функции время он не укладывался.
