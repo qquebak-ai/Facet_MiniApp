@@ -10905,9 +10905,8 @@ function БаннерыГлавной({ onGoTab }) {
       style={{
         display: "flex", gap: 10, overflowX: один ? "visible" : "auto",
         scrollSnapType: "x mandatory", overscrollBehaviorX: "contain",
-        // Во всю ширину экрана: отрицательные поля гасят отступ ленты, в
-        // которой лежит вся главная.
-        margin: "0 -16px",
+        // По ширине содержимого — как кнопка запуска: во всю ширину
+        // экрана баннер выглядел приклеенным к краям.
       }}
     >
       {БАННЕРЫ.map((б) => (
@@ -10915,7 +10914,10 @@ function БаннерыГлавной({ onGoTab }) {
           key={б.id}
           onClick={() => { haptic("light"); onGoTab && onGoTab(б.куда); }}
           className="fx-tap"
-          style={{ position: "relative", flex: один ? "0 0 100%" : "0 0 92%", scrollSnapAlign: "center", lineHeight: 0 }}
+          style={{
+            position: "relative", flex: один ? "0 0 100%" : "0 0 92%", scrollSnapAlign: "center",
+            lineHeight: 0, borderRadius: 16, overflow: "hidden",
+          }}
           role="button"
           aria-label={б.подпись}
         >
