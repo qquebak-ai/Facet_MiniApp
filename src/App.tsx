@@ -4799,8 +4799,6 @@ function RecentBuysTicker({ tokens, curveTokens, onOpen, onReady, сеть = "to
   );
 }
 
-
-
 function MintlyFrame({ children, size = 52, glow }) {
   return (
     <div style={{
@@ -15339,8 +15337,6 @@ function ProfileView({
     setVerifyStatus((cur) => (profile.verified ? "verified" : cur === "pending" ? "pending" : "none"));
   }, [profile.verified]);
 
-
-
   // Без аккаунта украшений нет: пустой профиль с чужой рамкой и фоном
   // выглядит как чей-то чужой, хотя войти ещё даже не предлагали.
   // Прошлый выбор хранится и вернётся сам, как только человек войдёт.
@@ -15488,25 +15484,20 @@ function ProfileView({
               Раньше список лежал в одной карточке, и нажатие вдавливало
               её целиком: в CSS состояние «нажато» достаётся не только
               самой кнопке, но и всем блокам вокруг неё. Теперь вдавливается
-              ровно то, на что нажали.
-
-              Два столбца, а не семь строк во всю ширину: строками список
-              уходил под нижний край, и профиль приходилось прокручивать
-              ради последнего пункта. Плитки читаются так же, а экран
-              заканчивается там же, где и содержимое. */}
-          <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+              ровно то, на что нажали. */}
+          <div className="flex flex-col gap-2">
             {SETTINGS_ITEMS.map((s, i) => (
               <button
                 key={s.key}
                 onClick={() => openSettingItem(s)}
-                className="fx-card fx-tap w-full flex items-center gap-2.5 rounded-[18px]"
+                className="fx-card fx-tap w-full flex items-center gap-3 rounded-[20px]"
                 style={{
                   background: T.surface, border: "none",
-                  padding: "12px 13px", animationDelay: `${i * 40}ms`,
+                  padding: "13px 16px", animationDelay: `${i * 40}ms`,
                 }}
               >
-                <s.icon size={16} color={T.muted} style={{ flexShrink: 0 }} />
-                <span style={{ fontFamily: bodyFont, fontSize: 13.5, color: T.ice, flex: 1, textAlign: "left", lineHeight: 1.25 }}>{t(s.tKey)}</span>
+                <s.icon size={16} color={T.muted} />
+                <span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice, flex: 1, textAlign: "left" }}>{t(s.tKey)}</span>
                 {/* Ответ поддержки ждёт прочтения. Без метки о нём знает
                     только личка в Telegram, а её человек мог отключить. */}
                 {s.key === "support" && supportUnread > 0 && (
@@ -15524,34 +15515,12 @@ function ProfileView({
           </div>
         </div>
 
-        {/* Отпечаток сборки и режим показа. Внутри Telegram нет ни
-            адресной строки, ни консоли: без этой строки нельзя отличить
-            «правка не работает» от «человек смотрит вчерашнюю страницу из
-            кеша», а вопрос этот всплывает после каждой выкладки. */}
-        <ОтпечаткиСборки />
-
         </div>
       </div>
     </div>
   );
 }
 
-function ОтпечаткиСборки() {
-  const tg = typeof window !== "undefined" ? window.Telegram && window.Telegram.WebApp : null;
-  const с = (typeof window !== "undefined" && window.__mintlyFull) || {};
-  const режим = !tg
-    ? "вне Telegram"
-    : tg.isFullscreen
-      ? "страница"
-      : с.ошибка
-        ? `шторка (${с.ошибка})`
-        : с.просили ? "шторка (без ответа)" : "шторка";
-  return (
-    <div style={{ marginTop: 18, textAlign: "center", fontFamily: monoFont, fontSize: 10.5, color: T.muted, opacity: 0.5 }}>
-      {`сборка ${typeof __BUILD_STAMP__ === "string" ? __BUILD_STAMP__ : "—"} · ${режим}${tg && tg.version ? ` · TG ${tg.version}` : ""}`}
-    </div>
-  );
-}
 
 /* ---------------------------------------------------------
    TELEGRAM MINI APP INTEGRATION
