@@ -10903,7 +10903,7 @@ function БаннерыГлавной({ onGoTab }) {
     <div
       className="no-scrollbar"
       style={{
-        display: "flex", gap: 10, overflowX: один ? "visible" : "auto",
+        display: "flex", gap: 10, justifyContent: "center", overflowX: один ? "visible" : "auto",
         scrollSnapType: "x mandatory", overscrollBehaviorX: "contain",
         // Лента идёт от края до края, а карточки внутри отступают: так
         // соседний баннер выглядывает из-за края и видно, что их больше.
@@ -10916,7 +10916,9 @@ function БаннерыГлавной({ onGoTab }) {
           onClick={() => { haptic("light"); onGoTab && onGoTab(б.куда); }}
           className="fx-tap"
           style={{
-            flex: один ? "1 1 auto" : "0 0 92%", scrollSnapAlign: "center",
+            // Баннер уже колонки: он декоративный, и в полную ширину
+            // спорил с кнопкой запуска над ним.
+            flex: "0 0 74%", scrollSnapAlign: "center", alignSelf: "center",
             display: "block", padding: 0, borderRadius: 16, overflow: "hidden",
             border: `1px solid ${T.line}`, background: T.surface, lineHeight: 0,
           }}
@@ -10927,7 +10929,8 @@ function БаннерыГлавной({ onGoTab }) {
             alt=""
             // Пропорции заданы заранее — место под баннер занимается до
             // загрузки, и лента не прыгает, когда картинка приезжает.
-            style={{ width: "100%", aspectRatio: "3.3 / 1", objectFit: "cover", display: "block" }}
+            // Картинка целиком: обрезка по высоте съедала нарисованную кнопку.
+            style={{ width: "100%", height: "auto", display: "block" }}
           />
         </button>
       ))}
@@ -10948,9 +10951,8 @@ function HomeView({
   return (
     // Запас снизу — под закреплённую кнопку: в конце прокрутки она
     // должна висеть над пустотой, а не над последней строкой топа.
-    <div className="flex flex-col" style={{ gap: 26, paddingTop: 8, paddingBottom: 78 }}>
+    <div className="flex flex-col" style={{ gap: 26, paddingTop: 8, paddingBottom: 96 }}>
       <ШапкаГлавной profile={profile} accountCreated={accountCreated} onOpenMyProfile={onOpenMyProfile} />
-      <БаннерыГлавной onGoTab={onGoTab} />
       <ГлавнаяСводка live={боевые} />
       <БегущаяЛента />
       <МоиДела
@@ -10985,6 +10987,8 @@ function HomeView({
           <Rocket size={17} strokeWidth={1.8} /> {t("homeActionLaunch")}
         </button>
       </div>
+
+      <БаннерыГлавной onGoTab={onGoTab} />
     </div>
   );
 }
