@@ -1289,36 +1289,78 @@ async function handleTokenCommand(message, запрос) {
   });
 }
 
+// Тикер приходит из чужой ленты: там встречается и «<», и «&», а
+// сообщение уходит с parse_mode HTML.
+const экранHTML = (с) => String(с || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const деньгиКоротко = (v) => {
+  const n = Number(v) || 0;
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
+};
+
+/* Топ — картинкой и списком, оба из одного места.
+ *
+ * Раньше в списке были свои токены, а потом чем придётся добитая лента
+ * бирж: порядок ни о чём не говорил, и «топ» им был только по названию.
+ * Теперь и картинка, и подпись собираются из одной пятёрки по обороту за
+ * сутки, поэтому расходиться им негде — что нарисовано, то и написано. */
 async function handleTop(message) {
   const chat = message.chat || {};
-  // Сперва запущенное в Mintly, потом лента бирж — ровно тем же
-  // порядком, каким это видно на главной.
-  const свои = await findTokens("", 5).catch(() => []);
-  const чужие = свои.length >= 5 ? [] : await trendingExternal(5 - свои.length).catch(() => []);
-  const найдено = [...свои, ...чужие];
-  if (!найдено.length) {
+  let строки = [];
+  try {
+    const { топСтроки } = await import("./_topcard.js");
+    строки = await топСтроки(adminClient());
+  } catch (err) {
+    console.warn("[bot] топ не собрался:", err && err.message);
+  }
+  if (!строки.length) {
     await tg("sendMessage", { chat_id: chat.id, text: `Пока пусто — ни одного токена.${ПОДСКАЗКА_СЕТИ}` });
     return;
   }
-  const строки = найдено.map((t, i) => {
-    const хвост = t.external ? " · с биржи" : "";
-    return `${i + 1}. ${t.emoji || (t.external ? "🪙" : "🚀")} <b>$${String(t.ticker || "").toUpperCase()}</b> — ${t.name || ""}${хвост}`;
-  });
+
+  const текст = [
+    "🔥 <b>Мемкоины в тренде</b>",
+    "",
+    ...строки.map((т, i) => {
+      const знак = т.движение >= 0 ? "+" : "";
+      const сеть = т.сеть === "solana" ? "SOL" : "TON";
+      return `${i + 1}. <b>$${экранHTML(т.тикер)}</b> · ${сеть} — ${знак}${т.движение.toFixed(1)}% · ${деньгиКоротко(т.объём)} за сутки`;
+    }),
+    "",
+    "🔎 Подробнее о токене: <code>/token ТИКЕР</code>",
+  ].join("\n");
+
+  const кнопки = { inline_keyboard: [[{ text: "Открыть Mintly", url: `https://t.me/${TG_BOT}?start=open` }]] };
+
+  // Картинка рисуется заново под эту самую пятёрку, поэтому слепок
+  // (file_id) ей не подходит: он вернул бы вчерашний список.
+  try {
+    const { картинкаТопа } = await import("./_topcard.js");
+    const байты = await картинкаТопа(строки, АДРЕС_КАРТИНОК);
+    if (байты) {
+      const ответ = await tgПоФайлу("sendPhoto", {
+        chat_id: chat.id,
+        caption: текст,
+        parse_mode: "HTML",
+        reply_markup: кнопки,
+      }, байты, "top.png");
+      if (ответ && ответ.ok) return;
+      console.warn("[bot] топ картинкой не ушёл:", ответ && ответ.description);
+    }
+  } catch (err) {
+    console.warn("[bot] топ картинкой не ушёл:", err && err.message);
+  }
+
   await tg("sendMessage", {
     chat_id: chat.id,
     reply_to_message_id: message.message_id,
-    text: [
-      "🔥 <b>Топ мемкоинов за последнее время</b>",
-      "",
-      "Какие мемкоины сейчас забирают внимание рынка? 👀",
-      "",
-      ...строки,
-      "",
-      "🔎 Хочешь подробнее узнать о токене?",
-      "Пиши: <code>/token ТИКЕР</code>",
-    ].join("\n"),
+    text,
     parse_mode: "HTML",
-    reply_markup: { inline_keyboard: [[{ text: "Открыть Mintly", url: `https://t.me/${TG_BOT}?start=open` }]] },
+    link_preview_options: { is_disabled: true },
+    reply_markup: кнопки,
   });
 }
 
