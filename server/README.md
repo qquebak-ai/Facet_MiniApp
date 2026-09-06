@@ -15,9 +15,25 @@
 
 ---
 
+## Установка одной командой
+
+Ubuntu 22.04/24.04, 2 ядра, 2–4 ГБ.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/qquebak-ai/Facet_MiniApp/main/server/setup.sh | sudo bash
+```
+
+Скрипт ставит node, nginx и git, заводит пользователя, забирает код,
+кладёт службу и вход nginx. Первый запуск заканчивается просьбой
+заполнить ключи; заполнив, запусти его ещё раз — он поднимет службу.
+Повторный запуск безопасен: скрипт доводит до нужного состояния, а не
+делает всё заново.
+
+Ниже — то же самое по шагам, если хочется руками.
+
 ## Что нужно на сервере
 
-Ubuntu 22.04/24.04, 2 ядра, 2–4 ГБ. Node 22, nginx, git.
+Node 22, nginx, git.
 
 ```bash
 sudo apt update
@@ -29,11 +45,16 @@ node -v            # должно быть v22.x
 
 ## Учётная запись и код
 
+Каталог создаётся пустым намеренно: `useradd -m` положил бы в него свои
+файлы, а `git clone` в непустой каталог не идёт.
+
 ```bash
-sudo useradd -r -m -d /srv/mintly -s /bin/bash mintly
-sudo -u mintly git clone https://github.com/qquebak-ai/Facet_MiniApp.git /srv/mintly
-cd /srv/mintly
-sudo -u mintly npm ci --omit=dev
+sudo useradd -r -s /bin/bash -d /srv/mintly mintly
+sudo mkdir -p /srv/mintly && sudo chown mintly:mintly /srv/mintly
+sudo -u mintly git clone https://github.com/qquebak-ai/Facet_MiniApp.git /tmp/mintly-код
+sudo -u mintly bash -c 'shopt -s dotglob; mv /tmp/mintly-код/* /srv/mintly/'
+# HOME задаём явно: иначе npm ищет кеш в /home/mintly, которого нет.
+sudo -u mintly env HOME=/srv/mintly npm --prefix /srv/mintly ci --omit=dev
 ```
 
 ## Переменные окружения
