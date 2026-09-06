@@ -8,16 +8,17 @@
 
 set -euo pipefail
 
-КАТАЛОГ=${КАТАЛОГ:-/srv/mintly}
-ПОЛЬЗ=${ПОЛЬЗ:-mintly}
+# Имена латиницей: кириллические переменные bash не принимает.
+DIR=${DIR:-/srv/mintly}
+USR=${USR:-mintly}
 
 echo "== код =="
-sudo -u "$ПОЛЬЗ" git -C "$КАТАЛОГ" fetch --quiet origin main
-sudo -u "$ПОЛЬЗ" git -C "$КАТАЛОГ" reset --hard --quiet origin/main
-sudo -u "$ПОЛЬЗ" git -C "$КАТАЛОГ" log -1 --oneline
+sudo -u "$USR" git -C "$DIR" fetch --quiet origin main
+sudo -u "$USR" git -C "$DIR" reset --hard --quiet origin/main
+sudo -u "$USR" git -C "$DIR" log -1 --oneline
 
 echo "== зависимости =="
-sudo -u "$ПОЛЬЗ" npm --prefix "$КАТАЛОГ" ci --omit=dev --no-audit --no-fund
+sudo -u "$USR" env HOME="$DIR" npm --prefix "$DIR" ci --omit=dev --no-audit --no-fund
 
 echo "== перезапуск =="
 systemctl restart mintly-api

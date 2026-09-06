@@ -25,11 +25,11 @@ jobs:
     steps:
       - name: Позвать обработчик
         run: |
-          код=$(curl -s -o /tmp/ответ -w "%{http_code}" -X POST \
+          code=$(curl -s -o /tmp/otvet -w "%{http_code}" -X POST \
             "https://mintly.company/api/notify" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
-          echo "ответ: $код"
-          cat /tmp/ответ
+          echo "ответ: $code"
+          cat /tmp/otvet
           # Падаем только на отказе сервера: 401 значит секрет не совпал,
           # и это стоит увидеть в списке запусков.
-          test "$код" = "200"
+          test "$code" = "200"

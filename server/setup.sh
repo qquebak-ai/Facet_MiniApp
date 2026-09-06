@@ -7,60 +7,69 @@
 # ломается на том, что уже сделано. Первый запуск заканчивается просьбой
 # заполнить ключи — служба не поднимается вслепую, чтобы не крутиться в
 # перезапусках с пустой базой.
+#
+# Имена переменных латиницей намеренно: кириллические bash не принимает и
+# считает такую строку командой, а не присваиванием.
 
 set -euo pipefail
 
-КАТАЛОГ=/srv/mintly
-ПОЛЬЗ=mintly
-РЕПО=https://github.com/qquebak-ai/Facet_MiniApp.git
+DIR=/srv/mintly
+USR=mintly
+REPO=https://github.com/qquebak-ai/Facet_MiniApp.git
 
-шаг() { printf "\n== %s ==\n" "$1"; }
+step() { printf "\n== %s ==\n" "$1"; }
 
 [ "$(id -u)" -eq 0 ] || { echo "Нужен root: запусти через sudo"; exit 1; }
 
-шаг "Пакеты"
+# Оборванная ссылка от неудачной прошлой попытки роняет проверку nginx,
+# а с ней и установку пакетов, и выпуск сертификата. Убираем сразу.
+if [ -L /etc/nginx/sites-enabled/mintly-api ] && [ ! -e /etc/nginx/sites-enabled/mintly-api ]; then
+  rm -f /etc/nginx/sites-enabled/mintly-api
+  echo "убрал оборванную ссылку nginx от прошлой попытки"
+fi
+
+step "Пакеты"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git curl ca-certificates nginx >/dev/null
-if ! command -v node >/dev/null || [ "$(node -v | cut -c2-3)" -lt 20 ]; then
+if ! command -v node >/dev/null || [ "$(node -v | sed 's/^v\([0-9]*\).*/\1/')" -lt 20 ]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
   apt-get install -y -qq nodejs >/dev/null
 fi
-echo "node $(node -v), nginx $(nginx -v 2>&1 | awk '{print $3}')"
+echo "node $(node -v)"
 
-шаг "Пользователь и каталог"
+step "Пользователь и каталог"
 # Без домашнего каталога-скелета: useradd -m кладёт в него свои файлы, и
 # git отказывается клонировать в непустое место — на этом установка и
 # спотыкалась.
-id "$ПОЛЬЗ" >/dev/null 2>&1 || useradd -r -s /bin/bash -d "$КАТАЛОГ" "$ПОЛЬЗ"
-mkdir -p "$КАТАЛОГ"
-chown "$ПОЛЬЗ:$ПОЛЬЗ" "$КАТАЛОГ"
+id "$USR" >/dev/null 2>&1 || useradd -r -s /bin/bash -d "$DIR" "$USR"
+mkdir -p "$DIR"
+chown "$USR:$USR" "$DIR"
 
-шаг "Код"
-if [ -d "$КАТАЛОГ/.git" ]; then
-  sudo -u "$ПОЛЬЗ" git -C "$КАТАЛОГ" fetch --quiet origin main
-  sudo -u "$ПОЛЬЗ" git -C "$КАТАЛОГ" reset --hard --quiet origin/main
+step "Код"
+if [ -d "$DIR/.git" ]; then
+  sudo -u "$USR" git -C "$DIR" fetch --quiet origin main
+  sudo -u "$USR" git -C "$DIR" reset --hard --quiet origin/main
 else
   # Клонируем рядом и переносим внутрь: каталог уже существует и может
   # быть не пуст, а git такое не любит.
-  ВРЕМ=$(mktemp -d)
-  git clone --quiet --depth 50 "$РЕПО" "$ВРЕМ/код"
+  TMP=$(mktemp -d)
+  git clone --quiet --depth 50 "$REPO" "$TMP/code"
   shopt -s dotglob
-  mv "$ВРЕМ/код"/* "$КАТАЛОГ"/
+  mv "$TMP/code"/* "$DIR"/
   shopt -u dotglob
-  rm -rf "$ВРЕМ"
-  chown -R "$ПОЛЬЗ:$ПОЛЬЗ" "$КАТАЛОГ"
+  rm -rf "$TMP"
+  chown -R "$USR:$USR" "$DIR"
 fi
-sudo -u "$ПОЛЬЗ" git -C "$КАТАЛОГ" log -1 --oneline
+sudo -u "$USR" git -C "$DIR" log -1 --oneline
 
-шаг "Зависимости"
+step "Зависимости"
 # HOME задаём явно: без него npm ищет кеш в /home/mintly, которого нет.
-sudo -u "$ПОЛЬЗ" env HOME="$КАТАЛОГ" npm --prefix "$КАТАЛОГ" ci --omit=dev --no-audit --no-fund
+sudo -u "$USR" env HOME="$DIR" npm --prefix "$DIR" ci --omit=dev --no-audit --no-fund
 
-шаг "Переменные"
-if [ ! -f "$КАТАЛОГ/.env.server" ]; then
-  install -o "$ПОЛЬЗ" -g "$ПОЛЬЗ" -m 600 /dev/null "$КАТАЛОГ/.env.server"
-  cat > "$КАТАЛОГ/.env.server" <<'КОНЕЦ'
+step "Переменные"
+if [ ! -f "$DIR/.env.server" ]; then
+  cat > "$DIR/.env.server" <<'EOF'
 PORT=8080
 SUPABASE_URL=https://rinxzaakkhxdbhjghtwa.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=
@@ -68,24 +77,24 @@ CRON_SECRET=
 APP_URL=https://mintly.company
 ALLOW_ORIGINS=https://mintly.company,https://www.mintly.company
 FEED_INTERVAL_MS=10000
-КОНЕЦ
-  chown "$ПОЛЬЗ:$ПОЛЬЗ" "$КАТАЛОГ/.env.server"
-  chmod 600 "$КАТАЛОГ/.env.server"
-  echo "создан $КАТАЛОГ/.env.server — ключи пока пустые"
+EOF
+  chown "$USR:$USR" "$DIR/.env.server"
+  chmod 600 "$DIR/.env.server"
+  echo "создан $DIR/.env.server — ключи пока пустые"
 else
-  echo "$КАТАЛОГ/.env.server уже есть, не трогаю"
+  echo "$DIR/.env.server уже есть, не трогаю"
 fi
 
-шаг "Служба и вход"
-cp "$КАТАЛОГ/server/mintly-api.service" /etc/systemd/system/
+step "Служба и вход"
+cp "$DIR/server/mintly-api.service" /etc/systemd/system/
 systemctl daemon-reload
-cp "$КАТАЛОГ/server/nginx.conf" /etc/nginx/sites-available/mintly-api
+cp "$DIR/server/nginx.conf" /etc/nginx/sites-available/mintly-api
 ln -sf /etc/nginx/sites-available/mintly-api /etc/nginx/sites-enabled/mintly-api
 nginx -t && systemctl reload nginx
 
 # Служба поднимается, только когда есть чем ходить в базу: без ключа она
 # просто крутилась бы в перезапусках, и это выглядело бы поломкой.
-if grep -q "^SUPABASE_SERVICE_ROLE_KEY=.\+" "$КАТАЛОГ/.env.server"; then
+if grep -q "^SUPABASE_SERVICE_ROLE_KEY=.\+" "$DIR/.env.server"; then
   systemctl enable --now mintly-api
   sleep 2
   systemctl --no-pager --lines=0 status mintly-api || true
@@ -93,7 +102,7 @@ if grep -q "^SUPABASE_SERVICE_ROLE_KEY=.\+" "$КАТАЛОГ/.env.server"; then
   curl -fsS localhost:8080/health && echo
   echo "Готово. Дальше: A-запись api → IP сервера, потом certbot --nginx -d api.mintly.company"
 else
-  cat <<'КОНЕЦ'
+  cat <<'EOF'
 
 Осталось заполнить ключи:
 
@@ -103,5 +112,5 @@ else
   CRON_SECRET               — то же значение, что в переменных Vercel
 
 Потом запусти этот же скрипт ещё раз — он поднимет службу.
-КОНЕЦ
+EOF
 fi
