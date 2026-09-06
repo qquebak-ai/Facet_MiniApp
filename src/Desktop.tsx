@@ -118,7 +118,23 @@ export default function Desktop() {
   const [поиск, setПоиск] = useState("");
   const [сорт, setСорт] = useState({ поле: "объём", по_убыв: true });
   const [выбран, setВыбран] = useState(null);
-  const [раздел, setРаздел] = useState("market");
+  /* Раздел переживает перезагрузку вкладки.
+     Вход через Google уводит на Google и обратно, и страница собирается
+     заново: человек, нажавший «продолжить с Google» в своём профиле,
+     возвращался на витрину рынка и решал, что вход не сработал.
+     Держим в памяти вкладки, а не браузера: новый визит должен
+     начинаться с рынка. */
+  const [раздел, setРаздел] = useState(() => {
+    try {
+      const с = sessionStorage.getItem("mintly.pro.раздел");
+      return с === "wallet" || с === "profile" ? с : "market";
+    } catch {
+      return "market";
+    }
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem("mintly.pro.раздел", раздел); } catch { /* приватный режим */ }
+  }, [раздел]);
   // Когда список обновлялся в последний раз — по этому видно, что данные
   // живые, а не застыли на первом кадре.
   const [обновлено, setОбновлено] = useState(null);
