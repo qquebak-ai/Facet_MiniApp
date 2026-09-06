@@ -1407,15 +1407,15 @@ async function handleWallet(chatId, telegramId) {
   const строки = [
     "<b>💼 Кошелёк Mintly</b>",
     "",
-    "🔗 <b>Адрес</b>",
+    "🔗 <b>TON-адрес</b>",
     `<code>${адрес}</code>`,
     "",
     "💎 <b>Баланс</b>",
     `${ton == null ? "—" : ton.toFixed(3)} TON`,
+    "",
+    "🪙 <b>Токены</b>",
   ];
   if (список && список.length) {
-    строки.push("");
-    строки.push("🪙 <b>Токены</b>");
     for (const ж of список.slice(0, 12)) {
       const шт = ж.amount >= 1000 ? Math.round(ж.amount).toLocaleString("ru-RU") : ж.amount.toFixed(2);
       // Тикер всегда с долларом: так он читается как тикер, а не как
@@ -1424,31 +1424,60 @@ async function handleWallet(chatId, telegramId) {
     }
     if (список.length > 12) строки.push(`…и ещё ${список.length - 12}`);
   } else {
-    строки.push("");
-    строки.push("🪙 <b>Токены</b>");
-    строки.push("Пока пусто.");
+    строки.push("Пока нет активов.");
   }
   if (соло) {
     строки.push("");
     строки.push("━━━━━━━━━━━━━━");
+    строки.push("");
     строки.push("◎ <b>Solana</b>");
-    строки.push(`${соло.sol.toFixed(4)} SOL`);
+    строки.push("");
+    строки.push(`Баланс: ${соло.sol.toFixed(4)} SOL`);
+    строки.push("Адрес:");
     строки.push(`<code>${соло.address}</code>`);
-    строки.push("Внутренний кошелёк площадки: им идут сделки прямо в чате.");
+    строки.push("");
+    строки.push("💡 Внутренний кошелёк Mintly — используется для сделок прямо в чате.");
   }
   строки.push("");
   строки.push("━━━━━━━━━━━━━━");
-  строки.push("💡 Управляй своими активами прямо в Mintly.");
+  строки.push("");
+  строки.push("🚀 Управляй активами прямо в Mintly — быстро, удобно и без лишних действий.");
 
-  await tg("sendMessage", {
-    chat_id: chatId,
-    text: строки.join("\n"),
-    parse_mode: "HTML",
-    link_preview_options: { is_disabled: true },
-    reply_markup: { inline_keyboard: [
+  await картинкойСТекстом(chatId, `${APP_URL}/wallet.png?v=${БАННЕР_КОШЕЛЬКА}`, строки.join("\n"), {
+    inline_keyboard: [
       [{ text: "🔄 Обновить", callback_data: "w:" }],
       [{ text: "📱 Открыть приложение", web_app: { url: APP_URL } }],
-    ] },
+    ],
+  });
+}
+
+/* Сообщение с картинкой сверху.
+ *
+ * У подписи под фотографией предел в тысячу с небольшим знаков, а
+ * кошелёк с десятком жетонов в него не всегда влезает. Тогда шлём двумя
+ * сообщениями: картинку и текст под ней — выглядит так же, а обрезать
+ * список токенов не приходится. Не отдал Telegram картинку — остаётся
+ * текст: без баннера кошелёк читается, без текста нет. */
+async function картинкойСТекстом(chatId, фото, текст, клавиатура) {
+  const ПРЕДЕЛ_ПОДПИСИ = 1024;
+  if (текст.length <= ПРЕДЕЛ_ПОДПИСИ) {
+    const ответ = await tg("sendPhoto", {
+      chat_id: chatId,
+      photo: фото,
+      caption: текст,
+      parse_mode: "HTML",
+      reply_markup: клавиатура,
+    });
+    if (ответ && ответ.ok) return;
+  } else {
+    await tg("sendPhoto", { chat_id: chatId, photo: фото });
+  }
+  await tg("sendMessage", {
+    chat_id: chatId,
+    text: текст,
+    parse_mode: "HTML",
+    link_preview_options: { is_disabled: true },
+    reply_markup: клавиатура,
   });
 }
 
@@ -1473,6 +1502,10 @@ async function handleWalletSet(message, аргумент) {
    отдаёт старую картинку, сколько её ни перерисовывай. Поэтому в адресе
    стоит номер: перерисовал баннер — подними его на единицу. */
 const БАННЕР_ВЕРСИЯ = 15;
+
+// Номер картинки кошелька. Telegram кеширует фотографии по адресу
+// неделями: без него обновлённый баннер к людям не доходит.
+const БАННЕР_КОШЕЛЬКА = 1;
 
 const ПРИВЕТСТВИЕ =
   "Mintly — запуск токенов в Telegram.\n\nЗдесь можно смотреть цены, покупать и продавать, не выходя из переписки: /menu\n\nВопрос или поломка — «Профиль» → «Поддержка» в приложении.";
