@@ -61,6 +61,21 @@ const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 // не требуется.
 const APP_URL = process.env.APP_URL || "https://mintly.company";
 
+/* Откуда Telegram будет забирать картинки.
+ *
+ * По умолчанию — то, что записано в переменных. Но однажды площадка
+ * переехала на новый домен, а переменная осталась старой, и баннеры
+ * молча перестали приходить: Telegram шёл по мёртвому адресу и отвечал
+ * отказом, которого никто не видел. Поэтому адрес берём из самого
+ * запроса — вебхук приходит ровно на тот домен, где живёт сайт, и
+ * ошибиться тут уже нечем. */
+let АДРЕС_КАРТИНОК = APP_URL;
+
+function запомнитьАдрес(req) {
+  const хост = String((req.headers && (req.headers["x-forwarded-host"] || req.headers.host)) || "").split(",")[0].trim();
+  if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(хост)) АДРЕС_КАРТИНОК = `https://${хост}`;
+}
+
 // Значок для подсказок, у которых нет своей картинки: без него Telegram
 // рисует серый квадрат с первой буквой заголовка, и подсказка выглядит
 // поломанной.
@@ -1443,7 +1458,7 @@ async function handleWallet(chatId, telegramId) {
   строки.push("");
   строки.push("🚀 Управляй активами прямо в Mintly — быстро, удобно и без лишних действий.");
 
-  await картинкойСТекстом(chatId, `${APP_URL}/wallet.png?v=${БАННЕР_КОШЕЛЬКА}`, строки.join("\n"), {
+  await картинкойСТекстом(chatId, `${АДРЕС_КАРТИНОК}/wallet.png?v=${БАННЕР_КОШЕЛЬКА}`, строки.join("\n"), {
     inline_keyboard: [
       [{ text: "🔄 Обновить", callback_data: "w:" }],
       [{ text: "📱 Открыть приложение", web_app: { url: APP_URL } }],
@@ -1460,17 +1475,31 @@ async function handleWallet(chatId, telegramId) {
  * текст: без баннера кошелёк читается, без текста нет. */
 async function картинкойСТекстом(chatId, фото, текст, клавиатура) {
   const ПРЕДЕЛ_ПОДПИСИ = 1024;
+  // Через tgCall, а не tg: тот проглатывает ответ целиком, и отказ
+  // Telegram («картинку по ссылке забрать не смог») выглядел бы удачей —
+  // ровно так баннер и пропал в прошлый раз, без единой записи в журнале.
+  const послать = async (тело) => {
+    try {
+      const ответ = await tgCall("sendPhoto", тело);
+      if (ответ && ответ.ok) return true;
+      console.warn("[bot] sendPhoto отказ:", фото, ответ && ответ.description);
+    } catch (err) {
+      console.warn("[bot] sendPhoto не дошёл:", фото, err && err.message);
+    }
+    return false;
+  };
+
   if (текст.length <= ПРЕДЕЛ_ПОДПИСИ) {
-    const ответ = await tg("sendPhoto", {
+    const вышло = await послать({
       chat_id: chatId,
       photo: фото,
       caption: текст,
       parse_mode: "HTML",
       reply_markup: клавиатура,
     });
-    if (ответ && ответ.ok) return;
+    if (вышло) return;
   } else {
-    await tg("sendPhoto", { chat_id: chatId, photo: фото });
+    await послать({ chat_id: chatId, photo: фото });
   }
   await tg("sendMessage", {
     chat_id: chatId,
@@ -1525,7 +1554,7 @@ async function welcome(chatId) {
   // приветствие всё равно должно дойти — поэтому текстом.
   const ответ = await tgCall("sendPhoto", {
     chat_id: chatId,
-    photo: `${APP_URL}/start.png?v=${БАННЕР_ВЕРСИЯ}`,
+    photo: `${АДРЕС_КАРТИНОК}/start.png?v=${БАННЕР_ВЕРСИЯ}`,
     caption: ПРИВЕТСТВИЕ,
     reply_markup: menuButtons(),
   }).catch(() => null);
@@ -1576,6 +1605,8 @@ async function setup(req, res) {
 }
 
 export default async function handler(req, res) {
+  запомнитьАдрес(req);
+
   // Настройка идёт обычной ссылкой в браузере, поэтому GET здесь
   // разрешён — но только со знанием секрета.
   if (req.method === "GET") {
