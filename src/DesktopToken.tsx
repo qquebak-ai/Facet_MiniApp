@@ -12,7 +12,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
-import { Ц, шрифт, цифры, ПОЛОСА, деньги, цена, возраст, число, Логотип, Движение, ЗнакPhantom, ЦВЕТА_СЕРВИСОВ } from "./desktopUI";
+import { Ц, шрифт, цифры, ПОЛОСА, деньги, цена, возраст, число, Логотип, Движение, ЗнакPhantom, ЦВЕТА_СЕРВИСОВ, изКеша } from "./desktopUI";
+import { supabase } from "./supabaseClient";
 import { состояниеВнутреннего, сделкаВнутренним } from "./appWallet";
 import { сделкаTon, сделкаSolana, подключитьPhantom, расширениеPhantom } from "./desktopTrade";
 
@@ -400,7 +401,29 @@ function ОТокене({ токен }) {
 
 /* ---------- экран ---------- */
 
-export default function DesktopToken({ токен, наНазад }) {
+export default function DesktopToken({ токен: токенПроп, наНазад }) {
+  /* Цифры экрана живут сами.
+   *
+   * Раньше это был снимок строки, сделанный в момент открытия: цена,
+   * капитализация и объём стояли до возвращения на витрину. Теперь строка
+   * приезжает из базы, как только обход её записал, — за доли секунды и
+   * без опроса. */
+  const [живой, setЖивой] = useState(токенПроп);
+  useEffect(() => { setЖивой(токенПроп); }, [токенПроп]);
+  useEffect(() => {
+    if (!токенПроп || !токенПроп.id) return undefined;
+    const канал = supabase
+      .channel(`токен:${токенПроп.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "feed_cache", filter: `id=eq.${токенПроп.id}` },
+        (со) => { if (со.new && со.new.id) setЖивой(изКеша(со.new)); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(канал); };
+  }, [токенПроп && токенПроп.id]);
+  const токен = живой || токенПроп;
+
   const [тф, setТф] = useState("M15");
   const [свечи, setСвечи] = useState(null);
   const [вкладка, setВкладка] = useState("trades");
@@ -499,6 +522,24 @@ export default function DesktopToken({ токен, наНазад }) {
     return () => { жив = false; clearInterval(iv); };
   }, [токен.пул, токен.сеть, тф]);
 
+  /* Последняя свеча дорисовывается живой ценой.
+   *
+   * Свечи источник отдаёт раз в двадцать секунд, а цена приезжает из базы
+   * сразу. Без этого график стоял, хотя число над ним уже изменилось, и
+   * казалось, что он отстал. Историю не трогаем — только текущую свечу. */
+  const свечиЖивые = useMemo(() => {
+    const p = Number(токен.цена) || 0;
+    if (!свечи || !свечи.length || !(p > 0)) return свечи;
+    const к = свечи.slice();
+    const последняя = { ...к[к.length - 1] };
+    if (последняя.c === p) return свечи;
+    последняя.c = p;
+    последняя.h = Math.max(последняя.h, p);
+    последняя.l = Math.min(последняя.l, p);
+    к[к.length - 1] = последняя;
+    return к;
+  }, [свечи, токен.цена]);
+
   const монета = токен.сеть === "solana" ? "SOL" : "TON";
   const быстрые = токен.сеть === "solana" ? БЫСТРЫЕ_SOL : БЫСТРЫЕ_TON;
 
@@ -565,7 +606,7 @@ export default function DesktopToken({ токен, наНазад }) {
           {/* Графику отдана большая часть экрана: ради него терминал и
               открывают, а лента сделок читается и в четверти высоты. */}
           <div style={{ flex: 3, minHeight: 420, padding: "4px 10px 0" }}>
-            <График свечи={свечи} />
+            <График свечи={свечиЖивые} />
           </div>
 
           <div style={{ flex: 1, minHeight: 170, borderTop: `1px solid ${Ц.линия}`, display: "flex", flexDirection: "column" }}>

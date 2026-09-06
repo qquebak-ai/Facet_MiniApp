@@ -164,6 +164,30 @@ export function ЗнакPhantom({ размер = 16 }) {
   );
 }
 
+/* Строка кеша к тому виду, в котором её рисует таблица. Имена полей
+   намеренно другие, чем в базе: колонки не должны знать про схему. */
+export function изКеша(r) {
+  return {
+    id: r.id,
+    сеть: r.chain === "solana" ? "solana" : "ton",
+    пул: r.pool_address,
+    адрес: r.token_address,
+    имя: r.name,
+    тикер: r.ticker,
+    лого: r.logo_url,
+    цена: Number(r.price) || 0,
+    движение: Number(r.change24) || 0,
+    капитализация: Number(r.mcap) || 0,
+    ликвидность: Number(r.liq) || 0,
+    объём: Number(r.vol24) || 0,
+    сделки: Number(r.tx24) || 0,
+    биржа: r.dex_name || null,
+    создан: r.pool_created_at || null,
+    новый: r.new_at || null,
+    обновлён: r.updated_at || null,
+  };
+}
+
 export function деньги(v) {
   const n = Number(v) || 0;
   if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;

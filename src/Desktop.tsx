@@ -20,7 +20,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import DesktopToken from "./DesktopToken";
 import { DesktopWallet, DesktopProfile } from "./DesktopWallet";
-import { Ц, шрифт, цифры, ПОЛОСА, СТИЛИ, ЦВЕТА_СЕРВИСОВ, ЗнакTelegram, ЗнакTON, ЗнакSolana, деньги, цена, возраст, число, Логотип, Линия, Движение } from "./desktopUI";
+import { Ц, шрифт, цифры, ПОЛОСА, СТИЛИ, ЦВЕТА_СЕРВИСОВ, ЗнакTelegram, ЗнакTON, ЗнакSolana, деньги, цена, возраст, число, Логотип, Линия, Движение, изКеша } from "./desktopUI";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
 
@@ -49,29 +49,6 @@ const ВКЛАДКИ = [
 ];
 
 /* ---------- данные ---------- */
-
-/* Строка кеша к тому виду, в котором её рисует таблица. Имена полей
-   намеренно другие, чем в базе: колонки не должны знать про схему. */
-function изКеша(r) {
-  return {
-    id: r.id,
-    сеть: r.chain === "solana" ? "solana" : "ton",
-    пул: r.pool_address,
-    адрес: r.token_address,
-    имя: r.name,
-    тикер: r.ticker,
-    лого: r.logo_url,
-    цена: Number(r.price) || 0,
-    движение: Number(r.change24) || 0,
-    капитализация: Number(r.mcap) || 0,
-    ликвидность: Number(r.liq) || 0,
-    объём: Number(r.vol24) || 0,
-    сделки: Number(r.tx24) || 0,
-    биржа: r.dex_name || null,
-    создан: r.pool_created_at || null,
-    новый: r.new_at || null,
-  };
-}
 
 async function загрузитьРынок(сеть) {
   const { data, error } = await supabase
@@ -169,19 +146,64 @@ export default function Desktop() {
 
   const обновить = useCallback(() => {
     загрузитьРынок(сеть)
-      .then((список) => { setСтроки(список); setОшибка(null); setОбновлено(Date.now()); })
+      .then((список) => {
+        setСтроки(список);
+        setОшибка(null);
+        // Возраст считаем по самим данным, а не по времени запроса: если
+        // обход встанет, строка честно скажет «час назад», а не будет
+        // бодро рапортовать «только что» на вчерашних ценах.
+        const свежесть = Math.max(0, ...список.map((t) => new Date(t.обновлён || 0).getTime() || 0));
+        setОбновлено(свежесть || Date.now());
+      })
       .catch((e) => setОшибка(String((e && e.message) || e)));
   }, [сеть]);
 
   useEffect(() => {
     setСтроки(null);
     обновить();
-    // Обход обновляет кеш раз в минуту — чаще спрашивать нечего.
+    // Опрос остаётся страховкой на случай, если живой канал не поднялся
+    // (сеть за строгим прокси, вкладка спала). Реже, чем раньше: цифры
+    // теперь приходят сами.
     const iv = setInterval(() => {
       if (document.visibilityState === "visible") обновить();
-    }, 30000);
+    }, 60000);
     return () => clearInterval(iv);
   }, [обновить]);
+
+  /* Живая лента: изменения приезжают из базы сами.
+   *
+   * Раньше витрина спрашивала список раз в полминуты, и цифра на экране
+   * отставала от базы на эти полминуты плюс время запроса. Теперь обход
+   * записал строку — она тут же меняется во всех открытых вкладках, за
+   * доли секунды и без единого лишнего запроса. */
+  useEffect(() => {
+    const канал = supabase
+      .channel(`рынок:${сеть}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "feed_cache", filter: `chain=eq.${сеть}` },
+        (со) => {
+          const строка = со.new && со.new.id ? изКеша(со.new) : null;
+          setОбновлено(Date.now());
+          if (со.eventType === "DELETE") {
+            const ушёл = со.old && со.old.id;
+            if (ушёл) setСтроки((пр) => (пр ? пр.filter((t) => t.id !== ушёл) : пр));
+            return;
+          }
+          if (!строка || !строка.пул || !(строка.цена > 0)) return;
+          setСтроки((пр) => {
+            if (!пр) return пр;
+            const i = пр.findIndex((t) => t.id === строка.id);
+            if (i < 0) return [...пр, строка];
+            const копия = пр.slice();
+            копия[i] = строка;
+            return копия;
+          });
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(канал); };
+  }, [сеть]);
 
   useEffect(() => { localStorage.setItem("mintly.pro.chain", сеть); }, [сеть]);
 
