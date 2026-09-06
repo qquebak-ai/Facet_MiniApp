@@ -11,6 +11,14 @@ export default defineConfig({
   // нужен; если он всё же где-то понадобится, обращение упрётся в
   // отсутствующий модуль, а не тихо подтянет мегабайт.
   plugins: [react(), nodePolyfills({ exclude: ["crypto"] })],
+  // Отпечаток сборки. Внутри Telegram нет ни адресной строки, ни
+  // консоли: понять, доехали правки до человека или он смотрит вчерашнюю
+  // страницу из кеша, иначе нечем — а вопрос этот возникает каждый раз.
+  define: {
+    __СБОРКА__: JSON.stringify(
+      new Date().toLocaleString("ru-RU", { timeZone: "UTC", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+    ),
+  },
   build: {
     outDir: "dist",
     rollupOptions: {

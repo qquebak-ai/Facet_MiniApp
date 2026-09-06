@@ -15654,8 +15654,31 @@ function ProfileView({
           </div>
         </div>
 
+        {/* Отпечаток сборки и режим показа. Внутри Telegram нет ни
+            адресной строки, ни консоли: без этой строки нельзя отличить
+            «правка не работает» от «человек смотрит вчерашнюю страницу из
+            кеша», а вопрос этот всплывает после каждой выкладки. */}
+        <ОтпечаткиСборки />
+
         </div>
       </div>
+    </div>
+  );
+}
+
+function ОтпечаткиСборки() {
+  const tg = typeof window !== "undefined" ? window.Telegram && window.Telegram.WebApp : null;
+  const с = (typeof window !== "undefined" && window.__страница) || {};
+  const режим = !tg
+    ? "вне Telegram"
+    : tg.isFullscreen
+      ? "страница"
+      : с.ошибка
+        ? `шторка (${с.ошибка})`
+        : с.просили ? "шторка (без ответа)" : "шторка";
+  return (
+    <div style={{ marginTop: 18, textAlign: "center", fontFamily: monoFont, fontSize: 10.5, color: T.muted, opacity: 0.5 }}>
+      {`сборка ${typeof __СБОРКА__ === "string" ? __СБОРКА__ : "—"} · ${режим}${tg && tg.version ? ` · TG ${tg.version}` : ""}`}
     </div>
   );
 }
