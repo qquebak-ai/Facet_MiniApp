@@ -21,6 +21,7 @@ import { supabase } from "./supabaseClient";
 import DesktopToken from "./DesktopToken";
 import { DesktopWallet, DesktopProfile } from "./DesktopWallet";
 import { Ц, шрифт, цифры, ПОЛОСА, СТИЛИ, ЦВЕТА_СЕРВИСОВ, ЗнакTelegram, ЗнакTON, ЗнакSolana, деньги, цена, возраст, число, Логотип, Линия, Движение, изКеша } from "./desktopUI";
+import { апи } from "./апи";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
 
@@ -156,7 +157,7 @@ export default function Desktop() {
     подтолкнуть.current = Date.now();
     // Обходим ровно ту сеть, которую человек сейчас смотрит: обе за один
     // вызов не укладываются в отведённое обработчику время.
-    fetch(`/api/refresh-feed?chain=${сеть}`).catch(() => {});
+    fetch(апи(`/api/refresh-feed?chain=${сеть}`)).catch(() => {});
   }, [сеть]);
 
   const обновить = useCallback(() => {

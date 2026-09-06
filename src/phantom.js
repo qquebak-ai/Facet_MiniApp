@@ -17,6 +17,7 @@
 
 import nacl from "tweetnacl";
 import bs58 from "bs58";
+import { апи } from "./апи";
 
 const APP_URL = typeof window !== "undefined" ? window.location.origin : "";
 const PHANTOM = "https://phantom.app/ul/v1";
@@ -77,7 +78,7 @@ async function дождаться(id, { таймаут = 180000, шаг = 1500 }
   const до = Date.now() + таймаут;
   while (Date.now() < до) {
     try {
-      const res = await fetch(`/api/phantom?action=poll&id=${encodeURIComponent(id)}`);
+      const res = await fetch(апи(`/api/phantom?action=poll&id=${encodeURIComponent(id)}`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.ready) return json.params || {};

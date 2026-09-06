@@ -4,6 +4,7 @@
    разный формат цены на соседних экранах видно сразу. */
 
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import { апи } from "./апи";
 
 export const Ц = {
   фон: "#000000",
@@ -272,7 +273,7 @@ function точкиЦены(пул, сеть) {
   if (было && Date.now() - было.ts < 5 * 60 * 1000) return Promise.resolve(было.точки);
   return new Promise((готово) => {
     линииОчередь.push(() =>
-      fetch(`/api/chart?what=ohlcv&pool=${encodeURIComponent(пул)}&tf=M15&n=96&network=${сеть}`)
+      fetch(апи(`/api/chart?what=ohlcv&pool=${encodeURIComponent(пул)}&tf=M15&n=96&network=${сеть}`))
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => {
           const ряд = (j && j.data && j.data.attributes && j.data.attributes.ohlcv_list) || [];

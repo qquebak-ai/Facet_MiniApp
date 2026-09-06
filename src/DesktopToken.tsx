@@ -16,6 +16,7 @@ import { Ц, шрифт, цифры, ПОЛОСА, деньги, цена, во�
 import { supabase } from "./supabaseClient";
 import { состояниеВнутреннего, сделкаВнутренним } from "./appWallet";
 import { сделкаTon, сделкаSolana, подключитьPhantom, расширениеPhantom } from "./desktopTrade";
+import { апи } from "./апи";
 
 const ТАЙМФРЕЙМЫ = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
 const БЫСТРЫЕ_TON = [0.5, 1, 5, 10];
@@ -320,7 +321,7 @@ function Сделки({ токен }) {
   useEffect(() => {
     let жив = true;
     const грузить = () => {
-      fetch(`/api/chart?what=trades&pool=${encodeURIComponent(токен.пул)}&network=${токен.сеть}`)
+      fetch(апи(`/api/chart?what=trades&pool=${encodeURIComponent(токен.пул)}&network=${токен.сеть}`))
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => {
           if (!жив) return;
@@ -502,7 +503,7 @@ export default function DesktopToken({ токен: токенПроп, наНа�
     let жив = true;
     setСвечи(null);
     const грузить = () => {
-      fetch(`/api/chart?what=ohlcv&pool=${encodeURIComponent(токен.пул)}&tf=${тф}&network=${токен.сеть}`)
+      fetch(апи(`/api/chart?what=ohlcv&pool=${encodeURIComponent(токен.пул)}&tf=${тф}&network=${токен.сеть}`))
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => {
           if (!жив) return;

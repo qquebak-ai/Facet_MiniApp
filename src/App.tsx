@@ -12,6 +12,7 @@ import {
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, beginCell, toNano } from "@ton/core";
 import { supabase } from "./supabaseClient";
+import { апи } from "./апи";
 import {
   CURVE_PARAMS,
   CURVE_TOTAL_SUPPLY,
@@ -3344,7 +3345,7 @@ async function своё(что, параметры, signal) {
   const строка = new URLSearchParams({ what: что, ...параметры }).toString();
   // Ручка живёт внутри обработчика графика: на бесплатном тарифе Vercel
   // двенадцать функций, и отдельная ради трёх запросов туда не влезала.
-  const res = await fetch(`/api/chart?${строка}`, { signal });
+  const res = await fetch(апи(`/api/chart?${строка}`), { signal });
   if (!res.ok) throw new Error(`данные рынка ${res.status}`);
   return res.json();
 }
@@ -10840,7 +10841,7 @@ function SolanaWalletCard({ showToast }) {
   useEffect(() => {
     if (!сессия) { setБаланс(null); return; }
     let cancelled = false;
-    fetch(`/api/solana?action=balances&wallet=${сессия.wallet}`)
+    fetch(апи(`/api/solana?action=balances&wallet=${сессия.wallet}`))
       .then((r) => r.json())
       .then((b) => { if (!cancelled && b && !b.error) setБаланс(Number(b.sol) || 0); })
       .catch(() => {});
@@ -11445,7 +11446,7 @@ function useПозиция(token, walletAddress) {
           const { сохранённаяСессия } = await import("./phantom");
           const сессия = сохранённаяСессия();
           if (!сессия) { if (жив) setКоличество(0); return; }
-          const r = await fetch(`/api/solana?action=balances&wallet=${сессия.wallet}&mint=${адрес}`)
+          const r = await fetch(апи(`/api/solana?action=balances&wallet=${сессия.wallet}&mint=${адрес}`))
             .then((x) => x.json());
           if (жив) setКоличество(Number(r && r.token) || 0);
           return;
@@ -11478,7 +11479,7 @@ function useТопДержателей(token, открыто) {
     async function загрузить() {
       try {
         if (token.chain === "solana") {
-          const r = await fetch(`/api/solana?action=holders&mint=${адрес}`).then((x) => x.json());
+          const r = await fetch(апи(`/api/solana?action=holders&mint=${адрес}`)).then((x) => x.json());
           const счета = (r && r.счета) || [];
           if (жив) setСписок(счета.map((с) => ({ адрес: с.адрес, доля: с.доля, количество: с.количество })));
           return;
@@ -12740,7 +12741,7 @@ function TradeModal({ t: token, tradeModal: tradeModalProp, onClose, onConfirm, 
       if (!сессия || cancelled) return;
       const параметры = new URLSearchParams({ wallet: сессия.wallet });
       if (token.tokenAddress) параметры.set("mint", token.tokenAddress);
-      const b = await fetch(`/api/solana?action=balances&${параметры}`).then((r) => r.json()).catch(() => null);
+      const b = await fetch(апи(`/api/solana?action=balances&${параметры}`)).then((r) => r.json()).catch(() => null);
       if (!cancelled && b && !b.error) setSolБаланс({ sol: Number(b.sol) || 0, token: Number(b.token) || 0 });
     })();
     return () => { cancelled = true; };
@@ -14078,7 +14079,7 @@ function SupportChat({ accountCreated, showToast, onRead }) {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session && session.access_token;
       if (!token) throw new Error("no_session");
-      const res = await fetch("/api/support", {
+      const res = await fetch(апи("/api/support"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ body: text }),
@@ -14752,7 +14753,7 @@ function storageWorks() {
 async function probeTelegramAccount() {
   const initData = telegramInitData();
   if (!initData) throw new Error("no_telegram");
-  const res = await fetch("/api/telegram-auth", {
+  const res = await fetch(апи("/api/telegram-auth"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ initData, probe: true }),
@@ -14781,7 +14782,7 @@ async function linkReferralIfAny() {
   const startParam = telegramStartParam();
   if (!initData || !startParam.startsWith("ref_")) return;
   try {
-    await fetch("/api/telegram-auth", {
+    await fetch(апи("/api/telegram-auth"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ initData, startParam, linkReferralOnly: true }),
@@ -14798,7 +14799,7 @@ async function signInWithTelegram(nickname) {
 
   const startParam = telegramStartParam();
 
-  const res = await fetch("/api/telegram-auth", {
+  const res = await fetch(апи("/api/telegram-auth"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ initData, startParam, nickname: nickname || undefined }),
@@ -18106,7 +18107,7 @@ function mapTokenRow(row) {
     // с балансом, там она приходит вместе со счётом.
     let десятичные = 6;
     if (продажа) {
-      const b = await fetch(`/api/solana?action=balances&wallet=${сессия.wallet}&mint=${token.tokenAddress}`)
+      const b = await fetch(апи(`/api/solana?action=balances&wallet=${сессия.wallet}&mint=${token.tokenAddress}`))
         .then((r) => r.json())
         .catch(() => null);
       if (b && b.decimals > 0) десятичные = b.decimals;
@@ -18123,10 +18124,10 @@ function mapTokenRow(row) {
     if (черезВнутренний) return await свопВнутренним({ вход, выход, сумма });
 
     const параметры = new URLSearchParams({ input: вход, output: выход, amount: сумма, slippage: "150" });
-    const кот = await fetch(`/api/solana?action=quote&${параметры}`).then((r) => r.json());
+    const кот = await fetch(апи(`/api/solana?action=quote&${параметры}`)).then((r) => r.json());
     if (!кот || кот.error || !кот.quote) throw new Error("маршрут не найден");
 
-    const собранная = await fetch("/api/solana?action=swap", {
+    const собранная = await fetch(апи("/api/solana?action=swap"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ quote: кот.quote, wallet: сессия.wallet }),
@@ -18137,7 +18138,7 @@ function mapTokenRow(row) {
     // Кошелёк только подписывает: отправку в сеть Phantom больше не
     // делает, поэтому подписанную сделку доводим до узла сами.
     const подписанная = await подписать(собранная.transaction, сессия);
-    const итог = await fetch("/api/solana?action=send", {
+    const итог = await fetch(апи("/api/solana?action=send"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ transaction: подписанная }),

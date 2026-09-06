@@ -20,6 +20,7 @@
  */
 
 import { supabase } from "./supabaseClient";
+import { апи } from "./апи";
 
 async function токен() {
   const { data } = await supabase.auth.getSession();
@@ -57,7 +58,7 @@ let включён = null;
 export async function внутреннийДоступен() {
   if (включён !== null) return включён;
   try {
-    const j = await fetch("/api/wallet-solana?action=enabled").then((r) => r.json());
+    const j = await fetch(апи("/api/wallet-solana?action=enabled")).then((r) => r.json());
     включён = !!(j && j.enabled);
   } catch {
     включён = false;

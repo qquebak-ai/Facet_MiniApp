@@ -15,6 +15,7 @@
  */
 
 import { VersionedTransaction } from "@solana/web3.js";
+import { апи } from "./апи";
 
 const SOL = "So11111111111111111111111111111111111111112";
 
@@ -31,7 +32,7 @@ export async function собратьСделкуTon({ жетон, кошелёк
     amount: String(сумма),
     side: продажа ? "sell" : "buy",
   });
-  const ответ = await fetch(`/api/chart?${параметры}`);
+  const ответ = await fetch(апи(`/api/chart?${параметры}`));
   if (ответ.status === 404) throw new Error("маршрут не найден: этот пул биржа не отдаёт");
   if (!ответ.ok) throw new Error("не удалось собрать сделку");
   const сделка = await ответ.json();
@@ -79,7 +80,7 @@ export async function сделкаSolana({ mint, кошелёк, сумма, п�
   let десятичные = 6;
   let количество = Number(сумма);
   if (продажа) {
-    const b = await fetch(`/api/solana?action=balances&wallet=${кошелёк}&mint=${mint}`)
+    const b = await fetch(апи(`/api/solana?action=balances&wallet=${кошелёк}&mint=${mint}`))
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
     // Точность у каждого токена своя, и ошибка здесь — это ошибка в
@@ -95,10 +96,10 @@ export async function сделкаSolana({ mint, кошелёк, сумма, п�
     : String(Math.round(количество * 1e9));
 
   const параметры = new URLSearchParams({ input: вход, output: выход, amount: единиц, slippage: "150" });
-  const кот = await fetch(`/api/solana?action=quote&${параметры}`).then((r) => r.json());
+  const кот = await fetch(апи(`/api/solana?action=quote&${параметры}`)).then((r) => r.json());
   if (!кот || кот.error || !кот.quote) throw new Error("маршрут не найден");
 
-  const собранная = await fetch("/api/solana?action=swap", {
+  const собранная = await fetch(апи("/api/solana?action=swap"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ quote: кот.quote, wallet: кошелёк }),
@@ -112,7 +113,7 @@ export async function сделкаSolana({ mint, кошелёк, сумма, п�
   let двоичная = "";
   for (const b of подписанная.serialize()) двоичная += String.fromCharCode(b);
 
-  const итог = await fetch("/api/solana?action=send", {
+  const итог = await fetch(апи("/api/solana?action=send"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transaction: btoa(двоичная) }),

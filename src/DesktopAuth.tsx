@@ -19,6 +19,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient";
 import { ошибкаВозврата, запомнитьСтраницу } from "./oauthВозврат";
 import { Ц, шрифт, цифры, ЗнакGoogle, ЗнакPhantom, ЗнакTelegram, ЦВЕТА_СЕРВИСОВ } from "./desktopUI";
+import { апи } from "./апи";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
 
@@ -32,7 +33,7 @@ async function токенСессии() {
 export async function завестиПрофиль(nickname) {
   const t = await токенСессии();
   if (!t) throw new Error("нет сессии");
-  const res = await fetch("/api/telegram-auth?action=profile", {
+  const res = await fetch(апи("/api/telegram-auth?action=profile"), {
     method: "POST",
     headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" },
     body: JSON.stringify({ nickname }),
@@ -60,14 +61,14 @@ async function войтиФантомом() {
   const { publicKey } = await провайдер.connect();
   const адрес = publicKey.toString();
 
-  const выдан = await fetch("/api/telegram-auth?action=nonce").then((r) => r.json());
+  const выдан = await fetch(апи("/api/telegram-auth?action=nonce")).then((r) => r.json());
   if (!выдан || !выдан.nonce) throw new Error("сервер не выдал код");
 
   const подписано = await провайдер.signMessage(new TextEncoder().encode(выдан.message), "utf8");
   const { default: bs58 } = await import("bs58");
   const подпись = bs58.encode(подписано.signature);
 
-  const res = await fetch("/api/telegram-auth?action=phantom", {
+  const res = await fetch(апи("/api/telegram-auth?action=phantom"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ address: адрес, nonce: выдан.nonce, exp: выдан.exp, sig: выдан.sig, signature: подпись }),

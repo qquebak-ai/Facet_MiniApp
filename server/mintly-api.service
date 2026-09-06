@@ -1,0 +1,36 @@
+; Служба API. Ставится в /etc/systemd/system/mintly-api.service
+;
+; Перезапуск безусловный: упасть процесс может по чужой вине (оборвалась
+; сеть к базе, источник вернул мусор), и в этом случае правильное
+; поведение — подняться снова, а не ждать человека.
+
+[Unit]
+Description=Mintly API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mintly
+WorkingDirectory=/srv/mintly
+ExecStart=/usr/bin/node server/index.mjs
+EnvironmentFile=/srv/mintly/.env.server
+Restart=always
+RestartSec=3
+; Порт слушает только петля: наружу его выставляет nginx, и оставлять
+; открытым второй вход незачем.
+Environment=HOST=127.0.0.1
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mintly-api
+
+; Ограничения на всякий случай: служба ходит в сеть и пишет только в свой
+; каталог, всё остальное ей ни к чему.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/mintly
+
+[Install]
+WantedBy=multi-user.target
