@@ -26,7 +26,10 @@ SyslogIdentifier=mintly-api
 
 ; Ограничения на всякий случай: служба ходит в сеть и пишет только в свой
 ; каталог, всё остальное ей ни к чему.
-NoNewPrivileges=true
+; Запрет на повышение прав снят намеренно: служба запускает выкладку
+; (server/deploy.sh) через sudo, а с NoNewPrivileges sudo не работает
+; вовсе. Право выдано ровно на один скрипт — см. /etc/sudoers.d/mintly-deploy.
+NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true

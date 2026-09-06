@@ -157,6 +157,27 @@ sudo /srv/mintly/server/deploy.sh
 Скрипт забирает код, ставит зависимости, собирает сайт и перезапускает
 службу. Это и есть выкладка целиком — примерно минута.
 
+### Выкладка по запросу
+
+Чтобы не ходить на сервер руками, тот же скрипт запускается маршрутом
+`/api/deploy` — с секретом из `.env.server`:
+
+```bash
+curl -X POST https://mintly.company/api/deploy -H "authorization: Bearer $DEPLOY_SECRET"
+curl https://mintly.company/api/deploy -H "authorization: Bearer $DEPLOY_SECRET"   # чем кончилось
+```
+
+Ответ приходит сразу, сборка идёт дальше сама. Без `DEPLOY_SECRET`
+маршрут выключен целиком — открытым его оставлять нельзя, он выполняет
+команды на машине.
+
+Службе нужно право запускать скрипт от root без пароля:
+
+```bash
+echo 'mintly ALL=(root) NOPASSWD: /srv/mintly/server/deploy.sh' | sudo tee /etc/sudoers.d/mintly-deploy
+sudo chmod 440 /etc/sudoers.d/mintly-deploy
+```
+
 ## Когда переедет
 
 Оба расписания в GitHub Actions — «Обход ленты» и «Уведомления» — можно
