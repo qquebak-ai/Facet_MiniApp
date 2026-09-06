@@ -10,7 +10,7 @@
 |---|---|---|
 | холодный старт | 1,3 с | нет |
 | свечи из кеша | 0,3 с | 20–40 мс |
-| обход ленты | раз в минуту, чужим планировщиком | свой цикл, шаг задаётся переменной |
+| обход ленты | раз в минуту, чужим планировщиком | свой цикл, каждая сеть раз в минуту |
 | число обработчиков | 12 (лимит тарифа) | сколько нужно |
 
 ---
@@ -70,7 +70,7 @@ SUPABASE_SERVICE_ROLE_KEY=<service_role из Supabase → Project Settings → A
 CRON_SECRET=<то же значение, что в переменных Vercel>
 APP_URL=https://mintly.company
 ALLOW_ORIGINS=https://mintly.company,https://www.mintly.company
-FEED_INTERVAL_MS=10000
+FEED_INTERVAL_MS=30000
 TELEGRAM_BOT_TOKEN=<токен бота>
 TELEGRAM_WEBHOOK_SECRET=<секрет вебхука>
 TONCENTER_API_KEY=
@@ -147,7 +147,7 @@ sudo systemctl restart mintly-api
 только зря выбирают лимит источника, а уведомления через GitHub ещё и
 падали, когда секрет в репозитории расходился с секретом на площадке.
 
-Шаги циклов задаются переменными: `FEED_INTERVAL_MS` (по умолчанию 10 с)
+Шаги циклов задаются переменными: `FEED_INTERVAL_MS` (по умолчанию 30 с)
 и `NOTIFY_INTERVAL_MS` (10 мин). Выключаются `FEED_LOOP=0` и
 `NOTIFY_LOOP=0` — это удобно, если сервер поднимают вторым, рядом с
 работающим Vercel.

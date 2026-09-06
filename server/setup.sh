@@ -76,7 +76,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 CRON_SECRET=
 APP_URL=https://mintly.company
 ALLOW_ORIGINS=https://mintly.company,https://www.mintly.company
-FEED_INTERVAL_MS=10000
+FEED_INTERVAL_MS=30000
 EOF
   chown "$USR:$USR" "$DIR/.env.server"
   chmod 600 "$DIR/.env.server"
@@ -84,6 +84,10 @@ EOF
 else
   echo "$DIR/.env.server уже есть, не трогаю"
 fi
+
+# Слишком частый обход выбирает весь лимит источника, и свечи начинают
+# получать отказы. Правим, если осталось от прежней установки.
+sed -i 's|^FEED_INTERVAL_MS=10000$|FEED_INTERVAL_MS=30000|' "$DIR/.env.server"
 
 step "Служба и вход"
 cp "$DIR/server/mintly-api.service" /etc/systemd/system/
