@@ -15908,7 +15908,13 @@ function useTelegramViewport() {
         // второй, и оба могут быть ненулевыми одновременно.
         const device = tg.safeAreaInset || {};
         const content = tg.contentSafeAreaInset || {};
-        setInsetTop((device.top || 0) + (content.top || 0));
+        // Целой страницей (fullscreen) шапки над окном уже нет, но кнопки
+        // «закрыть» и «ещё» никуда не деваются — они висят прямо поверх
+        // содержимого справа сверху. Клиент не всегда закладывает их в
+        // свой отступ, поэтому держим запас сами: без него первая строка
+        // экрана оказывается под кнопками.
+        const запасПодКнопки = tg.isFullscreen ? 48 : 0;
+        setInsetTop((device.top || 0) + Math.max(content.top || 0, запасПодКнопки));
         setInsetBottom((device.bottom || 0) + (content.bottom || 0));
         setDeviceTop(device.top || 0);
         setFullscreen(!!tg.isFullscreen);
@@ -15918,10 +15924,14 @@ function useTelegramViewport() {
       tg.onEvent && tg.onEvent("viewportChanged", update);
       tg.onEvent && tg.onEvent("safeAreaChanged", update);
       tg.onEvent && tg.onEvent("contentSafeAreaChanged", update);
+      // Переход на целую страницу приходит отдельным событием: отступы
+      // при нём меняются, а viewportChanged может и не сработать.
+      tg.onEvent && tg.onEvent("fullscreenChanged", update);
       return () => {
         tg.offEvent && tg.offEvent("viewportChanged", update);
         tg.offEvent && tg.offEvent("safeAreaChanged", update);
         tg.offEvent && tg.offEvent("contentSafeAreaChanged", update);
+        tg.offEvent && tg.offEvent("fullscreenChanged", update);
       };
     }
 
