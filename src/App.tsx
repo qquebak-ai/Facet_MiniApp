@@ -304,7 +304,7 @@ const STR = {
     mempadSpotlight: "В центре внимания",
     mempadLaunchToken: "Запустить токен",
     tickerBought: "купил", tickerSold: "продал",
-    sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterNew: "Новые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", mempadFilterSol: "Solana", homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionProfile: "Профиль",
+    sinceSec: "с", sinceMin: "м", sinceHour: "ч", mempadFilterNew: "Новые", mempadFilterTrend: "Трендовые", mempadFilterHot: "Горячие", mempadFilterBluming: "В росте", mempadFilterDex: "DEX", mempadFilterSol: "Solana", homeActionLaunch: "Создать токен", homeActionMempad: "Мемпад", homeActionProfile: "Профиль",
     feedTitle: "Прямо сейчас",
     feedSub: "Что происходит на площадке",
     feedTrade: "{who} купил ${ticker} на {ton} TON",
@@ -775,7 +775,7 @@ const STR = {
     mempadSpotlight: "Spotlight",
     mempadLaunchToken: "Launch token",
     tickerBought: "bought", tickerSold: "sold",
-    sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterNew: "New", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", mempadFilterSol: "Solana", homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionProfile: "Profile",
+    sinceSec: "s", sinceMin: "m", sinceHour: "h", mempadFilterNew: "New", mempadFilterTrend: "Trending", mempadFilterHot: "Hot", mempadFilterBluming: "Bluming", mempadFilterDex: "DEX", mempadFilterSol: "Solana", homeActionLaunch: "Launch token", homeActionMempad: "Mempad", homeActionProfile: "Profile",
     feedTitle: "Right now",
     feedSub: "What's happening here",
     feedTrade: "{who} bought ${ticker} for {ton} TON",
@@ -5283,9 +5283,22 @@ function RocketIconFX() {
 --------------------------------------------------------- */
 const MEMPAD_FILTERS = [
   { id: "new", labelKey: "mempadFilterNew" },
+  { id: "trend", labelKey: "mempadFilterTrend" },
   { id: "dex", labelKey: "mempadFilterDex" },
   { id: "hot", labelKey: "mempadFilterHot" },
 ];
+
+/* Трендовые — где прямо сейчас идут сделки.
+ *
+ * Это не то же, что «Горячие»: там наверху то, что сильнее выросло за
+ * сутки, и туда попадает монета с одной сделкой и рисованным плюсом.
+ * Тренд считается по числу сделок, а окно берётся то, в котором вообще
+ * есть жизнь: час, потом шесть часов, потом сутки. Ночью и на выходных
+ * часовое окно пустое у всех, и без отката список выходил бы пустым. */
+function поТренду(arr) {
+  const окно = ["tx1h", "tx6h", "tx24h"].find((w) => arr.some((tok) => (tok[w] || 0) > 0)) || "tx24h";
+  return [...arr].sort((a, b) => (b[окно] || 0) - (a[окно] || 0));
+}
 
 /* Аура токена — фон карточки «В центре внимания».
 
@@ -9949,6 +9962,7 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
       const featured = new Set(spotlightTop.map((tok) => tok.id));
       let arr = (solTokens || []).filter((tok) => !featured.has(tok.id));
       switch (filter) {
+        case "trend": arr = поТренду(arr); break;
         case "hot": arr = [...arr].sort((a, b) => b.change - a.change); break;
         case "dex": arr = arr.filter((tok) => tok.verified); break;
         default: break;
@@ -9958,6 +9972,7 @@ function MempadView({ tokens, loading, myTokensLoading = false, myTokens, onOpen
     const featured = new Set(spotlightTop.map((tok) => tok.id));
     let arr = tokens.filter((tok) => !featured.has(tok.id));
     switch (filter) {
+      case "trend": arr = поТренду(arr); break;
       case "hot": arr = [...arr].sort((a, b) => b.change - a.change); break;
       case "dex": arr = arr.filter(tok => tok.verified); break;
       default: break;
