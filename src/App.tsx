@@ -3868,6 +3868,13 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   // длины истории, то есть номера не значат ничего постоянного. Держим
   // якорь по времени и после обновления возвращаем окно на ту же дату.
   const anchorTimeRef = useRef(null);
+  /* Сколько времени показываем — в секундах, а не в свечах.
+     Источник отдаёт свечи только там, где были сделки, и ряд то
+     уплотняется, то редеет. Полсотни свечей в одном ответе — это час, в
+     следующем — двадцать минут, и график на живом обновлении менял
+     масштаб сам собой: только что был виден час, стало двадцать минут.
+     Длительность окна от плотности ряда не зависит. */
+  const spanRef = useRef(null);
   // Трогали ли шкалу цены руками. Пока нет — она подгоняется под данные
   // сама при каждом обновлении.
   const yUserRef = useRef(false);
@@ -3884,7 +3891,9 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   const hoverIdxRef = useRef(null);
   // Ширина шкалы цен. Живёт в ref, а не в состоянии: её читают и расчёт
   // раскладки, и отрисовка, и полоса захвата — все в одном кадре.
-  const gutterRef = useRef(CHART_GUTTER);
+  // Ноль значит «ещё не мерили»: до первого замера подписей берётся
+  // запасная ширина.
+  const gutterRef = useRef(0);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -3924,7 +3933,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   function ширинаШкалы(min, max, range) {
     const canvas = canvasRef.current;
     const ctx = canvas && canvas.getContext("2d");
-    if (!ctx) return gutterRef.current;
+    if (!ctx) return gutterRef.current || CHART_GUTTER;
     const fmt = valueFmt || fmtPrice;
     const шаг = (range || Math.abs(max - min) || 1) / 6;
     const подписи = [max, min, (max + min) / 2].map(
@@ -3943,11 +3952,37 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       ширина = Math.max(ширина, ctx.measureText(String(fmt(последняя.close))).width);
     }
     ctx.restore();
-    if (!Number.isFinite(ширина) || ширина <= 0) return gutterRef.current;
+    if (!Number.isFinite(ширина) || ширина <= 0) return gutterRef.current || CHART_GUTTER;
     // Восемь точек справа от цифр и восемь слева — ровно на дыхание, плюс
-    // поля самой плашки.
-    gutterRef.current = Math.min(104, Math.max(44, Math.ceil((ширина + 20) / 8) * 8));
+    // поля самой плашки. Ширина только растёт: цена живая, и подпись то
+    // длиннее, то короче — от каждой такой смены поле свечей меняло
+    // ширину, и график вздрагивал вбок на ровном месте.
+    const нужно = Math.min(104, Math.max(44, Math.ceil((ширина + 20) / 8) * 8));
+    gutterRef.current = gutterRef.current ? Math.max(gutterRef.current, нужно) : нужно;
     return gutterRef.current;
+  }
+
+  /* Запомнить, сколько времени сейчас в окне. Вызывается после каждого
+     жеста — по нему окно и восстанавливается на следующем обновлении. */
+  function запомнитьРазмахОкна() {
+    const v = viewRef.current;
+    const слева = candles[Math.max(0, Math.min(n - 1, Math.floor(v.start)))];
+    const справа = candles[Math.max(0, Math.min(n - 1, Math.ceil(v.start + v.count) - 1))];
+    if (слева && справа && Number.isFinite(слева.time) && Number.isFinite(справа.time) && справа.time > слева.time) {
+      spanRef.current = справа.time - слева.time;
+    }
+  }
+
+  // Сколько свечей укладывается в запомненную длительность, считая от
+  // правого края ряда.
+  function свечейВРазмахе() {
+    const размах = spanRef.current;
+    if (!размах || !n) return null;
+    const конец = candles[n - 1];
+    if (!конец || !Number.isFinite(конец.time)) return null;
+    let i = n - 1;
+    while (i > 0 && Number.isFinite(candles[i - 1].time) && конец.time - candles[i - 1].time <= размах) i--;
+    return Math.max(CHART_MIN_VISIBLE, Math.min(n, n - i));
   }
 
   function clampView() {
@@ -4018,6 +4053,9 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     const canvas = canvasRef.current;
     if (!canvas || !n || !widthPx) return;
     clampView();
+    // Первый кадр задаёт размах окна: дальше от него и пляшем при
+    // обновлениях, даже если человек ничего не трогал.
+    if (spanRef.current == null) запомнитьРазмахОкна();
     const layout = computeLayout();
     if (!layout) return;
     // Размер холста трогаем только когда он правда изменился. Присвоение
@@ -4260,7 +4298,11 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     if (!n) return;
     const v = viewRef.current;
     if (pinnedRef.current) {
-      v.count = Math.max(CHART_MIN_VISIBLE, Math.min(n, v.count || CHART_DEFAULT_VISIBLE));
+      // Окно восстанавливаем по времени: сохранить прежнее число свечей
+      // мало — в новом ответе их может быть вдвое больше на том же часе,
+      // и масштаб менялся сам собой прямо под рукой.
+      const поВремени = свечейВРазмахе();
+      v.count = Math.max(CHART_MIN_VISIBLE, Math.min(n, поВремени || v.count || CHART_DEFAULT_VISIBLE));
       v.start = Math.max(0, n - v.count);
     } else if (anchorTimeRef.current != null) {
       // Ряд мог пересобраться с другим шагом: у свечей другие номера и
@@ -4343,6 +4385,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     pinnedRef.current = v.start + v.count >= n - 0.75;
     const left = candles[Math.max(0, Math.min(n - 1, Math.floor(v.start)))];
     anchorTimeRef.current = left && Number.isFinite(left.time) ? left.time : null;
+    запомнитьРазмахОкна();
     draw();
   }
   // Вертикальный сдвиг: окно цены едет за пальцем так же, как время по
@@ -4408,6 +4451,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       const newSlot = chartWidth() / newCount;
       viewRef.current = { start: pinchRef.current.anchorIdx - mx / newSlot, count: newCount };
       clampView();
+      запомнитьРазмахОкна();
       draw();
       return;
     }
@@ -4485,6 +4529,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     const newSlot = chartWidth() / newCount;
     viewRef.current = { start: anchorIdx - mx / newSlot, count: newCount };
     clampView();
+    запомнитьРазмахОкна();
     draw();
   }
 
@@ -4521,7 +4566,7 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
   // Полоса захвата шкалы по ширине совпадает с самой шкалой: иначе
   // тянуть приходится мимо подписей.
   const layoutNow = computeLayout();
-  const scaleGutter = gutterRef.current;
+  const scaleGutter = gutterRef.current || CHART_GUTTER;
   return (
     <div ref={wrapRef} data-chart="1" style={{ width: "100%", height, position: "relative", touchAction: "none" }}
       onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
@@ -18720,3 +18765,4 @@ function mapTokenRow(row) {
     </div>
   );
 }
+export { TerminalChart as ГрафикДляПроверки };
