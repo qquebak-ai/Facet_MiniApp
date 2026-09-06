@@ -7,7 +7,7 @@ import {
   Copy, ExternalLink, LogOut, ChevronRight, ChevronDown, Rocket, HeartCrack,
   Lock, Gift, LifeBuoy,
   FileText, CheckCircle2, RefreshCw, X,
-  Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown, Bell, Check, Cpu
+  Eye, EyeOff, LogIn, ShoppingBag, Trash2, Crown, Bell, Check, Cpu, Settings
 } from "lucide-react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Address, beginCell, toNano } from "@ton/core";
@@ -10643,7 +10643,7 @@ function ШапкаГлавной({ profile, accountCreated, onOpenMyProfile }) 
  *
  * В профиле они лежали за лишним переходом, и человек, запустивший
  * токен, не видел его до тех пор, пока не вспомнит, где смотреть. */
-function МоиДела({ myTokens = [], achievements = [], userId, onGoCreate, onManageToken, onOpenAchievements }) {
+function МоиДела({ myTokens = [], achievements = [], userId, onGoCreate, onOpenToken, onOpenAchievements }) {
   const закрыто = achievements.filter((a) => a.done).length;
   return (
     <>
@@ -10657,7 +10657,7 @@ function МоиДела({ myTokens = [], achievements = [], userId, onGoCreate, 
           <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 13.5, lineHeight: 1.5 }}>{t("noTokensYet")}</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {myTokens.slice(0, 3).map((tok) => <MyTokenCard key={tok.id} t={tok} onManage={onManageToken} />)}
+            {myTokens.slice(0, 3).map((tok) => <MyTokenCard key={tok.id} t={tok} onOpen={onOpenToken} />)}
           </div>
         )}
       </section>
@@ -10746,7 +10746,7 @@ function МояАктивность({ userId }) {
 function HomeView({
   onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile,
   profile = null, accountCreated = false, myTokens = [], achievements = [], userId = null,
-  onOpenMyProfile, onOpenAchievements, onManageToken,
+  onOpenMyProfile, onOpenAchievements,
 }) {
   // Главная — витрина площадки: сводка, токен дня, движение, топ. Монетам
   // из пробной сети там не место — их цена ничего не значит, а сводка по
@@ -10765,7 +10765,7 @@ function HomeView({
         achievements={achievements}
         userId={userId}
         onGoCreate={onGoCreate}
-        onManageToken={onManageToken}
+        onOpenToken={onOpenToken}
         onOpenAchievements={onOpenAchievements}
       />
       <ГлавныйТокен tokens={боевые} onOpen={onOpenToken} />
@@ -11509,7 +11509,7 @@ function useТезис(tokenId) {
   return [текст, сохранить];
 }
 
-function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey, currentUserId = null, onNeedAuth, onOpenProfile, tonPriceUsd = 0, walletAddress = null }) {
+function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = true, connected = true, onConnectWallet, themeKey, currentUserId = null, onNeedAuth, onOpenProfile, tonPriceUsd = 0, walletAddress = null, onManage = null }) {
   // График вынесен из вкладок наверх, поэтому здесь остались только
   // разделы под ним: держатели, лента, о токене.
   const [tab, setTab] = useState("feed"); // holders | feed | about
@@ -11912,6 +11912,16 @@ function TokenDetail({ t: token, onBack, showToast, onBuy, onSell, unlocked = tr
             style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${T.line}` }}>
             <Share2 size={14} color={T.muted} />
           </button>
+          {/* Ссылка и удаление — только у своего токена. Раньше они жили
+              кнопкой «Управлять» на карточке в профиле, но карточка ведёт
+              на этот экран, и распоряжаться токеном логично здесь же. */}
+          {onManage && (
+            <button onClick={() => onManage(token)} className="fx-tap flex items-center justify-center"
+              aria-label={tr("manageBtn")}
+              style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${T.line}` }}>
+              <Settings size={14} color={T.muted} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -13605,13 +13615,24 @@ function CreateView({ showToast, unlocked, accountCreated, connected, onOpenCrea
    PROFILE VIEW
 --------------------------------------------------------- */
 
-function MyTokenCard({ t, onManage }) {
+function MyTokenCard({ t, onOpen }) {
   // Свои токены живут в той же сети, что и приложение, а один из
   // жетонных кошельков — кошелёк кривой. Раньше здесь спрашивали
   // mainnet и получали прочерк вместо числа.
   const holdersCount = useJettonHolders(t.address, TON_TESTNET_NETWORK, t.curveAddress ? 1 : 0);
+  // Вся карточка ведёт на экран токена: за своим токеном заходят
+  // смотреть график и сделки, а не в служебное окно. Отдельной кнопки
+  // рядом больше нет — она перехватывала касание там, где его ждали от
+  // самой карточки.
   return (
-    <GlassCard style={{ padding: "12px 14px" }} className="flex items-center gap-3">
+    <GlassCard
+      style={{ padding: "12px 14px", cursor: "pointer" }}
+      className="fx-tap flex items-center gap-3"
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen && onOpen(t)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen && onOpen(t); } }}
+    >
       <TokenAvatar tone={t.verified ? "neutral" : "neutral"} src={t.logoUrl} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
@@ -13623,7 +13644,7 @@ function MyTokenCard({ t, onManage }) {
         <div style={{ fontFamily: displayFont, fontWeight: 700, fontSize: 17.5, color: T.turquoise, marginTop: 2 }}>{fmtUSD(t.mcapNum)}</div>
         <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 11.5, marginTop: 2 }}>{tr("liqShort")} ${t.liq} · {holdersCount == null ? "—" : holdersCount.toLocaleString("ru-RU")} {tr("holdersShort")} · {tr("volShort")} {t.vol}</div>
       </div>
-      <button onClick={() => onManage && onManage(t)} className="fx-tap rounded-[16px] px-3 py-1.5" style={{ background: T.surfaceHi, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 12, color: T.ice }}>{tr("manageBtn")}</button>
+      <ChevronRight size={16} color={T.muted} style={{ flexShrink: 0 }} />
     </GlassCard>
   );
 }
@@ -15324,7 +15345,7 @@ async function uploadAvatarIfNeeded(userId) {
 function ProfileView({
   connected, onOpenConnectModal, showToast,
   accountCreated, profile, onOpenCreateProfile, onOpenLogin, onOpenEditProfile, onLogOut,
-  onOpenSetting, onManageToken, onGoCreate, onOpenToken, myTokens = [],
+  onOpenSetting, onGoCreate, onOpenToken, myTokens = [],
   cosmetics: cosmeticsProp = { frame: "none", card: "none" }, onGoShop, onOpenAchievements, insetTop = 0, userId = null,
   // Достижения считаются в корне: их же показывает магазин и отдельная
   // страница достижений, дублировать запрос незачем.
@@ -17849,6 +17870,14 @@ function mapTokenRow(row) {
   // откуда пришли, и «назад» возвращает туда же.
   function openCreate() { setView("create"); }
   function backFromToken() { setView(tab); }
+
+  // Открытый токен — из своих? Тогда на его экране появляется управление
+  // (ссылка и удаление). Сравниваем по записи из базы, а не по флагу в
+  // карточке: на экран токен попадает и из ленты, где такого флага нет.
+  const свойТокен = React.useMemo(
+    () => (token ? (myTokens || []).find((м) => м.id === token.id) || null : null),
+    [token, myTokens]
+  );
   // Профиль создателя открывается поверх карточки токена, поэтому «назад»
   // возвращает именно на неё, а не на вкладку.
   const [viewedUserId, setViewedUserId] = useState(null);
@@ -18443,7 +18472,6 @@ function mapTokenRow(row) {
               userId={userId}
               onOpenMyProfile={() => goTab("profile")}
               onOpenAchievements={() => setView("achievements")}
-              onManageToken={(tok) => setManageToken_(tok)}
             />
           </KeepAlive>
           <KeepAlive show={view === "mempad"}>
@@ -18495,7 +18523,7 @@ function mapTokenRow(row) {
               insetTop={insetTop}
             />
           )}
-          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && (connected || (token && token.chain === "solana"))} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} onOpenProfile={openUserProfile} tonPriceUsd={tonPriceUsd} walletAddress={walletAddress} />}
+          {view === "token" && <TokenDetail t={token} onBack={backFromToken} showToast={showToast} onBuy={handleBuy} onSell={handleSell} unlocked={accountCreated && (connected || (token && token.chain === "solana"))} connected={connected} onConnectWallet={() => setConnectModalOpen(true)} themeKey={appSettings.theme} currentUserId={userId} onNeedAuth={openCreateProfile} onOpenProfile={openUserProfile} tonPriceUsd={tonPriceUsd} walletAddress={walletAddress} onManage={свойТокен ? () => setManageToken_(свойТокен) : null} />}
           {view === "create" && (
             <CreateView
               showToast={showToast}
@@ -18525,7 +18553,6 @@ function mapTokenRow(row) {
               onLogOut={logOutProfile}
               supportUnread={supportUnread}
               onOpenSetting={(item) => setSettingsItem(item)}
-              onManageToken={(tok) => setManageToken_(tok)}
               onGoCreate={openCreate}
               onOpenToken={openToken}
               myTokens={myTokens}
