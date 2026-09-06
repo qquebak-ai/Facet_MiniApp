@@ -126,6 +126,19 @@ export default function DesktopAuth({ наВход }) {
     if (т) setОшибка(т);
   }, []);
 
+  /* Вернулись от Google уже с сессией, но профиля ещё нет.
+     Без этой проверки страница показывала те же кнопки входа, и человек
+     жал «Продолжить с Google» по кругу: вход-то состоялся, не хватало
+     только ника. */
+  useEffect(() => {
+    let жив = true;
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!жив || !(data && data.user)) return;
+      if (!(await профильЕсть()) && жив) setНуженНик(true);
+    });
+    return () => { жив = false; };
+  }, []);
+
   async function послеВхода() {
     // Профиль мог остаться с прошлого входа — тогда ник спрашивать не за
     // что. Нет профиля — просим ник и заводим.
@@ -209,6 +222,17 @@ export default function DesktopAuth({ наВход }) {
             {идёт ? "Сохраняем…" : "Готово"}
           </Кнопка>
         </div>
+        {/* Выход прямо отсюда: сюда попадают и те, кто вошёл случайно —
+            чужим аккаунтом в общем браузере или не тем, чем собирались. */}
+        <button
+          onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }}
+          style={{
+            marginTop: 10, width: "100%", padding: "9px 0", borderRadius: 10, cursor: "pointer",
+            background: "transparent", border: "none", color: Ц.слабый, fontFamily: шрифт, fontSize: 12.5,
+          }}
+        >
+          Это не мой аккаунт — выйти
+        </button>
         {ошибка && <Ошибка>{ошибка}</Ошибка>}
       </Обёртка>
     );

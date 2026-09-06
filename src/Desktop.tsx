@@ -155,10 +155,11 @@ export default function Desktop() {
         .maybeSingle()
         .then(({ data }) => {
           if (!жив) return;
-          setАккаунт({
-            ник: (data && data.nickname) || (польз.email || "").split("@")[0] || "аккаунт",
-            лого: (data && data.avatar_url) || null,
-          });
+          // Только настоящий профиль. Сессия без него — это ещё не
+          // аккаунт: раньше в шапке появлялось имя, выведенное из почты,
+          // и человек видел «аккаунт», в который не входил, а приложение
+          // при этом продолжало просить войти.
+          setАккаунт(data && data.nickname ? { ник: data.nickname, лого: data.avatar_url || null } : null);
         });
     };
     supabase.auth.getUser().then(({ data }) => узнать(data && data.user));
@@ -303,14 +304,14 @@ export default function Desktop() {
             className="кнопка"
             onClick={() => { setРаздел("profile"); setВыбран(null); }}
             style={{
-              marginLeft: "auto", display: "flex", alignItems: "center", gap: 8,
+              marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
               padding: "6px 12px 6px 6px", borderRadius: 999, cursor: "pointer",
               background: Ц.панельВыше, border: `1px solid ${Ц.линия}`, color: Ц.текст,
               fontFamily: шрифт, fontSize: 13, fontWeight: 600,
             }}
           >
             <Логотип src={аккаунт.лого} тикер={аккаунт.ник} размер={22} />
-            {аккаунт.ник}
+            <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{аккаунт.ник}</span>
           </button>
         )}
 

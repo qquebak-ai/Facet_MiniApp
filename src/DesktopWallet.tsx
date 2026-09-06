@@ -395,6 +395,19 @@ export function DesktopProfile() {
           <div style={{ marginLeft: "auto", textAlign: "right" }}>
             <div style={{ fontFamily: шрифт, fontSize: 11.5, color: Ц.слабый, textTransform: "uppercase", letterSpacing: "0.04em" }}>Монеты</div>
             <div style={{ fontFamily: цифры, fontSize: 22, fontWeight: 700 }}>{число(профиль.coins || 0)}</div>
+            {/* Выход с сайта: браузер бывает общий, и уйти из аккаунта
+                надо там же, где его видно. */}
+            <button
+              onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }}
+              className="кнопка"
+              style={{
+                marginTop: 8, padding: "5px 10px", borderRadius: 9, cursor: "pointer",
+                background: "transparent", border: `1px solid ${Ц.линия}`, color: Ц.тусклый,
+                fontFamily: шрифт, fontSize: 12,
+              }}
+            >
+              Выйти
+            </button>
           </div>
         </div>
       </Карточка>
