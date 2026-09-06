@@ -1394,27 +1394,28 @@ async function handleWallet(chatId, telegramId) {
   const соло = профиль && профиль.id ? await солоКошелёк(профиль.id) : null;
 
   if (!адрес) {
-    await tg("sendMessage", {
-      chat_id: chatId,
-      text: [
-        "Кошелёк не привязан.",
+    await картинкойСТекстом(chatId, "wallet.png", [
+      "<b>💼 Кошелёк Mintly</b>",
+      "",
+      "Кошелёк не привязан.",
+      "",
+      "Подключи его в приложении — адрес запомнится сам. Или пришли сюда командой:",
+      "<code>/wallet UQ…</code>",
+      "",
+      "Ключи бот не спрашивает и знать не может: адрес нужен только чтобы показать баланс и собрать сделку, подписываешь всегда сам в кошельке.",
+      ...(соло ? [
         "",
-        "Подключи его в приложении — адрес запомнится сам. Или пришли сюда командой:",
-        "<code>/wallet UQ…</code>",
+        "━━━━━━━━━━━━━━",
         "",
-        "Ключи бот не спрашивает и знать не может: адрес нужен только чтобы показать баланс и собрать сделку, подписываешь всегда сам в кошельке.",
-        ...(соло ? [
-          "",
-          "━━━━━━━━━━━━━━",
-          "◎ <b>Solana</b>",
-          `${соло.sol.toFixed(4)} SOL`,
-          `<code>${соло.address}</code>`,
-          "Это внутренний кошелёк площадки: им идут сделки прямо в чате. Пополняется обычным переводом.",
-        ] : []),
-      ].join("\n"),
-      parse_mode: "HTML",
-      reply_markup: { inline_keyboard: [[{ text: "📱 Подключить в приложении", web_app: { url: APP_URL } }]] },
-    });
+        "◎ <b>Solana</b>",
+        "",
+        `Баланс: ${соло.sol.toFixed(4)} SOL`,
+        "Адрес:",
+        `<code>${соло.address}</code>`,
+        "",
+        "💡 Внутренний кошелёк Mintly — используется для сделок прямо в чате.",
+      ] : []),
+    ].join("\n"), { inline_keyboard: [[{ text: "📱 Подключить в приложении", web_app: { url: APP_URL } }]] });
     return;
   }
 
@@ -1458,7 +1459,7 @@ async function handleWallet(chatId, telegramId) {
   строки.push("");
   строки.push("🚀 Управляй активами прямо в Mintly — быстро, удобно и без лишних действий.");
 
-  await картинкойСТекстом(chatId, `${АДРЕС_КАРТИНОК}/wallet.png?v=${БАННЕР_КОШЕЛЬКА}`, строки.join("\n"), {
+  await картинкойСТекстом(chatId, "wallet.png", строки.join("\n"), {
     inline_keyboard: [
       [{ text: "🔄 Обновить", callback_data: "w:" }],
       [{ text: "📱 Открыть приложение", web_app: { url: APP_URL } }],
@@ -1473,33 +1474,35 @@ async function handleWallet(chatId, telegramId) {
  * сообщениями: картинку и текст под ней — выглядит так же, а обрезать
  * список токенов не приходится. Не отдал Telegram картинку — остаётся
  * текст: без баннера кошелёк читается, без текста нет. */
-async function картинкойСТекстом(chatId, фото, текст, клавиатура) {
+async function картинкойСТекстом(chatId, файл, текст, клавиатура) {
   const ПРЕДЕЛ_ПОДПИСИ = 1024;
-  // Через tgCall, а не tg: тот проглатывает ответ целиком, и отказ
-  // Telegram («картинку по ссылке забрать не смог») выглядел бы удачей —
-  // ровно так баннер и пропал в прошлый раз, без единой записи в журнале.
+  const снимок = await снимокФайла(файл);
+
   const послать = async (тело) => {
+    if (!снимок) return false;
     try {
-      const ответ = await tgCall("sendPhoto", тело);
-      if (ответ && ответ.ok) return true;
-      console.warn("[bot] sendPhoto отказ:", фото, ответ && ответ.description);
+      const ответ = снимок.id
+        ? await tgCall("sendPhoto", { ...тело, photo: снимок.id })
+        : await tgПоФайлу("sendPhoto", тело, снимок.байты, файл);
+      if (ответ && ответ.ok) {
+        запомнитьСнимок(файл, ответ);
+        return true;
+      }
+      console.warn("[bot] sendPhoto отказ:", файл, ответ && ответ.description);
+      // Запомненный слепок мог протухнуть (картинку перерисовали, бота
+      // перезапустили): забываем и на следующий раз загрузим заново.
+      снимки.delete(файл);
     } catch (err) {
-      console.warn("[bot] sendPhoto не дошёл:", фото, err && err.message);
+      console.warn("[bot] sendPhoto не дошёл:", файл, err && err.message);
     }
     return false;
   };
 
   if (текст.length <= ПРЕДЕЛ_ПОДПИСИ) {
-    const вышло = await послать({
-      chat_id: chatId,
-      photo: фото,
-      caption: текст,
-      parse_mode: "HTML",
-      reply_markup: клавиатура,
-    });
+    const вышло = await послать({ chat_id: chatId, caption: текст, parse_mode: "HTML", reply_markup: клавиатура });
     if (вышло) return;
   } else {
-    await послать({ chat_id: chatId, photo: фото });
+    await послать({ chat_id: chatId });
   }
   await tg("sendMessage", {
     chat_id: chatId,
@@ -1508,6 +1511,51 @@ async function картинкойСТекстом(chatId, фото, текст, 
     link_preview_options: { is_disabled: true },
     reply_markup: клавиатура,
   });
+}
+
+/* Картинки бот загружает сам, а не даёт Telegram ссылку.
+ *
+ * Со ссылкой всё зависит от того, дойдёт ли Telegram до нашего домена и
+ * тем ли он окажется: переезд на новый адрес однажды уже оставил бота
+ * без баннеров, и заметить это было нечем. Отправка файлом убирает
+ * посредника целиком.
+ *
+ * Первая отправка загружает байты, дальше Telegram отдаёт слепок
+ * (file_id) — по нему то же фото уходит мгновенно и без трафика. */
+const снимки = new Map();
+
+async function снимокФайла(имя) {
+  const готовый = снимки.get(имя);
+  if (готовый && готовый.id) return готовый;
+  try {
+    const ответ = await fetch(`${АДРЕС_КАРТИНОК}/${имя}`);
+    if (!ответ.ok) {
+      console.warn("[bot] картинка не отдалась:", имя, ответ.status);
+      return null;
+    }
+    return { байты: Buffer.from(await ответ.arrayBuffer()) };
+  } catch (err) {
+    console.warn("[bot] картинка не забралась:", имя, err && err.message);
+    return null;
+  }
+}
+
+function запомнитьСнимок(имя, ответ) {
+  const фото = ответ && ответ.result && ответ.result.photo;
+  if (!Array.isArray(фото) || !фото.length) return;
+  снимки.set(имя, { id: фото[фото.length - 1].file_id });
+}
+
+/* Отправка файлом: multipart вместо json. */
+async function tgПоФайлу(method, поля, байты, имя) {
+  const форма = new FormData();
+  for (const [ключ, значение] of Object.entries(поля)) {
+    if (значение == null) continue;
+    форма.append(ключ, typeof значение === "object" ? JSON.stringify(значение) : String(значение));
+  }
+  форма.append("photo", new Blob([байты], { type: "image/png" }), имя);
+  const ответ = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, { method: "POST", body: форма });
+  return ответ.json();
 }
 
 /* Привязка кошелька руками — для тех, кто в приложение ещё не заходил. */
