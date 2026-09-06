@@ -1227,6 +1227,17 @@ function fmtPrice(p) {
   if (!Number.isFinite(n)) return "—";
   return "$" + n.toFixed(n < 0.001 ? 6 : 4);
 }
+/* Подпись деления на оси времени. Формат зависит от шага: на минутах
+   важен час и минута, на днях — дата, а год не нужен нигде — история у
+   мемкоина короче него. */
+function подписьВремени(sec, tf) {
+  const д = new Date(sec * 1000);
+  const дв = (v) => String(v).padStart(2, "0");
+  if (tf === "D1" || tf === "W1" || tf === "MN1") return `${дв(д.getDate())}.${дв(д.getMonth() + 1)}`;
+  if (tf === "H4" || tf === "H1") return `${дв(д.getDate())}.${дв(д.getMonth() + 1)} ${дв(д.getHours())}:00`;
+  return `${дв(д.getHours())}:${дв(д.getMinutes())}`;
+}
+
 function fmtCountdown(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(total / 3600);
@@ -3921,11 +3932,21 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
     );
     ctx.save();
     ctx.font = "10px " + monoFont;
-    const ширина = Math.max(...подписи.map((t) => ctx.measureText(t).width));
+    let ширина = Math.max(...подписи.map((t) => ctx.measureText(t).width));
+    // Подпись в плашке текущей цены длиннее делений: у делений формат
+    // короткий («$180M»), а в плашке — полный («$163.22M»). Считали
+    // только по делениям, и плашке не хватало места: её текст обрезался
+    // краем экрана.
+    const последняя = candles && candles[candles.length - 1];
+    if (последняя && Number.isFinite(последняя.close)) {
+      ctx.font = "700 11px " + monoFont;
+      ширина = Math.max(ширина, ctx.measureText(String(fmt(последняя.close))).width);
+    }
     ctx.restore();
     if (!Number.isFinite(ширина) || ширина <= 0) return gutterRef.current;
-    // Восемь точек справа от цифр и восемь слева — ровно на дыхание.
-    gutterRef.current = Math.min(96, Math.max(40, Math.ceil((ширина + 16) / 8) * 8));
+    // Восемь точек справа от цифр и восемь слева — ровно на дыхание, плюс
+    // поля самой плашки.
+    gutterRef.current = Math.min(104, Math.max(44, Math.ceil((ширина + 20) / 8) * 8));
     return gutterRef.current;
   }
 
@@ -4113,8 +4134,18 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
 
     // Price axis (right gutter) — evenly spaced "nice" price levels, like
     // a real trading chart's scale, instead of the old 3 faint labels.
-    ctx.fillStyle = T.surface;
+    //
+    // Шкала — тем же фоном, что и график, с тонкой чертой вместо
+    // светлого прямоугольника: заливка другого цвета читалась как
+    // приклеенный сбоку кусок, обрезанный сверху и снизу, а не как ось.
+    ctx.fillStyle = T.bg;
     ctx.fillRect(plotW, 0, gutter, height);
+    ctx.strokeStyle = hexA(T.ice, 0.08);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(plotW + 0.5, padTop);
+    ctx.lineTo(plotW + 0.5, height - padBottom);
+    ctx.stroke();
     const targetLines = Math.max(4, Math.round(drawHeight / 44));
     const rawStep = range / targetLines;
     const mag = Math.pow(10, Math.floor(Math.log10(rawStep || 1)));
@@ -4132,10 +4163,39 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
         // Капитализация — числа от единицы и выше, у них подпись
         // подбирается по шагу шкалы. Цена за токен — доли цента, там
         // работает свой формат с длинным хвостом нулей.
-        ctx.fillText(Math.abs(price) >= 1 ? fmtAxisUSD(price, step) : fmt(price), chartWidth() - 8, y + 3);
+        ctx.fillText(Math.abs(price) >= 1 ? fmtAxisUSD(price, step) : fmt(price), chartWidth() - 10, y + 3);
       }
     }
     ctx.textAlign = "left";
+
+    /* Ось времени под свечами.
+       Без неё нижний край графика обрывался пустой полосой: свечи есть,
+       а к какому часу они относятся — негде посмотреть. Подписи ставим
+       по свечам, а не по ровным отрезкам времени, — иначе на прокрутке
+       они разъезжались бы с самими свечами. */
+    {
+      const шагПодписей = Math.max(1, Math.ceil((endI - startI) / Math.max(2, Math.round(plotW / 78))));
+      ctx.font = "9px " + monoFont;
+      ctx.fillStyle = T.faint;
+      ctx.textAlign = "center";
+      let правыйКрай = -Infinity;
+      for (let i = startI; i < endI; i += шагПодписей) {
+        const c = candles[i];
+        if (!c || !Number.isFinite(c.time)) continue;
+        const текст = подписьВремени(c.time, tf);
+        const половина = ctx.measureText(текст).width / 2;
+        const x = xFor(i);
+        // Крайние подписи не режем краем поля: половина числа за
+        // границей выглядит хуже, чем её отсутствие. Соседние разводим
+        // по фактической ширине, а не по одному числу на все форматы —
+        // «04.09 22:00» вдвое длиннее «22:00».
+        if (x - половина < 2 || x + половина > plotW - 4) continue;
+        if (x - половина < правыйКрай + 14) continue;
+        правыйКрай = x + половина;
+        ctx.fillText(текст, x, height - padBottom + 16);
+      }
+      ctx.textAlign = "left";
+    }
 
     // Live current-price pill — the highlighted price + a live countdown
     // to when the current (rightmost) bar closes and the next candle
@@ -4151,15 +4211,25 @@ function TerminalChart({ candles, height = 340, themeKey, onHover, tf, valueFmt 
       // график показывает прошлый участок (сделок в текущем окне не
       // было), вечный «0:00» под ценой выглядел бы как зависший таймер.
       const live = leftMs > 0;
+      // Плашка не во всю ширину шкалы и не впритык к краю: раньше она
+      // упиралась в границу экрана, и её цифры обрезались вместе с ним.
+      const отступ = 6;
+      const плашкаX = plotW + 2;
+      const плашкаШ = Math.max(24, chartWidth() - отступ - плашкаX);
+      const плашкаВ = live ? 32 : 20;
       ctx.fillStyle = lastColor;
-      ctx.fillRect(chartWidth() - gutter, pillTop, gutter, live ? 32 : 20);
+      ctx.beginPath();
+      // roundRect есть не во всех встроенных браузерах — там просто угол.
+      if (ctx.roundRect) ctx.roundRect(плашкаX, pillTop, плашкаШ, плашкаВ, 5);
+      else ctx.rect(плашкаX, pillTop, плашкаШ, плашкаВ);
+      ctx.fill();
       ctx.fillStyle = T.bg;
       ctx.textAlign = "center";
       ctx.font = "700 11px " + monoFont;
-      ctx.fillText(priceLabel, chartWidth() - gutter / 2, pillTop + (live ? 13 : 10));
+      ctx.fillText(priceLabel, плашкаX + плашкаШ / 2, pillTop + (live ? 13 : 10));
       if (live) {
         ctx.font = "9px " + monoFont;
-        ctx.fillText(fmtCountdown(leftMs), chartWidth() - gutter / 2, pillTop + 26);
+        ctx.fillText(fmtCountdown(leftMs), плашкаX + плашкаШ / 2, pillTop + 26);
       }
       ctx.textAlign = "left";
     }
