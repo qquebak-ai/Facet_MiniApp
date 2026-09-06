@@ -10886,6 +10886,34 @@ function МояАктивность({ userId }) {
   );
 }
 
+/* Баннер над сводкой: нажатие ведёт в мемпад.
+   Нажимается весь баннер, а не только нарисованная на нём кнопка: на
+   узком экране в неё пришлось бы целиться, а промах по картинке читается
+   как «не работает». */
+function БаннерТорговли({ onGo }) {
+  return (
+    <button
+      onClick={() => { haptic("light"); onGo && onGo(); }}
+      className="fx-tap w-full"
+      style={{
+        display: "block", padding: 0, borderRadius: 18, overflow: "hidden",
+        border: `1px solid ${T.line}`, background: T.surface, lineHeight: 0,
+      }}
+      aria-label="Открыть мемпад"
+    >
+      <img
+        src="/banner-home.jpg"
+        alt=""
+        // Ширина картинки известна заранее — место под неё занимается до
+        // загрузки, и лента не прыгает, когда баннер приезжает.
+        width={1180}
+        height={472}
+        style={{ width: "100%", height: "auto", display: "block" }}
+      />
+    </button>
+  );
+}
+
 function HomeView({
   onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile,
   profile = null, accountCreated = false, myTokens = [], achievements = [], userId = null,
@@ -10901,6 +10929,7 @@ function HomeView({
     // должна висеть над пустотой, а не над последней строкой топа.
     <div className="flex flex-col" style={{ gap: 26, paddingTop: 8, paddingBottom: 78 }}>
       <ШапкаГлавной profile={profile} accountCreated={accountCreated} onOpenMyProfile={onOpenMyProfile} />
+      <БаннерТорговли onGo={() => onGoTab("mempad")} />
       <ГлавнаяСводка live={боевые} />
       <БегущаяЛента />
       <МоиДела
