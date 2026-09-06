@@ -18,7 +18,16 @@ sudo -u "$USR" git -C "$DIR" reset --hard --quiet origin/main
 sudo -u "$USR" git -C "$DIR" log -1 --oneline
 
 echo "== зависимости =="
-sudo -u "$USR" env HOME="$DIR" npm --prefix "$DIR" ci --omit=dev --no-audit --no-fund
+# Сборщик нужен здесь же: сайт собирается на сервере, а не приезжает
+# готовым, поэтому dev-зависимости не отбрасываем.
+sudo -u "$USR" env HOME="$DIR" npm --prefix "$DIR" ci --no-audit --no-fund
+
+echo "== сборка сайта =="
+# Ключи для страниц берутся из .env: сборщик вшивает их в код, поэтому
+# без файла сайт соберётся, но не найдёт ни базу, ни вход.
+[ -f "$DIR/.env" ] || { echo "нет $DIR/.env — заполни его (см. server/README.md)"; exit 1; }
+sudo -u "$USR" env HOME="$DIR" npm --prefix "$DIR" run build
+echo "собрано: $(ls "$DIR/dist" | wc -l) файлов в корне dist"
 
 echo "== перезапуск =="
 systemctl restart mintly-api

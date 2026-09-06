@@ -111,6 +111,59 @@ function тело(req) {
   });
 }
 
+/* Раздача самого сайта.
+ *
+ * Пока сайт жил на чужой площадке, серверу хватало API. Теперь он отдаёт
+ * и собранные страницы из dist: одно место, куда идёт выкладка, и
+ * никакого ожидания чужой очереди сборки.
+ *
+ * Всё, что не файл, отдаётся как index.html: адреса вроде /pro и /app
+ * разбирает само приложение в браузере, и без этого обновление страницы
+ * на них давало бы 404. */
+const САЙТ = path.join(корень, "dist");
+
+const ТИПЫ = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+  ".txt": "text/plain; charset=utf-8",
+  ".webmanifest": "application/manifest+json",
+};
+
+function отдатьФайл(res, файл, кеш) {
+  const тип = ТИПЫ[path.extname(файл).toLowerCase()] || "application/octet-stream";
+  let байты;
+  try { байты = fs.readFileSync(файл); } catch { return false; }
+  res.setHeader("Content-Type", тип);
+  res.setHeader("Cache-Control", кеш);
+  res.status(200).end(байты);
+  return true;
+}
+
+function отдатьСайт(res, путь) {
+  if (!fs.existsSync(САЙТ)) return false;
+  // Путь из запроса нормализуем и держим внутри dist: «..» в адресе не
+  // должно выводить за пределы каталога сайта.
+  const внутри = path.normalize(path.join(САЙТ, decodeURIComponent(путь)));
+  if (внутри.startsWith(САЙТ) && fs.existsSync(внутри) && fs.statSync(внутри).isFile()) {
+    // Файлы с отпечатком в имени (assets/index-XXXX.js) не меняются
+    // никогда — их можно держать в кеше браузера год. Всё остальное
+    // перепроверяем.
+    const навсегда = /\/assets\//.test(путь) || /\.(woff2|png|jpg|jpeg|webp|svg|ico)$/.test(путь);
+    return отдатьФайл(res, внутри, навсегда ? "public, max-age=31536000, immutable" : "no-cache");
+  }
+  // Не файл — значит адрес внутри приложения.
+  return отдатьФайл(res, path.join(САЙТ, "index.html"), "no-cache, no-store, must-revalidate");
+}
+
 const сервер = http.createServer(async (req, res) => {
   const адрес = new URL(req.url, "http://x");
   дополнить(res);
@@ -137,7 +190,15 @@ const сервер = http.createServer(async (req, res) => {
   }
 
   const ф = await обработчик(адрес.pathname);
-  if (!ф) { res.status(404).json({ error: "not_found" }); return; }
+  if (!ф) {
+    // Не наш обработчик — пробуем отдать сайт. API живёт под /api, всё
+    // остальное принадлежит страницам.
+    if (req.method === "GET" || req.method === "HEAD") {
+      if (!адрес.pathname.startsWith("/api/") && отдатьСайт(res, адрес.pathname)) return;
+    }
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
 
   req.query = Object.fromEntries(адрес.searchParams);
   req.body = await тело(req);

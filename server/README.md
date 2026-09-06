@@ -1,8 +1,8 @@
-# API на своём сервере
+# Сайт и API на своём сервере
 
-Сайт остаётся на CDN — там он быстрее любого одиночного сервера. Сюда
-переезжает то, чему постоянный процесс действительно нужен: обработчики
-`api/*.js`, их кеш и обход биржевых лент.
+Здесь живёт всё: обработчики `api/*.js` с их кешем, обход биржевых лент и
+сам сайт. Выкладка — это `git pull` и сборка на месте, без чужой очереди:
+именно из-за неё коммиты часами не доезжали до людей.
 
 Что это даёт против текущего Vercel:
 
@@ -118,27 +118,44 @@ sudo certbot --nginx -d api.mintly.company
 
 Certbot сам допишет блок 443 и продление.
 
-## Переключить сайт на этот API
+## Ключи для страниц
 
-В Vercel → Settings → Environment Variables добавить:
+Сайт собирается на сервере, и сборщику нужны переменные с префиксом
+`VITE_` — он вшивает их прямо в код страниц. Файл `/srv/mintly/.env`
+(не путать с `.env.server`, который читает служба):
 
+```bash
+sudo -u mintly tee /srv/mintly/.env >/dev/null <<'КОНЕЦ'
+VITE_SUPABASE_URL=https://rinxzaakkhxdbhjghtwa.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon из Supabase → Project Settings → API>
+VITE_TG_BOT=MintlyAppbot
+VITE_TG_APP=app
+КОНЕЦ
 ```
-VITE_API_BASE = https://api.mintly.company
+
+`VITE_API_BASE` здесь не нужен вовсе: сайт и API на одном домене, и
+запросы идут к соседнему пути.
+
+## Домен сайта
+
+В DNS: `A  @  <IP сервера>` и `A  www  <IP сервера>`, потом сертификат на
+оба имени сразу:
+
+```bash
+sudo certbot --nginx -d mintly.company -d www.mintly.company -d api.mintly.company
 ```
 
-и передеплоить. Приложение начнёт ходить за свечами, сделками и обходом
-сюда. Пустое значение возвращает всё обратно на Vercel — откат в одну
-переменную, без правки кода.
+Пока записи ведут на старую площадку, сервер уже можно проверить по IP:
+`curl -H "Host: mintly.company" http://<IP>/` должен отдать страницу.
 
 ## Обновление
 
 ```bash
-sudo -u mintly git -C /srv/mintly pull
-sudo -u mintly npm --prefix /srv/mintly ci --omit=dev
-sudo systemctl restart mintly-api
+sudo /srv/mintly/server/deploy.sh
 ```
 
-Или одной командой: `sudo /srv/mintly/server/deploy.sh`.
+Скрипт забирает код, ставит зависимости, собирает сайт и перезапускает
+службу. Это и есть выкладка целиком — примерно минута.
 
 ## Когда переедет
 
