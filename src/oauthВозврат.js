@@ -1,0 +1,74 @@
+/* Возврат из чужого входа (Google).
+ *
+ * Google не отдаёт сессию напрямую: он присылает человека обратно на
+ * сайт с одноразовым кодом в адресе, и код нужно обменять на сессию.
+ * Делать это автоматически (detectSessionInUrl) мы не разрешаем
+ * намеренно — тогда любая присланная ссылка с параметрами могла бы
+ * подсунуть открытому приложению постороннюю сессию. Поэтому обмен идёт
+ * здесь и только для кода, который мы сами и запросили: проверочный ключ
+ * от него лежит в этом же браузере, без него обмен не проходит.
+ *
+ * Вызывается один раз перед отрисовкой: иначе приложение успевает
+ * решить, что человек не вошёл, и показать форму входа поверх уже
+ * состоявшегося входа.
+ */
+
+import { supabase } from "./supabaseClient";
+
+// Куда кладём текст неудачи, чтобы форма входа показала его человеку:
+// к моменту разбора адреса ни одного экрана ещё не нарисовано.
+export const КЛЮЧ_ОШИБКИ = "mintly.oauth.ошибка";
+
+export function ошибкаВозврата() {
+  try {
+    const т = sessionStorage.getItem(КЛЮЧ_ОШИБКИ);
+    if (т) sessionStorage.removeItem(КЛЮЧ_ОШИБКИ);
+    return т;
+  } catch {
+    return null;
+  }
+}
+
+function убратьСледы(адрес) {
+  for (const п of ["code", "state", "error", "error_code", "error_description"]) адрес.searchParams.delete(п);
+  const хвост = адрес.searchParams.toString();
+  // Код одноразовый: оставлять его в адресной строке незачем, а при
+  // обновлении страницы он ещё и попробует обменяться повторно и
+  // получит отказ.
+  window.history.replaceState({}, "", адрес.pathname + (хвост ? `?${хвост}` : "") + адрес.hash);
+}
+
+export async function разобратьВозвратOAuth() {
+  if (typeof window === "undefined") return;
+  let адрес;
+  try {
+    адрес = new URL(window.location.href);
+  } catch {
+    return;
+  }
+
+  const код = адрес.searchParams.get("code");
+  const отказ = адрес.searchParams.get("error_description") || адрес.searchParams.get("error");
+
+  if (отказ) {
+    try { sessionStorage.setItem(КЛЮЧ_ОШИБКИ, отказ); } catch { /* приватный режим */ }
+    убратьСледы(адрес);
+    return;
+  }
+  if (!код) return;
+
+  try {
+    const { error } = await supabase.auth.exchangeCodeForSession(код);
+    if (error) throw error;
+  } catch (e) {
+    const т = String((e && e.message) || e);
+    // Проверочный ключ живёт в том браузере, где нажали «войти». Ссылку
+    // возврата открыли в другом браузере или после чистки хранилища —
+    // объясняем это словами, а не абзацем из библиотеки.
+    const понятно = /code verifier|flow state/i.test(т)
+      ? "Вход не завершился: начните заново в том же браузере, где нажимали «Продолжить с Google»."
+      : т;
+    try { sessionStorage.setItem(КЛЮЧ_ОШИБКИ, понятно); } catch { /* приватный режим */ }
+  }
+  убратьСледы(адрес);
+}

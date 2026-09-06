@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
 import TonLaunchApp from "./App";
 import Desktop from "./Desktop";
+import { разобратьВозвратOAuth } from "./oauthВозврат";
 import "./index.css";
 
 // Показываем текст ошибки прямо на экране, если что-то сломается —
@@ -89,24 +90,32 @@ function десктопнаяВитрина() {
 
 const Корень = десктопнаяВитрина() ? Desktop : TonLaunchApp;
 
-try {
-  ReactDOM.createRoot(document.getElementById("root")!).render(
-    <React.StrictMode>
-      <TonConnectUIProvider
-        manifestUrl={manifestUrl}
-        actionsConfiguration={{
-          // Внутри Telegram окно кошелька закрывалось раньше, чем по нему
-          // успевали нажать. Без указанной стратегии возврата TonConnect
-          // не знает, куда возвращать человека после подписи, и сворачивает
-          // своё окно само.
-          returnStrategy: "back",
-          skipRedirectToWallet: "never",
-        }}
-      >
-        <Корень />
-      </TonConnectUIProvider>
-    </React.StrictMode>
-  );
-} catch (err) {
-  showFatalError(err);
+function нарисовать() {
+  try {
+    ReactDOM.createRoot(document.getElementById("root")!).render(
+      <React.StrictMode>
+        <TonConnectUIProvider
+          manifestUrl={manifestUrl}
+          actionsConfiguration={{
+            // Внутри Telegram окно кошелька закрывалось раньше, чем по нему
+            // успевали нажать. Без указанной стратегии возврата TonConnect
+            // не знает, куда возвращать человека после подписи, и сворачивает
+            // своё окно само.
+            returnStrategy: "back",
+            skipRedirectToWallet: "never",
+          }}
+        >
+          <Корень />
+        </TonConnectUIProvider>
+      </React.StrictMode>
+    );
+  } catch (err) {
+    showFatalError(err);
+  }
 }
+
+/* Сначала разбираем возврат от Google, потом рисуем: иначе приложение
+   успевает решить, что человек не вошёл, и показывает форму входа поверх
+   уже состоявшегося входа. Отрисовку не блокируем ошибкой обмена — без
+   сессии сайт всё равно должен открыться. */
+разобратьВозвратOAuth().catch(() => {}).then(нарисовать);

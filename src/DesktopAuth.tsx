@@ -15,8 +15,9 @@
  * потом не меняется, поэтому придумывает его человек, а не сервер.
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient";
+import { ошибкаВозврата } from "./oauthВозврат";
 import { Ц, шрифт, цифры, ЗнакGoogle, ЗнакPhantom, ЗнакTelegram, ЦВЕТА_СЕРВИСОВ } from "./desktopUI";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
@@ -116,6 +117,14 @@ export default function DesktopAuth({ наВход }) {
   const [идёт, setИдёт] = useState(false);
   const [ошибка, setОшибка] = useState("");
   const [письмо, setПисьмо] = useState(false);
+
+  // Вход через Google заканчивается возвратом на страницу: если по дороге
+  // что-то сорвалось, человек видит ту же форму и не понимает, почему он
+  // не вошёл. Причина ждёт его здесь.
+  useEffect(() => {
+    const т = ошибкаВозврата();
+    if (т) setОшибка(т);
+  }, []);
 
   async function послеВхода() {
     // Профиль мог остаться с прошлого входа — тогда ник спрашивать не за
