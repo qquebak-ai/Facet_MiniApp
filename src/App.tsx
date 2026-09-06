@@ -10886,31 +10886,52 @@ function МояАктивность({ userId }) {
   );
 }
 
-/* Баннер над сводкой: нажатие ведёт в мемпад.
-   Нажимается весь баннер, а не только нарисованная на нём кнопка: на
-   узком экране в неё пришлось бы целиться, а промах по картинке читается
-   как «не работает». */
-function БаннерТорговли({ onGo }) {
+/* Баннеры над сводкой. Лента, а не один баннер: их будет несколько, и
+   листаются они горизонтально с прилипанием — вертикальную прокрутку
+   главной это не трогает.
+   Нажимается весь баннер, а не нарисованная на нём кнопка: на узком
+   экране в неё пришлось бы целиться, а промах читается как «не
+   работает». */
+const БАННЕРЫ = [
+  { id: "trade", файл: "/banner-home.jpg", подпись: "Открыть мемпад", куда: "mempad" },
+];
+
+function БаннерыГлавной({ onGoTab }) {
+  if (!БАННЕРЫ.length) return null;
+  const один = БАННЕРЫ.length === 1;
   return (
-    <button
-      onClick={() => { haptic("light"); onGo && onGo(); }}
-      className="fx-tap w-full"
+    <div
+      className="no-scrollbar"
       style={{
-        display: "block", padding: 0, borderRadius: 18, overflow: "hidden",
-        border: `1px solid ${T.line}`, background: T.surface, lineHeight: 0,
+        display: "flex", gap: 10, overflowX: один ? "visible" : "auto",
+        scrollSnapType: "x mandatory", overscrollBehaviorX: "contain",
+        // Лента идёт от края до края, а карточки внутри отступают: так
+        // соседний баннер выглядывает из-за края и видно, что их больше.
+        margin: "0 -16px", padding: "0 16px",
       }}
-      aria-label="Открыть мемпад"
     >
-      <img
-        src="/banner-home.jpg"
-        alt=""
-        // Ширина картинки известна заранее — место под неё занимается до
-        // загрузки, и лента не прыгает, когда баннер приезжает.
-        width={1180}
-        height={472}
-        style={{ width: "100%", height: "auto", display: "block" }}
-      />
-    </button>
+      {БАННЕРЫ.map((б) => (
+        <button
+          key={б.id}
+          onClick={() => { haptic("light"); onGoTab && onGoTab(б.куда); }}
+          className="fx-tap"
+          style={{
+            flex: один ? "1 1 auto" : "0 0 92%", scrollSnapAlign: "center",
+            display: "block", padding: 0, borderRadius: 16, overflow: "hidden",
+            border: `1px solid ${T.line}`, background: T.surface, lineHeight: 0,
+          }}
+          aria-label={б.подпись}
+        >
+          <img
+            src={б.файл}
+            alt=""
+            // Пропорции заданы заранее — место под баннер занимается до
+            // загрузки, и лента не прыгает, когда картинка приезжает.
+            style={{ width: "100%", aspectRatio: "3.3 / 1", objectFit: "cover", display: "block" }}
+          />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -10929,7 +10950,7 @@ function HomeView({
     // должна висеть над пустотой, а не над последней строкой топа.
     <div className="flex flex-col" style={{ gap: 26, paddingTop: 8, paddingBottom: 78 }}>
       <ШапкаГлавной profile={profile} accountCreated={accountCreated} onOpenMyProfile={onOpenMyProfile} />
-      <БаннерТорговли onGo={() => onGoTab("mempad")} />
+      <БаннерыГлавной onGoTab={onGoTab} />
       <ГлавнаяСводка live={боевые} />
       <БегущаяЛента />
       <МоиДела
