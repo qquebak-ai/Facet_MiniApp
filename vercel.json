@@ -34,7 +34,7 @@
       ]
     },
     {
-      "source": "/(index.html)?",
+      "source": "/",
       "headers": [
         {
           "key": "Cache-Control",
@@ -43,7 +43,25 @@
       ]
     },
     {
-      "source": "/(pro|app)",
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/pro",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/app",
       "headers": [
         {
           "key": "Cache-Control",
