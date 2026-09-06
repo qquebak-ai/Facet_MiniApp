@@ -9,7 +9,7 @@
 import React, { useEffect, useState } from "react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { supabase } from "./supabaseClient";
-import { Ц, шрифт, цифры, деньги, возраст, число, Логотип, ЗнакTelegram, ЦВЕТА_СЕРВИСОВ } from "./desktopUI";
+import { Ц, шрифт, цифры, деньги, возраст, число, Логотип, ЗнакTelegram, ЦВЕТА_СЕРВИСОВ, Скелет } from "./desktopUI";
 import { состояниеВнутреннего, вывестиСВнутреннего } from "./appWallet";
 import DesktopAuth from "./DesktopAuth";
 
@@ -273,8 +273,8 @@ export function DesktopWallet({ наТокен }) {
         <Заголовок>TON-кошелёк</Заголовок>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
           <div>
-            <div style={{ fontFamily: цифры, fontSize: 30, fontWeight: 700 }}>
-              {баланс == null ? "—" : `${баланс.toFixed(3)} TON`}
+            <div style={{ fontFamily: цифры, fontSize: 30, fontWeight: 700, minHeight: 36, display: "flex", alignItems: "center" }}>
+              {баланс == null ? <Скелет ш={150} в={26} /> : `${баланс.toFixed(3)} TON`}
             </div>
             <button
               onClick={() => navigator.clipboard && navigator.clipboard.writeText(адрес)}
@@ -302,7 +302,20 @@ export function DesktopWallet({ наТокен }) {
 
       <Карточка>
         <Заголовок>Токены, запущенные с этого адреса</Заголовок>
-        {!токены && <div style={{ fontFamily: шрифт, fontSize: 13, color: Ц.слабый }}>Загружаем…</div>}
+        {!токены && (
+          <div aria-hidden style={{ display: "grid", gap: 12 }}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, opacity: 1 - i * 0.18 }}>
+                <Скелет ш={34} в={34} круг />
+                <div style={{ flex: 1, display: "grid", gap: 7 }}>
+                  <Скелет ш="34%" в={11} />
+                  <Скелет ш="58%" в={9} />
+                </div>
+                <Скелет ш={72} в={11} />
+              </div>
+            ))}
+          </div>
+        )}
         {токены && !токены.length && (
           <div style={{ fontFamily: шрифт, fontSize: 13, color: Ц.слабый }}>
             С этого кошелька ещё ничего не запускали. Запуск — в мини-приложении.

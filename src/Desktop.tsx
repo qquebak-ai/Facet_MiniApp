@@ -20,7 +20,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "./supabaseClient";
 import DesktopToken from "./DesktopToken";
 import { DesktopWallet, DesktopProfile } from "./DesktopWallet";
-import { Ц, шрифт, цифры, ПОЛОСА, СТИЛИ, ЦВЕТА_СЕРВИСОВ, ЗнакTelegram, ЗнакTON, ЗнакSolana, деньги, цена, возраст, число, Логотип, Линия, Движение, изКеша } from "./desktopUI";
+import { Ц, шрифт, цифры, ПОЛОСА, СТИЛИ, ЦВЕТА_СЕРВИСОВ, ЗнакTelegram, ЗнакTON, ЗнакSolana, деньги, цена, возраст, число, Логотип, Линия, Движение, изКеша, Скелет } from "./desktopUI";
 import { апи } from "./апи";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
@@ -87,6 +87,42 @@ function свежесть(когда) {
 /* Одна раскладка на шапку и на строки: если ширины разъедутся, колонки
    перестанут совпадать с заголовками. */
 const СЕТКА = КОЛОНКИ.map((к) => к.ширина).join(" ");
+
+/* Рынок, пока он едет: те же строки, только вместо чисел заглушки.
+   Ширины у них разные и повторяются по кругу — ровный частокол
+   одинаковых полос читается как узор, а не как список. */
+function ЗаглушкаТаблицы({ строк = 12 }) {
+  const ширины = ["58%", "72%", "64%", "80%", "52%", "68%"];
+  return (
+    <div aria-hidden>
+      {Array.from({ length: строк }, (_, i) => (
+        <div
+          key={i}
+          style={{
+            display: "grid", gridTemplateColumns: СЕТКА, gap: 14, alignItems: "center",
+            padding: "10px 4px", borderBottom: `1px solid ${Ц.линия}`,
+            // Дальние строки бледнее: взгляд держится на первых, а низ
+            // списка не спорит с ними за внимание.
+            opacity: Math.max(0.25, 1 - i * 0.06),
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <Скелет ш={28} в={28} круг />
+            <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 6 }}>
+              <Скелет ш="46%" в={11} />
+              <Скелет ш="66%" в={9} />
+            </div>
+          </div>
+          {КОЛОНКИ.slice(1).map((к, j) => (
+            <div key={к.id} style={{ display: "flex", justifyContent: "flex-end" }}>
+              <Скелет ш={ширины[(i + j) % ширины.length]} в={11} />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function Desktop() {
   const [сеть, setСеть] = useState(() => (localStorage.getItem("mintly.pro.chain") === "solana" ? "solana" : "ton"));
@@ -393,9 +429,9 @@ export default function Desktop() {
               fontFamily: шрифт, fontSize: 12.5, color: Ц.слабый,
             }}
           >
-            <span>
-              {список == null ? "Загружаем рынок…" : `${число(список.length)} ${поиск.trim() ? "найдено" : "токенов"}`}
-              {поиск.trim() && строки ? ` из ${число(строки.length)}` : ""}
+            <span style={{ display: "inline-flex", alignItems: "center", minHeight: 15 }}>
+              {список == null ? <Скелет ш={96} в={10} /> : `${число(список.length)} ${поиск.trim() ? "найдено" : "токенов"}`}
+              {список != null && поиск.trim() && строки ? ` из ${число(строки.length)}` : ""}
             </span>
             <span className="проявился" key={`${обновлено || 0}:${тик}`}>
               {обновлено ? свежесть(обновлено) : ""}
@@ -432,9 +468,7 @@ export default function Desktop() {
                 Не удалось загрузить рынок: {ошибка}
               </div>
             )}
-            {!список && !ошибка && (
-              <div style={{ padding: 20, fontFamily: шрифт, fontSize: 13.5, color: Ц.слабый }}>Загружаем рынок…</div>
-            )}
+            {!список && !ошибка && <ЗаглушкаТаблицы />}
             {список && !список.length && (
               <div style={{ padding: 20, fontFamily: шрифт, fontSize: 13.5, color: Ц.слабый }}>
                 По этому фильтру пусто.

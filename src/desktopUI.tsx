@@ -71,11 +71,40 @@ export const СТИЛИ = `
   input { transition: border-color 140ms ease, background 140ms ease; }
   input:focus { border-color: ${Ц.линияЯрче}; }
 
+  /* Заглушка вместо ещё не пришедших данных.
+     Слово «Загружаем…» посреди пустого экрана не говорит, чего именно
+     ждать и сколько там будет строк. Заглушка занимает то самое место,
+     которое займут данные, поэтому при их появлении ничего не
+     подпрыгивает. Блик едет отдельным слоем и размыт: градиентом по
+     фону та же полоса выходит плоской и на широкой плашке почти не
+     видна. */
+  @keyframes перелив { from { transform: translateX(-120%); } to { transform: translateX(220%); } }
+  .скелет { position: relative; overflow: hidden; background: ${Ц.панельВыше}; border-radius: 8px; }
+  .скелет::after {
+    content: ""; position: absolute; top: -50%; bottom: -50%; left: 0; width: 55%;
+    background: linear-gradient(90deg, transparent, ${Ц.текст}2E 42%, ${Ц.текст}52 50%, ${Ц.текст}2E 58%, transparent);
+    filter: blur(12px);
+    animation: перелив 1.5s linear infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .вплыл, .проявился { animation: none; }
     .строка, .лого, .кнопка { transition: none; }
+    .скелет::after { animation: none; }
   }
 `;
+
+/* Заглушка нужного размера. Круг — под логотипы и аватарки: у них
+   заглушка квадратной формы выглядит как поломанная картинка. */
+export function Скелет({ ш = "100%", в = 12, круг = false, стиль = {} }) {
+  return (
+    <div
+      className="скелет"
+      style={{ width: ш, height: в, borderRadius: круг ? "50%" : в <= 14 ? 4 : 8, ...стиль }}
+      aria-hidden
+    />
+  );
+}
 
 /* Знаки сетей. Подпись «TON» и «Solana» в переключателе читалась как
    слово, а сеть узнают по цвету и форме — за то же место знак говорит

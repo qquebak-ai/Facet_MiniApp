@@ -12,7 +12,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
-import { Ц, шрифт, цифры, ПОЛОСА, деньги, цена, возраст, число, Логотип, Движение, ЗнакPhantom, ЦВЕТА_СЕРВИСОВ, изКеша } from "./desktopUI";
+import { Ц, шрифт, цифры, ПОЛОСА, деньги, цена, возраст, число, Логотип, Движение, ЗнакPhantom, ЦВЕТА_СЕРВИСОВ, изКеша, Скелет } from "./desktopUI";
 import { supabase } from "./supabaseClient";
 import { состояниеВнутреннего, сделкаВнутренним } from "./appWallet";
 import { сделкаTon, сделкаSolana, подключитьPhantom, расширениеPhantom } from "./desktopTrade";
@@ -173,9 +173,14 @@ function График({ свечи, наведение = true }) {
     ctx.clearRect(0, 0, размер.ш, размер.в);
 
     if (!геометрия) {
-      ctx.fillStyle = Ц.слабый;
-      ctx.font = `13px ${шрифт}`;
-      ctx.fillText(показ ? "За этот период сделок не было" : "Загружаем свечи…", 16, размер.в / 2);
+      // Пока свечи едут, поверх холста лежит заглушка — она и объясняет
+      // ожидание. Текстом остаётся только случай, когда ответ пришёл и
+      // сделок в нём нет: это не ожидание, а ответ.
+      if (показ) {
+        ctx.fillStyle = Ц.слабый;
+        ctx.font = `13px ${шрифт}`;
+        ctx.fillText("За этот период сделок не было", 16, размер.в / 2);
+      }
       return;
     }
 
@@ -297,6 +302,7 @@ function График({ свечи, наведение = true }) {
       onMouseLeave={() => setКурсор(null)}
     >
       <canvas ref={холст} style={{ width: "100%", height: "100%", display: "block" }} />
+      {!показ && <ЗаглушкаГрафика />}
       {подКурсором && (
         <div
           style={{
@@ -345,7 +351,7 @@ function Сделки({ токен }) {
     return () => { жив = false; clearInterval(iv); };
   }, [токен.пул, токен.сеть]);
 
-  if (!строки) return <Пусто>Загружаем сделки…</Пусто>;
+  if (!строки) return <ЗаглушкаСделок />;
   if (!строки.length) return <Пусто>Сделок пока нет.</Пусто>;
 
   return (
@@ -373,6 +379,53 @@ function Сделки({ токен }) {
 function Пусто({ children }) {
   return (
     <div style={{ padding: 18, fontFamily: шрифт, fontSize: 13, color: Ц.слабый }}>{children}</div>
+  );
+}
+
+/* График, пока свечи едут: столбики разной высоты на месте будущих
+   свечей. Высоты берутся по синусоиде, а не случайно, — иначе заглушка
+   меняла бы рисунок на каждой перерисовке и дёргалась. */
+function ЗаглушкаГрафика() {
+  const столбики = Array.from({ length: 34 }, (_, i) => 30 + Math.abs(Math.sin(i * 0.7)) * 64);
+  return (
+    <div
+      aria-hidden
+      style={{
+        // По центру области, а не во всю её высоту: панель графика на
+        // большом мониторе выше экрана, и прижатая к низу заглушка
+        // оказывалась за его краем.
+        position: "absolute", left: 16, right: 84, top: "50%", transform: "translateY(-50%)",
+        height: "min(46%, 240px)", display: "flex", alignItems: "flex-end", gap: 6,
+        pointerEvents: "none", opacity: 0.75,
+      }}
+    >
+      {столбики.map((в, i) => (
+        <Скелет key={i} ш="100%" в={`${в}%`} стиль={{ flex: 1, borderRadius: 3 }} />
+      ))}
+    </div>
+  );
+}
+
+/* Лента сделок, пока она едет. Колонки те же, что у настоящей: когда
+   строки приедут, ничего не переставляется. */
+function ЗаглушкаСделок({ строк = 14 }) {
+  const ширины = ["62%", "48%", "74%", "56%", "68%"];
+  return (
+    <div aria-hidden style={{ padding: "10px 16px", display: "grid", gap: 11 }}>
+      {Array.from({ length: строк }, (_, i) => (
+        <div
+          key={i}
+          style={{
+            display: "grid", gridTemplateColumns: "90px 1fr 1fr 1fr 1fr", gap: 12,
+            opacity: Math.max(0.25, 1 - i * 0.055),
+          }}
+        >
+          {ширины.map((ш, j) => (
+            <Скелет key={j} ш={ширины[(i + j) % ширины.length]} в={10} />
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 

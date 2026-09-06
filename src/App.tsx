@@ -1487,7 +1487,7 @@ function GlobalStyle() {
         0%, 100% { opacity: .35; transform: scaleY(0.86); }
         50%      { opacity: 1;   transform: scaleY(1.12); }
       }
-      @keyframes shimmer { from{background-position:-300px 0;} to{background-position:300px 0;} }
+      @keyframes shimmer { from{ transform: translateX(-120%); } to{ transform: translateX(220%); } }
       /* Блик по тексту. Крайние точки — ровно 100% и 0%: подложка шире
          надписи, и в этих границах она всегда её закрывает. За ними
          (было 150% и -150%) картинка уезжает за пределы букв, красить их
@@ -1842,7 +1842,19 @@ function GlobalStyle() {
         from { opacity: 0; transform: translateY(8px) scale(0.994); }
         to   { opacity: 1; transform: none; }
       }
-      .fx-skeleton { background: linear-gradient(90deg, ${T.surface} 25%, ${T.surfaceHi} 37%, ${T.surface} 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; }
+      /* Заглушка вместо ещё не пришедших данных.
+         Блик едет отдельным слоем и размыт: градиентом по фону та же
+         полоса выходит плоской и на широкой плашке почти не видна, а
+         размытая читается как отблеск на стекле — сразу понятно, что
+         место живое и содержимое вот-вот появится. */
+      .fx-skeleton { position: relative; overflow: hidden; background: ${T.surfaceHi}; }
+      .fx-skeleton::after {
+        content: ""; position: absolute; top: -50%; bottom: -50%; left: 0; width: 55%;
+        background: linear-gradient(90deg, transparent, ${T.ice}2E 42%, ${T.ice}52 50%, ${T.ice}2E 58%, transparent);
+        filter: blur(12px);
+        animation: shimmer 1.5s linear infinite;
+      }
+      @media (prefers-reduced-motion: reduce) { .fx-skeleton::after { animation: none; } }
       .fx-chip { transition: border-color ${EASE}, background ${EASE}, color ${EASE}, transform ${SPRING}; }
       .fx-chip:active { transition: border-color ${EASE}, background ${EASE}, color ${EASE}, transform ${PRESS}; }
       /* Замороженная плитка: всё внутри стоит. Анимации не снимаются, а
