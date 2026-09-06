@@ -15668,7 +15668,7 @@ function ProfileView({
 
 function ОтпечаткиСборки() {
   const tg = typeof window !== "undefined" ? window.Telegram && window.Telegram.WebApp : null;
-  const с = (typeof window !== "undefined" && window.__страница) || {};
+  const с = (typeof window !== "undefined" && window.__mintlyFull) || {};
   const режим = !tg
     ? "вне Telegram"
     : tg.isFullscreen
@@ -15678,7 +15678,7 @@ function ОтпечаткиСборки() {
         : с.просили ? "шторка (без ответа)" : "шторка";
   return (
     <div style={{ marginTop: 18, textAlign: "center", fontFamily: monoFont, fontSize: 10.5, color: T.muted, opacity: 0.5 }}>
-      {`сборка ${typeof __СБОРКА__ === "string" ? __СБОРКА__ : "—"} · ${режим}${tg && tg.version ? ` · TG ${tg.version}` : ""}`}
+      {`сборка ${typeof __BUILD_STAMP__ === "string" ? __BUILD_STAMP__ : "—"} · ${режим}${tg && tg.version ? ` · TG ${tg.version}` : ""}`}
     </div>
   );
 }

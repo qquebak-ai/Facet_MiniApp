@@ -30,7 +30,7 @@ if (tg) {
      на весь экран окно. Причину записываем — внутри Telegram нет
      консоли, и без записи разбираться было бы не с чем: её показывает
      профиль строкой о сборке. */
-  const слепок = (window as any).__страница = { просили: false, вышло: false, ошибка: "" };
+  const слепок = (window as any).__mintlyFull = { просили: false, вышло: false, ошибка: "" };
   const наСтраницу = () => {
     const м = (tg as any).requestFullscreen;
     if (typeof м !== "function") { слепок.ошибка = "метода нет"; return; }
