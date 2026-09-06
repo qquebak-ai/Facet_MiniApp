@@ -18765,4 +18765,3 @@ function mapTokenRow(row) {
     </div>
   );
 }
-export { TerminalChart as ГрафикДляПроверки };
