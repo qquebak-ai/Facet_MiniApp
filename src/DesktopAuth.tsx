@@ -17,7 +17,7 @@
 
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient";
-import { ошибкаВозврата } from "./oauthВозврат";
+import { ошибкаВозврата, запомнитьСтраницу } from "./oauthВозврат";
 import { Ц, шрифт, цифры, ЗнакGoogle, ЗнакPhantom, ЗнакTelegram, ЦВЕТА_СЕРВИСОВ } from "./desktopUI";
 
 const БОТ = import.meta.env.VITE_TG_BOT || "MintlyAppBot";
@@ -149,6 +149,7 @@ export default function DesktopAuth({ наВход }) {
 
   async function google() {
     setОшибка("");
+    запомнитьСтраницу();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: window.location.origin + window.location.pathname },

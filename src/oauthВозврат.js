@@ -19,6 +19,31 @@ import { supabase } from "./supabaseClient";
 // к моменту разбора адреса ни одного экрана ещё не нарисовано.
 export const КЛЮЧ_ОШИБКИ = "mintly.oauth.ошибка";
 
+/* Откуда человек уходил на вход.
+ *
+ * Supabase возвращает не туда, куда мы просим, а на свой Site URL, если
+ * нужный адрес не внесён в список разрешённых у него в настройках. Со
+ * страницы «/pro» человек попадал на главную и решал, что вход не
+ * сработал. Запоминаем страницу сами и возвращаем на неё — от чужих
+ * настроек это уже не зависит. */
+const КЛЮЧ_ПУТИ = "mintly.oauth.путь";
+
+export function запомнитьСтраницу() {
+  try { sessionStorage.setItem(КЛЮЧ_ПУТИ, window.location.pathname); } catch { /* приватный режим */ }
+}
+
+function забратьСтраницу() {
+  try {
+    const п = sessionStorage.getItem(КЛЮЧ_ПУТИ);
+    if (п) sessionStorage.removeItem(КЛЮЧ_ПУТИ);
+    // Только свой путь и только от корня: «//чужой.сайт» браузер считает
+    // полноценным адресом, и такой возврат увёл бы человека с сайта.
+    return п && /^\/[^/]/.test(п) ? п : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ошибкаВозврата() {
   try {
     const т = sessionStorage.getItem(КЛЮЧ_ОШИБКИ);
@@ -60,6 +85,13 @@ export async function разобратьВозвратOAuth() {
   try {
     const { error } = await supabase.auth.exchangeCodeForSession(код);
     if (error) throw error;
+    const откуда = забратьСтраницу();
+    if (откуда && откуда !== адрес.pathname) {
+      // Сессия уже лежит в хранилище браузера, поэтому перезагрузка на
+      // нужной странице откроет её уже с входом.
+      window.location.replace(откуда);
+      return;
+    }
   } catch (e) {
     const т = String((e && e.message) || e);
     // Проверочный ключ живёт в том браузере, где нажали «войти». Ссылку

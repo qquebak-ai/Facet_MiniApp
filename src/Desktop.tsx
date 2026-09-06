@@ -123,6 +123,32 @@ export default function Desktop() {
   // живые, а не застыли на первом кадре.
   const [обновлено, setОбновлено] = useState(null);
   const [тик, setТик] = useState(0);
+  // Кто вошёл. Без этого после входа через Google на экране не менялось
+  // ничего, и понять, состоялся вход или нет, можно было только зайдя в
+  // «Профиль».
+  const [аккаунт, setАккаунт] = useState(null);
+
+  useEffect(() => {
+    let жив = true;
+    const узнать = (польз) => {
+      if (!польз) { if (жив) setАккаунт(null); return; }
+      supabase
+        .from("profiles")
+        .select("nickname, avatar_url")
+        .eq("id", польз.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (!жив) return;
+          setАккаунт({
+            ник: (data && data.nickname) || (польз.email || "").split("@")[0] || "аккаунт",
+            лого: (data && data.avatar_url) || null,
+          });
+        });
+    };
+    supabase.auth.getUser().then(({ data }) => узнать(data && data.user));
+    const { data: подписка } = supabase.auth.onAuthStateChange((_, сессия) => узнать(сессия && сессия.user));
+    return () => { жив = false; подписка.subscription.unsubscribe(); };
+  }, []);
 
   const обновить = useCallback(() => {
     загрузитьРынок(сеть)
@@ -256,15 +282,33 @@ export default function Desktop() {
           }}
         />
 
+        {аккаунт && (
+          <button
+            className="кнопка"
+            onClick={() => { setРаздел("profile"); setВыбран(null); }}
+            style={{
+              marginLeft: "auto", display: "flex", alignItems: "center", gap: 8,
+              padding: "6px 12px 6px 6px", borderRadius: 999, cursor: "pointer",
+              background: Ц.панельВыше, border: `1px solid ${Ц.линия}`, color: Ц.текст,
+              fontFamily: шрифт, fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <Логотип src={аккаунт.лого} тикер={аккаунт.ник} размер={22} />
+            {аккаунт.ник}
+          </button>
+        )}
+
         <a
           className="кнопка"
           href={`https://t.me/${БОТ}`}
           target="_blank"
           rel="noreferrer"
           style={{
-            marginLeft: "auto", display: "flex", alignItems: "center", gap: 8,
+            // Вправо уезжает то, что стоит первым: с карточкой аккаунта
+            // отступ держит она, без неё — сама кнопка.
+            marginLeft: аккаунт ? 0 : "auto", display: "flex", alignItems: "center", gap: 8,
             fontFamily: шрифт, fontSize: 13, fontWeight: 600, color: ЦВЕТА_СЕРВИСОВ.telegram,
-            textDecoration: "none", padding: "8px 14px", borderRadius: 10,
+            textDecoration: "none", padding: "8px 14px", borderRadius: 10, whiteSpace: "nowrap", flexShrink: 0,
             border: `1px solid ${hexA(ЦВЕТА_СЕРВИСОВ.telegram, 0.45)}`,
             background: hexA(ЦВЕТА_СЕРВИСОВ.telegram, 0.12),
           }}
