@@ -10886,61 +10886,6 @@ function МояАктивность({ userId }) {
   );
 }
 
-/* Баннеры над сводкой. Лента, а не один баннер: их будет несколько, и
-   листаются они горизонтально с прилипанием — вертикальную прокрутку
-   главной это не трогает.
-   Нажимается весь баннер, а не нарисованная на нём кнопка: на узком
-   экране в неё пришлось бы целиться, а промах читается как «не
-   работает». */
-const БАННЕРЫ = [
-  { id: "trade", файл: "/banner-home.jpg", подпись: "Открыть мемпад", куда: "mempad" },
-];
-
-function БаннерыГлавной({ onGoTab }) {
-  if (!БАННЕРЫ.length) return null;
-  const один = БАННЕРЫ.length === 1;
-  return (
-    <div
-      className="no-scrollbar"
-      style={{
-        display: "flex", gap: 10, overflowX: один ? "visible" : "auto",
-        scrollSnapType: "x mandatory", overscrollBehaviorX: "contain",
-        // По ширине содержимого — как кнопка запуска: во всю ширину
-        // экрана баннер выглядел приклеенным к краям.
-      }}
-    >
-      {БАННЕРЫ.map((б) => (
-        <div
-          key={б.id}
-          onClick={() => { haptic("light"); onGoTab && onGoTab(б.куда); }}
-          className="fx-tap"
-          style={{
-            position: "relative", flex: один ? "0 0 100%" : "0 0 92%", scrollSnapAlign: "center",
-            lineHeight: 0, borderRadius: 16, overflow: "hidden",
-          }}
-          role="button"
-          aria-label={б.подпись}
-        >
-          <img src={б.файл} alt="" style={{ width: "100%", height: "auto", display: "block" }} />
-          {/* Нарисованная на картинке кнопка — своя область нажатия:
-              по ней и целятся, а подсветка показывает, что она живая.
-              Доли взяты с самой картинки, поэтому область держится за
-              кнопкой при любой ширине экрана. */}
-          <button
-            onClick={(e) => { e.stopPropagation(); haptic("light"); onGoTab && onGoTab(б.куда); }}
-            className="fx-tap"
-            style={{
-              position: "absolute", left: "8.4%", top: "62.5%", width: "25.4%", height: "14.5%",
-              background: "transparent", border: "none", padding: 0, borderRadius: 999, cursor: "pointer",
-            }}
-            aria-label={б.подпись}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function HomeView({
   onGoTab, onGoCreate, curveTokens = [], onOpenToken, onOpenProfile,
   profile = null, accountCreated = false, myTokens = [], achievements = [], userId = null,
@@ -10991,7 +10936,6 @@ function HomeView({
         </button>
       </div>
 
-      <БаннерыГлавной onGoTab={onGoTab} />
     </div>
   );
 }
