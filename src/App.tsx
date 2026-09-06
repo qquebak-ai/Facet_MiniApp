@@ -1429,11 +1429,6 @@ function GlobalStyle() {
       .вст-кнопка:active { transform: scale(0.985); filter: brightness(0.95); box-shadow: 0 6px 18px rgba(108,124,255,0.28) !important; }
       .вст-тихо { transition: color 180ms ease-out, opacity 180ms ease-out; }
       .вст-тихо:active { opacity: 0.6; }
-      /* Пока шторка идёт за пальцем, всё, что шевелится под ней, стоит:
-         бегущая лента, мерцания карточек, полосы загрузки. Они рисуются
-         в тех же кадрах, и на слабом телефоне движение из-за них идёт
-         ступеньками. */
-      body.шторка-едет .подложка *, body.шторка-едет .подложка { animation-play-state: paused !important; }
       @keyframes spin360 { from{ transform: rotate(0deg); } to{ transform: rotate(360deg); } }
       @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
       @keyframes scaleIn { from{opacity:0; transform:scale(0.92);} to{opacity:1; transform:scale(1);} }
@@ -7950,176 +7945,44 @@ const ProfileCardBg = React.memo(function ProfileCardBg({ cardId, height = 260, 
    Скрываем показом, а не размонтированием: состояние, прокрутка и
    загруженные данные остаются на месте. Скрытая вкладка не ловит
    нажатия и не читается голосовыми программами. */
-/* Профиль как шторка.
+/* Профиль — обычная страница.
  *
- * Он не раздел рынка, а «моё»: заходят на минуту и возвращаются туда же,
- * откуда пришли. Поэтому он приезжает снизу поверх главной и уходит тем
- * же движением — пальцем вниз, как в любом мессенджере. Кнопки «назад»
- * для этого не нужно.
+ * Раньше он приезжал шторкой: ручка сверху, затемнение под ней, закрытие
+ * пальцем вниз. На телефоне это выходило боком — жест ловил и список, и
+ * шторку сразу, движение шло ступеньками, а промахнувшись мимо ручки,
+ * человек закрывал экран вместо прокрутки.
  *
- * Жест ловится только когда содержимое прокручено к самому верху: иначе
- * потянуть список вниз стало бы нельзя — каждая попытка закрывала бы
- * экран.
+ * Теперь это просто экран: он занимает окно целиком, ничего не тянется,
+ * а вернуться можно панелью разделов — она висит выше по слою и остаётся
+ * доступной, пока профиль открыт.
  */
-function ШторкаПрофиля({ открыт, onClose, insetTop = 0, children }) {
-  const лист = useRef(null);
-  const затемнение = useRef(null);
-  const прокрутка = useRef(null);
-  const состояние = useRef({ y: 0, ts: 0, тянем: false, путь: 0 });
-  const закрыть = useRef(onClose);
-  закрыть.current = onClose;
-
-  /* Шторка двигается напрямую, минуя перерисовку.
-   *
-   * Сначала смещение держалось в состоянии — и каждый кадр жеста React
-   * перебирал весь профиль целиком. Потом выяснилось, что и этого мало:
-   * React вешает касания через свой корень и делает их «пассивными», то
-   * есть отменить прокрутку страницы из них нельзя. Браузер на каждом
-   * кадре решал, кому отдать движение — списку или странице, — и отдавал
-   * с запозданием: пальцем ведёшь ровно, а шторка идёт ступеньками.
-   *
-   * Поэтому касания слушаются напрямую, без React, с правом отменить
-   * прокрутку. Кадр при этом делает ровно одну вещь: меняет transform у
-   * одного узла. */
-  useEffect(() => {
-    const el = лист.current;
-    if (!el) return undefined;
-
-    const поставить = (y, плавно) => {
-      el.style.transition = плавно ? "transform 300ms cubic-bezier(0.22,1,0.36,1)" : "none";
-      el.style.transform = `translate3d(0, ${y}px, 0)`;
-      const ф = затемнение.current;
-      if (ф) {
-        const доля = Math.max(0, 1 - y / (el.offsetHeight || 1));
-        ф.style.transition = плавно ? "opacity 300ms ease-out" : "none";
-        ф.style.opacity = String(0.5 * доля);
-      }
-    };
-
-    const началось = (e) => {
-      const с = прокрутка.current;
-      const t = e.touches && e.touches[0];
-      if (!t || !с || с.scrollTop > 0) { состояние.current.тянем = false; return; }
-      состояние.current = { y: t.clientY, ts: Date.now(), тянем: true, путь: 0 };
-      // Тень на движущемся слое браузер пересчитывает каждый кадр —
-      // самая дорогая часть картинки. На время движения её нет, и
-      // заметить это невозможно: шторка в этот момент едет.
-      el.style.boxShadow = "none";
-      // Прокрутка внутри трансформируемого слоя заставляет браузер
-      // перекраивать слои на каждом кадре. Пока тянем — она не нужна.
-      с.style.overflowY = "hidden";
-      // И всё, что шевелится позади: бегущая лента, мерцания, полосы.
-      // Они рисуются в тех же кадрах и отбирают их у движения.
-      if (typeof document !== "undefined") document.body.classList.add("шторка-едет");
-    };
-
-    const идёт = (e) => {
-      if (!состояние.current.тянем) return;
-      const t = e.touches && e.touches[0];
-      if (!t) return;
-      const вниз = t.clientY - состояние.current.y;
-      if (вниз <= 0) {
-        // Палец пошёл вверх — это уже прокрутка списка, а не закрытие.
-        состояние.current.тянем = false;
-        поставить(0, true);
-        return;
-      }
-      // Отменяем прокрутку страницы: иначе браузер тянет и её тоже, и
-      // движение выходит рваным.
-      if (e.cancelable) e.preventDefault();
-      состояние.current.путь = вниз;
-      поставить(вниз, false);
-    };
-
-    const кончилось = () => {
-      el.style.boxShadow = "0 -18px 50px rgba(0,0,0,0.55)";
-      if (прокрутка.current) прокрутка.current.style.overflowY = "auto";
-      if (typeof document !== "undefined") document.body.classList.remove("шторка-едет");
-      if (!состояние.current.тянем) return;
-      const { путь, ts } = состояние.current;
-      состояние.current.тянем = false;
-      const скорость = путь / Math.max(1, Date.now() - ts); // точек в миллисекунду
-      if (путь > 110 || скорость > 0.6) {
-        // Уезжает из того места, где её отпустили, а не прыгает наверх,
-        // чтобы оттуда начать закрываться.
-        поставить(el.offsetHeight || 1000, true);
-        закрыть.current();
-        return;
-      }
-      поставить(0, true);
-    };
-
-    el.addEventListener("touchstart", началось, { passive: true });
-    el.addEventListener("touchmove", идёт, { passive: false });
-    el.addEventListener("touchend", кончилось, { passive: true });
-    el.addEventListener("touchcancel", кончилось, { passive: true });
-    return () => {
-      el.removeEventListener("touchstart", началось);
-      el.removeEventListener("touchmove", идёт);
-      el.removeEventListener("touchend", кончилось);
-      el.removeEventListener("touchcancel", кончилось);
-    };
-  }, []);
-
-  // Открытие и закрытие — одно и то же движение в разные стороны.
-  useEffect(() => {
-    const el = лист.current;
-    if (!el) return;
-    const y = открыт ? 0 : (el.offsetHeight || 1000);
-    el.style.transition = "transform 300ms cubic-bezier(0.22,1,0.36,1)";
-    el.style.transform = `translate3d(0, ${y}px, 0)`;
-    const ф = затемнение.current;
-    if (ф) {
-      ф.style.transition = "opacity 300ms ease-out";
-      ф.style.opacity = открыт ? "0.5" : "0";
-    }
-    if (открыт && прокрутка.current) прокрутка.current.scrollTop = 0;
-  }, [открыт]);
-
+function СтраницаПрофиля({ открыт, insetTop = 0, children }) {
   return (
     <div
       aria-hidden={открыт ? undefined : true}
       inert={открыт ? undefined : ""}
       style={{
-        position: "absolute", left: 0, right: 0, top: 0, bottom: 0, zIndex: 40,
-        pointerEvents: открыт ? "auto" : "none",
+        position: "absolute", left: 0, right: 0, top: 0, bottom: 0,
+        // Ниже панели разделов (её слой 5) и выше содержимого главной:
+        // страница закрывает ленту, но не сам способ уйти с неё.
+        zIndex: 3,
+        background: T.bg,
+        display: открыт ? "flex" : "none",
+        flexDirection: "column",
       }}
     >
-      {/* Затемнение отдельным слоем: его прозрачность меняется вместе с
-          движением, и трогать ради этого саму шторку не нужно. */}
       <div
-        ref={затемнение}
-        onClick={onClose}
-        style={{ position: "absolute", inset: 0, background: "#000", opacity: 0 }}
-      />
-      <div
-        ref={лист}
+        className={`no-scrollbar px-4${открыт ? " fx-view" : ""}`}
         style={{
-          position: "absolute", left: 0, right: 0, bottom: 0,
-          top: Math.max(10, insetTop * 0.5) + 10,
-          background: T.bg,
-          borderTopLeftRadius: 22, borderTopRightRadius: 22,
-          border: `1px solid ${T.line}`, borderBottom: "none",
-          boxShadow: "0 -18px 50px rgba(0,0,0,0.55)",
-          display: "flex", flexDirection: "column",
-          // Начальное положение — внизу: до первого открытия шторки на
-          // экране быть не должно.
-          transform: "translate3d(0, 2000px, 0)",
-          // Слой готовится к движению заранее, а его содержимое не влияет
-          // на расчёты снаружи: без этого браузер на каждом кадре
-          // пересчитывал бы всю страницу целиком.
-          willChange: "transform",
-          contain: "layout paint",
+          flex: 1, overflowY: "auto", minHeight: 0,
+          // Тот же отступ сверху, что и у главной: подложка карточки
+          // профиля рассчитана ровно на него.
+          paddingTop: contentTopPad(insetTop),
+          paddingBottom: 92,
           overscrollBehavior: "contain",
         }}
       >
-        {/* Ручка: единственное, что говорит «меня можно утащить вниз». */}
-        <div style={{ padding: "10px 0 6px", display: "flex", justifyContent: "center", flexShrink: 0, touchAction: "none" }}>
-          <div style={{ width: 40, height: 4, borderRadius: 999, background: T.lineHi }} />
-        </div>
-        <div ref={прокрутка} className="no-scrollbar px-4" style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingBottom: 92 }}>
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   );
@@ -15533,7 +15396,7 @@ function ProfileView({
             className="fx-tap"
             style={{ position: "relative", zIndex: 1, background: "transparent", border: "none", padding: 0, lineHeight: 0 }}
           >
-            <AvatarFrame frameId={cosmetics.frame} size={128}>
+            <AvatarFrame frameId={cosmetics.frame} size={100}>
                 <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: profile.avatarUrl ? `center/cover no-repeat url(${profile.avatarUrl})` : T.surfaceHi, border: cosmetics.frame === "none" ? (profile.avatarUrl ? `2px solid ${T.lineHi}` : `2px dashed ${T.lineHi}`) : "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: accountCreated ? 52 : 40 }}>
                   {!profile.avatarUrl && (accountCreated && profile.emoji ? profile.emoji : <User size={40} color={T.muted} />)}
                 </div>
@@ -15547,13 +15410,19 @@ function ProfileView({
                 <CreatorWreathBadge tier={creatorTier} size={19} />
                 <VerifiedBadge verified={verifyStatus === "verified"} size={16} />
               </div>
-              <p style={{ fontFamily: bodyFont, color: T.muted, fontSize: 14, maxWidth: 260, lineHeight: 1.5 }}>
+              {/* Описание в две строки: длинное всё равно дочитывают на
+                  своей странице токена, а здесь оно раздвигало экран так,
+                  что настройки уезжали за нижний край. */}
+              <p style={{
+                fontFamily: bodyFont, color: T.muted, fontSize: 13.5, maxWidth: 280, lineHeight: 1.45,
+                display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+              }}>
                 {profile.bio || t("bioEmptyPlaceholder")}
               </p>
-              <div className="flex items-center gap-3" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>
+              <div className="flex items-center gap-3" style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12 }}>
                 <span className="flex items-center gap-1"><Clock size={12} /> {t("memberSince")}</span>
               </div>
-              <button onClick={onOpenEditProfile} className="fx-tap rounded-[20px] px-5 py-2.5 mt-2" style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14.5, color: T.ice }}>{t("editProfileBtn")}</button>
+              <button onClick={onOpenEditProfile} className="fx-tap rounded-[18px] px-5 py-2 mt-1" style={{ background: T.surface, border: `1px solid ${T.line}`, fontFamily: bodyFont, fontSize: 14, color: T.ice }}>{t("editProfileBtn")}</button>
             </>
           ) : (
             <>
@@ -15581,20 +15450,16 @@ function ProfileView({
             значило прятать самое нужное. Здесь остаётся то, за чем
             приходят изредка, — подтверждение и настройки. */}
 
-        <div className="mt-5">
+        {/* Подтверждённый профиль эту строку не показывает: о том, что он
+            подтверждён, уже говорит значок у ника, а целый раздел ради
+            повтора съедал экран — из-за него профиль переставал помещаться
+            целиком и начинал прокручиваться. */}
+        <div className="mt-5" style={{ display: verifyStatus === "verified" ? "none" : undefined }}>
           <SectionTitle>{t("verificationTitle")}</SectionTitle>
           {/* Без подложки: это строка состояния, а не отдельный объект —
               карточка вокруг двух строк текста только добавляла слой. */}
           <div className="flex items-center gap-3" style={{ padding: "4px 0" }}>
-            {verifyStatus === "verified" ? (
-              <>
-                <ShieldCheck size={22} color={T.electric} />
-                <div className="flex-1">
-                  <div style={{ fontFamily: displayFont, color: T.ice, fontSize: 14.5, fontWeight: 600 }}>{t("verifiedStatus")}</div>
-                  <div style={{ fontFamily: bodyFont, color: T.muted, fontSize: 12.5 }}>{t("profileConfirmed")}</div>
-                </div>
-              </>
-            ) : verifyStatus === "pending" ? (
+            {verifyStatus === "pending" ? (
               <>
                 <ShieldAlert size={22} color={T.violet} />
                 <div className="flex-1">
@@ -15623,20 +15488,25 @@ function ProfileView({
               Раньше список лежал в одной карточке, и нажатие вдавливало
               её целиком: в CSS состояние «нажато» достаётся не только
               самой кнопке, но и всем блокам вокруг неё. Теперь вдавливается
-              ровно то, на что нажали. */}
-          <div className="flex flex-col gap-2">
+              ровно то, на что нажали.
+
+              Два столбца, а не семь строк во всю ширину: строками список
+              уходил под нижний край, и профиль приходилось прокручивать
+              ради последнего пункта. Плитки читаются так же, а экран
+              заканчивается там же, где и содержимое. */}
+          <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
             {SETTINGS_ITEMS.map((s, i) => (
               <button
                 key={s.key}
                 onClick={() => openSettingItem(s)}
-                className="fx-card fx-tap w-full flex items-center gap-3 rounded-[20px]"
+                className="fx-card fx-tap w-full flex items-center gap-2.5 rounded-[18px]"
                 style={{
                   background: T.surface, border: "none",
-                  padding: "13px 16px", animationDelay: `${i * 40}ms`,
+                  padding: "12px 13px", animationDelay: `${i * 40}ms`,
                 }}
               >
-                <s.icon size={16} color={T.muted} />
-                <span style={{ fontFamily: bodyFont, fontSize: 14.5, color: T.ice, flex: 1, textAlign: "left" }}>{t(s.tKey)}</span>
+                <s.icon size={16} color={T.muted} style={{ flexShrink: 0 }} />
+                <span style={{ fontFamily: bodyFont, fontSize: 13.5, color: T.ice, flex: 1, textAlign: "left", lineHeight: 1.25 }}>{t(s.tKey)}</span>
                 {/* Ответ поддержки ждёт прочтения. Без метки о нём знает
                     только личка в Telegram, а её человек мог отключить. */}
                 {s.key === "support" && supportUnread > 0 && (
@@ -18671,10 +18541,9 @@ function mapTokenRow(row) {
           )}
         </div>
 
-        {/* Профиль — шторка поверх главной, а не соседний раздел: за ним
-            заходят на минуту и возвращаются туда же, откуда пришли.
-            Закрывается пальцем вниз или касанием по затемнению. */}
-        <ШторкаПрофиля открыт={view === "profile"} onClose={() => goTab("home")} insetTop={insetTop}>
+        {/* Профиль — отдельная страница поверх главной. Уйти с неё можно
+            панелью разделов: она остаётся выше по слою. */}
+        <СтраницаПрофиля открыт={view === "profile"} insetTop={insetTop}>
             <ProfileView
               connected={connected}
               onOpenConnectModal={() => setConnectModalOpen(true)}
@@ -18700,7 +18569,7 @@ function mapTokenRow(row) {
               creatorTier={creatorTier}
               onVerified={markProfileVerified}
             />
-        </ШторкаПрофиля>
+        </СтраницаПрофиля>
 
         {/* Панель разделов — плавающая капсула, как и была: отдельный
             предмет поверх приложения, а не полоса, приросшая к нижнему
