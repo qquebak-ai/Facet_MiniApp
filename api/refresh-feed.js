@@ -296,12 +296,22 @@ export default async function handler(req, res) {
      Ограничитель встроен в само условие — после удачного обхода строки
      свежие, и следующий вызов сразу уйдёт ни с чем. Так первый же
      открывший приложение чинит ленту, даже если планировщик мёртв. */
+  // Сеть можно спросить по одной: обход обеих подряд — это десять
+  // страниц с паузами, и в отведённое функции время он не укладывался.
+  // Solana просто не доходила до записи, и её лента оставалась пустой.
+  const выбор = String((req.query && req.query.chain) || "").toLowerCase();
+  const сети = выбор === "ton" || выбор === "solana" ? [выбор] : ["ton", "solana"];
+
   const auth = req.headers.authorization || "";
   const поСекрету = CRON_SECRET && auth === `Bearer ${CRON_SECRET}`;
   if (!поСекрету) {
+    // Свежесть считаем по той сети, которую просят обойти: у TON и
+    // Solana свои строки, и одна свежая лента не повод считать свежей
+    // вторую — именно так Solana и простояла сутки незамеченной.
     const { data } = await admin
       .from("feed_cache")
       .select("updated_at")
+      .in("chain", сети)
       .order("updated_at", { ascending: false })
       .limit(1);
     const свежесть = data && data[0] ? new Date(data[0].updated_at).getTime() : 0;
@@ -310,12 +320,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, пропущено: true, возрастСек: Math.round(возраст / 1000) });
     }
   }
-
-  // Сеть можно спросить по одной: обход обеих подряд — это десять
-  // страниц с паузами, и в отведённое функции время он не укладывался.
-  // Solana просто не доходила до записи, и её лента оставалась пустой.
-  const выбор = String((req.query && req.query.chain) || "").toLowerCase();
-  const сети = выбор === "ton" || выбор === "solana" ? [выбор] : ["ton", "solana"];
 
   const итог = {};
   for (const сеть of сети) {

@@ -35,15 +35,19 @@ jobs:
         run: |
           провал=0
           for шаг in 1 2 3 4 5; do
-            код=$(curl -s -o /tmp/ответ -w "%{http_code}" --max-time 110 \
-              "https://mintly.company/api/refresh-feed" \
-              -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
-            echo "шаг $шаг: $код $(head -c 300 /tmp/ответ)"
-            # 401 значит секрет не совпал — это стоит увидеть красным.
-            if [ "$код" = "401" ]; then exit 1; fi
-            if [ "$код" != "200" ]; then провал=$((провал + 1)); fi
-            if [ "$шаг" != "5" ]; then sleep 60; fi
+            # Сети по очереди: обе за один вызов не укладываются в
+            # отведённое обработчику время, и Solana не доходила до записи.
+            for сеть in ton solana; do
+              код=$(curl -s -o /tmp/ответ -w "%{http_code}" --max-time 110 \
+                "https://mintly.company/api/refresh-feed?chain=$сеть" \
+                -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+              echo "шаг $шаг $сеть: $код $(head -c 200 /tmp/ответ)"
+              # 401 значит секрет не совпал — это стоит увидеть красным.
+              if [ "$код" = "401" ]; then exit 1; fi
+              if [ "$код" != "200" ]; then провал=$((провал + 1)); fi
+            done
+            if [ "$шаг" != "5" ]; then sleep 55; fi
           done
           # Разовый отказ источника — обычное дело, а пять подряд значит,
           # что сломан обход.
-          test "$провал" -lt 5
+          test "$провал" -lt 10

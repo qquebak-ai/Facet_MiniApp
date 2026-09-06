@@ -154,8 +154,10 @@ export default function Desktop() {
     if (!(возраст > 3 * 60 * 1000)) return;
     if (Date.now() - подтолкнуть.current < 60000) return;
     подтолкнуть.current = Date.now();
-    fetch("/api/refresh-feed").catch(() => {});
-  }, []);
+    // Обходим ровно ту сеть, которую человек сейчас смотрит: обе за один
+    // вызов не укладываются в отведённое обработчику время.
+    fetch(`/api/refresh-feed?chain=${сеть}`).catch(() => {});
+  }, [сеть]);
 
   const обновить = useCallback(() => {
     загрузитьРынок(сеть)
