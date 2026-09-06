@@ -15519,8 +15519,12 @@ function ProfileView({
               поднимает её выше шапки — так у карточки не остаётся видимых
               обрезанных краёв. */}
           <ProfileCardBg cardId={cosmetics.card} height={320} radius={0} bleed={16} top={PROFILE_CARD_TOP(insetTop)} />
+          {/* Отступ сверху — не украшение: вплотную к плашке висят свои
+              кнопки Telegram («свернуть» и «ещё»), и без зазора она
+              читалась как их кривой сосед, а не как часть профиля.
+              Подложка отделяет её от картинки карточки. */}
           {accountCreated && (
-            <button onClick={logOut} className="fx-tap flex items-center gap-1.5" style={{ position: "absolute", top: 0, right: 0, zIndex: 2, background: "transparent", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "6px 12px", fontFamily: bodyFont, fontSize: 13, color: T.rose }}>
+            <button onClick={logOut} className="fx-tap flex items-center gap-1.5" style={{ position: "absolute", top: 14, right: 0, zIndex: 2, background: "rgba(10,10,14,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: `1px solid rgba(140,140,148,0.3)`, borderRadius: 999, padding: "7px 13px", fontFamily: bodyFont, fontSize: 13, lineHeight: 1, color: T.rose }}>
               <LogOut size={13} /> {t("logOutShort")}
             </button>
           )}

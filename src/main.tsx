@@ -23,10 +23,42 @@ if (tg) {
   tg.ready();
   tg.expand();
   // Свайп вниз по мини-приложению по умолчанию тянет всё окно (жест
-  // закрытия). Из-за него из-под интерфейса видно чёрный фон Telegram,
-  // поэтому вертикальные свайпы выключаем — метод появился в Bot API
-  // 7.7, в старых клиентах его просто нет.
+  // закрытия). Посреди списка это мешает — из-под интерфейса видно
+  // чёрный фон Telegram, — поэтому по умолчанию жест выключен. Но и
+  // насовсем выключать его нельзя: закрывают приложение именно им, и с
+  // запретом окно на потягивание только вздрагивало.
+  //
+  // Разводим по месту: пока есть куда прокручивать — жест наш, список
+  // едет плавно; список стоит в самом верху — жест отдаём Telegram, и
+  // приложение закрывается как обычно. Решение принимается в момент
+  // касания, до первого движения пальца.
   tg.disableVerticalSwipes?.();
+
+  if (tg.disableVerticalSwipes && tg.enableVerticalSwipes) {
+    let отдан = false;
+    const отдать = (кому: boolean) => {
+      if (кому === отдан) return;
+      отдан = кому;
+      try { кому ? tg.enableVerticalSwipes() : tg.disableVerticalSwipes(); } catch { /* старый клиент */ }
+    };
+    // Ближайший предок, который действительно прокручивается: у самого
+    // элемента под пальцем прокрутки может не быть вовсе.
+    const вВерху = (эл: Element | null) => {
+      for (let у: Element | null = эл; у && у !== document.body; у = у.parentElement) {
+        const с = getComputedStyle(у);
+        if (/(auto|scroll)/.test(с.overflowY) && у.scrollHeight - у.clientHeight > 4) return у.scrollTop <= 0;
+      }
+      return (window.scrollY || 0) <= 0;
+    };
+    document.addEventListener(
+      "touchstart",
+      (e) => {
+        const цель = e.target;
+        отдать(цель instanceof Element ? вВерху(цель) : true);
+      },
+      { passive: true, capture: true }
+    );
+  }
 }
 
 // iOS игнорирует user-scalable=no, поэтому щипок гасим сами.
